@@ -10,6 +10,7 @@ class Admin::WebHooksController < Admin::AdminController
                        .includes(:web_hook_event_types)
                        .includes(:categories)
                        .includes(:groups)
+
     json = {
       web_hooks: serialize_data(web_hooks, AdminWebHookSerializer),
       extras: {
@@ -19,7 +20,7 @@ class Admin::WebHooksController < Admin::AdminController
         delivery_statuses: WebHook.last_delivery_statuses.map { |name, id| { id: id, name: name.to_s } },
       },
       total_rows_web_hooks: WebHook.count,
-      load_more_web_hooks: Discourse.base_url + admin_web_hooks_path(limit: limit, offset: offset + limit, format: :json)
+      load_more_web_hooks: admin_web_hooks_path(limit: limit, offset: offset + limit, format: :json)
     }
 
     render json: MultiJson.dump(json), status: 200
@@ -62,7 +63,7 @@ class Admin::WebHooksController < Admin::AdminController
     json = {
       web_hook_events: serialize_data(@web_hook.web_hook_events.limit(limit).offset(offset), AdminWebHookEventSerializer),
       total_rows_web_hook_events: @web_hook.web_hook_events.count,
-      load_more_web_hook_events: Discourse.base_url + admin_web_hook_events_path(limit: limit, offset: offset + limit, format: :json),
+      load_more_web_hook_events: admin_web_hook_events_path(limit: limit, offset: offset + limit, format: :json),
       extras: {
         web_hook_id: @web_hook.id
       }
@@ -94,7 +95,6 @@ class Admin::WebHooksController < Admin::AdminController
 
   def ping
     Jobs.enqueue(:emit_web_hook_event, web_hook_id: @web_hook.id, event_type: 'ping')
-
     render json: success_json
   end
 
