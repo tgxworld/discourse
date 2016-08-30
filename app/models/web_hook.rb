@@ -40,12 +40,16 @@ class WebHook < ActiveRecord::Base
     end
   end
 
-  TOPIC_HOOK_2_ARGS = Proc.new do |topic, user|
+  def self.enqueue_topic_hooks(topic, user)
     WebHook.enqueue_hooks(:topic, topic_id: topic.id, user_id: user&.id, category_id: topic&.category&.id)
   end
 
+  TOPIC_HOOK_2_ARGS = Proc.new do |topic, user|
+    WebHook.enqueue_topic_hooks(topic, user)
+  end
+
   TOPIC_HOOK_3_ARGS = Proc.new do |topic, _, user|
-    WebHook.enqueue_hooks(:topic, topic_id: topic.id, user_id: user&.id, category_id: topic&.category&.id)
+    WebHook.enqueue_topic_hooks(topic, user)
   end
 
   POST_HOOK = Proc.new do |post, _, user|
