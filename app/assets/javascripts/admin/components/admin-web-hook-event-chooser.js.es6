@@ -1,7 +1,7 @@
 import computed from 'ember-addons/ember-computed-decorators';
 
 export default Ember.Component.extend({
-  tagName: '',
+  classNames: ['hook-event'],
   typeName: Ember.computed.alias('type.name'),
 
   @computed('typeName')
@@ -14,21 +14,21 @@ export default Ember.Component.extend({
     return I18n.t(`admin.web_hooks.${typeName}_event.details`);
   },
 
-  @computed('model.[]')
-  eventTypeExists(eventTypes) {
-    return eventTypes.any(event => event.name === this.get('typeName'));
+  @computed('model.[]', 'typeName')
+  eventTypeExists(eventTypes, typeName) {
+    return eventTypes.any(event => event.name === typeName);
   },
 
-  @computed
+  @computed('eventTypeExists')
   enabled: {
-    get() {
-      return this.get('eventTypeExists');
+    get(eventTypeExists) {
+      return eventTypeExists;
     },
-    set(value) {
+    set(value, eventTypeExists) {
       const type = this.get('type');
       const model = this.get('model');
       // add an association when not exists
-      if (value !== this.get('eventTypeExists')) {
+      if (value !== eventTypeExists) {
         if (value) {
           model.addObject(type);
         } else {
