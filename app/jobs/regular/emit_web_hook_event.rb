@@ -76,7 +76,7 @@ module Jobs
 
       if @opts[:topic_id]
         topic_view = TopicView.new(@opts[:topic_id], web_hook_user)
-        body[:topic] = WebHooksTopicSerializer.new(topic_view, scope: guardian, root: false).as_json
+        body[:topic] = TopicViewSerializer.new(topic_view, scope: guardian, root: false).as_json
       end
 
       if @opts[:post_id]
@@ -86,7 +86,7 @@ module Jobs
 
       if @opts[:user_id]
         user = User.find(@opts[:user_id])
-        body[:user] = WebHooksUserSerializer.new(user, scope: guardian, root: false).as_json
+        body[:user] = UserSerializer.new(user, scope: guardian, root: false).as_json
       end
 
       body[:ping] = 'OK' if @opts[:event_type] == 'ping'
