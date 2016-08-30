@@ -9,7 +9,7 @@ export default Ember.Component.extend({
 
   @computed('model.status')
   statusColorClasses(status) {
-    if (!status) { return ''; }
+    if (!status) return '';
 
     if (status >= 200 && status <= 299) {
       return 'text-successful';
@@ -41,7 +41,9 @@ export default Ember.Component.extend({
     },
 
     toggleRequest() {
-      if (this.get('expandDetails') !== 'request') {
+      const expandDetailsKey = 'request';
+
+      if (this.get('expandDetails') !== expandDetailsKey) {
         let headers = _.extend({
           'Request URL': this.get('model.request_url'),
           'Request method': 'POST'
@@ -49,7 +51,7 @@ export default Ember.Component.extend({
         this.setProperties({
           headers: plainJSON(headers),
           body: prettyJSON(this.get('model.payload')),
-          expandDetails: 'request',
+          expandDetails: expandDetailsKey,
           bodyLabel: I18n.t('admin.web_hooks.events.payload')
         });
       } else {
@@ -58,11 +60,13 @@ export default Ember.Component.extend({
     },
 
     toggleResponse() {
-      if (this.get('expandDetails') !== 'response') {
+      const expandDetailsKey = 'response';
+
+      if (this.get('expandDetails') !== expandDetailsKey) {
         this.setProperties({
           headers: plainJSON(this.get('model.response_headers')),
           body: this.get('model.response_body'),
-          expandDetails: 'response',
+          expandDetails: expandDetailsKey,
           bodyLabel: I18n.t('admin.web_hooks.events.body')
         });
       } else {
