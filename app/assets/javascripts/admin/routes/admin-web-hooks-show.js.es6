@@ -12,15 +12,11 @@ export default Discourse.Route.extend({
 
   setupController(controller, model) {
     if (model.get('isNew') || Ember.isEmpty(model.get('web_hook_event_types'))) {
-      model.set('web_hook_event_types', controller.get('defaultEventTypes').map(e => e));
+      model.set('web_hook_event_types', controller.get('defaultEventTypes'));
     }
-    model.set('category_ids', Ember.isEmpty(model.get('category_ids')) ?
-      Em.A() :
-      model.get('category_ids').map(c => c));
-    model.set('group_ids', Ember.isEmpty(model.get('group_ids')) ?
-      Em.A() :
-      model.get('group_ids').map(c => c));
 
+    model.set('category_ids', model.get('category_ids'));
+    model.set('group_ids', model.get('group_ids'));
     controller.setProperties({ model, saved: false });
   },
 
