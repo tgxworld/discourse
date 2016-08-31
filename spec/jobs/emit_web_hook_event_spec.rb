@@ -68,5 +68,25 @@ describe Jobs::EmitWebHookEvent do
         subject.execute(web_hook_id: post_hook.id, event_type: 'post', post_id: post.id)
       end.to change(WebHookEvent, :count).by(1)
     end
+
+    it 'sets up proper request headers' do
+      Excon.stub({ url: "https://meta.discourse.org/webhook_listener" },
+                 { headers: { test: 'string' }, body: 'OK', status: 200 })
+
+      subject.execute(web_hook_id: post_hook.id, event_type: 'ping', event_name: 'ping')
+      event = WebHookEvent.last
+      headers = MultiJson.load(event.headers)
+      expect(headers['Content-Length']).to eq(9)
+      expect(headers['Host']).to eq("meta.discourse.org")
+      expect(headers['User-Agent']).to eq(13)
+      expect(headers['X-Discourse-Event-Id']).to eq(event.id)
+      expect(headers['X-Discourse-Event-Type']).to eq('ping')
+      expect(headers['X-Discourse-Event']).to eq('ping')
+      expect(headers['X-Discourse-Event-Signature']).to eq('f7f5b596751363e107cfbdbb23a3bb5b44e3892916c77e6eef30337cffc7b017')
+      expect(event.payload).to eq(MultiJson.dump({body: 'OK'}))
+      expect(event.status).to eq(200)
+      expect(MultiJson.load(event.response_headers)['test']).to eq('string')
+      expect(event.response_body).to eq('OK')
+    end
   end
 end

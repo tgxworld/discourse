@@ -81,7 +81,7 @@ module Jobs
 
       if @opts[:post_id]
         post = Post.find(@opts[:post_id])
-        body[:post] = WebHooksPostSerializer.new(post, scope: guardian, root: false).as_json
+        body[:post] = PostSerializer.new(post, scope: guardian, root: false).as_json
       end
 
       if @opts[:user_id]

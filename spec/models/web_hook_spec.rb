@@ -98,4 +98,22 @@ describe WebHook do
       end
     end
   end
+
+  describe 'enqueues hooks' do
+    let!(:post_hook) { Fabricate(:web_hook) }
+    let!(:topic_hook) { Fabricate(:topic_web_hook) }
+    let(:user) { Fabricate(:user) }
+    let(:topic) { Fabricate(:topic, user: user) }
+    let(:post) { Fabricate(:post, user: user) }
+
+    it 'when a topic is created' do
+      WebHook.expects(:enqueue_topic_hooks).once
+      PostCreator.create(user, { raw: 'post', title: 'topic', skip_validations: true })
+    end
+
+    it 'when a post is created' do
+      WebHook.expects(:enqueue_hooks).once
+      PostCreator.create(user, { raw: 'post', topic_id: topic.id, reply_to_post_number: 1, skip_validations: true })
+    end
+  end
 end
