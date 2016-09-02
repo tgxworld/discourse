@@ -104,7 +104,6 @@ describe WebHook do
     let!(:topic_hook) { Fabricate(:topic_web_hook) }
     let(:user) { Fabricate(:user) }
     let(:topic) { Fabricate(:topic, user: user) }
-    let(:post) { Fabricate(:post, user: user) }
 
     it 'when a topic is created' do
       WebHook.expects(:enqueue_topic_hooks).once
