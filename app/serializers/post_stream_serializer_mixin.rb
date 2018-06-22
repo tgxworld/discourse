@@ -14,7 +14,12 @@ module PostStreamSerializerMixin
 
   def post_stream
     result = { posts: posts }
-    result[:stream] = object.filtered_post_ids if include_stream?
+
+    if include_stream?
+      result[:stream] = object.filtered_post_ids
+      result[:stream_length] = result[:stream].length
+    end
+
     result[:gaps] = GapSerializer.new(object.gaps, root: false) if object.gaps.present?
     result
   end

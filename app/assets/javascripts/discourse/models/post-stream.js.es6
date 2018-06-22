@@ -19,6 +19,7 @@ export default RestModel.extend({
   stagingPost: null,
   postsWithPlaceholders: null,
   timelineLookup: null,
+  filteredPostsCount: null,
 
   init() {
     this._identityMap = {};
@@ -39,6 +40,7 @@ export default RestModel.extend({
       loadingBelow: false,
       loadingFilter: false,
       stagingPost: false,
+      filteredPostsCount: null,
       timelineLookup: []
     });
   },
@@ -50,7 +52,6 @@ export default RestModel.extend({
     "stagingPost"
   ),
   notLoading: Ember.computed.not("loading"),
-  filteredPostsCount: Ember.computed.alias("stream.length"),
 
   @computed("posts.[]")
   hasPosts() {
@@ -780,7 +781,11 @@ export default RestModel.extend({
       delete postStreamData.posts;
 
       // Update our attributes
-      this.setProperties(postStreamData);
+      this.setProperties({
+        gaps: postStreamData.gaps,
+        stream: postStreamData.stream,
+        filteredPostsCount: postStreamData.stream_length
+      });
     }
   },
 
