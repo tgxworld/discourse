@@ -70,7 +70,8 @@ class PostSerializer < BasicPostSerializer
              :action_code,
              :action_code_who,
              :last_wiki_edit,
-             :locked
+             :locked,
+             :sort_order
 
   def initialize(object, opts)
     super(object, opts)
