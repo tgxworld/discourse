@@ -12,26 +12,24 @@ class Gaps
   def initialize(subset, original)
     @before = {}
     @after = {}
-    @subset = subset
-    @original = original
 
-    find_gaps
+    find_gaps(subset, original)
   end
 
   def empty?
     @before.size == 0 && @after.size == 0
   end
 
-  def find_gaps
-    return if @subset.nil? || @original.nil?
+  def find_gaps(subset, original)
+    return if subset.nil? || original.nil?
 
     i = j = 0
     gaps = {}
     current_gap = []
 
     while
-      e1 = @subset[i]
-      e2 = @original[j]
+      e1 = subset[i]
+      e2 = original[j]
 
       if (e1 == e2)
         if current_gap.size > 0
@@ -45,10 +43,10 @@ class Gaps
       end
       j = j + 1
 
-      break if (i == @subset.size) || (j == @original.size)
+      break if (i == subset.size) || (j == original.size)
     end
 
-    @after[@subset[i - 1]] = @original[j..-1] if j < @original.size
+    @after[subset[i - 1]] = original[j..-1] if j < original.size
   end
 
 end
