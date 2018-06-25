@@ -5,6 +5,8 @@ import PostsWithPlaceholders from "discourse/lib/posts-with-placeholders";
 import { default as computed } from "ember-addons/ember-computed-decorators";
 import { loadTopicView } from "discourse/models/topic";
 
+const STAGED_POST_ID = -1;
+
 export default RestModel.extend({
   _identityMap: null,
   posts: null,
@@ -355,13 +357,12 @@ export default RestModel.extend({
       post_number: topic.get("highest_post_number"),
       topic: topic,
       created_at: new Date(),
-      id: -1
+      id: STAGED_POST_ID
     });
 
     // If we're at the end of the stream, add the post
     if (this.get("loadedAllPosts")) {
       this.appendPost(post);
-      this.get("stream").addObject(post.get("id"));
       return "staged";
     }
 
@@ -373,12 +374,10 @@ export default RestModel.extend({
     if (this.get("topic.id") === post.get("topic_id")) {
       if (this.get("loadedAllPosts")) {
         this.appendPost(post);
-        this.get("stream").addObject(post.get("id"));
       }
     }
 
-    this.get("stream").removeObject(-1);
-    this._identityMap[-1] = null;
+    this._identityMap[STAGED_POST_ID] = null;
     this.set("stagingPost", false);
   },
 
@@ -387,11 +386,10 @@ export default RestModel.extend({
     state we changed.
   **/
   undoPost(post) {
-    this.get("stream").removeObject(-1);
     this.get("postsWithPlaceholders").removePost(() =>
       this.posts.removeObject(post)
     );
-    this._identityMap[-1] = null;
+    this._identityMap[STAGED_POST_ID] = null;
 
     const topic = this.get("topic");
     this.set("stagingPost", false);
