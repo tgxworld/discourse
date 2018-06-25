@@ -416,6 +416,14 @@ class TopicView
     @filtered_posts.where(post_number: post_number).pluck(:id).first
   end
 
+  def first_post_id
+    @filtered_posts.order(sort_order: :asc).limit(1).pluck(:id).first
+  end
+
+  def last_post_id
+    @filtered_posts.order(sort_order: :desc).limit(1).pluck(:id).first
+  end
+
   protected
 
   def read_posts_set

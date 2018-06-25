@@ -83,15 +83,14 @@ export default RestModel.extend({
   },
 
   firstPostNotLoaded: Ember.computed.not("firstPostPresent"),
-  firstPostId: Ember.computed.alias("stream.firstObject"),
-  lastPostId: Ember.computed.alias("stream.lastObject"),
 
   @computed("hasLoadedData", "lastPostId", "posts.@each.id")
   loadedAllPosts(hasLoadedData, lastPostId) {
     if (!hasLoadedData) {
       return false;
     }
-    if (lastPostId === -1) {
+
+    if (lastPostId === null) {
       return true;
     }
 
@@ -784,7 +783,9 @@ export default RestModel.extend({
       this.setProperties({
         gaps: postStreamData.gaps,
         stream: postStreamData.stream,
-        filteredPostsCount: postStreamData.stream_length
+        filteredPostsCount: postStreamData.stream_length,
+        firstPostId: postStreamData.first_post_id,
+        lastPostId: postStreamData.last_post_id
       });
     }
   },
