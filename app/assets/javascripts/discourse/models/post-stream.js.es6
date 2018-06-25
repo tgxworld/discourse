@@ -127,59 +127,8 @@ export default RestModel.extend({
     );
   },
 
-  /**
-    Returns the window of posts above the current set in the stream, bound to the top of the stream.
-    This is the collection we'll ask for when scrolling upwards.
-  **/
-  @computed("posts.[]", "stream.[]")
-  previousWindow() {
-    // If we can't find the last post loaded, bail
-    const firstPost = _.first(this.get("posts"));
-    if (!firstPost) {
-      return [];
-    }
-
-    // Find the index of the last post loaded, if not found, bail
-    const stream = this.get("stream");
-    const firstIndex = this.indexOf(firstPost);
-    if (firstIndex === -1) {
-      return [];
-    }
-
-    let startIndex = firstIndex - this.get("topic.chunk_size");
-    if (startIndex < 0) {
-      startIndex = 0;
-    }
-    return stream.slice(startIndex, firstIndex);
-  },
-
-  /**
-    Returns the window of posts below the current set in the stream, bound by the bottom of the
-    stream. This is the collection we use when scrolling downwards.
-  **/
-  @computed("posts.lastObject", "stream.[]")
-  nextWindow(lastLoadedPost) {
-    // If we can't find the last post loaded, bail
-    if (!lastLoadedPost) {
-      return [];
-    }
-
-    // Find the index of the last post loaded, if not found, bail
-    const stream = this.get("stream");
-    const lastIndex = this.indexOf(lastLoadedPost);
-    if (lastIndex === -1) {
-      return [];
-    }
-    if (lastIndex + 1 >= this.get("highest_post_number")) {
-      return [];
-    }
-
-    // find our window of posts
-    return stream.slice(
-      lastIndex + 1,
-      lastIndex + this.get("topic.chunk_size") + 1
-    );
-  },
+  windowStartSortOrder: Ember.computed.alias("posts.firstObject.sort_order"),
+  windowEndSortOrder: Ember.computed.alias("posts.lastObject.sort_order"),
 
   cancelFilter() {
     this.set("summary", false);
@@ -338,23 +287,22 @@ export default RestModel.extend({
       return Ember.RSVP.resolve();
     }
 
-    const postIds = this.get("nextWindow");
-    if (Ember.isEmpty(postIds)) {
+    const windowEndSortOrder = this.get("windowEndSortOrder");
+    if (Ember.isEmpty(windowEndSortOrder)) {
       return Ember.RSVP.resolve();
     }
 
     this.set("loadingBelow", true);
     const postsWithPlaceholders = this.get("postsWithPlaceholders");
-    postsWithPlaceholders.appending(postIds);
-    return this.findPostsByIds(postIds)
-      .then(posts => {
-        posts.forEach(p => this.appendPost(p));
-        return posts;
-      })
-      .finally(() => {
-        postsWithPlaceholders.finishedAppending(postIds);
-        this.set("loadingBelow", false);
-      });
+    const topicChunkSize = this.get("topic.chunk_size");
+    postsWithPlaceholders.appending(topicChunkSize);
+
+    return this.fetchNextWindow(windowEndSortOrder, true, p => {
+      this.appendPost(p);
+    }).finally(() => {
+      postsWithPlaceholders.finishedAppending(topicChunkSize);
+      this.set("loadingBelow", false);
+    });
   },
 
   // Prepend the previous window of posts to the stream. Call it when scrolling upwards.
@@ -364,21 +312,22 @@ export default RestModel.extend({
       return Ember.RSVP.resolve();
     }
 
-    const postIds = this.get("previousWindow");
-    if (Ember.isEmpty(postIds)) {
+    const windowStartSortOrder = this.get("windowStartSortOrder");
+    if (Ember.isEmpty(windowStartSortOrder)) {
       return Ember.RSVP.resolve();
     }
 
     this.set("loadingAbove", true);
-    return this.findPostsByIds(postIds.reverse())
-      .then(posts => {
-        posts.forEach(p => this.prependPost(p));
-      })
-      .finally(() => {
-        const postsWithPlaceholders = this.get("postsWithPlaceholders");
-        postsWithPlaceholders.finishedPrepending(postIds);
-        this.set("loadingAbove", false);
-      });
+    let preprendedLength = 0;
+
+    return this.fetchNextWindow(windowStartSortOrder, false, p => {
+      this.prependPost(p);
+      preprendedLength++;
+    }).finally(() => {
+      const postsWithPlaceholders = this.get("postsWithPlaceholders");
+      postsWithPlaceholders.finishedPrepending(preprendedLength);
+      this.set("loadingAbove", false);
+    });
   },
 
   /**
@@ -825,6 +774,35 @@ export default RestModel.extend({
       this._identityMap[post.get("id")] = post;
     }
     return post;
+  },
+
+  fetchNextWindow(sortOrder, asc, callback) {
+    const url = `/t/${this.get("topic.id")}/posts.json`;
+    let data = {
+      sort_order: sortOrder,
+      asc: asc
+    };
+
+    data = _.merge(data, this.get("streamFilters"));
+    const store = this.store;
+
+    return ajax(url, { data }).then(result => {
+      if (result.suggested_topics) {
+        this.set("topic.suggested_topics", result.suggested_topics);
+      }
+
+      const posts = Ember.get(result, "post_stream.posts");
+
+      if (posts) {
+        posts.forEach(p => {
+          p = this.storePost(store.createRecord("post", p));
+
+          if (callback) {
+            callback.call(this, p);
+          }
+        });
+      }
+    });
   },
 
   findPostsByIds(postIds) {

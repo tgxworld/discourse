@@ -6,17 +6,15 @@ export function Placeholder(viewName) {
 
 export default Ember.Object.extend(Ember.Array, {
   posts: null,
-  _appendingIds: null,
+  _appendingLength: null,
 
   init() {
-    this._appendingIds = {};
+    this._appendingLength = 0;
   },
 
   @computed
   length() {
-    return (
-      this.get("posts.length") + Object.keys(this._appendingIds || {}).length
-    );
+    return this.get("posts.length") + this._appendingLength;
   },
 
   _changeArray(cb, offset, removed, inserted) {
@@ -43,32 +41,30 @@ export default Ember.Object.extend(Ember.Array, {
     this._changeArray(cb, 0, length, length);
   },
 
-  appending(postIds) {
+  appending(appendingLength) {
     this._changeArray(
       () => {
-        const appendingIds = this._appendingIds;
-        postIds.forEach(pid => (appendingIds[pid] = true));
+        this._appendingLength = appendingLength;
       },
       this.get("length"),
       0,
-      postIds.length
+      appendingLength
     );
   },
 
-  finishedAppending(postIds) {
+  finishedAppending(appendingLength) {
     this._changeArray(
       () => {
-        const appendingIds = this._appendingIds;
-        postIds.forEach(pid => delete appendingIds[pid]);
+        this._appendingLength -= appendingLength;
       },
-      this.get("posts.length") - postIds.length,
-      postIds.length,
-      postIds.length
+      this.get("posts.length") - appendingLength,
+      appendingLength,
+      appendingLength
     );
   },
 
-  finishedPrepending(postIds) {
-    this._changeArray(function() {}, 0, 0, postIds.length);
+  finishedPrepending(prependingLength) {
+    this._changeArray(function() {}, 0, 0, prependingLength);
   },
 
   objectAt(index) {

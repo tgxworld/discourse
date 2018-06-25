@@ -202,6 +202,11 @@ class TopicView
   def filter_posts(opts = {})
     return filter_posts_near(opts[:post_number].to_i) if opts[:post_number].present?
     return filter_posts_by_ids(opts[:post_ids]) if opts[:post_ids].present?
+
+    if opts[:sort_order].present?
+      return filter_posts_by_sort_order(opts[:sort_order], asc: opts[:asc])
+    end
+
     return filter_best(opts[:best], opts) if opts[:best].present?
 
     filter_posts_paged(@page)
@@ -452,6 +457,27 @@ class TopicView
     else
       posts.where(post_type: visible_types)
     end
+  end
+
+  def filter_posts_by_sort_order(sort_order, asc:)
+    @posts = @filtered_posts
+      .includes({ user: :primary_group }, :reply_to_user, :deleted_by, :incoming_email, :topic)
+
+    @posts =
+      if asc
+        @posts
+          .where('sort_order > ?', sort_order)
+          .order(sort_order: :asc)
+      else
+        @posts
+          .where('sort_order < ?', sort_order)
+          .order(sort_order: :desc)
+      end
+
+    @posts = filter_post_types(@posts)
+    @posts = @posts.with_deleted if @guardian.can_see_deleted_posts?
+    @posts = @posts.limit(@limit)
+    @posts
   end
 
   def filter_posts_by_ids(post_ids)
