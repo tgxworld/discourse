@@ -232,53 +232,68 @@ export default RestModel.extend({
 
   // Fill in a gap of posts before a particular post
   fillGapBefore(post, gap) {
-    const postId = post.get("id"),
-      stream = this.get("stream"),
-      idx = stream.indexOf(postId),
-      currentPosts = this.get("posts");
+    const postId = post.get("id");
+    const currentPosts = this.get("posts");
+    let postIdx = currentPosts.indexOf(post);
+    const origIdx = postIdx;
 
-    if (idx !== -1) {
-      // Insert the gap at the appropriate place
-      stream.splice.apply(stream, [idx, 0].concat(gap));
+    if (postIdx !== -1) {
+      return this.findPostsByIds(gap).then(posts => {
+        posts.forEach(p => {
+          const stored = this.storePost(p);
 
-      let postIdx = currentPosts.indexOf(post);
-      const origIdx = postIdx;
-      if (postIdx !== -1) {
-        return this.findPostsByIds(gap).then(posts => {
-          posts.forEach(p => {
-            const stored = this.storePost(p);
-            if (!currentPosts.includes(stored)) {
-              currentPosts.insertAt(postIdx++, stored);
-            }
-          });
-
-          delete this.get("gaps.before")[postId];
-          this.get("stream").enumerableContentDidChange();
-          this.get("postsWithPlaceholders").arrayContentDidChange(
-            origIdx,
-            0,
-            posts.length
-          );
-          post.set("hasGap", false);
+          if (!currentPosts.includes(stored)) {
+            currentPosts.insertAt(postIdx++, stored);
+          }
         });
-      }
+
+        delete this.get("gaps.before")[postId];
+
+        this.get("postsWithPlaceholders").arrayContentDidChange(
+          origIdx,
+          0,
+          posts.length
+        );
+
+        post.set("hasGap", false);
+      });
     }
+
     return Ember.RSVP.resolve();
   },
 
   // Fill in a gap of posts after a particular post
   fillGapAfter(post, gap) {
-    const postId = post.get("id"),
-      stream = this.get("stream"),
-      idx = stream.indexOf(postId);
+    const currentPosts = this.get("posts");
+    let postIdx = currentPosts.indexOf(post);
+    const origIdx = postIdx;
 
-    if (idx !== -1) {
-      stream.pushObjects(gap);
-      return this.appendMore().then(() => {
+    if (postIdx !== -1) {
+      return this.findPostsByIds(gap).then(posts => {
+        posts
+          .sort((a, b) => {
+            return b.sort_order - a.sort_order;
+          })
+          .forEach(p => {
+            const stored = this.storePost(p);
+
+            if (!currentPosts.includes(stored)) {
+              postIdx++;
+              currentPosts.insertAt(postIdx, stored);
+            }
+          });
+
+        this.get("postsWithPlaceholders").arrayContentDidChange(
+          origIdx,
+          0,
+          posts.length
+        );
+
+        const postId = post.get("id");
         delete this.get("gaps.after")[postId];
-        this.get("stream").enumerableContentDidChange();
       });
     }
+
     return Ember.RSVP.resolve();
   },
 
@@ -799,6 +814,10 @@ export default RestModel.extend({
             callback.call(this, p);
           }
         });
+      }
+
+      if (result.post_stream.gaps) {
+        this.set("gaps", _.merge(this.get("gaps"), result.post_stream.gaps));
       }
     });
   },
