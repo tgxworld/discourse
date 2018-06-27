@@ -112,7 +112,9 @@ class TopicView
       first_sort_order = @posts.first.sort_order
       last_sort_order = @posts.last.sort_order
 
-      ascending = (last_sort_order >= first_sort_order)
+      return if first_sort_order == last_sort_order
+
+      ascending = (last_sort_order > first_sort_order)
       right_limit = "<"
       left_limit = ">"
 
