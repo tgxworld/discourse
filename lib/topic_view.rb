@@ -118,7 +118,7 @@ class TopicView
 
       sort_order_range =
         if ascending
-          if @posts.offset(@limit).exists? && unfiltered_posts.order(:sort_order)
+          if unfiltered_posts.order(:sort_order)
               .where("sort_order > ?", last_sort_order)
               .offset(@limit)
               .exists?
@@ -503,6 +503,12 @@ class TopicView
     @filtered_posts.order(sort_order: :desc).limit(1).pluck(:id).first
   end
 
+  MEGA_TOPIC_POSTS_COUNT = 10000
+
+  def is_mega_topic?
+    @is_mega_topic ||= (@topic.posts_count >= MEGA_TOPIC_POSTS_COUNT)
+  end
+
   protected
 
   def read_posts_set
@@ -632,11 +638,5 @@ class TopicView
         StaffActionLogger.new(@user).log_check_personal_message(@topic)
       end
     end
-  end
-
-  MEGA_TOPIC_POSTS_COUNT = 10000
-
-  def is_mega_topic?
-    @is_mega_topic ||= (@topic.posts_count >= MEGA_TOPIC_POSTS_COUNT)
   end
 end
