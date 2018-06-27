@@ -462,16 +462,24 @@ class TopicView
     end
   end
 
-  def filtered_post_ids
-    @filtered_post_ids ||= filtered_post_stream.map do |tuple|
+  def filtered_days_ago
+    @filtered_days_ago ||= begin
       if is_mega_topic?
-        tuple
+        []
       else
-        tuple[0]
+        filtered_post_stream.map do |_, days_ago|
+          days_ago
+        end.compact
       end
     end
   end
 
+  def filtered_post_ids
+    @filtered_post_ids ||= filtered_post_stream.map { |id, _| id }
+  end
+
+  # This method is expensive for large topics. It should only be called for
+  # small topics where an accurate count is required.
   def unfiltered_post_ids
     @unfiltered_post_ids ||=
       begin

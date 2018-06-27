@@ -27,7 +27,7 @@ module PostStreamSerializerMixin
   end
 
   def timeline_lookup
-    TimelineLookup.build(object.filtered_post_stream)
+    TimelineLookup.build(object.filtered_days_ago)
   end
 
   def posts
