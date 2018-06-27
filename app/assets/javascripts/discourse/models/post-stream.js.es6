@@ -742,13 +742,16 @@ export default RestModel.extend({
       delete postStreamData.posts;
 
       // Update our attributes
-      this.setProperties({
-        gaps: postStreamData.gaps,
-        stream: postStreamData.stream,
-        filteredPostsCount: postStreamData.stream_length,
-        firstPostId: postStreamData.first_post_id,
-        lastPostId: postStreamData.last_post_id
-      });
+      if (postStreamData.stream) {
+        this.setProperties({
+          stream: postStreamData.stream,
+          filteredPostsCount: postStreamData.stream_length,
+          firstPostId: postStreamData.first_post_id,
+          lastPostId: postStreamData.last_post_id
+        });
+      }
+
+      if (postStreamData.gaps) this.set("gaps", postStreamData.gaps);
     }
   },
 
