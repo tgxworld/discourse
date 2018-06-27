@@ -313,9 +313,12 @@ class TopicView
     # Sometimes we don't care about the OP, for example when embedding comments
     min = 1 if min == 0 && @exclude_first
 
-    max = (min + @limit) - 1
+    @posts = filter_posts_by_ids(@filtered_posts.order(:sort_order)
+      .offset(min)
+      .limit(@limit)
+      .pluck(:id))
 
-    filter_posts_in_range(min, max)
+    @posts
   end
 
   def filter_best(max, opts = {})
@@ -550,19 +553,6 @@ class TopicView
       .order('sort_order')
     @posts = filter_post_types(@posts)
     @posts = @posts.with_deleted if @guardian.can_see_deleted_posts?
-    @posts
-  end
-
-  def filter_posts_in_range(min, max)
-    post_count = (filtered_post_ids.length - 1)
-
-    max = [max, post_count].min
-
-    return @posts = Post.none if min > max
-
-    min = [[min, max].min, 0].max
-
-    @posts = filter_posts_by_ids(filtered_post_ids[min..max])
     @posts
   end
 
