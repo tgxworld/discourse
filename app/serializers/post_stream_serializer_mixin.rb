@@ -8,20 +8,11 @@ module PostStreamSerializerMixin
     klass.attributes :timeline_lookup
   end
 
-  def include_stream?
-    true
-  end
-
   def post_stream
     result = { posts: posts }
-
-    if include_stream?
-      result[:stream] = object.filtered_post_ids
-      result[:stream_length] = object.filtered_post_stream_length
-      result[:first_post_id] = object.first_post_id
-      result[:last_post_id] = object.last_post_id
-    end
-
+    result[:stream_length] = object.filtered_post_stream_length
+    result[:first_post_id] = object.first_post_id
+    result[:last_post_id] = object.last_post_id
     result[:gaps] = GapSerializer.new(object.gaps, root: false) if object.gaps.present?
     result
   end
@@ -38,6 +29,7 @@ module PostStreamSerializerMixin
         serializer = PostSerializer.new(post, scope: scope, root: false)
         serializer.add_raw = true if @options[:include_raw]
         serializer.topic_view = object
+        serializer.post_stream_position = object.filtered_post_stream_position(post)
 
         serializer.as_json
       end

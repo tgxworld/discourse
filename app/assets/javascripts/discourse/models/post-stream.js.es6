@@ -634,12 +634,7 @@ export default RestModel.extend({
 
   // Get the index of a post in the stream. (Use this for the topic progress bar.)
   progressIndexOfPost(post) {
-    return this.progressIndexOfPostId(post.get("id"));
-  },
-
-  // Get the index in the stream of a post id. (Use this for the topic progress bar.)
-  progressIndexOfPostId(postId) {
-    return this.get("stream").indexOf(postId) + 1;
+    return post.get("post_stream_position") || post.get("post_number");
   },
 
   /**
@@ -742,16 +737,12 @@ export default RestModel.extend({
       delete postStreamData.posts;
 
       // Update our attributes
-      if (postStreamData.stream) {
-        this.setProperties({
-          stream: postStreamData.stream,
-          filteredPostsCount: postStreamData.stream_length,
-          firstPostId: postStreamData.first_post_id,
-          lastPostId: postStreamData.last_post_id
-        });
-      }
-
-      if (postStreamData.gaps) this.set("gaps", postStreamData.gaps);
+      this.setProperties({
+        filteredPostsCount: postStreamData.stream_length,
+        firstPostId: postStreamData.first_post_id,
+        lastPostId: postStreamData.last_post_id,
+        gaps: postStreamData.gaps
+      });
     }
   },
 

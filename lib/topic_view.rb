@@ -456,7 +456,7 @@ class TopicView
 
       columns = [:id]
 
-      if !is_mega_topic?
+      if !heuristic_stream_details?
         columns << 'EXTRACT(DAYS FROM CURRENT_TIMESTAMP - created_at)::INT AS days_ago'
       end
 
@@ -464,9 +464,15 @@ class TopicView
     end
   end
 
+  def filtered_post_stream_position(post)
+    return if heuristic_stream_details?
+    post_id = post.id
+    filtered_post_ids.index(post.id) + 1
+  end
+
   def filtered_post_stream_length
     @filtered_post_stream_length ||= begin
-      if is_mega_topic?
+      if heuristic_stream_details?
         @topic.highest_post_number
       else
         filtered_post_ids.length
@@ -476,7 +482,7 @@ class TopicView
 
   def filtered_days_ago
     @filtered_days_ago ||= begin
-      if is_mega_topic?
+      if heuristic_stream_details?
         []
       else
         filtered_post_stream.map do |_, days_ago|
@@ -650,5 +656,9 @@ class TopicView
         StaffActionLogger.new(@user).log_check_personal_message(@topic)
       end
     end
+  end
+
+  def heuristic_stream_details?
+    is_mega_topic? && @filter.blank?
   end
 end

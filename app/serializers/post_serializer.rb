@@ -9,7 +9,8 @@ class PostSerializer < BasicPostSerializer
     :single_post_link_counts,
     :draft_sequence,
     :post_actions,
-    :all_post_actions
+    :all_post_actions,
+    :post_stream_position
   ]
 
   INSTANCE_VARS.each do |v|
@@ -71,7 +72,8 @@ class PostSerializer < BasicPostSerializer
              :action_code_who,
              :last_wiki_edit,
              :locked,
-             :sort_order
+             :sort_order,
+             :post_stream_position
 
   def initialize(object, opts)
     super(object, opts)
@@ -377,6 +379,10 @@ class PostSerializer < BasicPostSerializer
 
   def include_hidden_reason_id?
     object.hidden
+  end
+
+  def include_post_stream_position?
+    @post_stream_position
   end
 
   private
