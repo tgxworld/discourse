@@ -17,7 +17,7 @@ module PostStreamSerializerMixin
 
     if include_stream?
       result[:stream] = object.filtered_post_ids
-      result[:stream_length] = result[:stream].length
+      result[:stream_length] = object.filtered_post_stream_length
       result[:first_post_id] = object.first_post_id
       result[:last_post_id] = object.last_post_id
     end

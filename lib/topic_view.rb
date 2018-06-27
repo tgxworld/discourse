@@ -462,6 +462,16 @@ class TopicView
     end
   end
 
+  def filtered_post_stream_length
+    @filtered_post_stream_length ||= begin
+      if is_mega_topic?
+        @topic.highest_post_number
+      else
+        filtered_post_ids.length
+      end
+    end
+  end
+
   def filtered_days_ago
     @filtered_days_ago ||= begin
       if is_mega_topic?
