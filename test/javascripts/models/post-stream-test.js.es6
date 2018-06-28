@@ -213,28 +213,6 @@ QUnit.test("cancelFilter", assert => {
   );
 });
 
-QUnit.test("findPostIdForPostNumber", assert => {
-  const postStream = buildStream(1234, [10, 20, 30, 40, 50, 60, 70]);
-  postStream.set("gaps", { before: { 60: [55, 58] } });
-
-  assert.equal(
-    postStream.findPostIdForPostNumber(500),
-    null,
-    "it returns null when the post cannot be found"
-  );
-  assert.equal(
-    postStream.findPostIdForPostNumber(1),
-    10,
-    "it finds the postId at the beginning"
-  );
-  assert.equal(
-    postStream.findPostIdForPostNumber(5),
-    50,
-    "it finds the postId in the middle"
-  );
-  assert.equal(postStream.findPostIdForPostNumber(8), 60, "it respects gaps");
-});
-
 QUnit.test("toggleParticipant", assert => {
   const postStream = buildStream(1236);
   sandbox.stub(postStream, "refresh").returns(new Ember.RSVP.resolve());

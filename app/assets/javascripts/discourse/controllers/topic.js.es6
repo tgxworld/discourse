@@ -329,7 +329,7 @@ export default Ember.Controller.extend(BufferedContent, {
       let firstPost = postStream.get("posts.firstObject");
 
       if (firstPost.get("post_number") !== 1) {
-        const postId = postStream.findPostIdForPostNumber(1);
+        const postId = postStream.get("firstPostId");
         // try loading from identity map first
         firstPost = postStream.findLoadedPost(postId);
         if (firstPost === undefined) {
@@ -556,16 +556,7 @@ export default Ember.Controller.extend(BufferedContent, {
     },
 
     jumpToPost(postNumber) {
-      const postStream = this.get("model.postStream");
-      let postId = postStream.findPostIdForPostNumber(postNumber);
-
-      // If we couldn't find the post, find the closest post to it
-      if (!postId) {
-        const closest = postStream.closestPostNumberFor(postNumber);
-        postId = postStream.findPostIdForPostNumber(closest);
-      }
-
-      this._jumpToPostId(postId);
+      this._jumpToPostNumber(postNumber);
     },
 
     jumpTop() {

@@ -164,8 +164,7 @@ export default Ember.Component.extend({
   actions: {
     replyAsNewTopic() {
       const postStream = this.get("topic.postStream");
-      const postId =
-        this.get("postId") || postStream.findPostIdForPostNumber(1);
+      const postId = this.get("postId") || postStream.get("firstPostId");
       const post = postStream.findLoadedPost(postId);
       this.sendAction("replyAsNewTopic", post);
       this.send("close");

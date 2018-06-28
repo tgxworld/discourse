@@ -694,36 +694,6 @@ export default RestModel.extend({
     }
   },
 
-  // Find a postId for a postNumber, respecting gaps
-  findPostIdForPostNumber(postNumber) {
-    const stream = this.get("stream"),
-      beforeLookup = this.get("gaps.before"),
-      streamLength = stream.length;
-
-    let sum = 1;
-    for (let i = 0; i < streamLength; i++) {
-      const pid = stream[i];
-
-      // See if there are posts before this post
-      if (beforeLookup) {
-        const before = beforeLookup[pid];
-        if (before) {
-          for (let j = 0; j < before.length; j++) {
-            if (sum === postNumber) {
-              return pid;
-            }
-            sum++;
-          }
-        }
-      }
-
-      if (sum === postNumber) {
-        return pid;
-      }
-      sum++;
-    }
-  },
-
   updateFromJson(postStreamData) {
     const posts = this.get("posts");
 
