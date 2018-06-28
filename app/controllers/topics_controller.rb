@@ -175,6 +175,25 @@ class TopicsController < ApplicationController
     render_json_dump(wordpress_serializer)
   end
 
+  def post_ids
+    params.require(:topic_id)
+    params.permit(:sort_order, :username_filters, :filter)
+
+    default_options = {
+      sort_order: params[:sort_order],
+      filter: params[:filter],
+      skip_limit: true,
+      asc: true
+    }
+
+    if (username_filters = params[:username_filters]).present?
+      default_options[:username_filters] = username_filters.split(',')
+    end
+
+    @topic_view = TopicView.new(params[:topic_id], current_user, default_options)
+    render_json_dump(post_ids: @topic_view.posts.pluck(:id))
+  end
+
   def posts
     params.require(:topic_id)
     params.permit(:post_ids, :sort_order, :username_filters, :filter)

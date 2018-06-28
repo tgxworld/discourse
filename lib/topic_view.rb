@@ -574,7 +574,7 @@ class TopicView
 
     @posts = filter_post_types(@posts)
     @posts = @posts.with_deleted if @guardian.can_see_deleted_posts?
-    @posts = @posts.limit(@limit)
+    @posts = @posts.limit(@limit) if !@skip_limit
     @posts
   end
 

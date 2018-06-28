@@ -148,6 +148,30 @@ export default Ember.Controller.extend(BufferedContent, {
     );
   },
 
+  _loadPostIds(sortOrder) {
+    if (this.get("loadingPostIds")) return;
+
+    const postStream = this.get("model.postStream");
+    const url = `/t/${this.get("model.id")}/post_ids.json`;
+
+    this.set("loadingPostIds", true);
+
+    return ajax(url, {
+      data: _.merge(
+        { sort_order: sortOrder - 1 },
+        postStream.get("streamFilters")
+      )
+    })
+      .then(result => {
+        this.get("selectedPostIds").pushObjects(result.post_ids);
+        this.set("selectedPostIds", [...new Set(this.get("selectedPostIds"))]);
+        this.appEvents.trigger("post-stream:refresh", { force: true });
+      })
+      .finally(() => {
+        this.set("loadingPostIds", false);
+      });
+  },
+
   actions: {
     showPostFlags(post) {
       return this.send("showFlags", post);
@@ -585,8 +609,11 @@ export default Ember.Controller.extend(BufferedContent, {
     },
 
     selectAll() {
-      this.set("selectedPostIds", [...this.get("model.postStream.stream")]);
-      this.appEvents.trigger("post-stream:refresh", { force: true });
+      this._loadPostIds(1);
+    },
+
+    selectBelow(post) {
+      this._loadPostIds(post.get("sort_order"));
     },
 
     deselectAll() {
@@ -607,13 +634,6 @@ export default Ember.Controller.extend(BufferedContent, {
         this.get("selectedPostIds").pushObjects([post.id, ...replyIds]);
         this.appEvents.trigger("post-stream:refresh", { force: true });
       });
-    },
-
-    selectBelow(post) {
-      const stream = [...this.get("model.postStream.stream")];
-      const below = stream.slice(stream.indexOf(post.id));
-      this.get("selectedPostIds").pushObjects(below);
-      this.appEvents.trigger("post-stream:refresh", { force: true });
     },
 
     deleteSelected() {
@@ -958,7 +978,7 @@ export default Ember.Controller.extend(BufferedContent, {
       : undefined;
   },
 
-  @computed("selectedPostsCount", "model.postStream.stream.length")
+  @computed("selectedPostsCount", "model.postStream.filteredPostsCount")
   selectedAllPosts(selectedPostsCount, postsCount) {
     return selectedPostsCount >= postsCount;
   },
