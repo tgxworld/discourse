@@ -821,41 +821,29 @@ export default RestModel.extend({
     });
   },
 
-  backfillExcerpts(streamPosition) {
-    this._excerpts = this._excerpts || [];
-    const stream = this.get("stream");
+  backfillExcerpts(streamPosition, opts) {
+    this._excerpts = this._excerpts || {};
+    const postId = post.get("id");
 
     this._excerpts.loadNext = streamPosition;
 
     if (this._excerpts.loading) {
       return this._excerpts.loading.then(() => {
-        if (!this._excerpts[stream[streamPosition]]) {
+        if (!this._excerpts[postId]) {
           if (this._excerpts.loadNext === streamPosition) {
-            return this.backfillExcerpts(streamPosition);
+            return this.backfillExcerpts(streamPosition, post);
           }
         }
       });
     }
 
-    let postIds = stream.slice(
-      Math.max(streamPosition - 20, 0),
-      streamPosition + 20
-    );
-
-    for (let i = postIds.length - 1; i >= 0; i--) {
-      if (this._excerpts[postIds[i]]) {
-        postIds.splice(i, 1);
-      }
-    }
-
     let data = {
-      post_ids: postIds
+      sort_order: post.get("sort_order")
     };
 
-    this._excerpts.loading = ajax(
-      "/t/" + this.get("topic.id") + "/excerpts.json",
-      { data }
-    )
+    this._excerpts.loading = ajax(`/t/${this.get("topic.id")}/excerpts.json`, {
+      data
+    })
       .then(excerpts => {
         excerpts.forEach(obj => {
           this._excerpts[obj.post_id] = obj;
@@ -869,19 +857,39 @@ export default RestModel.extend({
   },
 
   excerpt(streamPosition) {
-    const stream = this.get("stream");
-
     return new Ember.RSVP.Promise((resolve, reject) => {
-      let excerpt = this._excerpts && this._excerpts[stream[streamPosition]];
+      const post = this.get("posts").find(p => {
+        return p.get("post_stream_position") === streamPosition;
+      });
 
-      if (excerpt) {
-        resolve(excerpt);
-        return;
+      let opts = {};
+
+      if (post) {
+        const postId = post.get("id");
+
+        let excerpt = this._excerpts && this._excerpts[postId];
+
+        if (excerpt) {
+          resolve(excerpt);
+          return;
+        }
+
+        opts.sortOrder = post.get("sort_order");
+      } else {
+        const firstPost = this.get("posts")[0];
+        opts.sort_order = firstPost.get("sort_order");
+        const offset = firstPost.get("post_stream_position") - streamPosition;
+
+        if (offset >= 0) {
+          opts.asc = true;
+        } else {
+          opts.asc = false;
+        }
       }
 
-      this.backfillExcerpts(streamPosition)
+      this.backfillExcerpts(streamPosition, opts)
         .then(() => {
-          resolve(this._excerpts[stream[streamPosition]]);
+          resolve(this._excerpts[postId]);
         })
         .catch(e => reject(e));
     });

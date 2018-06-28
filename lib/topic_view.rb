@@ -64,6 +64,7 @@ class TopicView
 
     @chunk_size =
       case
+      when options[:chunk_size] then options[:chunk_size]
       when options[:slow_platform] then TopicView.slow_chunk_size
       when @print then TopicView.print_chunk_size
       else TopicView.chunk_size

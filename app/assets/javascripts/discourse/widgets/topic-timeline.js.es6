@@ -393,7 +393,7 @@ export default createWidget("topic-timeline", {
 
       // we have an off by one, stream is zero based,
       // pos is 1 based
-      stream.excerpt(pos - 1).then(info => {
+      stream.excerpt(pos).then(info => {
         if (info && this.state.position === pos) {
           let excerpt = "";
 
