@@ -463,7 +463,11 @@ export default RestModel.extend({
       const postIds = posts.map(p => p.get("id"));
       const identityMap = this._identityMap;
 
-      this.get("stream").removeObjects(postIds);
+      this.set(
+        "filteredPostsCount",
+        this.get("filteredPostsCount") - postIds.length
+      );
+
       allPosts.removeObjects(posts);
       postIds.forEach(id => delete identityMap[id]);
     });
@@ -507,10 +511,14 @@ export default RestModel.extend({
 
     const loadedAllPosts = this.get("loadedAllPosts");
 
-    if (this.get("stream").indexOf(postId) === -1) {
-      this.get("stream").addObject(postId);
+    const postLoaded = this.get("posts").find(p => {
+      return p.get("id") === postId;
+    });
+
+    if (!postLoaded) {
       if (loadedAllPosts) {
         this.set("loadingLastPost", true);
+
         return this.findPostsByIds([postId])
           .then(posts => {
             posts.forEach(p => this.appendPost(p));
