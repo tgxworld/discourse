@@ -128,7 +128,7 @@ createWidget("timeline-padding", {
 
 createWidget("timeline-scrollarea", {
   tagName: "div.timeline-scrollarea",
-  buildKey: () => `timeline-scrollarea`,
+  buildKey: attrs => `timeline-scrollarea-${attrs.enteredIndex}`,
 
   buildAttributes() {
     return { style: `height: ${scrollareaHeight()}px` };
@@ -147,7 +147,6 @@ createWidget("timeline-scrollarea", {
     const topic = attrs.topic;
     const postStream = topic.get("postStream");
     const total = postStream.get("filteredPostsCount");
-
     const current = clamp(Math.floor(total * percentage) + 1, 1, total);
 
     const daysAgo = postStream.closestDaysAgoFor(current);

@@ -237,6 +237,7 @@ export default Ember.Controller.extend(BufferedContent, {
       const total = this.get("model.postStream.filteredPostsCount");
       const percent =
         parseFloat(this._progressIndex + event.percent - 1) / total;
+
       this.appEvents.trigger("topic:current-post-scrolled", {
         postIndex: this._progressIndex,
         percent: Math.max(Math.min(percent, 1.0), 0.0)
@@ -884,33 +885,42 @@ export default Ember.Controller.extend(BufferedContent, {
   },
 
   _jumpToIndex(index) {
-    const stream = this.get("model.postStream.stream");
-    index = Math.max(1, Math.min(stream.length, index));
-    this._jumpToPostId(stream[index - 1]);
+    const post = this.get("model.postStream.posts").find(p => {
+      return p.get("post_stream_position") === index - 1;
+    });
+
+    if (post) {
+      this._jumpToPostId(post.get("id"));
+    } else {
+      this._jumpToPostNumber(index);
+      this.appEvents.trigger("topic:jump-to-post", index);
+    }
   },
 
   _jumpToPostId(postId) {
     if (!postId) {
       Ember.Logger.warn(
-        "jump-post code broken - requested an index outside the stream array"
+        "jump-post code broken - requested an index that isn't loaded"
       );
       return;
     }
 
     this.appEvents.trigger("topic:jump-to-post", postId);
-
-    const topic = this.get("model");
-    const postStream = topic.get("postStream");
+    const postStream = this.get("model").get("postStream");
     const post = postStream.findLoadedPost(postId);
 
     if (post) {
-      DiscourseURL.routeTo(topic.urlForPostNumber(post.get("post_number")));
+      this._jumpToPostNumber(post.get("post_number"));
     } else {
       // need to load it
       postStream.findPostsByIds([postId]).then(arr => {
-        DiscourseURL.routeTo(topic.urlForPostNumber(arr[0].get("post_number")));
+        this._jumpToPostNumber(arr[0].get("post_number"));
       });
     }
+  },
+
+  _jumpToPostNumber(postNumber) {
+    DiscourseURL.routeTo(this.get("model").urlForPostNumber(postNumber));
   },
 
   togglePinnedState() {
