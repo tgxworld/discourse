@@ -459,7 +459,6 @@ export default RestModel.extend({
     }
 
     this.get("postsWithPlaceholders").refreshAll(() => {
-      const allPosts = this.get("posts");
       const postIds = posts.map(p => p.get("id"));
       const identityMap = this._identityMap;
 
@@ -468,7 +467,7 @@ export default RestModel.extend({
         this.get("filteredPostsCount") - postIds.length
       );
 
-      allPosts.removeObjects(posts);
+      this.get("posts").removeObjects(posts);
       postIds.forEach(id => delete identityMap[id]);
     });
   },
@@ -534,43 +533,35 @@ export default RestModel.extend({
 
   triggerRecoveredPost(postId) {
     const existing = this._identityMap[postId];
+    const postsWithPlaceholders = this.get("postsWithPlaceholders");
 
     if (existing) {
       return this.triggerChangedPost(postId, new Date());
     } else {
-      // need to insert into stream
-      const url = "/posts/" + postId;
-      const store = this.store;
-      return ajax(url).then(p => {
-        const post = store.createRecord("post", p);
-        const stream = this.get("stream");
+      return this.findPostsByIds([postId]).then(newPosts => {
         const posts = this.get("posts");
-        this.storePost(post);
 
-        // we need to zip this into the stream
-        let index = 0;
-        stream.forEach(pid => {
-          if (pid < p.id) {
-            index += 1;
-          }
-        });
+        newPosts.forEach(newPost => {
+          let index = 0;
 
-        stream.insertAt(index, p.id);
+          posts.forEach(_post => {
+            if (_post.sort_order < newPost.sort_order) {
+              index += 1;
+            }
+          });
 
-        index = 0;
-        posts.forEach(_post => {
-          if (_post.id < p.id) {
-            index += 1;
-          }
-        });
-
-        if (index < posts.length) {
-          posts.insertAt(index, post);
-        } else {
-          if (post.post_number < posts[posts.length - 1].post_number + 5) {
+          if (index < posts.length) {
+            postsWithPlaceholders.refreshAll(() => {
+              posts.insertAt(index, newPost);
+              this.incrementProperty("filteredPostsCount");
+            });
+          } else if (
+            newPost.post_number <
+            posts[posts.length - 1].post_number + 5
+          ) {
             this.appendMore();
           }
-        }
+        });
       });
     }
   },
