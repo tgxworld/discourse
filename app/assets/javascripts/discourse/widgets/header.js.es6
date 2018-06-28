@@ -440,7 +440,7 @@ export default createWidget("header", {
     // If we're viewing a topic, only intercept search if there are cloaked posts
     if (showSearch && currentPath.match(/^topic\./)) {
       const controller = this.register.lookup("controller:topic");
-      const total = controller.get("model.postStream.stream.length") || 0;
+      const total = controller.get("model.postStream.filteredPostsCount") || 0;
       const chunkSize = controller.get("model.chunk_size") || 0;
 
       showSearch =
