@@ -375,6 +375,8 @@ export default RestModel.extend({
       id: STAGED_POST_ID
     });
 
+    this.incrementProperty("filteredPostsCount");
+
     // If we're at the end of the stream, add the post
     if (this.get("loadedAllPosts")) {
       this.appendPost(post);
@@ -413,6 +415,8 @@ export default RestModel.extend({
       highest_post_number: (topic.get("highest_post_number") || 0) - 1,
       posts_count: (topic.get("posts_count") || 0) - 1
     });
+
+    this.decrementProperty("filteredPostsCount");
 
     // TODO unfudge reply count on parent post
   },
