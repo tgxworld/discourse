@@ -167,13 +167,11 @@ createWidget("timeline-scrollarea", {
       lastReadPercentage: null
     };
 
-    const lastReadId = topic.last_read_post_id;
-    const lastReadNumber = topic.last_read_post_number;
+    const lastReadStreamPosition = topic.last_read_stream_position;
 
-    if (lastReadId && lastReadNumber) {
-      const idx = postStream.get("stream").indexOf(lastReadId) + 1;
-      result.lastRead = idx;
-      result.lastReadPercentage = this._percentFor(topic, idx);
+    if (lastReadStreamPosition) {
+      result.lastRead = lastReadStreamPosition;
+      result.lastReadPercentage = this._percentFor(topic, result.lastRead);
     }
 
     if (this.state.position !== result.current) {

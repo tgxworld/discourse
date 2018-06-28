@@ -464,10 +464,17 @@ class TopicView
     end
   end
 
-  def filtered_post_stream_position(post)
+  def filtered_post_stream_position(post_or_post_id)
     return if heuristic_stream_details?
-    post_id = post.id
-    filtered_post_ids.index(post.id) + 1
+
+    post_id =
+      if post_or_post_id.is_a?(Post)
+        post_or_post_id.id
+      else
+        post_or_post_id
+      end
+
+    filtered_post_ids.index(post_id) + 1
   end
 
   def filtered_post_stream_length

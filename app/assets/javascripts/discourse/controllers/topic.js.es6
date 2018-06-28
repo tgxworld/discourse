@@ -246,9 +246,13 @@ export default Ember.Controller.extend(BufferedContent, {
       const postNumber = post.get("post_number");
       const topic = this.get("model");
       topic.set("currentPost", postNumber);
+
       if (postNumber > (topic.get("last_read_post_number") || 0)) {
-        topic.set("last_read_post_id", post.get("id"));
-        topic.set("last_read_post_number", postNumber);
+        topic.setProperties({
+          last_read_post_id: post.get("id"),
+          last_read_post_number: postNumber,
+          last_read_stream_position: post.get("post_stream_position")
+        });
       }
 
       this.send("postChangedRoute", postNumber);

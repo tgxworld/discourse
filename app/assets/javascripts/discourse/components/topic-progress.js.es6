@@ -59,18 +59,19 @@ export default Ember.Component.extend({
     }
   },
 
-  @computed("progressPosition", "topic.last_read_post_id")
-  showBackButton(position, lastReadId) {
-    if (!lastReadId) {
+  @computed("progressPosition", "topic.last_read_stream_position")
+  showBackButton(position, lastReadStreamPosition) {
+    if (!position || !lastReadStreamPosition) {
       return;
     }
 
-    const stream = this.get("postStream.stream");
-    const readPos = stream.indexOf(lastReadId) || 0;
-    return readPos < stream.length - 1 && readPos > position;
+    return (
+      lastReadStreamPosition < this.get("postStream.filteredPostsCount") - 1 &&
+      lastReadStreamPosition > position
+    );
   },
 
-  @observes("postStream.stream.[]")
+  @observes("postStream.posts.[]", "postStream.filteredPostsCount")
   _updateBar() {
     Ember.run.scheduleOnce("afterRender", this, this._updateProgressBar);
   },

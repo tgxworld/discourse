@@ -887,10 +887,6 @@ export default RestModel.extend({
     });
   },
 
-  indexOf(post) {
-    return this.get("stream").indexOf(post.get("id"));
-  },
-
   // Handles an error loading a topic based on a HTTP status code. Updates
   // the text to the correct values.
   errorLoading(result) {
