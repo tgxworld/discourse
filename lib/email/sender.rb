@@ -1,4 +1,3 @@
-#
 # A helper class to send an email. It will also handle a nil message, which it considers
 # to be "do nothing". This is because some Mailers will decide not to do work for some
 # reason. For example, emailing a user too frequently. A nil to address is also considered
@@ -27,8 +26,8 @@ module Email
       return if ActionMailer::Base::NullMail === @message
       return if ActionMailer::Base::NullMail === (@message.message rescue nil)
 
-      return skip(I18n.t('email_log.message_blank'))    if @message.blank?
-      return skip(I18n.t('email_log.message_to_blank')) if @message.to.blank?
+      return skip(SkippedEmailLog.reason_types[:sender_message_blank])    if @message.blank?
+      return skip(SkippedEmailLog.reason_types[:sender_message_to_blank]) if @message.to.blank?
 
       if SiteSetting.disable_emails == "non-staff"
         user = User.find_by_email(to_address)
@@ -36,9 +35,13 @@ module Email
       end
 
       if @message.text_part
-        return skip(I18n.t('email_log.text_part_body_blank')) if @message.text_part.body.to_s.blank?
+        if @message.text_part.body.to_s.blank?
+          return skip(SkippedEmailLog.reason_types[:sender_text_part_body_blank])
+        end
       else
-        return skip(I18n.t('email_log.body_blank')) if @message.body.to_s.blank?
+        if @message.body.to_s.blank?
+          return skip(SkippedEmailLog.reason_types[:sender_body_blank])
+        end
       end
 
       @message.charset = 'UTF-8'
@@ -186,7 +189,7 @@ module Email
       begin
         @message.deliver_now
       rescue *SMTP_CLIENT_ERRORS => e
-        return skip(e.message)
+        return skip(SkippedEmailLog.reason_types[:custom], custom_reason: e.message)
       end
 
       # Save and return the email log
@@ -222,14 +225,16 @@ module Email
       header.value
     end
 
-    def skip(reason)
-      EmailLog.create!(
+    def skip(reason_type, custom_reason: nil)
+      attributes = {
         email_type: @email_type,
         to_address: to_address,
-        user_id: @user.try(:id),
-        skipped: true,
-        skipped_reason: "[Sender] #{reason}"
-      )
+        user_id: @user&.id,
+        reason_type: reason_type
+      }
+
+      attributes[:custom_reason] = custom_reason if custom_reason
+      SkippedEmailLog.create!(attributes)
     end
 
     def merge_json_x_header(name, value)
