@@ -82,6 +82,32 @@ export default Ember.Controller.extend(PreferencesTabController, {
     return listThemes(this.site);
   },
 
+  @computed("themeId")
+  userSelectableThemeComponents(themeId) {
+    const theme = this.site.get("user_themes").find(theme => {
+      return theme.theme_id === themeId;
+    });
+
+    if (theme) return theme.components;
+  },
+
+  @computed("model.user_option.theme_ids", "userSelectableThemeComponents")
+  activeThemeComponents(userThemeIds, userSelectableThemeComponents) {
+    if (userThemeIds.length === 1) {
+      return userSelectableThemeComponents.map(component => component.id);
+    }
+
+    const active = [];
+
+    userSelectableThemeComponents.each(component => {
+      if (userThemeIds.include(component.id)) {
+        active.push(component.id);
+      }
+    });
+
+    return active;
+  },
+
   @computed("userSelectableThemes")
   showThemeSelector(themes) {
     return themes && themes.length > 1;

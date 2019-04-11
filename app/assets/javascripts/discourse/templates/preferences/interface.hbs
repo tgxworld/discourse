@@ -10,6 +10,19 @@
     </div>
   {{/if}}
 </div>
+
+  {{#if userSelectableThemeComponents}}
+    <div class="control-group theme-components">
+      <label class="control-label">{{i18n 'user.theme_components'}}</label>
+
+      <div class="controls">
+        {{multi-select allowAny=false
+            placeholder="test"
+            content=userSelectableThemeComponents
+            values=activeThemeComponents}}
+      </div>
+    </div>
+  {{/if}}
 {{/if}}
 
 <div class="control-group text-size">

@@ -40,12 +40,30 @@ class SiteSerializer < ApplicationSerializer
 
   def user_themes
     cache_fragment("user_themes") do
-      Theme.where('id = :default OR user_selectable',
-                    default: SiteSetting.default_theme_id)
+      themes = {}
+
+      Theme.user_selectable
         .order(:name)
         .pluck(:id, :name)
-        .map { |id, n| { theme_id: id, name: n, default: id == SiteSetting.default_theme_id } }
-        .as_json
+        .map do |id, n|
+          themes[id] = {
+            theme_id: id,
+            name: n,
+            default: id == SiteSetting.default_theme_id
+          }
+        end
+
+      ChildTheme
+        .joins("INNER JOIN themes ON themes.id = child_themes.child_theme_id AND themes.user_selectable")
+        .where(parent_theme_id: themes.keys)
+        .pluck("child_themes.parent_theme_id", "themes.id", "themes.name")
+        .each do |parent_theme_id, child_theme_id, child_theme_name|
+          (themes[parent_theme_id][:components] ||= []).push(
+            id: child_theme_id, name: child_theme_name
+          )
+        end
+
+      themes.values.as_json
     end
   end
 

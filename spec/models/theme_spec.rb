@@ -85,9 +85,14 @@ describe Theme do
     end.to raise_error(Discourse::InvalidParameters, I18n.t("themes.errors.no_multilevels_components"))
   end
 
-  it "doesn't allow a child to be user selectable" do
+  it "doesn't allow a child to be user selectable unless user_optional is true" do
     child.update(user_selectable: true)
-    expect(child.errors.full_messages).to contain_exactly(I18n.t("themes.errors.component_no_user_selectable"))
+
+    expect(child.errors.full_messages).to contain_exactly(
+      I18n.t("themes.errors.component_no_user_selectable")
+    )
+
+    child.update!(user_optional: true, user_selectable: true)
   end
 
   it "doesn't allow a child to be set as the default theme" do
@@ -607,6 +612,27 @@ HTML
       en_translation2 = ThemeField.create!(theme_id: theme2.id, name: "en", type_id: ThemeField.types[:yaml], target_id: Theme.targets[:translations], value: '')
 
       expect(Theme.list_baked_fields([theme.id, theme2.id], :translations, 'fr').map(&:id)).to contain_exactly(fr_translation.id, en_translation2.id)
+    end
+  end
+
+  describe '.user_selectable' do
+    it 'should return the right themes' do
+      Theme.destroy_all
+      theme1 = Fabricate(:theme, user_selectable: true)
+      theme2 = Fabricate(:theme)
+      SiteSetting.default_theme_id = theme2.id
+
+      Fabricate(:theme, user_selectable: false)
+
+      Fabricate(:theme,
+        user_selectable: true,
+        user_optional: true,
+        component: true
+      )
+
+      expect(Theme.user_selectable.pluck(:id)).to contain_exactly(
+        theme1.id, theme2.id
+      )
     end
   end
 end

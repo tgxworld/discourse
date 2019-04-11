@@ -63,7 +63,7 @@ class RemoteTheme < ActiveRecord::Base
     importer.import!
 
     theme_info = RemoteTheme.extract_theme_info(importer)
-    component = [true, "true"].include?(theme_info["component"])
+    component = theme_info["component"].to_s == "true"
     theme = Theme.new(user_id: user&.id || -1, name: theme_info["name"], component: component)
 
     remote_theme = new
@@ -135,9 +135,14 @@ class RemoteTheme < ActiveRecord::Base
       end
     end
 
+    if theme.component && theme_info["user_optional"].to_s == "true"
+      theme.user_optional = true
+    end
+
     METADATA_PROPERTIES.each do |property|
       self.public_send(:"#{property}=", theme_info[property.to_s])
     end
+
     if !self.valid?
       raise ImportError, I18n.t("themes.import_error.about_json_values", errors: self.errors.full_messages.join(","))
     end

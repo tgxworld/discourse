@@ -161,6 +161,24 @@ describe RemoteTheme do
       scheme_count = ColorScheme.where(theme_id: @theme.id).count
       expect(scheme_count).to eq(1)
     end
+
+    describe 'theme component' do
+      let(:about) do
+        data = JSON.parse(about_json)
+        data["component"] = "true"
+        data["user_optional"] = "true"
+        data.to_json
+      end
+
+      let(:initial_repo) { setup_git_repo("about.json" => about) }
+
+      it 'can correct import a remote theme' do
+        theme = RemoteTheme.import_theme(initial_repo)
+
+        expect(theme.component).to eq(true)
+        expect(theme.user_optional).to eq(true)
+      end
+    end
   end
 
   let(:github_repo) do

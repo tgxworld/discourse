@@ -28,12 +28,15 @@
     </div>
   {{/unless}}
 
-  {{#unless model.component}}
-    <div class="control-unit">
+  <div class="control-unit">
+    {{#unless model.component}}
       {{inline-edit-checkbox action=(action "applyDefault") labelKey="admin.customize.theme.is_default" checked=model.default}}
+    {{/unless}}
+
+    {{#if showSelectable}}
       {{inline-edit-checkbox action=(action "applyUserSelectable") labelKey="admin.customize.theme.user_selectable" checked=model.user_selectable}}
-    </div>
-  {{/unless}}
+    {{/if}}
+  </div>
 
   {{#if model.remote_theme}}
 

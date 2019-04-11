@@ -61,7 +61,15 @@ class RemoteThemeSerializer < ApplicationSerializer
 end
 
 class ThemeSerializer < BasicThemeSerializer
-  attributes :color_scheme, :color_scheme_id, :user_selectable, :remote_theme_id, :settings, :errors, :enabled?, :description
+  attributes :color_scheme,
+             :color_scheme_id,
+             :user_selectable,
+             :user_optional,
+             :remote_theme_id,
+             :settings,
+             :errors,
+             :enabled?,
+             :description
 
   has_one :user, serializer: UserNameSerializer, embed: :object
 
@@ -105,5 +113,9 @@ class ThemeSerializer < BasicThemeSerializer
 
   def description
     object.internal_translations.find  { |t| t.key == "theme_metadata.description" } &.value
+  end
+
+  def include_user_optional?
+    object.component
   end
 end

@@ -83,7 +83,7 @@ class Stylesheet::Manager
   end
 
   def self.precompile_css
-    themes = Theme.where('user_selectable OR id = ?', SiteSetting.default_theme_id).pluck(:id, :name)
+    themes = Theme.user_selectable.pluck(:id, :name)
     themes << nil
     themes.each do |id, name|
       [:desktop, :mobile, :desktop_rtl, :mobile_rtl, :desktop_theme, :mobile_theme, :admin].each do |target|

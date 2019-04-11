@@ -847,6 +847,7 @@ en:
       api_approved: "Approved:"
       api_last_used_at: "Last used at:"
       theme: "Theme"
+      theme_components: "Theme Components"
       home: "Default Home Page"
       staged: "Staged"
 

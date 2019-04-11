@@ -93,6 +93,12 @@ export default Ember.Controller.extend({
     return errorMessage && !updating;
   },
 
+  @computed("model.component", "model.user_optional")
+  showSelectable(component, userOptional) {
+    if (!component) return true;
+    return userOptional;
+  },
+
   editedFieldsForTarget(target) {
     return this.get("model.editedFields").filter(
       field => field.target === target
