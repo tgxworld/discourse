@@ -166,17 +166,21 @@ describe RemoteTheme do
       let(:about) do
         data = JSON.parse(about_json)
         data["component"] = "true"
-        data["user_optional"] = "true"
-        data.to_json
+        data["user_selection_default"] = "false"
+        data
       end
 
-      let(:initial_repo) { setup_git_repo("about.json" => about) }
+      let(:initial_repo) { setup_git_repo("about.json" => about.to_json) }
 
       it 'can correct import a remote theme' do
         theme = RemoteTheme.import_theme(initial_repo)
 
         expect(theme.component).to eq(true)
         expect(theme.user_optional).to eq(true)
+        expect(theme.user_selectable).to eq(false)
+      end
+
+      it 'can correct import a theme with user selectable' do
       end
     end
   end

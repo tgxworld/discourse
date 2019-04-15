@@ -107,6 +107,8 @@ class RemoteTheme < ActiveRecord::Base
     end
   end
 
+  USER_SELECTION_DEFAULT = "user_selection_default"
+
   def update_from_remote(importer = nil, skip_update: false)
     cleanup = false
 
@@ -135,8 +137,16 @@ class RemoteTheme < ActiveRecord::Base
       end
     end
 
-    if theme.component && theme_info["user_optional"].to_s == "true"
-      theme.user_optional = true
+    if theme.component &&
+       user_selection_default = theme_info[USER_SELECTION_DEFAULT].to_s
+
+      theme.user_selectable =
+        case user_selection_default
+        when "true"
+          true
+        when "false"
+          false
+        end
     end
 
     METADATA_PROPERTIES.each do |property|
