@@ -84,7 +84,6 @@ class Invite < ActiveRecord::Base
     opts ||= {}
 
     topic = opts[:topic]
-    group_ids = opts[:group_ids]
     send_email = opts[:send_email].nil? ? true : opts[:send_email]
     custom_message = opts[:custom_message]
     lower_email = Email.downcase(email)
@@ -131,11 +130,20 @@ class Invite < ActiveRecord::Base
       topic.reload
     end
 
-    if group_ids.present?
-      group_ids = group_ids - invite.invited_groups.pluck(:group_id)
+    if (group_ids = opts[:group_ids]).present?
+      groups = Group.where(id: group_ids)
+    end
 
-      group_ids.each do |group_id|
-        invite.invited_groups.create!(group_id: group_id)
+    if groups || (groups = opts[:groups])
+      invited_group_ids = invite.invited_groups.pluck(:group_id)
+      guardian = Guardian.new(invited_by)
+
+      groups.each do |group|
+        group_id = group.id
+
+        if invited_group_ids.include?(group_id) || guardian.can_edit_group?(group)
+          invite.invited_groups.create!(group_id: group_id)
+        end
       end
     end
 

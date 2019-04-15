@@ -494,4 +494,23 @@ describe Invite do
       expect(expired_invite.deleted_at).to be_present
     end
   end
+
+  describe '.create_invite_by_email' do
+    let(:group) { Fabricate(:group) }
+    let(:user) { Fabricate(:user) }
+
+    before do
+      group.add(user)
+    end
+
+    it 'should not create invited_groups records for automatic groups' do
+      invite = Invite.create_invite_by_email(
+        'test@discourse.org',
+        user,
+        group_ids: Group.where(automatic: true).pluck(:id).concat([group.id])
+      )
+
+      expect(invite.invited_groups.count).to eq(0)
+    end
+  end
 end

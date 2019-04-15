@@ -51,15 +51,15 @@ module Jobs
       file&.close
     end
 
-    def get_group_ids(group_names, csv_line_number)
-      group_ids = []
+    def get_groups(group_names, csv_line_number)
+      groups = []
+
       if group_names
         group_names = group_names.split(';')
         group_names.each { |group_name|
-          group_detail = Group.find_by_name(group_name)
-          if group_detail
+          if group_detail = Group.find_by_name(group_name)
             # valid group
-            group_ids.push(group_detail.id)
+            groups.push(group_detail)
           else
             # invalid group
             save_log "Invalid Group '#{group_name}' at line number '#{csv_line_number}'"
@@ -67,7 +67,8 @@ module Jobs
           end
         }
       end
-      return group_ids
+
+      groups
     end
 
     def get_topic(topic_id, csv_line_number)
@@ -84,10 +85,14 @@ module Jobs
 
     def send_invite(csv_info, csv_line_number)
       email = csv_info[0]
-      group_ids = get_group_ids(csv_info[1], csv_line_number)
+      groups = get_groups(csv_info[1], csv_line_number)
       topic = get_topic(csv_info[2], csv_line_number)
+
       begin
-        Invite.invite_by_email(email, @current_user, topic, group_ids)
+        Invite.create_invite_by_email(email, @current_user,
+          topic: topic,
+          groups: groups
+        )
       rescue => e
         save_log "Error inviting '#{email}' -- #{Rails::Html::FullSanitizer.new.sanitize(e.message)}"
         @sent -= 1
