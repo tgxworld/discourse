@@ -77,7 +77,7 @@ const User = RestModel.extend({
     return username;
   },
 
-  @computed("profile_background_upload_url")
+  @computed("display_profile_background_url")
   profileBackgroundUrl(bgUrl) {
     if (
       Ember.isEmpty(bgUrl) ||

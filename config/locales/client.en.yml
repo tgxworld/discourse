@@ -954,11 +954,11 @@ en:
 
       change_profile_background:
         title: "Profile Background"
-        instructions: "Profile backgrounds will be centered and have a default width of 850px."
+        instructions: "Profile backgrounds will be centered and have a default width of 1100px."
 
       change_card_background:
         title: "User Card Background"
-        instructions: "Background images will be centered and have a default width of 590px."
+        instructions: "Background images will be centered and have a default width of 580px."
 
       email:
         title: "Email"

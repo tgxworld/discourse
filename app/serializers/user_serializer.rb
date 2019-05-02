@@ -80,7 +80,9 @@ class UserSerializer < BasicUserSerializer
              :second_factor_remaining_backup_codes,
              :associated_accounts,
              :profile_background_upload_url,
-             :card_background_upload_url
+             :card_background_upload_url,
+             :display_profile_background_url,
+             :display_card_background_url
 
   has_one :invited_by, embed: :object, serializer: BasicUserSerializer
   has_many :groups, embed: :object, serializer: BasicGroupSerializer
@@ -489,6 +491,34 @@ class UserSerializer < BasicUserSerializer
 
   def card_background_upload_url
     object.card_background_upload&.url
+  end
+
+  def include_display_profile_background_url?
+    profile_background_upload_url.present?
+  end
+
+  def display_profile_background_url
+    profile_url(object.profile_background_upload)
+  end
+
+  def include_display_card_background_url?
+    card_background_upload_url.present?
+  end
+
+  def display_card_background_url
+    profile_url(object.card_background_upload)
+  end
+
+  private
+
+  def profile_url(upload)
+    thumbnail = upload.thumbnail
+
+    if thumbnail && thumbnail.filesize < upload.filesize
+      thumbnail.url
+    else
+      upload.url
+    end
   end
 
 end

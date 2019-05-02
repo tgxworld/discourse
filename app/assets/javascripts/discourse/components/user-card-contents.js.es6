@@ -131,7 +131,7 @@ export default Ember.Component.extend(
       }
     },
 
-    @observes("user.card_background_upload_url")
+    @observes("user.display_card_background_url")
     addBackground() {
       if (!this.get("allowBackgrounds")) {
         return;
@@ -142,7 +142,7 @@ export default Ember.Component.extend(
         return;
       }
 
-      const url = this.get("user.card_background_upload_url");
+      const url = this.get("user.display_card_background_url");
       const bg = Ember.isEmpty(url)
         ? ""
         : `url(${Discourse.getURLWithCDN(url)})`;

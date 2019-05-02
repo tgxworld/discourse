@@ -11,6 +11,9 @@ class UploadCreator
     tref tspan use
   }.each(&:freeze)
 
+  PROFILE_BACKGROUND_SIZES = [1100, 300]
+  CARD_BACKGROUND_SIZES = [580, 244]
+
   # Available options
   #  - type (string)
   #  - origin (string)
@@ -105,8 +108,23 @@ class UploadCreator
       @upload.extension         = image_type || File.extname(@filename)[1..10]
 
       if is_image
-        @upload.thumbnail_width, @upload.thumbnail_height = ImageSizer.resize(*@image_info.size)
         @upload.width, @upload.height = @image_info.size
+        resize_opts = {}
+
+        case @opts[:type]
+        when "card_background"
+          resize_opts[:max_height] = CARD_BACKGROUND_SIZES[1]
+          resize_opts[:max_width] = CARD_BACKGROUND_SIZES[0]
+        when "profile_background"
+          resize_opts[:max_height] = PROFILE_BACKGROUND_SIZES[1]
+          resize_opts[:max_width] = PROFILE_BACKGROUND_SIZES[0]
+        end
+
+        @upload.thumbnail_width, @upload.thumbnail_height = ImageSizer.resize(
+          @upload.width,
+          @upload.height,
+          resize_opts
+        )
       end
 
       @upload.for_private_message = true if @opts[:for_private_message]
@@ -129,11 +147,20 @@ class UploadCreator
         end
       end
 
-      if @upload.errors.empty? && is_image && @opts[:type] == "avatar" && @upload.extension != "svg"
-        Jobs.enqueue(:create_avatar_thumbnails, upload_id: @upload.id)
-      end
-
       if @upload.errors.empty?
+        if is_image && @upload.extension != "svg"
+          case @opts[:type]
+          when "avatar"
+            Jobs.enqueue(:create_avatar_thumbnails, upload_id: @upload.id)
+          when "profile_background", "card_background"
+            Jobs.enqueue(:create_optimized_image,
+              upload_id: @upload.id,
+              width: @upload.thumbnail_width,
+              height: @upload.thumbnail_height
+            )
+          end
+        end
+
         UserUpload.find_or_create_by!(user_id: user_id, upload_id: @upload.id) if user_id
       end
 
