@@ -60,7 +60,7 @@ module Jobs
         src = original_src = node['src'] || node['href']
         src = "#{SiteSetting.force_https ? "https" : "http"}:#{src}" if src.start_with?("//")
 
-        if should_download_image?(src)
+        if should_download_image?(src, raw: raw)
           begin
             # have we already downloaded that file?
             schemeless_src = remove_scheme(original_src)
@@ -89,32 +89,7 @@ module Jobs
             end
             # have we successfully downloaded that file?
             if downloaded_urls[src].present?
-              escaped_src = Regexp.escape(original_src)
-
-              replace_raw = ->(match, match_src, replacement, _index) {
-                if src.include?(match_src)
-                  raw = raw.gsub(
-                    match,
-                    replacement.sub(InlineUploads::PLACEHOLDER, upload.short_url)
-                  )
-                end
-              }
-
-              # there are 6 ways to insert an image in a post
-              # HTML tag - <img src="http://...">
-              InlineUploads.match_img(raw, external_src: true, &replace_raw)
-
-              # BBCode tag - [img]http://...[/img]
-              InlineUploads.match_bbcode_img(raw, &replace_raw)
-
-              # Markdown linked image - [![alt](http://...)](http://...)
-              # Markdown inline - ![alt](http://...)
-              # Markdown inline - ![](http://... "image title")
-              # Markdown inline - ![alt](http://... "image title")
-              InlineUploads.match_md_inline_img(raw, external_src: true, &replace_raw)
-
-              # Direct link
-              raw.gsub!(/^#{escaped_src}(\s?)$/) { "![](#{upload.short_url})#{$1}" }
+              raw = convert_to_md(raw: raw, upload: upload, src: src)
             end
           rescue => e
             if Rails.env.test?
@@ -153,7 +128,7 @@ module Jobs
         doc.css(".lightbox img[src]")
     end
 
-    def should_download_image?(src)
+    def should_download_image?(src, raw: nil)
       # make sure we actually have a url
       return false unless src.present?
 
@@ -163,7 +138,14 @@ module Jobs
 
         # Someone could hotlink a file from a different site on the same CDN,
         # so check whether we have it in this database
-        return !Upload.get_from_url(src)
+        upload = Upload.get_from_url(src)
+
+        if upload
+          raw = convert_to_md(raw: raw, upload: upload, src: src) if raw
+          return false
+        else
+          return true
+        end
       end
 
       # Don't download non-local images unless site setting enabled
@@ -194,6 +176,35 @@ module Jobs
 
     def remove_scheme(src)
       src.sub(/^https?:/i, "")
+    end
+
+    def convert_to_md(raw:, upload:, src:)
+      replace_raw = ->(match, match_src, replacement, _index) {
+        if src.include?(match_src)
+          raw = raw.gsub(
+            match,
+            replacement.sub(InlineUploads::PLACEHOLDER, upload.short_url)
+          )
+        end
+      }
+
+      # there are 6 ways to insert an image in a post
+      # HTML tag - <img src="http://...">
+      InlineUploads.match_img(raw, external_src: true, &replace_raw)
+
+      # BBCode tag - [img]http://...[/img]
+      InlineUploads.match_bbcode_img(raw, &replace_raw)
+
+      # Markdown linked image - [![alt](http://...)](http://...)
+      # Markdown inline - ![alt](http://...)
+      # Markdown inline - ![](http://... "image title")
+      # Markdown inline - ![alt](http://... "image title")
+      InlineUploads.match_md_inline_img(raw, external_src: true, &replace_raw)
+
+      # Direct link
+      escaped_src = Regexp.escape(src)
+      raw.gsub!(/^#{escaped_src}(\s?)$/) { "![](#{upload.short_url})#{$1}" }
+      raw
     end
   end
 

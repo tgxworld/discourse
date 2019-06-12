@@ -47,13 +47,25 @@ describe Jobs::PullHotlinkedImages do
     end
 
     it 'replaces images' do
-      post = Fabricate(:post, raw: "<img src='#{image_url}'>")
+      upload = Fabricate(:upload)
+      upload_url = "#{Discourse.base_url}#{upload.url}"
+      stub_request(:get, upload_url)
+
+      post = Fabricate(:post, raw: <<~RAW)
+      <img src='#{image_url}' alt="test" title="title">
+
+      #{upload_url}
+      RAW
 
       expect do
         Jobs::PullHotlinkedImages.new.execute(post_id: post.id)
       end.to change { Upload.count }.by(1)
 
-      expect(post.reload.raw).to eq("![](#{Upload.last.short_url})")
+      expect(post.reload.raw).to eq(<<~RAW.chomp)
+      ![test](#{Upload.last.short_url} "title")
+
+      ![](#{upload.short_url})
+      RAW
     end
 
     it 'replaces images without protocol' do
