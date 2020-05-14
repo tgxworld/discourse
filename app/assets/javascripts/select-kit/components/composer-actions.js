@@ -4,10 +4,13 @@ import {
   PRIVATE_MESSAGE,
   CREATE_TOPIC,
   CREATE_SHARED_DRAFT,
-  REPLY
+  REPLY,
+  EDIT
 } from "discourse/models/composer";
 import Draft from "discourse/models/draft";
 import { computed } from "@ember/object";
+import { equal } from "@ember/object/computed";
+import discourseComputed from "discourse-common/utils/decorators";
 import { camelize } from "@ember/string";
 import { isEmpty } from "@ember/utils";
 
@@ -24,9 +27,9 @@ export default DropdownSelectBoxComponent.extend({
   seq: 0,
   pluginApiIdentifiers: ["composer-actions"],
   classNames: ["composer-actions"],
+  isEditing: equal("action", EDIT),
 
   selectKitOptions: {
-    icon: "share",
     filterable: false,
     showFullTitle: false
   },
@@ -54,6 +57,11 @@ export default DropdownSelectBoxComponent.extend({
       this.contentChanged();
     }
 
+    this.set(
+      "selectKit.options.icon",
+      this.action === EDIT ? "pencil-alt" : "share"
+    );
+
     if (isEmpty(this.content)) {
       this.set("selectKit.isHidden", true);
     }
@@ -69,6 +77,7 @@ export default DropdownSelectBoxComponent.extend({
     if (
       this.action !== CREATE_TOPIC &&
       this.action !== CREATE_SHARED_DRAFT &&
+      !this.isEditing &&
       _topicSnapshot
     ) {
       items.push({
@@ -100,7 +109,8 @@ export default DropdownSelectBoxComponent.extend({
 
     if (
       this.siteSettings.enable_personal_messages &&
-      this.action !== PRIVATE_MESSAGE
+      this.action !== PRIVATE_MESSAGE &&
+      !this.isEditing
     ) {
       items.push({
         name: I18n.t(
@@ -115,12 +125,13 @@ export default DropdownSelectBoxComponent.extend({
     }
 
     if (
-      (this.action !== REPLY && _topicSnapshot) ||
-      (this.action === REPLY &&
-        _topicSnapshot &&
-        this.replyOptions.userAvatar &&
-        this.replyOptions.userLink &&
-        this.replyOptions.topicLink)
+      !this.isEditing &&
+      ((this.action !== REPLY && _topicSnapshot) ||
+        (this.action === REPLY &&
+          _topicSnapshot &&
+          this.replyOptions.userAvatar &&
+          this.replyOptions.userLink &&
+          this.replyOptions.topicLink))
     ) {
       items.push({
         name: I18n.t("composer.composer_actions.reply_to_topic.label"),
