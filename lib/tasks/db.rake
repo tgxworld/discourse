@@ -98,9 +98,9 @@ class StdOutDemux
 end
 
 task 'multisite:migrate' => ['db:load_config', 'environment', 'set_locale'] do |_, args|
-  if ENV["RAILS_ENV"] != "production"
-    raise "Multisite migrate is only supported in production"
-  end
+  # if ENV["RAILS_ENV"] != "production"
+  #   raise "Multisite migrate is only supported in production"
+  # end
 
   concurrency = (ENV['MIGRATE_CONCURRENCY'].presence || "20").to_i
 

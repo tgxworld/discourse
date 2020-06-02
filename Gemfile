@@ -18,14 +18,15 @@ else
   # this allows us to include the bits of rails we use without pieces we do not.
   #
   # To issue a rails update bump the version number here
-  gem 'actionmailer', '6.0.3.1'
-  gem 'actionpack', '6.0.3.1'
-  gem 'actionview', '6.0.3.1'
-  gem 'activemodel', '6.0.3.1'
-  gem 'activerecord', '6.0.3.1'
-  gem 'activesupport', '6.0.3.1'
-  gem 'railties', '6.0.3.1'
+  # gem 'actionmailer', '6.0.3.1'
+  # gem 'actionpack', '6.0.3.1'
+  # gem 'actionview', '6.0.3.1'
+  # gem 'activemodel', '6.0.3.1'
+  # gem 'activerecord', '6.0.3.1'
+  # gem 'activesupport', '6.0.3.1'
+  # gem 'railties', '6.0.3.1'
   gem 'sprockets-rails'
+  gem 'rails', path: '/home/tgxworld/work/rails'
 end
 
 gem 'json'
@@ -74,7 +75,7 @@ gem 'barber'
 
 gem 'message_bus'
 
-gem 'rails_multisite'
+gem 'rails_multisite', path: '/home/tgxworld/work/rails_multisite'
 
 gem 'fast_xs', platform: :mri
 
@@ -249,4 +250,4 @@ gem 'webpush', require: false
 gem 'colored2', require: false
 gem 'maxminddb'
 
-gem 'rails_failover', require: false, git: 'https://github.com/discourse/rails_failover'
+gem 'rails_failover', path: "/home/tgxworld/work/rails_failover"

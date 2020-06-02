@@ -1,13 +1,19 @@
 # frozen_string_literal: true
 
 if ENV["REDIS_RAILS_FAILOVER"]
+  original_message_bus_keepalive = MessageBus.keepalive_interval
+
   RailsFailover::Redis.on_failover do
     Discourse.received_redis_readonly!
+    # Disables MessageBus keepalive when Redis is in readonly mode otherwise
+    # it'll terminate the unicorn process
+    MessageBus.keepalive_interval = 0
   end
 
   RailsFailover::Redis.on_fallback do
     Discourse.clear_readonly!
     Discourse.request_refresh!
+    MessageBus.keepalive_interval = original_message_bus_keepalive
   end
 end
 

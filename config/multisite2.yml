@@ -1,0 +1,15 @@
+apple:
+  adapter: postgresql
+  database: discourse_apple
+  username: tgxworld
+  host: "/home/tgxworld/work/rails_failover/tmp/primary/run"
+  port: 5434
+  replica_host: "/home/tgxworld/work/rails_failover/tmp/replica/run"
+  replica_port: 5435
+  pool: 5
+  timeout: 5000
+  ### If you change this setting you will need to
+  ###   - restart sidekiq if you change this setting
+  ###   - rebake all to posts using: `RAILS_ENV=production bundle exec rake posts:rebake`
+  host_names:
+    - apple.localhost
