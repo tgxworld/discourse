@@ -519,13 +519,33 @@ class TopicView
     @initial_load
   end
 
+  def topic_query
+    @topic_query ||= TopicQuery.new(@user)
+  end
+
   def pm_params
-    @pm_params ||= TopicQuery.new(@user).get_pm_params(topic)
+    @pm_params ||= topic_query.get_pm_params(topic)
   end
 
   def suggested_topics
     if @include_suggested
-      @suggested_topics ||= TopicQuery.new(@user).list_suggested_for(topic, pm_params: pm_params)
+      @suggested_topics ||= topic_query.list_suggested_for(topic, pm_params: pm_params)
+    else
+      nil
+    end
+  end
+
+  def new_messages_count
+    if suggested_topics && suggested_topics.topics.length == SiteSetting.suggested_topics
+      @new_messages_count ||= topic_query.new_messages(pm_params.merge(count: nil)).count
+    else
+      nil
+    end
+  end
+
+  def unread_messages_count
+    if suggested_topics && suggested_topics.topics.length == SiteSetting.suggested_topics
+      @unread_messages_count ||= topic_query.unread_messages(pm_params.merge(count: nil)).count
     else
       nil
     end
@@ -533,7 +553,7 @@ class TopicView
 
   def related_messages
     if @include_related
-      @related_messages ||= TopicQuery.new(@user).list_related_for(topic, pm_params: pm_params)
+      @related_messages ||= topic_query.list_related_for(topic, pm_params: pm_params)
     else
       nil
     end

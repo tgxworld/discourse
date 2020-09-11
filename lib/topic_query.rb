@@ -122,12 +122,12 @@ class TopicQuery
   end
 
   def joined_topic_user(list = nil)
+    byebug
     (list || Topic).joins("LEFT OUTER JOIN topic_users AS tu ON (topics.id = tu.topic_id AND tu.user_id = #{@user.id.to_i})")
   end
 
   def get_pm_params(topic)
     if topic.private_message?
-
       my_group_ids = topic.topic_allowed_groups
         .joins("
           LEFT JOIN group_users gu
@@ -235,6 +235,35 @@ class TopicQuery
       params[:preload_posters] = true
     end
     create_list(:suggested, params, builder.results)
+  end
+
+  def new_messages(params)
+    query = TopicQuery.new_filter(
+      messages_for_groups_or_user(params[:my_group_ids]),
+      Time.at(SiteSetting.min_new_topics_time).to_datetime
+    )
+
+    query = query.limit(params[:count]) if params[:count]
+    query
+  end
+
+  def unread_messages(params)
+    query = TopicQuery.unread_filter(
+      messages_for_groups_or_user(params[:my_group_ids]),
+      @user.id,
+      staff: @user.staff?
+    )
+
+    first_unread_pm_at =
+      if params[:my_group_ids].present?
+        GroupUser.where(user_id: @user.id, group_id: params[:my_group_ids]).minimum(:first_unread_pm_at)
+      else
+        UserStat.where(user_id: @user.id).pluck(:first_unread_pm_at).first
+      end
+
+    query = query.where("topics.updated_at >= ?", first_unread_pm_at) if first_unread_pm_at
+    query = query.limit(params[:count]) if params[:count]
+    query
   end
 
   # The latest view of topics
@@ -953,31 +982,6 @@ class TopicQuery
     end
 
     list
-  end
-
-  def new_messages(params)
-    TopicQuery
-      .new_filter(messages_for_groups_or_user(params[:my_group_ids]), Time.at(SiteSetting.min_new_topics_time).to_datetime)
-      .limit(params[:count])
-  end
-
-  def unread_messages(params)
-    query = TopicQuery.unread_filter(
-      messages_for_groups_or_user(params[:my_group_ids]),
-      @user.id,
-      staff: @user.staff?
-    )
-
-    first_unread_pm_at =
-      if params[:my_group_ids].present?
-        GroupUser.where(user_id: @user.id, group_id: params[:my_group_ids]).minimum(:first_unread_pm_at)
-      else
-        UserStat.where(user_id: @user.id).pluck(:first_unread_pm_at).first
-      end
-
-    query = query.where("topics.updated_at >= ?", first_unread_pm_at) if first_unread_pm_at
-    query = query.limit(params[:count]) if params[:count]
-    query
   end
 
   def related_messages_user(params)
