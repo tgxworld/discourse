@@ -11,16 +11,26 @@
         {{i18n "user.messages.inbox"}}
       {{/link-to}}
     </li>
-    <li class="noGlyph">
+    <!-- <li class="archive">
+      {{#link-to "userPrivateMessages.unread" model}}
+        New
+      {{/link-to}}
+    </li>
+    <li class="archive">
+      {{#link-to "userPrivateMessages.unread" model}}
+        {{i18n "user.messages.unread"}}
+      {{/link-to}}
+    </li>
+    <li class="archive">
       {{#link-to "userPrivateMessages.sent" model}}
         {{i18n "user.messages.sent"}}
       {{/link-to}}
     </li>
-    <li class="noGlyph">
+    <li class="archive">
       {{#link-to "userPrivateMessages.archive" model}}
         {{i18n "user.messages.archive"}}
       {{/link-to}}
-    </li>
+    </li> -->
     {{plugin-outlet name="user-messages-nav" connectorTagName="li" args=(hash model=model)}}
     {{#each model.groups as |group|}}
       {{#if group.has_messages}}
@@ -28,6 +38,16 @@
           {{#link-to "userPrivateMessages.group" group.name}}
             {{d-icon "users"}}
             {{capitalize-string group.name}}
+          {{/link-to}}
+        </li>
+        <li class="archive">
+          {{#link-to "userPrivateMessages.unread" model}}
+            New
+          {{/link-to}}
+        </li>
+        <li class="archive">
+          {{#link-to "userPrivateMessages.unread" model}}
+            Unread
           {{/link-to}}
         </li>
         <li class="archive">

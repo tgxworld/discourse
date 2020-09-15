@@ -154,6 +154,7 @@ export default function () {
         "userPrivateMessages",
         { path: "/messages", resetNamespace: true },
         function () {
+          this.route("unread");
           this.route("sent");
           this.route("archive");
           this.route("group", { path: "group/:name" });

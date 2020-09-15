@@ -1036,6 +1036,7 @@ en:
         inbox: "Inbox"
         sent: "Sent"
         archive: "Archive"
+        unread: "Unread"
         groups: "My Groups"
         bulk_select: "Select messages"
         move_to_inbox: "Move to Inbox"
