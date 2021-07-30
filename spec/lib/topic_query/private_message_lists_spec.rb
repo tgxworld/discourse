@@ -301,5 +301,12 @@ describe TopicQuery::PrivateMessageLists do
       expect(TopicQuery.new(user_2).list_private_messages_new(user_2).topics)
         .to eq([])
     end
+
+    it 'returns a list of new private messages accounting for dismissed topics' do
+      Fabricate(:dismissed_topic_user, topic: pm ,user: user_2)
+
+      expect(TopicQuery.new(user_2).list_private_messages_new(user_2).topics)
+        .to eq([])
+    end
   end
 end

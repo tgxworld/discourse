@@ -925,23 +925,43 @@ class TopicsController < ApplicationController
       end
       topic_ids = params[:topic_ids].map { |t| t.to_i }
     elsif params[:filter] == 'unread'
-      tq = TopicQuery.new(current_user)
-      topics = TopicQuery.unread_filter(tq.joined_topic_user, staff: guardian.is_staff?).listable_topics
-      topics = TopicQuery.tracked_filter(topics, current_user.id) if params[:tracked].to_s == "true"
+      topic_query = TopicQuery.new(current_user)
 
-      if params[:category_id]
-        if params[:include_subcategories]
-          topics = topics.where(<<~SQL, category_id: params[:category_id])
-            category_id in (select id FROM categories WHERE parent_category_id = :category_id) OR
-            category_id = :category_id
-          SQL
-        else
-          topics = topics.where('category_id = ?', params[:category_id])
+      if inbox = params[:private_message_inbox]
+        filter =
+          case inbox
+          when "group"
+            group_name = params[:group_name]
+            byebug
+            group = Group.lookup_group(group_name)
+            raise Discourse::InvalidParameters(:group_name) if group.blank?
+            topic_query.options[:group_name] = group_name
+            :group
+          when "user"
+            :user
+          else
+            :all
+          end
+
+        topics = topic_query.filter_private_messages_unread(current_user, filter)
+      else
+        topics = TopicQuery.unread_filter(topic_query.joined_topic_user, staff: guardian.is_staff?).listable_topics
+        topics = TopicQuery.tracked_filter(topics, current_user.id) if params[:tracked].to_s == "true"
+
+        if params[:category_id]
+          if params[:include_subcategories]
+            topics = topics.where(<<~SQL, category_id: params[:category_id])
+              category_id in (select id FROM categories WHERE parent_category_id = :category_id) OR
+              category_id = :category_id
+            SQL
+          else
+            topics = topics.where('category_id = ?', params[:category_id])
+          end
         end
-      end
 
-      if params[:tag_name].present?
-        topics = topics.joins(:tags).where("tags.name": params[:tag_name])
+        if params[:tag_name].present?
+          topics = topics.joins(:tags).where("tags.name": params[:tag_name])
+        end
       end
 
       topic_ids = topics.pluck(:id)
@@ -993,7 +1013,7 @@ class TopicsController < ApplicationController
       topic_scope = topic_scope.where(id: topic_ids)
     end
 
-    dismissed_topic_ids = TopicsBulkAction.new(current_user, [topic_scope.pluck(:id)], type: "dismiss_topics").perform!
+    dismissed_topic_ids = TopicsBulkAction.new(current_user, topic_scope.pluck(:id), type: "dismiss_topics").perform!
     TopicTrackingState.publish_dismiss_new(current_user.id, topic_ids: dismissed_topic_ids)
 
     render body: nil

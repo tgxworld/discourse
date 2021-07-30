@@ -69,24 +69,13 @@ class TopicQuery
       )
 
       list = remove_muted_tags(list, user)
+      list = remove_dismissed(list, user)
 
       create_list(:private_messages, {}, list)
     end
 
     def list_private_messages_unread(user, type = :user)
-      list = TopicQuery.unread_filter(
-        private_messages_for(user, type),
-        staff: user.staff?
-      )
-
-      first_unread_pm_at = UserStat
-        .where(user_id: user.id)
-        .pluck_first(:first_unread_pm_at)
-
-      if first_unread_pm_at
-        list = list.where("topics.updated_at >= ?", first_unread_pm_at)
-      end
-
+      list = filter_private_messages_unread(user, type)
       create_list(:private_messages, {}, list)
     end
 
@@ -129,19 +118,7 @@ class TopicQuery
     end
 
     def list_private_messages_group_unread(user)
-      list = TopicQuery.unread_filter(
-        private_messages_for(user, :group),
-        staff: user.staff?
-      )
-
-      first_unread_pm_at = UserStat
-        .where(user_id: user.id)
-        .pluck_first(:first_unread_pm_at)
-
-      if first_unread_pm_at
-        list = list.where("topics.updated_at >= ?", first_unread_pm_at)
-      end
-
+      list = filter_private_messages_unread(user, :group)
       publish_read_state = !!group.publish_read_state
       list = append_read_state(list, group) if publish_read_state
       create_list(:private_messages, { publish_read_state: publish_read_state }, list)
@@ -204,6 +181,23 @@ class TopicQuery
       list = list.joins("JOIN topic_tags tt ON tt.topic_id = topics.id
                         JOIN tags t ON t.id = tt.tag_id AND t.name = '#{@options[:tags][0]}'")
       create_list(:private_messages, {}, list)
+    end
+
+    def filter_private_messages_unread(user, type)
+      list = TopicQuery.unread_filter(
+        private_messages_for(user, type),
+        staff: user.staff?
+      )
+
+      first_unread_pm_at = UserStat
+        .where(user_id: user.id)
+        .pluck_first(:first_unread_pm_at)
+
+      if first_unread_pm_at
+        list = list.where("topics.updated_at >= ?", first_unread_pm_at)
+      end
+
+      list
     end
 
     private

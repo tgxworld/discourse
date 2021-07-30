@@ -747,6 +747,14 @@ Topic.reopenClass({
       if (options.tagName) {
         data.tag_name = options.tagName;
       }
+
+      if (options.private_message_inbox) {
+        data.private_message_inbox = options.private_message_inbox;
+
+        if (options.group_name) {
+          data.group_name = options.group_name;
+        }
+      }
     }
 
     return ajax("/topics/bulk", {
