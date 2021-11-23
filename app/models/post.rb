@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'archetype'
-require 'digest/sha1'
+require 'digest/sha1'...............................................................
 
 class Post < ActiveRecord::Base
   include RateLimiter::OnCreateRecord
