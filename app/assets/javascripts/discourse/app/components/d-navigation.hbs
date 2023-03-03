@@ -1,10 +1,7 @@
 {{#if this.isQueryFilterMode}}
   <div class="topic-query-filter">
-    <div class="topic-query-filter__label">
-      {{i18n "filters.filter.button.label"}}
-    </div>
     <div class="topic-query-filter__input">
-      {{d-icon "search" class="topic-query-filter__icon"}}
+      {{d-icon "filter" class="topic-query-filter__icon"}}
       <Input
         class="topic-query-filter__filter-term"
         @value={{this.queryString}}
