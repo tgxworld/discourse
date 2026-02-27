@@ -341,6 +341,9 @@ Discourse::Application.routes.draw do
       get "/whats-new" => "dashboard#new_features"
       post "/toggle-feature" => "dashboard#toggle_feature"
 
+      get "dashboard-v2" => "custom_dashboards#show"
+      put "dashboard-v2" => "custom_dashboards#update"
+
       resources :dashboard, only: [:index] do
         collection { get "problems" }
       end

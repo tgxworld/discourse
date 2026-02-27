@@ -6568,6 +6568,23 @@ en:
               label: "Include Subcategories"
             type_of_web_hook_event:
               label: "Type of event"
+      dashboard_v2:
+        title: "Dashboard V2"
+        description: "Customize your admin dashboard with drag-and-drop reports."
+        empty_state: "Drag reports from the sidebar to build your dashboard."
+        sidebar:
+          search_placeholder: "Filter reports..."
+          data_explorer: "Data Explorer"
+          group_engagement: "Engagement"
+          group_traffic: "Traffic"
+          group_members: "Members"
+          group_content: "Content"
+          group_moderation: "Moderation"
+          group_security: "Security"
+          group_other: "Other"
+        card:
+          remove: "Remove"
+          unavailable: "This report is no longer available."
       flags:
         title: "Moderation"
         description: "Description"
