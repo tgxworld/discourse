@@ -6570,21 +6570,20 @@ en:
               label: "Type of event"
       dashboard_v2:
         title: "Dashboard V2"
-        description: "Customize your admin dashboard with drag-and-drop reports."
-        empty_state: "Drag reports from the sidebar to build your dashboard."
+        description: "Customize your admin dashboard with Data Explorer queries."
+        empty_state: "Drag queries from the sidebar to build your dashboard."
         sidebar:
-          search_placeholder: "Filter reports..."
-          data_explorer: "Data Explorer"
-          group_engagement: "Engagement"
-          group_traffic: "Traffic"
-          group_members: "Members"
-          group_content: "Content"
-          group_moderation: "Moderation"
-          group_security: "Security"
-          group_other: "Other"
+          title: "Queries"
+          search_placeholder: "Filter queries..."
+          group_dashboard: "Dashboard"
+          group_other: "Other Queries"
+          plugin_missing: "The Data Explorer plugin must be installed and enabled."
+        date_range:
+          custom: "Custom"
         card:
           remove: "Remove"
-          unavailable: "This report is no longer available."
+          unavailable: "This query could not be loaded."
+          no_data: "No results returned."
       flags:
         title: "Moderation"
         description: "Description"

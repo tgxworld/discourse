@@ -116,6 +116,33 @@ module DiscourseDataExplorer
           description:
             "Details of a Ranked Choice poll result, including details about each vote and voter inc. rank, useful for analyzing results in external software.",
         },
+        "dashboard-active-users": {
+          id: -20,
+          name: "Dashboard: Active Users",
+          description:
+            "Daily count of distinct users who visited the site within the given date range.",
+        },
+        "dashboard-new-signups": {
+          id: -21,
+          name: "Dashboard: New Signups",
+          description: "Daily count of new user registrations within the given date range.",
+        },
+        "dashboard-new-posts": {
+          id: -22,
+          name: "Dashboard: New Posts",
+          description: "Daily count of new posts created within the given date range.",
+        },
+        "dashboard-topics-by-category": {
+          id: -23,
+          name: "Dashboard: Topics by Category",
+          description: "Number of topics created per category within the given date range.",
+        },
+        "dashboard-top-referral-sources": {
+          id: -24,
+          name: "Dashboard: Top Referral Sources",
+          description:
+            "Top referring domains by number of incoming clicks within the given date range.",
+        },
       }.with_indifferent_access
 
       queries["most-common-likers"]["sql"] = <<~SQL
@@ -586,6 +613,78 @@ module DiscourseDataExplorer
         AND (:enable_null_category = true OR t.category_id NOTNULL)
     GROUP BY t.category_id, c.name, p.year
     ORDER BY p.year DESC, qt DESC
+      SQL
+
+      queries["dashboard-active-users"]["sql"] = <<~SQL
+        -- [params]
+        -- date :start_date = 7 days ago
+        -- date :end_date = today
+
+        SELECT d::date AS date, COUNT(DISTINCT uv.user_id) AS active_users
+        FROM generate_series(:start_date::date, :end_date::date, '1 day') d
+        LEFT JOIN user_visits uv ON uv.visited_at = d::date
+        GROUP BY d::date
+        ORDER BY d::date
+      SQL
+
+      queries["dashboard-new-signups"]["sql"] = <<~SQL
+        -- [params]
+        -- date :start_date = 7 days ago
+        -- date :end_date = today
+
+        SELECT d::date AS date, COUNT(u.id) AS signups
+        FROM generate_series(:start_date::date, :end_date::date, '1 day') d
+        LEFT JOIN users u ON u.created_at::date = d::date AND u.id > 0
+        GROUP BY d::date
+        ORDER BY d::date
+      SQL
+
+      queries["dashboard-new-posts"]["sql"] = <<~SQL
+        -- [params]
+        -- date :start_date = 7 days ago
+        -- date :end_date = today
+
+        SELECT d::date AS date, COUNT(p.id) AS posts
+        FROM generate_series(:start_date::date, :end_date::date, '1 day') d
+        LEFT JOIN posts p ON p.created_at::date = d::date
+          AND p.deleted_at IS NULL
+          AND p.post_type = 1
+          AND p.user_id > 0
+        GROUP BY d::date
+        ORDER BY d::date
+      SQL
+
+      queries["dashboard-topics-by-category"]["sql"] = <<~SQL
+        -- [params]
+        -- date :start_date = 7 days ago
+        -- date :end_date = today
+
+        SELECT c.name AS category, COUNT(t.id) AS topics
+        FROM topics t
+        JOIN categories c ON c.id = t.category_id
+        WHERE t.created_at::date >= :start_date
+          AND t.created_at::date <= :end_date
+          AND t.deleted_at IS NULL
+          AND t.archetype = 'regular'
+          AND t.category_id IS NOT NULL
+        GROUP BY c.name
+        ORDER BY topics DESC
+      SQL
+
+      queries["dashboard-top-referral-sources"]["sql"] = <<~SQL
+        -- [params]
+        -- date :start_date = 7 days ago
+        -- date :end_date = today
+
+        SELECT
+          il.domain AS referral_source,
+          COUNT(*) AS clicks
+        FROM incoming_links il
+        WHERE il.created_at::date >= :start_date
+          AND il.created_at::date <= :end_date
+        GROUP BY il.domain
+        ORDER BY clicks DESC
+        LIMIT 20
       SQL
 
       # convert query ids from "mostcommonlikers" to "-1", "mostmessages" to "-2" etc.

@@ -1,14 +1,13 @@
 import DashboardV2 from "discourse/admin/components/custom-dashboard/dashboard-v2";
 import DBreadcrumbsItem from "discourse/components/d-breadcrumbs-item";
 import DPageHeader from "discourse/components/d-page-header";
+import bodyClass from "discourse/helpers/body-class";
 import { i18n } from "discourse-i18n";
 
 export default <template>
+  {{bodyClass "custom-dashboard-page"}}
   <div class="admin-dashboard-v2 admin-config-page">
-    <DPageHeader
-      @titleLabel={{i18n "admin.dashboard_v2.title"}}
-      @descriptionLabel={{i18n "admin.dashboard_v2.description"}}
-    >
+    <DPageHeader @descriptionLabel={{i18n "admin.dashboard_v2.description"}}>
       <:breadcrumbs>
         <DBreadcrumbsItem @path="/admin" @label={{i18n "admin_title"}} />
         <DBreadcrumbsItem

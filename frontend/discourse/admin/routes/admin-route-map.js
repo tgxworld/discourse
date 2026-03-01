@@ -1,4 +1,3 @@
-/* eslint-disable ember/route-path-style */
 export default function () {
   this.route("admin", function () {
     this.route("dashboard", { path: "/" }, function () {
@@ -15,10 +14,11 @@ export default function () {
         path: "/dashboard/reports",
         resetNamespace: true,
       });
-      this.route("admin.dashboardV2", {
-        path: "/dashboard-v2",
-        resetNamespace: true,
-      });
+    });
+
+    this.route("admin.dashboardV2", {
+      path: "/dashboard-v2",
+      resetNamespace: true,
     });
 
     this.route(
