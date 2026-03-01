@@ -3,6 +3,7 @@
 module PageObjects
   module Pages
     class AdminCustomDashboard < PageObjects::Pages::Base
+      DASHBOARD_SELECTOR = ".custom-dashboard"
       PALETTE_SELECTOR = ".dashboard-query-palette"
       PALETTE_ITEM_SELECTOR = ".dashboard-query-palette__item"
       PALETTE_GROUP_HEADER_SELECTOR = ".dashboard-query-palette__group-header"
@@ -11,10 +12,28 @@ module PageObjects
       HIGHLIGHTED_CELL_SELECTOR = ".custom-dashboard__grid-cell--highlight"
       TOOLBAR_SELECTOR = ".custom-dashboard__toolbar"
       DATE_BTN_SELECTOR = ".custom-dashboard__date-btn"
+      RESIZE_HANDLE_SELECTOR = ".custom-dashboard__card-resize-handle"
 
       def visit
         page.visit("/admin/dashboard-v2")
         self
+      end
+
+      def has_dashboard?
+        has_css?(DASHBOARD_SELECTOR)
+      end
+
+      def has_no_dashboard?
+        has_no_css?(DASHBOARD_SELECTOR)
+      end
+
+      def has_sidebar_replaced?
+        has_css?(".sidebar-wrapper #{PALETTE_SELECTOR}") &&
+          has_no_css?(".sidebar-container", visible: true)
+      end
+
+      def has_admin_sidebar?
+        has_css?(".sidebar-container", visible: true)
       end
 
       def has_query_palette?
@@ -85,6 +104,10 @@ module PageObjects
         has_no_css?(".custom-dashboard__date-picker-panel")
       end
 
+      def has_resize_handle?(title)
+        find(CARD_SELECTOR, text: title).has_css?(RESIZE_HANDLE_SELECTOR)
+      end
+
       def click_date_preset(label)
         find(DATE_BTN_SELECTOR, text: label).click
         self
@@ -107,6 +130,11 @@ module PageObjects
 
       def remove_card(title)
         find(CARD_SELECTOR, text: title).find(".custom-dashboard__card-remove").click
+        self
+      end
+
+      def navigate_to_admin
+        find(".d-breadcrumbs__item a", text: "Admin").click
         self
       end
 
@@ -148,15 +176,6 @@ module PageObjects
         self
       end
 
-      def card_grid_position(panel_title)
-        card = find(CARD_SELECTOR, text: panel_title)
-        style = card[:style]
-        col_match = style.match(/grid-column:\s*(\d+)/)
-        row_match = style.match(/grid-row:\s*(\d+)/)
-        return nil unless col_match && row_match
-        { x: col_match[1].to_i - 1, y: row_match[1].to_i - 1 }
-      end
-
       def has_card_at_position?(panel_title, col, row)
         css_col = col + 1
         css_row = row + 1
@@ -168,6 +187,10 @@ module PageObjects
 
       def has_card_with_size?(panel_title, w, h)
         has_css?("#{CARD_SELECTOR}[style*='span #{w}'][style*='span #{h}']", text: panel_title)
+      end
+
+      def has_no_card_with_size?(panel_title, w, h)
+        has_no_css?("#{CARD_SELECTOR}[style*='span #{w}'][style*='span #{h}']", text: panel_title)
       end
 
       def resize_card(panel_title, new_w, new_h)
