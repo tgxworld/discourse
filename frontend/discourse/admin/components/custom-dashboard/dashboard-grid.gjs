@@ -346,7 +346,17 @@ export default class DashboardGrid extends Component {
     if (card) {
       card.classList.add("custom-dashboard__card--resizing");
     }
+    gridEl.classList.add("is-receiving-drag");
     document.body.classList.add("is-resizing-dashboard-card");
+
+    this.#highlightCells(
+      gridEl,
+      this._resizeCardX,
+      this._resizeCardY,
+      this._resizeOrigW,
+      this._resizeOrigH,
+      false
+    );
 
     window.addEventListener("pointermove", this._handleResizeMove);
     window.addEventListener("pointerup", this._handleResizeEnd);
@@ -378,12 +388,13 @@ export default class DashboardGrid extends Component {
       newH
     );
 
-    if (this._resizeCardEl) {
-      const x = this._resizeCardX;
-      const y = this._resizeCardY;
-      this._resizeCardEl.style.cssText = `grid-column: ${x + 1} / span ${newW}; grid-row: ${y + 1} / span ${newH};`;
-      this._resizeCardEl.classList.toggle(
-        "custom-dashboard__card--resize-overlap",
+    if (this._gridElement) {
+      this.#highlightCells(
+        this._gridElement,
+        this._resizeCardX,
+        this._resizeCardY,
+        newW,
+        newH,
         overlap
       );
     }
@@ -420,9 +431,11 @@ export default class DashboardGrid extends Component {
   #resetResizeState() {
     if (this._resizeCardEl) {
       this._resizeCardEl.classList.remove("custom-dashboard__card--resizing");
-      this._resizeCardEl.classList.remove(
-        "custom-dashboard__card--resize-overlap"
-      );
+    }
+
+    if (this._gridElement) {
+      this.#clearHighlight(this._gridElement);
+      this._gridElement.classList.remove("is-receiving-drag");
     }
 
     document.body.classList.remove("is-resizing-dashboard-card");

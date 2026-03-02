@@ -240,21 +240,8 @@ body.custom-dashboard-page .sidebar-wrapper {
   }
 
   &--resizing {
-    border: 2px dashed var(--tertiary);
-    background: var(--tertiary-low);
-    box-shadow: none;
-    z-index: 20;
-
-    .custom-dashboard__card-header,
-    .custom-dashboard__card-content,
-    .custom-dashboard__card-resize-handle {
-      visibility: hidden;
-    }
-  }
-
-  &--resize-overlap {
-    border-color: var(--danger);
-    background: var(--danger-low);
+    opacity: 0;
+    pointer-events: none;
   }
 
   &:hover .custom-dashboard__card-resize-handle {
