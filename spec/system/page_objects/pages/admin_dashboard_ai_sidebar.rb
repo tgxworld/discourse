@@ -8,7 +8,6 @@ module PageObjects
       USER_MESSAGE_SELECTOR = ".dashboard-ai-sidebar__message--user"
       BOT_MESSAGE_SELECTOR = ".dashboard-ai-sidebar__message--bot"
       INPUT_SELECTOR = ".dashboard-ai-sidebar__textarea"
-      SEND_BTN_SELECTOR = ".dashboard-ai-sidebar__send-btn"
       CHART_PREVIEW_SELECTOR = ".dashboard-chart-preview"
       ADD_BTN_SELECTOR = ".dashboard-chart-preview__add-btn"
       LOADING_SELECTOR = ".dashboard-ai-sidebar__thinking"
@@ -25,7 +24,7 @@ module PageObjects
 
       def send_message(text)
         find(INPUT_SELECTOR).fill_in(with: text)
-        find(SEND_BTN_SELECTOR).click
+        find(INPUT_SELECTOR).send_keys(:enter)
         self
       end
 

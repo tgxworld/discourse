@@ -44,6 +44,7 @@ export default class DashboardV2 extends Component {
   @tracked activePreset = "7";
   @tracked customFrom = null;
   @tracked customTo = null;
+  @tracked sidebarMode = "queries";
   findTargets = modifier(() => {
     this._sidebarElement = document.querySelector(".sidebar-wrapper");
     this._headerElement = document.querySelector(".d-page-header__description");
@@ -57,10 +58,15 @@ export default class DashboardV2 extends Component {
     this.#loadQueries();
   }
 
-  get showAiSidebar() {
+  get aiEnabled() {
     return (
       this.siteSettings.discourse_ai_enabled && this.siteSettings.ai_bot_enabled
     );
+  }
+
+  @action
+  switchSidebarMode(mode) {
+    this.sidebarMode = mode;
   }
 
   get presets() {
@@ -181,11 +187,19 @@ export default class DashboardV2 extends Component {
     <div class="custom-dashboard" {{this.findTargets}}>
       {{#if this._sidebarElement}}
         {{#in-element this._sidebarElement insertBefore=null}}
-          <DashboardQueryPalette
-            @availableQueries={{this.availableQueries}}
-            @loading={{this.loading}}
-            @pluginMissing={{this.pluginMissing}}
-          />
+          {{#if (eq this.sidebarMode "ai")}}
+            <DashboardAiSidebar
+              @dashboard={{@dashboard}}
+              @onShowQueries={{fn this.switchSidebarMode "queries"}}
+            />
+          {{else}}
+            <DashboardQueryPalette
+              @availableQueries={{this.availableQueries}}
+              @loading={{this.loading}}
+              @pluginMissing={{this.pluginMissing}}
+              @onShowAi={{if this.aiEnabled (fn this.switchSidebarMode "ai")}}
+            />
+          {{/if}}
         {{/in-element}}
       {{/if}}
 
@@ -235,21 +249,15 @@ export default class DashboardV2 extends Component {
         {{/in-element}}
       {{/if}}
 
-      <div class="custom-dashboard__body">
-        <DashboardGrid
-          @panels={{this.panels}}
-          @startDate={{this.startDate}}
-          @endDate={{this.endDate}}
-          @onRemovePanel={{this.removePanel}}
-          @onUpdatePanel={{this.updatePanel}}
-          @onUpdateLayout={{this.updateLayout}}
-          @onAddPanel={{this.addPanel}}
-        />
-
-        {{#if this.showAiSidebar}}
-          <DashboardAiSidebar @dashboard={{@dashboard}} />
-        {{/if}}
-      </div>
+      <DashboardGrid
+        @panels={{this.panels}}
+        @startDate={{this.startDate}}
+        @endDate={{this.endDate}}
+        @onRemovePanel={{this.removePanel}}
+        @onUpdatePanel={{this.updatePanel}}
+        @onUpdateLayout={{this.updateLayout}}
+        @onAddPanel={{this.addPanel}}
+      />
     </div>
   </template>
 }

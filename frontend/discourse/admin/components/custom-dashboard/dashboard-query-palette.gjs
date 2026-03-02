@@ -3,6 +3,7 @@ import { tracked } from "@glimmer/tracking";
 import { fn } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
+import DButton from "discourse/components/d-button";
 import icon from "discourse/helpers/d-icon";
 import { i18n } from "discourse-i18n";
 
@@ -83,6 +84,14 @@ export default class DashboardQueryPalette extends Component {
         <h3 class="dashboard-query-palette__title">
           {{i18n "admin.dashboard_v2.sidebar.title"}}
         </h3>
+        {{#if @onShowAi}}
+          <DButton
+            @action={{@onShowAi}}
+            @icon="robot"
+            @title={{i18n "admin.dashboard_v2.ai_sidebar.show_ai"}}
+            class="btn-flat btn-icon no-text dashboard-query-palette__ai-btn"
+          />
+        {{/if}}
       </div>
 
       <input

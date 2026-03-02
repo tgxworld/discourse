@@ -6593,13 +6593,18 @@ en:
           cancel: "Cancel"
         ai_sidebar:
           title: "AI Assistant"
+          show_ai: "AI Dashboard Assistant"
+          back_to_queries: "Back to queries"
           placeholder: "Ask me to create a dashboard card..."
-          send: "Send"
           add_to_dashboard: "Add to dashboard"
           loading: "Thinking..."
           error: "Something went wrong. Please try again."
           empty_conversation: "Ask the AI to help create analytics cards for your dashboard."
           ai_not_available: "The AI assistant requires the discourse-ai plugin."
+          history:
+            title: "Conversation history"
+            new_conversation: "New conversation"
+            empty: "No past conversations"
         chart_preview:
           line: "Line chart"
           bar: "Bar chart"

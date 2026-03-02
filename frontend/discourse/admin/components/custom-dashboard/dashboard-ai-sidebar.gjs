@@ -1,13 +1,20 @@
 import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
+import { fn } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
 import { htmlSafe } from "@ember/template";
 import { modifier } from "ember-modifier";
 import ConditionalLoadingSpinner from "discourse/components/conditional-loading-spinner";
+import DButton from "discourse/components/d-button";
+import DropdownMenu from "discourse/components/dropdown-menu";
+import DMenu from "discourse/float-kit/components/d-menu";
+import icon from "discourse/helpers/d-icon";
+import formatDate from "discourse/helpers/format-date";
 import { ajax } from "discourse/lib/ajax";
 import { bind } from "discourse/lib/decorators";
+import { eq } from "discourse/truth-helpers";
 import { i18n } from "discourse-i18n";
 import DashboardChartPreview from "./dashboard-chart-preview";
 
@@ -22,6 +29,8 @@ export default class DashboardAiSidebar extends Component {
   @tracked streaming = false;
   @tracked error = null;
   @tracked topicId = null;
+  @tracked conversations = null;
+  @tracked loadingConversations = false;
 
   captureScrollContainer = modifier((element) => {
     this._scrollContainer = element;
@@ -29,6 +38,7 @@ export default class DashboardAiSidebar extends Component {
 
   _scrollContainer = null;
   _subscribed = false;
+  _historyMenuApi = null;
 
   constructor() {
     super(...arguments);
@@ -40,12 +50,7 @@ export default class DashboardAiSidebar extends Component {
 
   willDestroy() {
     super.willDestroy(...arguments);
-    if (this.topicId) {
-      this.messageBus.unsubscribe(
-        `discourse-ai/ai-bot/topic/${this.topicId}`,
-        this.onStreamMessage
-      );
-    }
+    this.#unsubscribeFromStream();
   }
 
   get botPersona() {
@@ -109,6 +114,62 @@ export default class DashboardAiSidebar extends Component {
     this.inputText = event.target.value;
     event.target.style.height = "auto";
     event.target.style.height = `${Math.min(event.target.scrollHeight, 120)}px`;
+  }
+
+  @action
+  onRegisterHistoryApi(api) {
+    this._historyMenuApi = api;
+  }
+
+  @action
+  async fetchConversations() {
+    if (this.loadingConversations) {
+      return;
+    }
+
+    this.loadingConversations = true;
+
+    try {
+      const result = await ajax("/discourse-ai/ai-bot/conversations.json", {
+        data: { page: 0, per_page: 20 },
+      });
+      this.conversations = result.conversations;
+    } catch {
+      this.conversations = [];
+    } finally {
+      this.loadingConversations = false;
+    }
+  }
+
+  @action
+  async switchConversation(topicId) {
+    this._historyMenuApi?.close();
+
+    if (topicId === this.topicId) {
+      return;
+    }
+
+    this.#unsubscribeFromStream();
+    this.topicId = topicId;
+    this.messages = [];
+    this.streaming = false;
+    this.error = null;
+
+    await this.#persistConversationTopicId();
+    await this.#loadMessages();
+  }
+
+  @action
+  async startNewConversation() {
+    this._historyMenuApi?.close();
+
+    this.#unsubscribeFromStream();
+    this.topicId = null;
+    this.messages = [];
+    this.streaming = false;
+    this.error = null;
+
+    await this.#persistConversationTopicId();
   }
 
   @action
@@ -212,15 +273,7 @@ export default class DashboardAiSidebar extends Component {
 
     this.topicId = response.topic_id;
     this.#subscribeToStream();
-
-    if (this.args.dashboard) {
-      const existingData = this.args.dashboard.data || {};
-      const data = { ...existingData, conversationTopicId: this.topicId };
-      await ajax("/admin/dashboard-v2.json", {
-        method: "PUT",
-        data: { data: JSON.stringify(data) },
-      });
-    }
+    await this.#persistConversationTopicId();
 
     this.streaming = true;
     await this.#loadMessages();
@@ -236,6 +289,19 @@ export default class DashboardAiSidebar extends Component {
     });
 
     this.streaming = true;
+  }
+
+  async #persistConversationTopicId() {
+    if (!this.args.dashboard) {
+      return;
+    }
+
+    const existingData = this.args.dashboard.data || {};
+    const data = { ...existingData, conversationTopicId: this.topicId };
+    await ajax("/admin/dashboard-v2.json", {
+      method: "PUT",
+      data: { data: JSON.stringify(data) },
+    });
   }
 
   async #loadMessages() {
@@ -284,6 +350,16 @@ export default class DashboardAiSidebar extends Component {
     );
   }
 
+  #unsubscribeFromStream() {
+    if (this.topicId && this._subscribed) {
+      this.messageBus.unsubscribe(
+        `discourse-ai/ai-bot/topic/${this.topicId}`,
+        this.onStreamMessage
+      );
+    }
+    this._subscribed = false;
+  }
+
   #escapeHtml(text) {
     const div = document.createElement("div");
     div.textContent = text;
@@ -293,7 +369,76 @@ export default class DashboardAiSidebar extends Component {
   <template>
     <div class="dashboard-ai-sidebar">
       <div class="dashboard-ai-sidebar__header">
+        {{#if @onShowQueries}}
+          <DButton
+            @action={{@onShowQueries}}
+            @icon="arrow-left"
+            @title={{i18n "admin.dashboard_v2.ai_sidebar.back_to_queries"}}
+            class="btn-flat btn-icon no-text dashboard-ai-sidebar__back-btn"
+          />
+        {{/if}}
         <h3>{{i18n "admin.dashboard_v2.ai_sidebar.title"}}</h3>
+        {{#if this.isAvailable}}
+          <DMenu
+            @icon="clock-rotate-left"
+            @identifier="ai-sidebar-history"
+            @onRegisterApi={{this.onRegisterHistoryApi}}
+            @onShow={{this.fetchConversations}}
+            @triggerClass="btn-flat btn-icon no-text dashboard-ai-sidebar__history-trigger"
+            @title={{i18n "admin.dashboard_v2.ai_sidebar.history.title"}}
+          >
+            <:content>
+              <DropdownMenu as |dropdown|>
+                <dropdown.item>
+                  <DButton
+                    @action={{this.startNewConversation}}
+                    @icon="plus"
+                    @translatedLabel={{i18n
+                      "admin.dashboard_v2.ai_sidebar.history.new_conversation"
+                    }}
+                    class="btn-transparent dashboard-ai-sidebar__history-new"
+                  />
+                </dropdown.item>
+                <dropdown.divider />
+                {{#if this.loadingConversations}}
+                  <li class="dashboard-ai-sidebar__history-loading">
+                    <ConditionalLoadingSpinner @condition={{true}} />
+                  </li>
+                {{else if this.conversations.length}}
+                  {{#each this.conversations as |convo|}}
+                    <dropdown.item>
+                      <DButton
+                        @action={{fn this.switchConversation convo.id}}
+                        class={{if
+                          (eq convo.id this.topicId)
+                          "btn-transparent dashboard-ai-sidebar__history-item is-selected"
+                          "btn-transparent dashboard-ai-sidebar__history-item"
+                        }}
+                      >
+                        <span
+                          class="dashboard-ai-sidebar__history-item-title"
+                        >{{convo.title}}</span>
+                        <span
+                          class="dashboard-ai-sidebar__history-item-date"
+                        >{{formatDate
+                            convo.last_posted_at
+                            format="tiny"
+                          }}</span>
+                      </DButton>
+                    </dropdown.item>
+                  {{/each}}
+                {{else}}
+                  <li class="dashboard-ai-sidebar__history-empty">
+                    {{icon "comments"}}
+                    <span>{{i18n
+                        "admin.dashboard_v2.ai_sidebar.history.empty"
+                      }}</span>
+                  </li>
+                {{/if}}
+              </DropdownMenu>
+            </:content>
+          </DMenu>
+        {{/if}}
       </div>
 
       {{#if this.isAvailable}}
@@ -358,14 +503,6 @@ export default class DashboardAiSidebar extends Component {
             {{on "input" this.updateInput}}
             {{on "keydown" this.handleKeydown}}
           />
-          <button
-            type="button"
-            class="btn btn-primary dashboard-ai-sidebar__send-btn"
-            disabled={{this.inputDisabled}}
-            {{on "click" this.sendMessage}}
-          >
-            {{i18n "admin.dashboard_v2.ai_sidebar.send"}}
-          </button>
         </div>
       {{else}}
         <div class="dashboard-ai-sidebar__unavailable">
