@@ -303,6 +303,22 @@ body.is-resizing-dashboard-card {
   }
 }
 
+.custom-dashboard__card-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-dashboard__card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex-shrink: 0;
+}
+
+.custom-dashboard__card-edit,
 .custom-dashboard__card-remove {
   border: none;
   background: none;
@@ -311,10 +327,15 @@ body.is-resizing-dashboard-card {
   padding: 0.2rem;
   display: flex;
   align-items: center;
+  text-decoration: none;
+}
 
-  &:hover {
-    color: var(--danger);
-  }
+.custom-dashboard__card-edit:hover {
+  color: var(--tertiary);
+}
+
+.custom-dashboard__card-remove:hover {
+  color: var(--danger);
 }
 
 .custom-dashboard__card-content {

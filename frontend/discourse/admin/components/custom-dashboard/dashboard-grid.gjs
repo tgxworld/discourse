@@ -485,13 +485,22 @@ export default class DashboardGrid extends Component {
                 {{on "dragend" this.handleCardDragEnd}}
               >&#x2807;</span>
               <span class="custom-dashboard__card-title">{{panel.title}}</span>
-              <button
-                class="custom-dashboard__card-remove btn-flat"
-                type="button"
-                {{on "click" (fn @onRemovePanel panel.id)}}
-              >
-                {{icon "xmark"}}
-              </button>
+              <div class="custom-dashboard__card-actions">
+                <a
+                  class="custom-dashboard__card-edit btn-flat"
+                  href="/admin/plugins/explorer/queries/{{panel.source}}"
+                  title="Edit query"
+                >
+                  {{icon "pencil"}}
+                </a>
+                <button
+                  class="custom-dashboard__card-remove btn-flat"
+                  type="button"
+                  {{on "click" (fn @onRemovePanel panel.id)}}
+                >
+                  {{icon "xmark"}}
+                </button>
+              </div>
             </div>
             <div class="custom-dashboard__card-content">
               <DashboardCard
