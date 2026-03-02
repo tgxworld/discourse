@@ -56,6 +56,8 @@ export default class DashboardGrid extends Component {
   _resizeCardY = 0;
   _cellPixelW = 0;
   _cellPixelH = 0;
+  _resizeCardEl = null;
+  _resizeOrigStyle = null;
 
   get gridRows() {
     let maxRow = 0;
@@ -338,27 +340,19 @@ export default class DashboardGrid extends Component {
     this.#computeCellDimensions(gridEl);
 
     const card = event.target.closest(".custom-dashboard__card");
+    this._resizeCardEl = card;
+    this._resizeOrigStyle = card?.getAttribute("style") || "";
+
     if (card) {
       card.classList.add("custom-dashboard__card--resizing");
     }
-    gridEl.classList.add("is-receiving-drag");
     document.body.classList.add("is-resizing-dashboard-card");
-
-    this.#highlightCells(
-      gridEl,
-      this._resizeCardX,
-      this._resizeCardY,
-      this._resizeOrigW,
-      this._resizeOrigH,
-      false
-    );
 
     window.addEventListener("pointermove", this._handleResizeMove);
     window.addEventListener("pointerup", this._handleResizeEnd);
   }
 
-  @bind
-  _handleResizeMove(event) {
+  #computeResizeDimensions(event) {
     const deltaX = event.clientX - this._resizeStartX;
     const deltaY = event.clientY - this._resizeStartY;
 
@@ -367,8 +361,14 @@ export default class DashboardGrid extends Component {
 
     let newW = Math.max(MIN_CARD_W, this._resizeOrigW + colDelta);
     let newH = Math.max(MIN_CARD_H, this._resizeOrigH + rowDelta);
-
     newW = Math.min(newW, GRID_COLS - this._resizeCardX);
+
+    return { newW, newH };
+  }
+
+  @bind
+  _handleResizeMove(event) {
+    const { newW, newH } = this.#computeResizeDimensions(event);
 
     const overlap = this.#wouldOverlap(
       this._resizeCardX,
@@ -378,13 +378,12 @@ export default class DashboardGrid extends Component {
       newH
     );
 
-    if (this._gridElement) {
-      this.#highlightCells(
-        this._gridElement,
-        this._resizeCardX,
-        this._resizeCardY,
-        newW,
-        newH,
+    if (this._resizeCardEl) {
+      const x = this._resizeCardX;
+      const y = this._resizeCardY;
+      this._resizeCardEl.style.cssText = `grid-column: ${x + 1} / span ${newW}; grid-row: ${y + 1} / span ${newH};`;
+      this._resizeCardEl.classList.toggle(
+        "custom-dashboard__card--resize-overlap",
         overlap
       );
     }
@@ -392,16 +391,7 @@ export default class DashboardGrid extends Component {
 
   @bind
   _handleResizeEnd(event) {
-    const deltaX = event.clientX - this._resizeStartX;
-    const deltaY = event.clientY - this._resizeStartY;
-
-    const colDelta = Math.round(deltaX / (this._cellPixelW + GAP));
-    const rowDelta = Math.round(deltaY / (this._cellPixelH + GAP));
-
-    let newW = Math.max(MIN_CARD_W, this._resizeOrigW + colDelta);
-    let newH = Math.max(MIN_CARD_H, this._resizeOrigH + rowDelta);
-
-    newW = Math.min(newW, GRID_COLS - this._resizeCardX);
+    const { newW, newH } = this.#computeResizeDimensions(event);
 
     const overlap = this.#wouldOverlap(
       this._resizeCardX,
@@ -428,16 +418,11 @@ export default class DashboardGrid extends Component {
   }
 
   #resetResizeState() {
-    const card = this._gridElement?.querySelector(
-      `.custom-dashboard__card[data-panel-id="${this._resizingPanelId}"]`
-    );
-    if (card) {
-      card.classList.remove("custom-dashboard__card--resizing");
-    }
-
-    if (this._gridElement) {
-      this.#clearHighlight(this._gridElement);
-      this._gridElement.classList.remove("is-receiving-drag");
+    if (this._resizeCardEl) {
+      this._resizeCardEl.classList.remove("custom-dashboard__card--resizing");
+      this._resizeCardEl.classList.remove(
+        "custom-dashboard__card--resize-overlap"
+      );
     }
 
     document.body.classList.remove("is-resizing-dashboard-card");
@@ -446,6 +431,8 @@ export default class DashboardGrid extends Component {
     window.removeEventListener("pointerup", this._handleResizeEnd);
 
     this._resizingPanelId = null;
+    this._resizeCardEl = null;
+    this._resizeOrigStyle = null;
     this._gridElement = null;
   }
 
