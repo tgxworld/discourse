@@ -43,9 +43,26 @@ module DiscourseAi
               (table_info[row.table_name] ||= []) << "#{row.column_name} #{row.data_type}"
             end
 
+          index_info = {}
+          DB
+            .query(<<~SQL, tables_arr)
+            select tablename, indexname, indexdef from pg_indexes
+            where schemaname = 'public'
+            and tablename in (?)
+            order by tablename, indexname
+          SQL
+            .each { |row| (index_info[row.tablename] ||= []) << row.indexdef }
+
           schema_info =
             table_info
-              .map { |table_name, columns| "#{table_name}(#{columns.join(",")})" }
+              .map do |table_name, columns|
+                result = +"#{table_name}(#{columns.join(",")})"
+                if index_info[table_name].present?
+                  result << "\nIndexes:\n"
+                  result << index_info[table_name].map { |indexdef| "  #{indexdef}" }.join("\n")
+                end
+                result
+              end
               .join("\n")
 
           { schema_info: schema_info, tables: tables }

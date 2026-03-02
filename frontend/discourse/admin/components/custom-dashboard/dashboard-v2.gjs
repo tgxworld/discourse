@@ -3,6 +3,7 @@ import { tracked } from "@glimmer/tracking";
 import { fn } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
+import { service } from "@ember/service";
 import { modifier } from "ember-modifier";
 import CustomDashboard from "discourse/admin/models/custom-dashboard";
 import DateTimeInputRange from "discourse/components/date-time-input-range";
@@ -11,6 +12,7 @@ import { ajax } from "discourse/lib/ajax";
 import discourseDebounce from "discourse/lib/debounce";
 import eq from "discourse/truth-helpers/helpers/eq";
 import { i18n } from "discourse-i18n";
+import DashboardAiSidebar from "./dashboard-ai-sidebar";
 import DashboardGrid from "./dashboard-grid";
 import DashboardQueryPalette from "./dashboard-query-palette";
 
@@ -33,6 +35,8 @@ function daysAgo(n) {
 }
 
 export default class DashboardV2 extends Component {
+  @service siteSettings;
+
   @tracked panels = [];
   @tracked availableQueries = [];
   @tracked loading = true;
@@ -51,6 +55,12 @@ export default class DashboardV2 extends Component {
     super(...arguments);
     this.panels = this.args.dashboard?.data?.panels || [];
     this.#loadQueries();
+  }
+
+  get showAiSidebar() {
+    return (
+      this.siteSettings.discourse_ai_enabled && this.siteSettings.ai_bot_enabled
+    );
   }
 
   get presets() {
@@ -117,7 +127,7 @@ export default class DashboardV2 extends Component {
   }
 
   @action
-  addPanel(type, source, title, gridPos) {
+  addPanel(type, source, title, gridPos, chartType) {
     const panel = {
       id: Math.random().toString(36).slice(2, 8),
       type,
@@ -125,6 +135,9 @@ export default class DashboardV2 extends Component {
       title,
       gridPos: gridPos || { x: 0, y: 0, w: 3, h: 8 },
     };
+    if (chartType) {
+      panel.chartType = chartType;
+    }
     this.panels = [...this.panels, panel];
     this.#save();
   }
@@ -222,15 +235,21 @@ export default class DashboardV2 extends Component {
         {{/in-element}}
       {{/if}}
 
-      <DashboardGrid
-        @panels={{this.panels}}
-        @startDate={{this.startDate}}
-        @endDate={{this.endDate}}
-        @onRemovePanel={{this.removePanel}}
-        @onUpdatePanel={{this.updatePanel}}
-        @onUpdateLayout={{this.updateLayout}}
-        @onAddPanel={{this.addPanel}}
-      />
+      <div class="custom-dashboard__body">
+        <DashboardGrid
+          @panels={{this.panels}}
+          @startDate={{this.startDate}}
+          @endDate={{this.endDate}}
+          @onRemovePanel={{this.removePanel}}
+          @onUpdatePanel={{this.updatePanel}}
+          @onUpdateLayout={{this.updateLayout}}
+          @onAddPanel={{this.addPanel}}
+        />
+
+        {{#if this.showAiSidebar}}
+          <DashboardAiSidebar @dashboard={{@dashboard}} />
+        {{/if}}
+      </div>
     </div>
   </template>
 }

@@ -185,6 +185,18 @@ module PageObjects
         )
       end
 
+      def has_card_with_chart?(panel_title)
+        find(CARD_SELECTOR, text: panel_title).has_css?(".custom-dashboard__card-chart canvas")
+      end
+
+      def has_card_with_table?(panel_title)
+        find(CARD_SELECTOR, text: panel_title).has_css?(".custom-dashboard__card-table")
+      end
+
+      def has_card_with_no_chart?(panel_title)
+        find(CARD_SELECTOR, text: panel_title).has_no_css?(".custom-dashboard__card-chart canvas")
+      end
+
       def has_card_with_size?(panel_title, w, h)
         has_css?("#{CARD_SELECTOR}[style*='span #{w}'][style*='span #{h}']", text: panel_title)
       end

@@ -6591,6 +6591,21 @@ en:
           sql: "SQL"
           save: "Save"
           cancel: "Cancel"
+        ai_sidebar:
+          title: "AI Assistant"
+          placeholder: "Ask me to create a dashboard card..."
+          send: "Send"
+          add_to_dashboard: "Add to dashboard"
+          loading: "Thinking..."
+          error: "Something went wrong. Please try again."
+          empty_conversation: "Ask the AI to help create analytics cards for your dashboard."
+          ai_not_available: "The AI assistant requires the discourse-ai plugin."
+        chart_preview:
+          line: "Line chart"
+          bar: "Bar chart"
+          pie: "Pie chart"
+          area: "Area chart"
+          table: "Table"
       flags:
         title: "Moderation"
         description: "Description"

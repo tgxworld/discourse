@@ -224,6 +224,63 @@ describe "Admin Custom Dashboard V2", type: :system do
     end
   end
 
+  context "with chart types" do
+    it "renders a chart for time series data and auto-detects line chart" do
+      create_dashboard_with_panels(default_panel)
+
+      dashboard_page.visit
+
+      expect(dashboard_page).to have_card_with_chart("Dashboard: Active Users")
+    end
+
+    it "renders a bar chart when chartType is bar" do
+      create_dashboard_with_panels(default_panel("chartType" => "bar"))
+
+      dashboard_page.visit
+
+      expect(dashboard_page).to have_card_with_chart("Dashboard: Active Users")
+    end
+
+    it "renders a table when chartType is table" do
+      create_dashboard_with_panels(default_panel("chartType" => "table"))
+
+      dashboard_page.visit
+
+      expect(dashboard_page).to have_card_with_table("Dashboard: Active Users")
+      expect(dashboard_page).to have_card_with_no_chart("Dashboard: Active Users")
+    end
+
+    it "renders a table for categorical data without explicit chartType" do
+      create_dashboard_with_panels(
+        default_panel(
+          "id" => "cat1",
+          "source" => "-23",
+          "title" => "Dashboard: Topics by Category",
+        ),
+      )
+
+      dashboard_page.visit
+
+      expect(dashboard_page).to have_card_with_table("Dashboard: Topics by Category")
+      expect(dashboard_page).to have_card_with_no_chart("Dashboard: Topics by Category")
+    end
+
+    it "renders a pie chart when chartType is pie" do
+      create_dashboard_with_panels(
+        default_panel(
+          "id" => "pie1",
+          "source" => "-23",
+          "title" => "Dashboard: Topics by Category",
+          "chartType" => "pie",
+        ),
+      )
+
+      dashboard_page.visit
+
+      expect(dashboard_page).to have_card_with_chart("Dashboard: Topics by Category")
+    end
+  end
+
   context "with date range toolbar" do
     it "shows the toolbar with 7d active and allows switching presets" do
       dashboard_page.visit

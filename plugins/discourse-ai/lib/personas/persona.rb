@@ -72,6 +72,7 @@ module DiscourseAi
             ReportRunner => -33,
             Discover => -34,
             ChatThreadTitler => -35,
+            DashboardDesigner => -36,
           }
         end
 

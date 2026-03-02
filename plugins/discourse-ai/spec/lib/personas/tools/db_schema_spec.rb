@@ -21,5 +21,14 @@ RSpec.describe DiscourseAi::Personas::Tools::DbSchema do
 
       expect(result[:tables]).to eq("posts,topics")
     end
+
+    it "includes index definitions for each table" do
+      result = described_class.new({ tables: "posts,topics" }, bot_user: bot_user, llm: llm).invoke
+
+      expect(result[:schema_info]).to include("Indexes:")
+      expect(result[:schema_info]).to include("index_posts_on_topic_id_and_post_number")
+      expect(result[:schema_info]).to include("topics_pkey")
+      expect(result[:schema_info]).to include("CREATE UNIQUE INDEX")
+    end
   end
 end

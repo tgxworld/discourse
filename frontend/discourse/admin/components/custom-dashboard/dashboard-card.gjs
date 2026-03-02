@@ -70,11 +70,61 @@ export default class DashboardCard extends Component {
     );
   }
 
+  get effectiveChartType() {
+    const explicit = this.args.panel?.chartType;
+    if (explicit && explicit !== "table") {
+      return explicit;
+    }
+    if (!explicit && this.isTimeSeries) {
+      return "line";
+    }
+    return null;
+  }
+
+  get shouldRenderChart() {
+    return this.effectiveChartType !== null;
+  }
+
   get chartConfig() {
+    const chartType = this.effectiveChartType;
     const labels = this.rows.map((r) => r[0]);
     const data = this.rows.map((r) =>
       typeof r[1] === "number" ? r[1] : parseFloat(r[1])
     );
+
+    if (chartType === "pie") {
+      return this.#pieChartConfig(labels, data);
+    }
+
+    if (chartType === "bar") {
+      return this.#barChartConfig(labels, data);
+    }
+
+    return this.#lineChartConfig(labels, data, chartType === "area");
+  }
+
+  #lineChartConfig(labels, data, fill) {
+    const isTime = this.isTimeSeries;
+    const xScale = isTime
+      ? {
+          grid: { display: false },
+          type: "time",
+          time: { unit: "day" },
+          ticks: {
+            maxTicksLimit: 4,
+            font: { size: 10 },
+            color: getCSSColor("--primary-medium"),
+          },
+          border: { display: false },
+        }
+      : {
+          grid: { display: false },
+          ticks: {
+            font: { size: 10 },
+            color: getCSSColor("--primary-medium"),
+          },
+          border: { display: false },
+        };
 
     return {
       type: "line",
@@ -85,13 +135,15 @@ export default class DashboardCard extends Component {
             data,
             label: this.columns[1],
             borderColor: getCSSColor("--tertiary"),
-            backgroundColor: "transparent",
+            backgroundColor: fill
+              ? getCSSColor("--tertiary-low")
+              : "transparent",
             pointRadius: 0,
             pointHoverRadius: 4,
             pointBackgroundColor: getCSSColor("--tertiary"),
             borderWidth: 1.5,
             tension: 0.4,
-            fill: false,
+            fill,
           },
         ],
       },
@@ -122,16 +174,101 @@ export default class DashboardCard extends Component {
               color: getCSSColor("--primary-medium"),
             },
           },
-          x: {
-            grid: { display: false },
-            type: "time",
-            time: { unit: "day" },
+          x: xScale,
+        },
+      },
+    };
+  }
+
+  #barChartConfig(labels, data) {
+    return {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          {
+            data,
+            label: this.columns[1],
+            backgroundColor: getCSSColor("--tertiary"),
+            borderRadius: 4,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 300 },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: getCSSColor("--primary"),
+            cornerRadius: 8,
+            padding: { left: 12, right: 12, top: 8, bottom: 8 },
+          },
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            grid: { color: getCSSColor("--primary-very-low") },
+            border: { display: false },
             ticks: {
+              precision: 0,
               maxTicksLimit: 4,
               font: { size: 10 },
               color: getCSSColor("--primary-medium"),
             },
+          },
+          x: {
+            grid: { display: false },
+            ticks: {
+              font: { size: 10 },
+              color: getCSSColor("--primary-medium"),
+            },
             border: { display: false },
+          },
+        },
+      },
+    };
+  }
+
+  #pieChartConfig(labels, data) {
+    const colors = [
+      getCSSColor("--tertiary"),
+      getCSSColor("--success"),
+      getCSSColor("--highlight"),
+      getCSSColor("--danger"),
+      getCSSColor("--love"),
+      getCSSColor("--primary-medium"),
+    ];
+
+    return {
+      type: "pie",
+      data: {
+        labels,
+        datasets: [
+          {
+            data,
+            backgroundColor: labels.map((_, i) => colors[i % colors.length]),
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 300 },
+        plugins: {
+          legend: {
+            position: "right",
+            labels: {
+              font: { size: 10 },
+              color: getCSSColor("--primary-medium"),
+            },
+          },
+          tooltip: {
+            backgroundColor: getCSSColor("--primary"),
+            cornerRadius: 8,
+            padding: { left: 12, right: 12, top: 8, bottom: 8 },
           },
         },
       },
@@ -176,7 +313,7 @@ export default class DashboardCard extends Component {
             {{i18n "admin.dashboard_v2.card.unavailable"}}
           </div>
         {{else if this.hasData}}
-          {{#if this.isTimeSeries}}
+          {{#if this.shouldRenderChart}}
             <Chart
               @chartConfig={{this.chartConfig}}
               class="custom-dashboard__card-chart"
