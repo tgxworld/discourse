@@ -136,6 +136,17 @@ export default class DashboardV2 extends Component {
   }
 
   @action
+  updatePanel(panelId, changes) {
+    this.panels = this.panels.map((p) => {
+      if (p.id === panelId) {
+        return { ...p, ...changes };
+      }
+      return p;
+    });
+    this.#save();
+  }
+
+  @action
   updateLayout(updatedPanels) {
     this.panels = updatedPanels;
     discourseDebounce(this, this.#debouncedSave, SAVE_DELAY);
@@ -216,6 +227,7 @@ export default class DashboardV2 extends Component {
         @startDate={{this.startDate}}
         @endDate={{this.endDate}}
         @onRemovePanel={{this.removePanel}}
+        @onUpdatePanel={{this.updatePanel}}
         @onUpdateLayout={{this.updateLayout}}
         @onAddPanel={{this.addPanel}}
       />

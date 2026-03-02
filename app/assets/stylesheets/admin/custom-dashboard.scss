@@ -200,6 +200,12 @@ body.custom-dashboard-page .sidebar-wrapper {
     background: var(--tertiary-low);
   }
 
+  &--swap {
+    border-color: var(--tertiary);
+    background: var(--tertiary-low);
+    opacity: 0.5;
+  }
+
   &--overlap {
     border-color: var(--danger);
     background: var(--danger-low);
@@ -242,6 +248,16 @@ body.custom-dashboard-page .sidebar-wrapper {
   &--resizing {
     opacity: 0;
     pointer-events: none;
+  }
+
+  &--swap-target {
+    border-color: var(--tertiary);
+    box-shadow: 0 0 0 2px var(--tertiary-low);
+    opacity: 0.7;
+    transition:
+      opacity 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
   }
 
   &:hover .custom-dashboard__card-resize-handle {
@@ -309,6 +325,45 @@ body.is-resizing-dashboard-card {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0.1rem 0.25rem;
+  margin: -0.1rem -0.25rem;
+  transition: background-color 0.15s ease;
+
+  .custom-dashboard__card-title-edit-icon {
+    display: inline;
+    opacity: 0;
+    margin-left: 0.25rem;
+    transition: opacity 0.15s ease;
+
+    .d-icon {
+      font-size: var(--font-down-2);
+      color: var(--primary-medium);
+    }
+  }
+
+  &:hover {
+    background: var(--primary-very-low);
+
+    .custom-dashboard__card-title-edit-icon {
+      opacity: 1;
+    }
+  }
+}
+
+.custom-dashboard__card-title-input {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  font-size: var(--font-down-1);
+  color: var(--primary);
+  background: transparent;
+  border: 1px solid var(--tertiary);
+  border-radius: 4px;
+  padding: 0.1rem 0.25rem;
+  margin: -0.1rem -0.25rem;
+  outline: none;
 }
 
 .custom-dashboard__card-actions {
@@ -422,6 +477,59 @@ body.is-resizing-dashboard-card {
   background: var(--primary-very-low);
   border: 2px dashed var(--tertiary-low);
   border-radius: 6px;
+}
+
+// Card editor modal
+.dashboard-card-editor {
+  .d-modal__body {
+    max-width: 600px;
+  }
+
+  &__field {
+    margin-bottom: 1rem;
+  }
+
+  &__label {
+    display: block;
+    font-weight: 700;
+    font-size: var(--font-down-1);
+    margin-bottom: 0.35rem;
+    color: var(--primary-high);
+  }
+
+  &__title-input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--primary-low);
+    border-radius: 4px;
+    font-size: var(--font-0);
+    color: var(--primary);
+    background: var(--secondary);
+
+    &:focus {
+      outline: none;
+      border-color: var(--tertiary);
+    }
+  }
+
+  &__sql-editor {
+    height: 250px;
+    border: 1px solid var(--primary-low);
+    border-radius: 4px;
+    overflow: hidden;
+
+    .ace-wrapper {
+      position: relative;
+      height: 100%;
+      width: 100%;
+      border: none;
+    }
+
+    .ace_editor {
+      position: absolute;
+      inset: 0;
+    }
+  }
 }
 
 // Responsive

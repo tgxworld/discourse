@@ -6581,9 +6581,16 @@ en:
         date_range:
           custom: "Custom"
         card:
+          edit: "Edit card"
           remove: "Remove"
           unavailable: "This query could not be loaded."
           no_data: "No results returned."
+        card_editor:
+          title: "Edit Card"
+          card_title: "Card Title"
+          sql: "SQL"
+          save: "Save"
+          cancel: "Cancel"
       flags:
         title: "Moderation"
         description: "Description"
