@@ -8,26 +8,30 @@ module DiscourseAi
           {
             name: name,
             description:
-              "Executes a read-only SQL query against the database and returns the results. " \
-                "Use this to fetch data for dashboard charts and tables.",
+              "Executes one or more read-only SQL queries and renders the results as a chart. " \
+                "Use a single query for simple charts, or multiple queries to overlay datasets " \
+                "(e.g., comparing two time periods on the same chart).",
             parameters: [
               {
-                name: "sql",
+                name: "queries",
                 description:
-                  "The SQL query to execute. Must be a single SELECT statement without semicolons.",
+                  'JSON array of query objects. Each object: {"sql": "SELECT ...", "label": "Dataset Name", "style": "solid|dashed"}. ' \
+                    "The first column of each query is used as labels (x-axis), the second as values (y-axis). " \
+                    "For multi-dataset comparison charts, all queries should return the same label column values for alignment. " \
+                    "Style defaults to solid. Use dashed for comparison/previous-period datasets.",
                 type: "string",
                 required: true,
               },
               {
                 name: "chart_type",
-                description: "The type of chart to render: line, bar, pie, area, or table.",
+                description: "The type of chart to render: line, bar, pie, or area.",
                 type: "string",
                 required: true,
-                enum: %w[line bar pie area table],
+                enum: %w[line bar pie area],
               },
               {
                 name: "title",
-                description: "A descriptive title for the chart or table.",
+                description: "A descriptive title for the chart.",
                 type: "string",
                 required: true,
               },
@@ -39,8 +43,8 @@ module DiscourseAi
           "run_data_explorer_query"
         end
 
-        def sql
-          parameters[:sql]
+        def queries
+          parameters[:queries]
         end
 
         def chart_type
@@ -52,23 +56,60 @@ module DiscourseAi
         end
 
         def invoke
-          if sql.include?(";")
-            return { error: "SQL must not contain semicolons. Use a single SELECT statement." }
+          parsed_queries =
+            begin
+              JSON.parse(queries)
+            rescue JSON::ParserError
+              return { error: "queries must be a valid JSON array." }
+            end
+
+          parsed_queries = [parsed_queries] if parsed_queries.is_a?(Hash)
+          return { error: "queries must be an array." } unless parsed_queries.is_a?(Array)
+          return { error: "queries must not be empty." } if parsed_queries.empty?
+
+          datasets = []
+          all_sql = []
+
+          parsed_queries.each_with_index do |q, idx|
+            sql = q["sql"].to_s
+            label = q["label"] || "Dataset #{idx + 1}"
+            style = q["style"] || "solid"
+
+            if sql.include?(";")
+              return(
+                {
+                  error:
+                    "Query #{idx + 1} must not contain semicolons. Use a single SELECT statement.",
+                }
+              )
+            end
+
+            query = DiscourseDataExplorer::Query.new(name: "#{title} - #{label}", sql: sql)
+            result = DiscourseDataExplorer::DataExplorer.run_query(query)
+
+            return { error: "Query #{idx + 1}: #{result[:error].message}" } if result[:error]
+
+            pg_result = result[:pg_result]
+
+            datasets << {
+              label: label,
+              style: style,
+              columns: pg_result.fields,
+              rows: pg_result.values,
+            }
+
+            all_sql << "-- #{label}\n#{sql}"
           end
 
-          query = DiscourseDataExplorer::Query.new(name: title, sql: sql)
+          chart_data = {
+            datasets: datasets,
+            chart_type: chart_type,
+            title: title,
+            sql: all_sql.join("\n\n"),
+          }
 
-          result = DiscourseDataExplorer::DataExplorer.run_query(query)
-
-          return { error: result[:error].message } if result[:error]
-
-          pg_result = result[:pg_result]
-          columns = pg_result.fields
-          rows = pg_result.values
-
-          chart_data = { columns: columns, rows: rows, chart_type: chart_type, title: title }
-
-          self.custom_raw = "[dashboard-chart]\n#{chart_data.to_json}\n[/dashboard-chart]"
+          self.custom_raw =
+            "\n[data-explorer-chart]\n#{chart_data.to_json}\n[/data-explorer-chart]\n"
 
           chart_data
         end

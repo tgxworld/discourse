@@ -443,9 +443,9 @@ en:
         chat_thread_titler:
           name: "Chat Thread Titler"
           description: "Default persona powering automatic chat thread title generation"
-        dashboard_designer:
-          name: Dashboard Designer
-          description: "AI Bot specialized in creating dashboard analytics cards with SQL queries"
+        forum_analyst:
+          name: Forum Analyst
+          description: "AI Bot specialized in forum analytics — runs SQL queries and renders charts inline"
 
       topic_not_found: "Summary unavailable, topic not found!"
       summarizing: "Summarizing topic"
@@ -533,7 +533,6 @@ en:
         researcher: "Researching"
         researcher_dry_run: "Preparing research"
         run_data_explorer_query: "Run Data Explorer query"
-        add_card_to_dashboard: "Add card to dashboard"
       tool_help:
         read_artifact: "Read a web artifact using the AI Bot"
         update_artifact: "Update a web artifact using the AI Bot"
@@ -562,8 +561,7 @@ en:
         search_meta_discourse: "Search Meta Discourse"
         javascript_evaluator: "Evaluate JavaScript"
         researcher: "Research forum information using the AI Bot"
-        run_data_explorer_query: "Execute a SQL query and preview the results as a chart"
-        add_card_to_dashboard: "Save a query and add it as a card to the custom dashboard"
+        run_data_explorer_query: "Execute a SQL query and render results as a chart or table"
       tool_description:
         read_artifact: "Read a web artifact using the AI Bot"
         update_artifact: "Updated a web artifact using the AI Bot"
@@ -600,7 +598,6 @@ en:
         setting_context: "Reading context for: %{setting_name}"
         schema: "%{tables}"
         run_data_explorer_query: "Executed query: %{title}"
-        add_card_to_dashboard: "Added card: %{title}"
         researcher_dry_run:
           one: "Proposed goals: %{goals}\n\nFound %{count} post matching '%{filter}'"
           other: "Proposed goals: %{goals}\n\nFound %{count} posts matching '%{filter}'"

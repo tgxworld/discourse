@@ -7,12 +7,11 @@ module PageObjects
       PALETTE_SELECTOR = ".dashboard-query-palette"
       PALETTE_ITEM_SELECTOR = ".dashboard-query-palette__item"
       PALETTE_GROUP_HEADER_SELECTOR = ".dashboard-query-palette__group-header"
-      GRID_CELL_SELECTOR = ".custom-dashboard__grid-cell"
-      CARD_SELECTOR = ".custom-dashboard__card"
-      HIGHLIGHTED_CELL_SELECTOR = ".custom-dashboard__grid-cell--highlight"
+      GRID_SELECTOR = ".custom-dashboard__grid.grid-stack"
+      CARD_SELECTOR = ".custom-dashboard__card.grid-stack-item"
       TOOLBAR_SELECTOR = ".custom-dashboard__toolbar"
+      CUSTOMIZE_BTN_SELECTOR = ".custom-dashboard__customize-btn"
       DATE_BTN_SELECTOR = ".custom-dashboard__date-btn"
-      RESIZE_HANDLE_SELECTOR = ".custom-dashboard__card-resize-handle"
 
       def visit
         page.visit("/admin/dashboard-v2")
@@ -56,16 +55,8 @@ module PageObjects
         has_css?(PALETTE_GROUP_HEADER_SELECTOR, text: text)
       end
 
-      def has_grid_cells?(count = nil)
-        if count
-          has_css?(GRID_CELL_SELECTOR, count: count)
-        else
-          has_css?(GRID_CELL_SELECTOR)
-        end
-      end
-
-      def has_no_grid_cells?
-        has_no_css?(GRID_CELL_SELECTOR)
+      def has_grid?
+        has_css?(GRID_SELECTOR)
       end
 
       def has_card?(title)
@@ -74,14 +65,6 @@ module PageObjects
 
       def has_no_card?(title)
         has_no_css?(CARD_SELECTOR, text: title)
-      end
-
-      def has_highlighted_cell?
-        has_css?(HIGHLIGHTED_CELL_SELECTOR)
-      end
-
-      def has_no_highlighted_cell?
-        has_no_css?(HIGHLIGHTED_CELL_SELECTOR)
       end
 
       def has_card_count?(count)
@@ -105,7 +88,44 @@ module PageObjects
       end
 
       def has_resize_handle?(title)
-        find(CARD_SELECTOR, text: title).has_css?(RESIZE_HANDLE_SELECTOR)
+        find(CARD_SELECTOR, text: title).has_css?(".ui-resizable-handle", visible: :all)
+      end
+
+      def has_grid_cells?(_count = nil)
+        has_css?(GRID_SELECTOR)
+      end
+
+      def click_customize
+        find(CUSTOMIZE_BTN_SELECTOR).click
+        self
+      end
+
+      def has_customize_button?
+        has_css?(CUSTOMIZE_BTN_SELECTOR)
+      end
+
+      def has_customizing_active?
+        has_css?("#{CUSTOMIZE_BTN_SELECTOR}.btn-primary")
+      end
+
+      def has_no_customizing_active?
+        has_no_css?("#{CUSTOMIZE_BTN_SELECTOR}.btn-primary")
+      end
+
+      def has_drag_handle?(title)
+        find(CARD_SELECTOR, text: title).has_css?(".custom-dashboard__card-drag-handle")
+      end
+
+      def has_no_drag_handle?(title)
+        find(CARD_SELECTOR, text: title).has_no_css?(".custom-dashboard__card-drag-handle")
+      end
+
+      def has_remove_button?(title)
+        find(CARD_SELECTOR, text: title).has_css?(".custom-dashboard__card-remove")
+      end
+
+      def has_no_remove_button?(title)
+        find(CARD_SELECTOR, text: title).has_no_css?(".custom-dashboard__card-remove")
       end
 
       def click_date_preset(label)
@@ -141,48 +161,24 @@ module PageObjects
       def drag_card_to_cell(panel_title, col, row)
         card = find(CARD_SELECTOR, text: panel_title)
         panel_id = card["data-panel-id"]
-        target_selector = "#{GRID_CELL_SELECTOR}[data-col='#{col}'][data-row='#{row}']"
 
-        page.execute_script(<<~JS, panel_id, target_selector)
+        page.execute_script(<<~JS, panel_id, col, row)
           const panelId = arguments[0];
-          const targetSelector = arguments[1];
-          const card = document.querySelector(`.custom-dashboard__card[data-panel-id="${panelId}"]`);
-          const handle = card.querySelector('.custom-dashboard__card-drag-handle');
-          const target = document.querySelector(targetSelector);
-          const grid = document.querySelector('.custom-dashboard__grid');
+          const targetCol = arguments[1];
+          const targetRow = arguments[2];
+          const gridEl = document.querySelector('.grid-stack');
+          const grid = gridEl.gridstack;
+          const card = document.querySelector(`.grid-stack-item[data-panel-id="${panelId}"]`);
 
-          function createDragEvent(type, element, dataTransfer) {
-            const rect = element.getBoundingClientRect();
-            return new DragEvent(type, {
-              bubbles: true,
-              cancelable: true,
-              clientX: rect.left + rect.width / 2,
-              clientY: rect.top + rect.height / 2,
-              dataTransfer: dataTransfer,
-            });
+          if (grid && card) {
+            grid.update(card, { x: targetCol, y: targetRow });
           }
-
-          const dt = new DataTransfer();
-          dt.setData('panel-id', panelId);
-
-          handle.dispatchEvent(createDragEvent('dragstart', handle, dt));
-          grid.dispatchEvent(createDragEvent('dragenter', grid, dt));
-
-          target.dispatchEvent(createDragEvent('dragover', target, dt));
-          target.dispatchEvent(createDragEvent('drop', target, dt));
-          grid.dispatchEvent(createDragEvent('dragleave', grid, dt));
-          handle.dispatchEvent(createDragEvent('dragend', handle, dt));
         JS
         self
       end
 
       def has_card_at_position?(panel_title, col, row)
-        css_col = col + 1
-        css_row = row + 1
-        has_css?(
-          "#{CARD_SELECTOR}[style*='grid-column: #{css_col}'][style*='grid-row: #{css_row}']",
-          text: panel_title,
-        )
+        has_css?("#{CARD_SELECTOR}[gs-x='#{col}'][gs-y='#{row}']", text: panel_title)
       end
 
       def has_card_with_chart?(panel_title)
@@ -198,11 +194,16 @@ module PageObjects
       end
 
       def has_card_with_size?(panel_title, w, h)
-        has_css?("#{CARD_SELECTOR}[style*='span #{w}'][style*='span #{h}']", text: panel_title)
+        has_css?("#{CARD_SELECTOR}[gs-w='#{w}'][gs-h='#{h}']", text: panel_title)
       end
 
       def has_no_card_with_size?(panel_title, w, h)
-        has_no_css?("#{CARD_SELECTOR}[style*='span #{w}'][style*='span #{h}']", text: panel_title)
+        has_no_css?("#{CARD_SELECTOR}[gs-w='#{w}'][gs-h='#{h}']", text: panel_title)
+      end
+
+      def wait_for_save
+        # The dashboard debounces saves by 1 second; wait for it to fire + network round-trip
+        sleep 2
       end
 
       def resize_card(panel_title, new_w, new_h)
@@ -213,45 +214,13 @@ module PageObjects
           const panelId = arguments[0];
           const targetW = arguments[1];
           const targetH = arguments[2];
-          const card = document.querySelector(`.custom-dashboard__card[data-panel-id="${panelId}"]`);
-          const handle = card.querySelector('.custom-dashboard__card-resize-handle');
-          const grid = document.querySelector('.custom-dashboard__grid');
+          const gridEl = document.querySelector('.grid-stack');
+          const grid = gridEl.gridstack;
+          const card = document.querySelector(`.grid-stack-item[data-panel-id="${panelId}"]`);
 
-          const gridRect = grid.getBoundingClientRect();
-          const gridStyle = window.getComputedStyle(grid);
-          const gap = parseFloat(gridStyle.gap) || 12;
-          const padding = parseFloat(gridStyle.paddingLeft) || 16;
-          const totalGaps = gap * 5;
-          const usableWidth = gridRect.width - padding * 2 - totalGaps;
-          const cellW = usableWidth / 6;
-          const cellH = 40;
-
-          const style = card.getAttribute('style');
-          const spanWMatch = style.match(/grid-column:[^;]*span\\s+(\\d+)/);
-          const spanHMatch = style.match(/grid-row:[^;]*span\\s+(\\d+)/);
-          const currentW = spanWMatch ? parseInt(spanWMatch[1]) : 3;
-          const currentH = spanHMatch ? parseInt(spanHMatch[1]) : 8;
-
-          const deltaW = targetW - currentW;
-          const deltaH = targetH - currentH;
-          const pixelDX = deltaW * (cellW + gap);
-          const pixelDY = deltaH * (cellH + gap);
-
-          const handleRect = handle.getBoundingClientRect();
-          const startX = handleRect.left + handleRect.width / 2;
-          const startY = handleRect.top + handleRect.height / 2;
-
-          handle.dispatchEvent(new PointerEvent('pointerdown', {
-            bubbles: true, cancelable: true, clientX: startX, clientY: startY
-          }));
-
-          window.dispatchEvent(new PointerEvent('pointermove', {
-            bubbles: true, cancelable: true, clientX: startX + pixelDX, clientY: startY + pixelDY
-          }));
-
-          window.dispatchEvent(new PointerEvent('pointerup', {
-            bubbles: true, cancelable: true, clientX: startX + pixelDX, clientY: startY + pixelDY
-          }));
+          if (grid && card) {
+            grid.update(card, { w: targetW, h: targetH });
+          }
         JS
         self
       end

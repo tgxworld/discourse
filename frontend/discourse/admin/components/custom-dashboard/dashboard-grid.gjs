@@ -4,10 +4,9 @@ import { fn } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
-import { htmlSafe } from "@ember/template";
 import { modifier } from "ember-modifier";
 import icon from "discourse/helpers/d-icon";
-import { bind } from "discourse/lib/decorators";
+import loadGridstack from "discourse/lib/load-gridstack";
 import eq from "discourse/truth-helpers/helpers/eq";
 import { i18n } from "discourse-i18n";
 import DashboardCard from "./dashboard-card";
@@ -19,68 +18,76 @@ const focusInput = modifier((element) => {
 });
 
 const GRID_COLS = 6;
-const ROW_HEIGHT = 40;
-const GAP = 12;
-const PADDING = 16;
+const CELL_HEIGHT = 45;
 const DEFAULT_CARD_W = 3;
 const DEFAULT_CARD_H = 8;
 const MIN_CARD_W = 2;
 const MIN_CARD_H = 4;
-const HIGHLIGHT_CLASS = "custom-dashboard__grid-cell--highlight";
-const SWAP_CLASS = "custom-dashboard__grid-cell--swap";
-const OVERLAP_CLASS = "custom-dashboard__grid-cell--overlap";
-const SWAP_TARGET_CLASS = "custom-dashboard__card--swap-target";
+const MARGIN = 16;
 
 export default class DashboardGrid extends Component {
   @service modal;
 
-  resizeHandle = modifier((element, [panelId]) => {
-    const handler = (event) => this.handleResizeStart(panelId, event);
-    element.addEventListener("pointerdown", handler);
-    return () => element.removeEventListener("pointerdown", handler);
+  gridstackInit = modifier((element) => {
+    this._initGridstack(element);
+    return () => this._destroyGridstack();
   });
 
-  measureGrid = modifier((element) => {
-    const computeRows = () => {
-      const height = element.clientHeight;
-      const usable = height - PADDING * 2;
-      this._minRows = Math.ceil((usable + GAP) / (ROW_HEIGHT + GAP));
+  syncStatic = modifier(() => {
+    const customizing = this.args.customizing;
+
+    // Consume _isLoading so this modifier re-runs when grid init completes.
+    // Without this, _grid is null on first run, customizing is never read,
+    // and the modifier never re-triggers.
+    if (this._isLoading || !this._grid) {
+      return;
+    }
+
+    this._grid.setStatic(!customizing);
+    if (customizing) {
+      requestAnimationFrame(() => this._setupPaletteDragIn());
+    }
+  });
+
+  registerWidget = modifier((element) => {
+    if (this._grid && !element.gridstackNode) {
+      this._enterBatch();
+      this._grid.makeWidget(element);
+      this._leaveBatch();
+    }
+    return () => {
+      if (this._grid && element.gridstackNode) {
+        this._enterBatch();
+        this._grid.removeWidget(element, false, false);
+        this._leaveBatch();
+      }
     };
-    computeRows();
-    const observer = new ResizeObserver(computeRows);
-    observer.observe(element);
-    return () => observer.disconnect();
   });
 
   @tracked _editingTitlePanelId = null;
   @tracked _editingTitleValue = "";
-  @tracked _minRows = DEFAULT_CARD_H * 4;
+  @tracked _isLoading = true;
 
-  _highlightCol = -1;
-  _highlightRow = -1;
-  _highlightW = -1;
-  _highlightH = -1;
+  _grid = null;
+  _GridStack = null;
+  _paletteObserver = null;
+  _placeholderWatcher = null;
+  _ignoreChange = false;
+  _batchDepth = 0;
   _gridElement = null;
-  _draggingPanelId = null;
-  _swapTargetEl = null;
-  _swapHighlightCol = -1;
-  _swapHighlightRow = -1;
-  _swapHighlightW = -1;
-  _swapHighlightH = -1;
+  _cellContainer = null;
+  _highlightedCells = [];
+  _lastHighlightKey = null;
 
-  _resizingPanelId = null;
-  _resizeStartX = 0;
-  _resizeStartY = 0;
-  _resizeOrigW = 0;
-  _resizeOrigH = 0;
-  _resizeCardX = 0;
-  _resizeCardY = 0;
-  _cellPixelW = 0;
-  _cellPixelH = 0;
-  _resizeCardEl = null;
-  _resizeOrigStyle = null;
+  _buildCellContainer() {
+    if (this._cellContainer) {
+      return;
+    }
+    const container = document.createElement("div");
+    container.className = "custom-dashboard__grid-cells";
+    this._gridElement.insertBefore(container, this._gridElement.firstChild);
+    this._cellContainer = container;
 
-  get gridRows() {
     let maxRow = 0;
     for (const panel of this.args.panels || []) {
       const bottom = panel.gridPos.y + panel.gridPos.h;
@@ -88,573 +95,285 @@ export default class DashboardGrid extends Component {
         maxRow = bottom;
       }
     }
-    return Math.max(maxRow + DEFAULT_CARD_H, this._minRows);
-  }
+    const scrollRows = Math.ceil(this._gridElement.scrollHeight / CELL_HEIGHT);
+    const totalRows = Math.max(
+      maxRow + DEFAULT_CARD_H * 2,
+      scrollRows + DEFAULT_CARD_H,
+      24
+    );
+    const colWidth = 100 / GRID_COLS;
 
-  get cells() {
-    const totalRows = this.gridRows;
-    const result = [];
     for (let row = 0; row < totalRows; row++) {
       for (let col = 0; col < GRID_COLS; col++) {
-        result.push({
-          col,
-          row,
-          style: htmlSafe(
-            `grid-column: ${col + 1} / span 1; grid-row: ${row + 1} / span 1;`
-          ),
-          occupied: this.#isCellOccupied(col, row),
-        });
+        const cell = document.createElement("div");
+        cell.className = "custom-dashboard__grid-cell";
+        cell.style.cssText = `left:${col * colWidth}%;top:${row * CELL_HEIGHT}px;width:${colWidth}%;height:${CELL_HEIGHT}px;`;
+        cell.dataset.col = col;
+        cell.dataset.row = row;
+        container.appendChild(cell);
       }
     }
-    return result;
+    container.style.height = `${totalRows * CELL_HEIGHT}px`;
   }
 
-  #isCellOccupied(col, row) {
-    return this.args.panels?.some((panel) => {
-      const { x, y, w, h } = panel.gridPos;
-      return col >= x && col < x + w && row >= y && row < y + h;
-    });
+  _showCells() {
+    this._buildCellContainer();
+    this._cellContainer.classList.add("is-active");
   }
 
-  #wouldOverlap(
-    col,
-    row,
-    excludePanelId = null,
-    cardW = DEFAULT_CARD_W,
-    cardH = DEFAULT_CARD_H
-  ) {
-    const endCol = col + cardW;
-    const endRow = row + cardH;
-    if (endCol > GRID_COLS) {
-      return true;
-    }
-    return this.args.panels?.some((panel) => {
-      if (excludePanelId && panel.id === excludePanelId) {
-        return false;
-      }
-      const { x, y, w, h } = panel.gridPos;
-      return col < x + w && endCol > x && row < y + h && endRow > y;
-    });
-  }
-
-  #findSwapTarget(col, row, draggedPanelId, cardW, cardH) {
-    const endCol = col + cardW;
-    const endRow = row + cardH;
-    if (endCol > GRID_COLS) {
-      return null;
-    }
-    let target = null;
-    for (const panel of this.args.panels || []) {
-      if (panel.id === draggedPanelId) {
-        continue;
-      }
-      const { x, y, w, h } = panel.gridPos;
-      if (col < x + w && endCol > x && row < y + h && endRow > y) {
-        if (target) {
-          return null;
-        }
-        target = panel;
-      }
-    }
-    return target;
-  }
-
-  #canSwap(draggedPanel, targetPanel, dropCol, dropRow) {
-    const { x: origX, y: origY } = draggedPanel.gridPos;
-    const { w: targetW, h: targetH } = targetPanel.gridPos;
-
-    if (origX + targetW > GRID_COLS) {
-      return false;
-    }
-
-    for (const panel of this.args.panels || []) {
-      if (panel.id === draggedPanel.id || panel.id === targetPanel.id) {
-        continue;
-      }
-      const { x, y, w, h } = panel.gridPos;
-      if (
-        origX < x + w &&
-        origX + targetW > x &&
-        origY < y + h &&
-        origY + targetH > y
-      ) {
-        return false;
-      }
-    }
-
-    const { w: dragW, h: dragH } = draggedPanel.gridPos;
-    if (dropCol + dragW > GRID_COLS) {
-      return false;
-    }
-    for (const panel of this.args.panels || []) {
-      if (panel.id === draggedPanel.id || panel.id === targetPanel.id) {
-        continue;
-      }
-      const { x, y, w, h } = panel.gridPos;
-      if (
-        dropCol < x + w &&
-        dropCol + dragW > x &&
-        dropRow < y + h &&
-        dropRow + dragH > y
-      ) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  #highlightCells(
-    gridEl,
-    col,
-    row,
-    cardW = DEFAULT_CARD_W,
-    cardH = DEFAULT_CARD_H,
-    overlap = false
-  ) {
-    if (
-      col === this._highlightCol &&
-      row === this._highlightRow &&
-      cardW === this._highlightW &&
-      cardH === this._highlightH
-    ) {
+  _updateHighlight(node) {
+    if (!this._cellContainer) {
       return;
     }
-    this.#clearHighlight(gridEl);
-    this._highlightCol = col;
-    this._highlightRow = row;
-    this._highlightW = cardW;
-    this._highlightH = cardH;
-
-    const cls = overlap ? OVERLAP_CLASS : HIGHLIGHT_CLASS;
-    const endCol = col + cardW;
-    const endRow = row + cardH;
-    for (let r = row; r < endRow; r++) {
-      for (let c = col; c < endCol; c++) {
-        const cell = gridEl.querySelector(
-          `.custom-dashboard__grid-cell[data-col="${c}"][data-row="${r}"]`
-        );
-        if (cell) {
-          cell.classList.add(cls);
-        }
-      }
+    for (const cell of this._highlightedCells) {
+      cell.classList.remove(
+        "is-highlighted",
+        "is-top",
+        "is-bottom",
+        "is-left",
+        "is-right"
+      );
     }
-  }
+    this._highlightedCells = [];
 
-  #clearHighlight(gridEl) {
-    if (this._highlightCol === -1 && this._swapHighlightCol === -1) {
-      return;
-    }
-    gridEl
-      .querySelectorAll(
-        `.${HIGHLIGHT_CLASS}, .${OVERLAP_CLASS}, .${SWAP_CLASS}`
-      )
-      .forEach((el) => {
-        el.classList.remove(HIGHLIGHT_CLASS);
-        el.classList.remove(OVERLAP_CLASS);
-        el.classList.remove(SWAP_CLASS);
-      });
-    this._highlightCol = -1;
-    this._highlightRow = -1;
-    this._highlightW = -1;
-    this._highlightH = -1;
-    this._swapHighlightCol = -1;
-    this._swapHighlightRow = -1;
-    this._swapHighlightW = -1;
-    this._swapHighlightH = -1;
-    this.#clearSwapTarget();
-  }
-
-  #highlightSwapOrigin(gridEl, col, row, cardW, cardH) {
-    if (
-      col === this._swapHighlightCol &&
-      row === this._swapHighlightRow &&
-      cardW === this._swapHighlightW &&
-      cardH === this._swapHighlightH
-    ) {
-      return;
-    }
-    this.#clearSwapHighlight(gridEl);
-    this._swapHighlightCol = col;
-    this._swapHighlightRow = row;
-    this._swapHighlightW = cardW;
-    this._swapHighlightH = cardH;
-
-    const endCol = col + cardW;
-    const endRow = row + cardH;
-    for (let r = row; r < endRow; r++) {
-      for (let c = col; c < endCol; c++) {
-        const cell = gridEl.querySelector(
-          `.custom-dashboard__grid-cell[data-col="${c}"][data-row="${r}"]`
-        );
-        if (cell) {
-          cell.classList.add(SWAP_CLASS);
-        }
-      }
-    }
-  }
-
-  #clearSwapHighlight(gridEl) {
-    if (this._swapHighlightCol === -1) {
-      return;
-    }
-    gridEl?.querySelectorAll(`.${SWAP_CLASS}`).forEach((el) => {
-      el.classList.remove(SWAP_CLASS);
-    });
-    this._swapHighlightCol = -1;
-    this._swapHighlightRow = -1;
-    this._swapHighlightW = -1;
-    this._swapHighlightH = -1;
-  }
-
-  #setSwapTarget(gridEl, panelId) {
-    this.#clearSwapTarget();
-    const card = gridEl?.querySelector(
-      `.custom-dashboard__card[data-panel-id="${panelId}"]`
-    );
-    if (card) {
-      card.classList.add(SWAP_TARGET_CLASS);
-      this._swapTargetEl = card;
-    }
-  }
-
-  #clearSwapTarget() {
-    if (this._swapTargetEl) {
-      this._swapTargetEl.classList.remove(SWAP_TARGET_CLASS);
-      this._swapTargetEl = null;
-    }
-  }
-
-  #panelsOverlap(a, b) {
-    return (
-      a.gridPos.x < b.gridPos.x + b.gridPos.w &&
-      a.gridPos.x + a.gridPos.w > b.gridPos.x &&
-      a.gridPos.y < b.gridPos.y + b.gridPos.h &&
-      a.gridPos.y + a.gridPos.h > b.gridPos.y
-    );
-  }
-
-  #resolveOverlaps(panels) {
-    const result = panels.map((p) => ({
-      ...p,
-      gridPos: { ...p.gridPos },
-    }));
-    result.sort((a, b) => a.gridPos.y - b.gridPos.y);
-
-    let changed = true;
-    let iterations = 0;
-    while (changed && iterations < 50) {
-      changed = false;
-      iterations++;
-      for (let i = 0; i < result.length; i++) {
-        for (let j = i + 1; j < result.length; j++) {
-          if (this.#panelsOverlap(result[i], result[j])) {
-            result[j].gridPos.y = result[i].gridPos.y + result[i].gridPos.h;
-            changed = true;
+    const cells = this._cellContainer.children;
+    for (let row = node.y; row < node.y + node.h; row++) {
+      for (let col = node.x; col < node.x + node.w; col++) {
+        const el = cells[row * GRID_COLS + col];
+        if (el) {
+          el.classList.add("is-highlighted");
+          if (row === node.y) {
+            el.classList.add("is-top");
           }
+          if (row === node.y + node.h - 1) {
+            el.classList.add("is-bottom");
+          }
+          if (col === node.x) {
+            el.classList.add("is-left");
+          }
+          if (col === node.x + node.w - 1) {
+            el.classList.add("is-right");
+          }
+          this._highlightedCells.push(el);
         }
       }
-      if (changed) {
-        result.sort((a, b) => a.gridPos.y - b.gridPos.y);
-      }
-    }
-    return result;
-  }
-
-  #computeCellDimensions(gridEl) {
-    const rect = gridEl.getBoundingClientRect();
-    const totalGaps = GAP * (GRID_COLS - 1);
-    const usableWidth = rect.width - PADDING * 2 - totalGaps;
-    this._cellPixelW = usableWidth / GRID_COLS;
-    this._cellPixelH = ROW_HEIGHT;
-  }
-
-  gridStyle(panel) {
-    const { x, y, w, h } = panel.gridPos;
-    return htmlSafe(
-      `grid-column: ${x + 1} / span ${w}; grid-row: ${y + 1} / span ${h};`
-    );
-  }
-
-  @action
-  handleGridDragEnter(event) {
-    event.preventDefault();
-    this._gridElement = event.currentTarget;
-    event.currentTarget.classList.add("is-receiving-drag");
-  }
-
-  @action
-  handleGridDragLeave(event) {
-    if (!event.currentTarget.contains(event.relatedTarget)) {
-      this.#clearHighlight(event.currentTarget);
-      event.currentTarget.classList.remove("is-receiving-drag");
-      this._gridElement = null;
     }
   }
 
-  @action
-  handleGridDrop() {
-    this.#resetDragState();
-  }
-
-  @action
-  handleDragOver(event) {
-    const cell = event.currentTarget;
-    const col = parseInt(cell.dataset.col, 10);
-    const row = parseInt(cell.dataset.row, 10);
-
-    const draggingPanel = this._draggingPanelId
-      ? this.args.panels?.find((p) => p.id === this._draggingPanelId)
-      : null;
-    const cardW = draggingPanel ? draggingPanel.gridPos.w : DEFAULT_CARD_W;
-    const cardH = draggingPanel ? draggingPanel.gridPos.h : DEFAULT_CARD_H;
-
-    const overlap = this.#wouldOverlap(
-      col,
-      row,
-      this._draggingPanelId,
-      cardW,
-      cardH
-    );
-
-    if (!overlap) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = this._draggingPanelId ? "move" : "copy";
-      if (this._gridElement) {
-        this.#clearSwapHighlight(this._gridElement);
-        this.#clearSwapTarget();
-        this.#highlightCells(this._gridElement, col, row, cardW, cardH, false);
-      }
-      return;
-    }
-
-    if (draggingPanel && this._gridElement) {
-      const swapTarget = this.#findSwapTarget(
-        col,
-        row,
-        this._draggingPanelId,
-        cardW,
-        cardH
+  _hideCells() {
+    for (const cell of this._highlightedCells) {
+      cell.classList.remove(
+        "is-highlighted",
+        "is-top",
+        "is-bottom",
+        "is-left",
+        "is-right"
       );
-
-      if (swapTarget && this.#canSwap(draggingPanel, swapTarget, col, row)) {
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "move";
-        this.#highlightCells(this._gridElement, col, row, cardW, cardH, false);
-        this.#highlightSwapOrigin(
-          this._gridElement,
-          draggingPanel.gridPos.x,
-          draggingPanel.gridPos.y,
-          swapTarget.gridPos.w,
-          swapTarget.gridPos.h
-        );
-        this.#setSwapTarget(this._gridElement, swapTarget.id);
-        return;
-      }
     }
-
-    if (this._gridElement) {
-      this.#clearSwapHighlight(this._gridElement);
-      this.#clearSwapTarget();
-      this.#highlightCells(this._gridElement, col, row, cardW, cardH, true);
+    this._highlightedCells = [];
+    if (this._cellContainer) {
+      this._cellContainer.classList.remove("is-active");
     }
   }
 
-  @action
-  handleDragLeave() {
-    // Highlight is managed at the grid level via #highlightCells/#clearHighlight
+  _teardownCells() {
+    this._highlightedCells = [];
+    if (this._cellContainer) {
+      this._cellContainer.remove();
+      this._cellContainer = null;
+    }
   }
 
-  @action
-  handleCardDragStart(panelId, event) {
-    if (this._resizingPanelId) {
-      event.preventDefault();
+  async _initGridstack(element) {
+    const { GridStack } = await loadGridstack();
+
+    if (!element.isConnected) {
       return;
     }
-    this._draggingPanelId = panelId;
-    event.dataTransfer.setData("panel-id", panelId);
-    event.dataTransfer.effectAllowed = "move";
-    const card = event.target.closest(".custom-dashboard__card");
-    if (card) {
-      card.classList.add("custom-dashboard__card--dragging");
-    }
-  }
 
-  @action
-  handleCardDragEnd(event) {
-    const card = event.target.closest(".custom-dashboard__card");
-    if (card) {
-      card.classList.remove("custom-dashboard__card--dragging");
-    }
-    this.#resetDragState();
-  }
+    this._GridStack = GridStack;
+    this._gridElement = element;
 
-  #resetDragState() {
-    this._draggingPanelId = null;
-    if (this._gridElement) {
-      this.#clearHighlight(this._gridElement);
-      this._gridElement.classList.remove("is-receiving-drag");
-      this._gridElement = null;
-    }
-  }
+    this._grid = GridStack.init(
+      {
+        column: GRID_COLS,
+        cellHeight: CELL_HEIGHT,
+        margin: MARGIN,
+        float: false,
+        animate: true,
+        staticGrid: !this.args.customizing,
+        resizable: { handles: "se" },
+        draggable: { handle: ".custom-dashboard__card-drag-handle" },
+        minRow: 1,
+        acceptWidgets: ".dashboard-query-palette__item",
+      },
+      element
+    );
 
-  @action
-  handleDrop(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    this.#resetDragState();
-
-    const cell = event.currentTarget;
-    const col = parseInt(cell.dataset.col, 10);
-    const row = parseInt(cell.dataset.row, 10);
-
-    const panelId = event.dataTransfer.getData("panel-id");
-    if (panelId) {
-      const panel = this.args.panels?.find((p) => p.id === panelId);
-      if (!panel) {
-        return;
-      }
-      const { w, h } = panel.gridPos;
-      const overlap = this.#wouldOverlap(col, row, panelId, w, h);
-
-      if (overlap) {
-        const swapTarget = this.#findSwapTarget(col, row, panelId, w, h);
-        if (swapTarget && this.#canSwap(panel, swapTarget, col, row)) {
-          const updatedPanels = this.args.panels.map((p) => {
-            if (p.id === panelId) {
-              return { ...p, gridPos: { ...p.gridPos, x: col, y: row } };
-            }
-            if (p.id === swapTarget.id) {
-              return {
-                ...p,
-                gridPos: {
-                  ...p.gridPos,
-                  x: panel.gridPos.x,
-                  y: panel.gridPos.y,
-                },
-              };
-            }
-            return p;
-          });
-          this.args.onUpdateLayout(updatedPanels);
+    // Register any widgets already rendered by Ember before gridstack init finished
+    this._ignoreChange = true;
+    element
+      .querySelectorAll(".grid-stack-item.custom-dashboard__card")
+      .forEach((el) => {
+        if (!el.gridstackNode) {
+          this._grid.makeWidget(el);
         }
-        return;
-      }
-
-      const updatedPanels = this.args.panels.map((p) => {
-        if (p.id === panelId) {
-          return { ...p, gridPos: { ...p.gridPos, x: col, y: row } };
-        }
-        return p;
       });
-      this.args.onUpdateLayout(updatedPanels);
-      return;
-    }
+    this._ignoreChange = false;
 
-    if (this.#wouldOverlap(col, row)) {
-      return;
-    }
-
-    const queryId = event.dataTransfer.getData("query-id");
-    const queryName = event.dataTransfer.getData("query-name");
-
-    if (!queryId) {
-      return;
-    }
-
-    const gridPos = { x: col, y: row, w: DEFAULT_CARD_W, h: DEFAULT_CARD_H };
-
-    this.args.onAddPanel("data_explorer", queryId, queryName, gridPos);
-  }
-
-  @action
-  handleResizeStart(panelId, event) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    const panel = this.args.panels?.find((p) => p.id === panelId);
-    if (!panel) {
-      return;
-    }
-
-    this._resizingPanelId = panelId;
-    this._resizeStartX = event.clientX;
-    this._resizeStartY = event.clientY;
-    this._resizeOrigW = panel.gridPos.w;
-    this._resizeOrigH = panel.gridPos.h;
-    this._resizeCardX = panel.gridPos.x;
-    this._resizeCardY = panel.gridPos.y;
-
-    const gridEl = event.target.closest(".custom-dashboard__grid");
-    this._gridElement = gridEl;
-    this.#computeCellDimensions(gridEl);
-
-    const card = event.target.closest(".custom-dashboard__card");
-    this._resizeCardEl = card;
-    this._resizeOrigStyle = card?.getAttribute("style") || "";
-
-    if (card) {
-      card.classList.add("custom-dashboard__card--resizing");
-    }
-    gridEl.classList.add("is-receiving-drag");
-    document.body.classList.add("is-resizing-dashboard-card");
-
-    this.#highlightCells(
-      gridEl,
-      this._resizeCardX,
-      this._resizeCardY,
-      this._resizeOrigW,
-      this._resizeOrigH,
-      false
-    );
-
-    window.addEventListener("pointermove", this._handleResizeMove);
-    window.addEventListener("pointerup", this._handleResizeEnd);
-  }
-
-  #computeResizeDimensions(event) {
-    const deltaX = event.clientX - this._resizeStartX;
-    const deltaY = event.clientY - this._resizeStartY;
-
-    const colDelta = Math.round(deltaX / (this._cellPixelW + GAP));
-    const rowDelta = Math.round(deltaY / (this._cellPixelH + GAP));
-
-    let newW = Math.max(MIN_CARD_W, this._resizeOrigW + colDelta);
-    let newH = Math.max(MIN_CARD_H, this._resizeOrigH + rowDelta);
-    newW = Math.min(newW, GRID_COLS - this._resizeCardX);
-
-    return { newW, newH };
-  }
-
-  @bind
-  _handleResizeMove(event) {
-    const { newW, newH } = this.#computeResizeDimensions(event);
-
-    if (this._gridElement) {
-      this.#highlightCells(
-        this._gridElement,
-        this._resizeCardX,
-        this._resizeCardY,
-        newW,
-        newH,
-        false
-      );
-    }
-  }
-
-  @bind
-  _handleResizeEnd(event) {
-    const { newW, newH } = this.#computeResizeDimensions(event);
-
-    const resized = this.args.panels.map((p) => {
-      if (p.id === this._resizingPanelId) {
-        return { ...p, gridPos: { ...p.gridPos, w: newW, h: newH } };
+    this._grid.on("change", (_event, nodes) => {
+      if (this._ignoreChange) {
+        return;
       }
-      return p;
+      this._syncFromGridstack(nodes);
     });
-    const resolved = this.#resolveOverlaps(resized);
-    this.args.onUpdateLayout(resolved);
 
-    this.#resetResizeState();
+    this._grid.on("dropped", (_event, _previousNode, newNode) => {
+      const el = newNode.el;
+      if (!el) {
+        return;
+      }
+
+      const queryId = el.getAttribute("data-query-id");
+      const queryName = el.getAttribute("data-query-name");
+
+      if (!queryId) {
+        return;
+      }
+
+      this._grid.removeWidget(el, true, false);
+
+      const gridPos = {
+        x: newNode.x,
+        y: newNode.y,
+        w: DEFAULT_CARD_W,
+        h: DEFAULT_CARD_H,
+      };
+      this.args.onAddPanel("data_explorer", queryId, queryName, gridPos);
+    });
+
+    this._grid.on("dragstart resizestart", () => {
+      element.classList.remove("grid-stack-animate");
+    });
+    this._grid.on("dragstop resizestop", () => {
+      element.classList.add("grid-stack-animate");
+    });
+
+    this._setupPlaceholderWatch();
+
+    this._setupPaletteDragIn();
+    this._isLoading = false;
+  }
+
+  _setupPlaceholderWatch() {
+    this._placeholderWatcher = new MutationObserver(() => {
+      const ph = this._gridElement.querySelector(".grid-stack-placeholder");
+      if (!ph) {
+        if (this._lastHighlightKey !== null) {
+          this._hideCells();
+          this._lastHighlightKey = null;
+        }
+        return;
+      }
+
+      const x = parseInt(ph.getAttribute("gs-x"), 10);
+      const y = parseInt(ph.getAttribute("gs-y"), 10);
+      const w = parseInt(ph.getAttribute("gs-w"), 10);
+      const h = parseInt(ph.getAttribute("gs-h"), 10);
+
+      if (isNaN(x) || isNaN(y) || isNaN(w) || isNaN(h)) {
+        return;
+      }
+
+      const key = `${x},${y},${w},${h}`;
+      if (key === this._lastHighlightKey) {
+        return;
+      }
+      this._lastHighlightKey = key;
+      this._showCells();
+      this._updateHighlight({ x, y, w, h });
+    });
+
+    this._placeholderWatcher.observe(this._gridElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["gs-x", "gs-y", "gs-w", "gs-h"],
+    });
+  }
+
+  _setupPaletteDragIn() {
+    const palette = document.querySelector(".dashboard-query-palette");
+    if (!palette || !this._GridStack) {
+      return;
+    }
+
+    this._GridStack.setupDragIn(".dashboard-query-palette__item", {
+      helper: "clone",
+      appendTo: "body",
+    });
+
+    this._paletteObserver = new MutationObserver(() => {
+      this._GridStack.setupDragIn(".dashboard-query-palette__item", {
+        helper: "clone",
+        appendTo: "body",
+      });
+    });
+    this._paletteObserver.observe(palette, { childList: true, subtree: true });
+  }
+
+  _enterBatch() {
+    this._ignoreChange = true;
+    if (this._batchDepth === 0) {
+      this._grid.batchUpdate();
+    }
+    this._batchDepth++;
+  }
+
+  _leaveBatch() {
+    this._batchDepth--;
+    if (this._batchDepth === 0) {
+      this._grid.batchUpdate(false);
+    }
+    this._ignoreChange = this._batchDepth > 0;
+  }
+
+  _syncFromGridstack(nodes) {
+    const updatedPanels = this.args.panels.map((panel) => {
+      const node = nodes.find(
+        (n) => n.id === panel.id || n.el?.dataset?.panelId === panel.id
+      );
+      if (node) {
+        return {
+          ...panel,
+          gridPos: {
+            x: node.x,
+            y: node.y,
+            w: node.w,
+            h: node.h,
+          },
+        };
+      }
+      return panel;
+    });
+    this.args.onUpdateLayout(updatedPanels);
+  }
+
+  _destroyGridstack() {
+    if (this._placeholderWatcher) {
+      this._placeholderWatcher.disconnect();
+      this._placeholderWatcher = null;
+    }
+    if (this._paletteObserver) {
+      this._paletteObserver.disconnect();
+      this._paletteObserver = null;
+    }
+    this._teardownCells();
+    if (this._grid) {
+      this._grid.offAll();
+      this._grid.destroy(false);
+      this._grid = null;
+    }
   }
 
   @action
@@ -707,62 +426,31 @@ export default class DashboardGrid extends Component {
     }
   }
 
-  #resetResizeState() {
-    if (this._resizeCardEl) {
-      this._resizeCardEl.classList.remove("custom-dashboard__card--resizing");
-    }
-
-    if (this._gridElement) {
-      this.#clearHighlight(this._gridElement);
-      this._gridElement.classList.remove("is-receiving-drag");
-    }
-
-    document.body.classList.remove("is-resizing-dashboard-card");
-
-    window.removeEventListener("pointermove", this._handleResizeMove);
-    window.removeEventListener("pointerup", this._handleResizeEnd);
-
-    this._resizingPanelId = null;
-    this._resizeCardEl = null;
-    this._resizeOrigStyle = null;
-    this._gridElement = null;
-  }
-
   <template>
     <div
-      class="custom-dashboard__grid"
-      {{this.measureGrid}}
-      {{on "dragenter" this.handleGridDragEnter}}
-      {{on "dragleave" this.handleGridDragLeave}}
-      {{on "drop" this.handleGridDrop}}
+      class="custom-dashboard__grid grid-stack
+        {{if this._isLoading 'is-loading'}}"
+      {{this.gridstackInit}}
+      {{this.syncStatic}}
     >
-      {{#each this.cells as |cell|}}
+      {{#each @panels key="id" as |panel|}}
         <div
-          class="custom-dashboard__grid-cell"
-          style={{cell.style}}
-          data-col={{cell.col}}
-          data-row={{cell.row}}
-          data-occupied={{cell.occupied}}
-          {{on "dragover" this.handleDragOver}}
-          {{on "dragleave" this.handleDragLeave}}
-          {{on "drop" this.handleDrop}}
-        ></div>
-      {{/each}}
-
-      <div class="custom-dashboard__cards">
-        {{#each @panels as |panel|}}
-          <div
-            class="custom-dashboard__card"
-            style={{this.gridStyle panel}}
-            data-panel-id={{panel.id}}
-          >
+          class="grid-stack-item custom-dashboard__card"
+          gs-x={{panel.gridPos.x}}
+          gs-y={{panel.gridPos.y}}
+          gs-w={{panel.gridPos.w}}
+          gs-h={{panel.gridPos.h}}
+          gs-min-w={{MIN_CARD_W}}
+          gs-min-h={{MIN_CARD_H}}
+          gs-id={{panel.id}}
+          data-panel-id={{panel.id}}
+          {{this.registerWidget}}
+        >
+          <div class="grid-stack-item-content">
             <div class="custom-dashboard__card-header">
-              <span
-                class="custom-dashboard__card-drag-handle"
-                draggable="true"
-                {{on "dragstart" (fn this.handleCardDragStart panel.id)}}
-                {{on "dragend" this.handleCardDragEnd}}
-              >&#x2807;</span>
+              {{#if @customizing}}
+                <span class="custom-dashboard__card-drag-handle">&#x2807;</span>
+              {{/if}}
               {{#if (eq this._editingTitlePanelId panel.id)}}
                 <input
                   type="text"
@@ -773,7 +461,7 @@ export default class DashboardGrid extends Component {
                   {{on "keydown" (fn this.onTitleKeydown panel.id)}}
                   {{on "blur" (fn this.saveTitleEdit panel.id)}}
                 />
-              {{else}}
+              {{else if @customizing}}
                 <span
                   class="custom-dashboard__card-title"
                   role="button"
@@ -786,24 +474,30 @@ export default class DashboardGrid extends Component {
                     {{icon "pencil"}}
                   </span>
                 </span>
+              {{else}}
+                <span class="custom-dashboard__card-title">
+                  {{panel.title}}
+                </span>
               {{/if}}
-              <div class="custom-dashboard__card-actions">
-                <button
-                  class="custom-dashboard__card-edit btn-flat"
-                  type="button"
-                  title={{i18n "admin.dashboard_v2.card.edit"}}
-                  {{on "click" (fn this.editCard panel)}}
-                >
-                  {{icon "pencil"}}
-                </button>
-                <button
-                  class="custom-dashboard__card-remove btn-flat"
-                  type="button"
-                  {{on "click" (fn @onRemovePanel panel.id)}}
-                >
-                  {{icon "xmark"}}
-                </button>
-              </div>
+              {{#if @customizing}}
+                <div class="custom-dashboard__card-actions">
+                  <button
+                    class="custom-dashboard__card-edit btn-flat"
+                    type="button"
+                    title={{i18n "admin.dashboard_v2.card.edit"}}
+                    {{on "click" (fn this.editCard panel)}}
+                  >
+                    {{icon "pencil"}}
+                  </button>
+                  <button
+                    class="custom-dashboard__card-remove btn-flat"
+                    type="button"
+                    {{on "click" (fn @onRemovePanel panel.id)}}
+                  >
+                    {{icon "xmark"}}
+                  </button>
+                </div>
+              {{/if}}
             </div>
             <div class="custom-dashboard__card-content">
               <DashboardCard
@@ -812,15 +506,9 @@ export default class DashboardGrid extends Component {
                 @endDate={{@endDate}}
               />
             </div>
-            <div
-              class="custom-dashboard__card-resize-handle"
-              {{this.resizeHandle panel.id}}
-            >
-              {{icon "angles-right"}}
-            </div>
           </div>
-        {{/each}}
-      </div>
+        </div>
+      {{/each}}
     </div>
   </template>
 }

@@ -72,7 +72,7 @@ module DiscourseAi
             ReportRunner => -33,
             Discover => -34,
             ChatThreadTitler => -35,
-            DashboardDesigner => -36,
+            ForumAnalyst => -36,
           }
         end
 
@@ -134,6 +134,8 @@ module DiscourseAi
             tools << Tools::UpdateArtifact
             tools << Tools::ReadArtifact
           end
+
+          tools << Tools::RunDataExplorerQuery if defined?(DiscourseDataExplorer)
 
           tools << Tools::GithubSearchCode if SiteSetting.ai_bot_github_access_token.present?
 

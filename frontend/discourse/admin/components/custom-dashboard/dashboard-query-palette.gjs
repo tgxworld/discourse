@@ -65,19 +65,6 @@ export default class DashboardQueryPalette extends Component {
     this.searchFilter = event.target.value;
   }
 
-  @action
-  handleDragStart(queryId, queryName, event) {
-    event.dataTransfer.setData("query-id", String(queryId));
-    event.dataTransfer.setData("query-name", queryName);
-    event.dataTransfer.effectAllowed = "copy";
-    event.currentTarget.classList.add("is-dragging");
-  }
-
-  @action
-  handleDragEnd(event) {
-    event.currentTarget.classList.remove("is-dragging");
-  }
-
   <template>
     <div class="dashboard-query-palette">
       <div class="dashboard-query-palette__header">
@@ -128,14 +115,11 @@ export default class DashboardQueryPalette extends Component {
                   {{#each group.queries as |query|}}
                     <li
                       class="dashboard-query-palette__item"
-                      draggable="true"
+                      gs-w="3"
+                      gs-h="8"
                       data-query-id={{query.id}}
+                      data-query-name={{query.name}}
                       title={{query.description}}
-                      {{on
-                        "dragstart"
-                        (fn this.handleDragStart query.id query.name)
-                      }}
-                      {{on "dragend" this.handleDragEnd}}
                     >
                       <span class="dashboard-query-palette__item-name">
                         {{query.name}}

@@ -57,6 +57,8 @@ register_asset "stylesheets/modules/ai-bot/common/ai-tools.scss"
 
 register_asset "stylesheets/modules/ai-bot/common/ai-artifact.scss"
 
+register_asset "stylesheets/common/data-explorer-chart-block.scss"
+
 module ::DiscourseAi
   PLUGIN_NAME = "discourse-ai"
 

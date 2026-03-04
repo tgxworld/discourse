@@ -18,10 +18,9 @@ DiscourseAi::Personas::Persona.system_personas.each do |persona_class, id|
     persona = AiPersona.new
     persona.id = id
 
-    if [
-         DiscourseAi::Personas::WebArtifactCreator,
-         DiscourseAi::Personas::DashboardDesigner,
-       ].include?(persona_class)
+    if [DiscourseAi::Personas::WebArtifactCreator, DiscourseAi::Personas::ForumAnalyst].include?(
+         persona_class,
+       )
       # this is somewhat sensitive, so we default it to staff
       persona.allowed_group_ids = [Group::AUTO_GROUPS[:staff]]
     elsif summarization_personas.include?(persona_class)

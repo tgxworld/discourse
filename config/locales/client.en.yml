@@ -6578,6 +6578,8 @@ en:
           group_dashboard: "Dashboard"
           group_other: "Other Queries"
           plugin_missing: "The Data Explorer plugin must be installed and enabled."
+        customize: "Customize"
+        done_customizing: "Done"
         date_range:
           custom: "Custom"
         card:

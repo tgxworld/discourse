@@ -8,6 +8,7 @@ import { modifier } from "ember-modifier";
 import CustomDashboard from "discourse/admin/models/custom-dashboard";
 import DateTimeInputRange from "discourse/components/date-time-input-range";
 import DMenu from "discourse/float-kit/components/d-menu";
+import icon from "discourse/helpers/d-icon";
 import { ajax } from "discourse/lib/ajax";
 import discourseDebounce from "discourse/lib/debounce";
 import eq from "discourse/truth-helpers/helpers/eq";
@@ -45,9 +46,13 @@ export default class DashboardV2 extends Component {
   @tracked customFrom = null;
   @tracked customTo = null;
   @tracked sidebarMode = "queries";
+  @tracked customizing = false;
   findTargets = modifier(() => {
     this._sidebarElement = document.querySelector(".sidebar-wrapper");
     this._headerElement = document.querySelector(".d-page-header__description");
+    return () => {
+      document.body.classList.remove("is-customizing-dashboard");
+    };
   });
   @tracked _sidebarElement = null;
   @tracked _headerElement = null;
@@ -61,6 +66,15 @@ export default class DashboardV2 extends Component {
   get aiEnabled() {
     return (
       this.siteSettings.discourse_ai_enabled && this.siteSettings.ai_bot_enabled
+    );
+  }
+
+  @action
+  toggleCustomize() {
+    this.customizing = !this.customizing;
+    document.body.classList.toggle(
+      "is-customizing-dashboard",
+      this.customizing
     );
   }
 
@@ -186,26 +200,42 @@ export default class DashboardV2 extends Component {
   <template>
     <div class="custom-dashboard" {{this.findTargets}}>
       {{#if this._sidebarElement}}
-        {{#in-element this._sidebarElement insertBefore=null}}
-          {{#if (eq this.sidebarMode "ai")}}
-            <DashboardAiSidebar
-              @dashboard={{@dashboard}}
-              @onShowQueries={{fn this.switchSidebarMode "queries"}}
-            />
-          {{else}}
-            <DashboardQueryPalette
-              @availableQueries={{this.availableQueries}}
-              @loading={{this.loading}}
-              @pluginMissing={{this.pluginMissing}}
-              @onShowAi={{if this.aiEnabled (fn this.switchSidebarMode "ai")}}
-            />
-          {{/if}}
-        {{/in-element}}
+        {{#if this.customizing}}
+          {{#in-element this._sidebarElement insertBefore=null}}
+            {{#if (eq this.sidebarMode "ai")}}
+              <DashboardAiSidebar
+                @dashboard={{@dashboard}}
+                @onShowQueries={{fn this.switchSidebarMode "queries"}}
+              />
+            {{else}}
+              <DashboardQueryPalette
+                @availableQueries={{this.availableQueries}}
+                @loading={{this.loading}}
+                @pluginMissing={{this.pluginMissing}}
+                @onShowAi={{if this.aiEnabled (fn this.switchSidebarMode "ai")}}
+              />
+            {{/if}}
+          {{/in-element}}
+        {{/if}}
       {{/if}}
 
       {{#if this._headerElement}}
         {{#in-element this._headerElement insertBefore=null}}
           <div class="custom-dashboard__toolbar">
+            <button
+              class="btn btn-small
+                {{if this.customizing 'btn-primary' 'btn-default'}}
+                custom-dashboard__customize-btn"
+              type="button"
+              {{on "click" this.toggleCustomize}}
+            >
+              {{icon "wrench"}}
+              {{if
+                this.customizing
+                (i18n "admin.dashboard_v2.done_customizing")
+                (i18n "admin.dashboard_v2.customize")
+              }}
+            </button>
             <div class="custom-dashboard__date-range">
               {{#each this.presets as |preset|}}
                 <button
@@ -253,6 +283,7 @@ export default class DashboardV2 extends Component {
         @panels={{this.panels}}
         @startDate={{this.startDate}}
         @endDate={{this.endDate}}
+        @customizing={{this.customizing}}
         @onRemovePanel={{this.removePanel}}
         @onUpdatePanel={{this.updatePanel}}
         @onUpdateLayout={{this.updateLayout}}

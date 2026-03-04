@@ -24,7 +24,7 @@ class Admin::CustomDashboardsController < Admin::AdminController
       return render json: failed_json.merge(error: "Version conflict"), status: :conflict
     end
 
-    dashboard.data = dashboard_params[:data] if dashboard_params[:data].present?
+    dashboard.data = parsed_data if parsed_data.present?
     dashboard.version = dashboard.version + 1
 
     if dashboard.save
@@ -41,7 +41,11 @@ class Admin::CustomDashboardsController < Admin::AdminController
 
   private
 
-  def dashboard_params
-    params.permit(data: {})
+  def parsed_data
+    return @parsed_data if defined?(@parsed_data)
+    raw = params[:data]
+    @parsed_data = raw.is_a?(String) ? JSON.parse(raw) : raw&.to_unsafe_h
+  rescue JSON::ParserError
+    @parsed_data = nil
   end
 end

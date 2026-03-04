@@ -73,7 +73,8 @@ export default class DashboardAiSidebar extends Component {
   }
 
   parseMessageContent(cooked) {
-    const chartRegex = /\[dashboard-chart\]([\s\S]*?)\[\/dashboard-chart\]/g;
+    const chartRegex =
+      /\[data-explorer-chart\]([\s\S]*?)\[\/data-explorer-chart\]/g;
     let match;
     const charts = [];
     let cleanedContent = cooked;

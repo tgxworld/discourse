@@ -30,16 +30,42 @@ describe "Admin Custom Dashboard V2", type: :system do
     sign_in(admin)
   end
 
-  it "renders the dashboard with the query palette replacing the sidebar" do
+  it "shows customize button and hides editing UI by default" do
+    create_dashboard_with_panels(default_panel)
+
     dashboard_page.visit
 
     expect(dashboard_page).to have_dashboard
+    expect(dashboard_page).to have_customize_button
+    expect(dashboard_page).to have_no_customizing_active
+    expect(dashboard_page).to have_no_query_palette
+    expect(dashboard_page).to have_no_drag_handle("Dashboard: Active Users")
+    expect(dashboard_page).to have_no_remove_button("Dashboard: Active Users")
+  end
+
+  it "enters and exits customize mode" do
+    create_dashboard_with_panels(default_panel)
+
+    dashboard_page.visit
+    dashboard_page.click_customize
+
+    expect(dashboard_page).to have_customizing_active
     expect(dashboard_page).to have_sidebar_replaced
     expect(dashboard_page).to have_query_palette
+    expect(dashboard_page).to have_drag_handle("Dashboard: Active Users")
+    expect(dashboard_page).to have_remove_button("Dashboard: Active Users")
+
+    dashboard_page.click_customize
+
+    expect(dashboard_page).to have_no_customizing_active
+    expect(dashboard_page).to have_no_query_palette
+    expect(dashboard_page).to have_no_drag_handle("Dashboard: Active Users")
+    expect(dashboard_page).to have_no_remove_button("Dashboard: Active Users")
   end
 
   it "restores the admin sidebar when navigating away" do
     dashboard_page.visit
+    dashboard_page.click_customize
     expect(dashboard_page).to have_dashboard
 
     dashboard_page.navigate_to_admin
@@ -48,9 +74,10 @@ describe "Admin Custom Dashboard V2", type: :system do
     expect(dashboard_page).to have_no_dashboard
   end
 
-  context "with query palette" do
+  context "with query palette in customize mode" do
     it "displays queries grouped under Dashboard and filters them" do
       dashboard_page.visit
+      dashboard_page.click_customize
 
       expect(dashboard_page).to have_palette_group("Dashboard")
       expect(dashboard_page).to have_palette_item("Dashboard: Active Users")
@@ -66,6 +93,7 @@ describe "Admin Custom Dashboard V2", type: :system do
 
     it "collapses and expands palette groups" do
       dashboard_page.visit
+      dashboard_page.click_customize
 
       expect(dashboard_page).to have_palette_item("Dashboard: Active Users")
 
@@ -78,6 +106,7 @@ describe "Admin Custom Dashboard V2", type: :system do
 
     it "does not add a card when clicking a palette query" do
       dashboard_page.visit
+      dashboard_page.click_customize
 
       dashboard_page.click_palette_item("Dashboard: New Signups")
       expect(dashboard_page).to have_no_card("Dashboard: New Signups")
@@ -85,7 +114,7 @@ describe "Admin Custom Dashboard V2", type: :system do
   end
 
   context "with grid layout" do
-    it "displays grid cells and renders pre-configured cards" do
+    it "renders the grid and pre-configured cards" do
       create_dashboard_with_panels(
         default_panel,
         default_panel(
@@ -103,16 +132,17 @@ describe "Admin Custom Dashboard V2", type: :system do
 
       dashboard_page.visit
 
-      expect(dashboard_page).to have_grid_cells
+      expect(dashboard_page).to have_grid
       expect(dashboard_page).to have_card_count(2)
       expect(dashboard_page).to have_card_at_position("Dashboard: Active Users", 0, 0)
       expect(dashboard_page).to have_card_at_position("Dashboard: New Signups", 3, 0)
     end
 
-    it "repositions a card via drag-and-drop and allows repeated repositioning" do
+    it "repositions a card via drag-and-drop in customize mode" do
       create_dashboard_with_panels(default_panel)
 
       dashboard_page.visit
+      dashboard_page.click_customize
       expect(dashboard_page).to have_card_at_position("Dashboard: Active Users", 0, 0)
 
       dashboard_page.drag_card_to_cell("Dashboard: Active Users", 3, 0)
@@ -122,7 +152,7 @@ describe "Admin Custom Dashboard V2", type: :system do
       expect(dashboard_page).to have_card_at_position("Dashboard: Active Users", 0, 0)
     end
 
-    it "removes a card when clicking the remove button" do
+    it "removes a card when clicking the remove button in customize mode" do
       create_dashboard_with_panels(
         default_panel,
         default_panel(
@@ -139,6 +169,7 @@ describe "Admin Custom Dashboard V2", type: :system do
       )
 
       dashboard_page.visit
+      dashboard_page.click_customize
       expect(dashboard_page).to have_card_count(2)
 
       dashboard_page.remove_card("Dashboard: Active Users")
@@ -152,21 +183,25 @@ describe "Admin Custom Dashboard V2", type: :system do
       create_dashboard_with_panels(default_panel)
 
       dashboard_page.visit
+      dashboard_page.click_customize
       expect(dashboard_page).to have_card_at_position("Dashboard: Active Users", 0, 0)
 
       dashboard_page.drag_card_to_cell("Dashboard: Active Users", 3, 0)
       expect(dashboard_page).to have_card_at_position("Dashboard: Active Users", 3, 0)
+
+      dashboard_page.wait_for_save
 
       dashboard_page.visit
       expect(dashboard_page).to have_card_at_position("Dashboard: Active Users", 3, 0)
     end
   end
 
-  context "with card resizing" do
+  context "with card resizing in customize mode" do
     it "resizes a card and shows a resize handle" do
       create_dashboard_with_panels(default_panel)
 
       dashboard_page.visit
+      dashboard_page.click_customize
       expect(dashboard_page).to have_card_with_size("Dashboard: Active Users", 3, 8)
       expect(dashboard_page).to have_resize_handle("Dashboard: Active Users")
 
@@ -179,6 +214,7 @@ describe "Admin Custom Dashboard V2", type: :system do
       create_dashboard_with_panels(default_panel)
 
       dashboard_page.visit
+      dashboard_page.click_customize
       expect(dashboard_page).to have_card("Dashboard: Active Users")
 
       dashboard_page.resize_card("Dashboard: Active Users", 1, 2)
@@ -186,7 +222,7 @@ describe "Admin Custom Dashboard V2", type: :system do
       expect(dashboard_page).to have_card_with_size("Dashboard: Active Users", 2, 4)
     end
 
-    it "prevents resizing into an adjacent card" do
+    it "pushes adjacent cards down when resizing into them" do
       create_dashboard_with_panels(
         default_panel,
         default_panel(
@@ -203,21 +239,25 @@ describe "Admin Custom Dashboard V2", type: :system do
       )
 
       dashboard_page.visit
+      dashboard_page.click_customize
       expect(dashboard_page).to have_card_count(2)
 
       dashboard_page.resize_card("Dashboard: Active Users", 5, 8)
 
-      expect(dashboard_page).to have_card_with_size("Dashboard: Active Users", 3, 8)
+      expect(dashboard_page).to have_card_with_size("Dashboard: Active Users", 5, 8)
     end
 
     it "persists resized card dimensions across page reloads" do
       create_dashboard_with_panels(default_panel)
 
       dashboard_page.visit
+      dashboard_page.click_customize
       expect(dashboard_page).to have_card_with_size("Dashboard: Active Users", 3, 8)
 
       dashboard_page.resize_card("Dashboard: Active Users", 4, 10)
       expect(dashboard_page).to have_card_with_size("Dashboard: Active Users", 4, 10)
+
+      dashboard_page.wait_for_save
 
       dashboard_page.visit
       expect(dashboard_page).to have_card_with_size("Dashboard: Active Users", 4, 10)
@@ -251,6 +291,7 @@ describe "Admin Custom Dashboard V2", type: :system do
     end
 
     it "renders a table for categorical data without explicit chartType" do
+      Fabricate(:topic)
       create_dashboard_with_panels(
         default_panel(
           "id" => "cat1",
@@ -266,6 +307,7 @@ describe "Admin Custom Dashboard V2", type: :system do
     end
 
     it "renders a pie chart when chartType is pie" do
+      Fabricate(:topic)
       create_dashboard_with_panels(
         default_panel(
           "id" => "pie1",

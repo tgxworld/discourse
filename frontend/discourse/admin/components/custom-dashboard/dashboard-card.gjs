@@ -86,6 +86,9 @@ export default class DashboardCard extends Component {
   }
 
   get chartConfig() {
+    if (!this.rows) {
+      return null;
+    }
     const chartType = this.effectiveChartType;
     const labels = this.rows.map((r) => r[0]);
     const data = this.rows.map((r) =>
