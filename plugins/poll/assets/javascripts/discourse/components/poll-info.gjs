@@ -1,8 +1,8 @@
 import Component from "@glimmer/component";
 import { service } from "@ember/service";
-import { htmlSafe } from "@ember/template";
-import icon from "discourse/helpers/d-icon";
+import { trustHTML } from "@ember/template";
 import { relativeAge } from "discourse/lib/formatter";
+import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { i18n } from "discourse-i18n";
 
 const ON_VOTE = "on_vote";
@@ -18,12 +18,12 @@ export default class PollInfoComponent extends Component {
 
     if (max > 0) {
       if (min === max && min > 1) {
-        return htmlSafe(i18n("poll.multiple.help.x_options", { count: min }));
+        return trustHTML(i18n("poll.multiple.help.x_options", { count: min }));
       }
 
       if (min > 1) {
         if (max < optionsCount) {
-          return htmlSafe(
+          return trustHTML(
             i18n("poll.multiple.help.between_min_and_max_options", {
               min,
               max,
@@ -31,13 +31,13 @@ export default class PollInfoComponent extends Component {
           );
         }
 
-        return htmlSafe(
+        return trustHTML(
           i18n("poll.multiple.help.at_least_min_options", { count: min })
         );
       }
 
       if (max <= optionsCount) {
-        return htmlSafe(
+        return trustHTML(
           i18n("poll.multiple.help.up_to_max_options", { count: max })
         );
       }
@@ -62,43 +62,40 @@ export default class PollInfoComponent extends Component {
     return i18n("poll.total_votes", { count: this.totalVotes });
   }
 
-  get automaticCloseAgeLabel() {
-    return i18n("poll.automatic_close.age", this.age);
+  get showAutomaticClose() {
+    return (
+      this.args.isAutomaticallyClosed ||
+      (!!this.args.closesAt && !this.args.closed)
+    );
   }
 
-  get automaticCloseClosesInLabel() {
-    return i18n("poll.automatic_close.closes_in", this.timeLeft);
+  get automaticCloseLabel() {
+    return trustHTML(
+      this.args.isAutomaticallyClosed
+        ? i18n("poll.automatic_close.age", { age: this.age })
+        : i18n("poll.automatic_close.closes_in", { timeLeft: this.timeLeft })
+    );
   }
 
   get showMultipleHelpText() {
-    return this.args.isMultiple && !this.args.showResults && !this.args.closed;
+    return (
+      this.args.isMultiple &&
+      !this.args.showResults &&
+      !this.args.showingVotedChoices &&
+      !this.args.closed
+    );
   }
 
   get closeTitle() {
-    const closeDate = moment.utc(this.args.close, "YYYY-MM-DD HH:mm:ss Z");
-    if (closeDate.isValid()) {
-      return closeDate.format("LLL");
-    } else {
-      return "";
-    }
+    return this.args.closesAt?.format("LLL") ?? "";
   }
 
   get age() {
-    const closeDate = moment.utc(this.args.close, "YYYY-MM-DD HH:mm:ss Z");
-    if (closeDate.isValid()) {
-      return relativeAge(closeDate.toDate(), { addAgo: true });
-    } else {
-      return 0;
-    }
+    return relativeAge(this.args.closesAt.toDate(), { addAgo: true });
   }
 
   get timeLeft() {
-    const closeDate = moment.utc(this.args.close, "YYYY-MM-DD HH:mm:ss Z");
-    if (closeDate.isValid()) {
-      return moment().to(closeDate, true);
-    } else {
-      return 0;
-    }
+    return moment().to(this.args.closesAt, true);
   }
 
   get resultsOnVote() {
@@ -110,7 +107,7 @@ export default class PollInfoComponent extends Component {
   }
 
   get resultsOnVoteTitle() {
-    return htmlSafe(i18n("poll.results.vote.title"));
+    return trustHTML(i18n("poll.results.vote.title"));
   }
 
   get resultsOnClose() {
@@ -118,7 +115,7 @@ export default class PollInfoComponent extends Component {
   }
 
   get resultsOnCloseTitle() {
-    return htmlSafe(i18n("poll.results.closed.title"));
+    return trustHTML(i18n("poll.results.closed.title"));
   }
 
   get resultsStaffOnly() {
@@ -129,7 +126,7 @@ export default class PollInfoComponent extends Component {
   }
 
   get resultsStaffOnlyTitle() {
-    return htmlSafe(i18n("poll.results.staff.title"));
+    return trustHTML(i18n("poll.results.staff.title"));
   }
 
   get publicTitle() {
@@ -142,18 +139,25 @@ export default class PollInfoComponent extends Component {
   }
 
   get publicTitleLabel() {
-    return htmlSafe(i18n("poll.public.title"));
+    return trustHTML(i18n("poll.public.title"));
   }
 
   get showInstructionsSection() {
     return (
+      this.args.showingVotedChoices ||
       this.showMultipleHelpText ||
-      this.args.close ||
+      this.showAutomaticClose ||
+      this.args.closedBy ||
       this.resultsOnVote ||
       this.resultsOnClose ||
       this.resultsStaffOnly ||
-      this.publicTitle
+      this.publicTitle ||
+      this.args.isDynamic
     );
+  }
+
+  get closedByLabel() {
+    return i18n("poll.closed_by", { username: this.args.closedBy.username });
   }
 
   <template>
@@ -172,46 +176,57 @@ export default class PollInfoComponent extends Component {
       </div>
       {{#if this.showInstructionsSection}}
         <ul class="poll-info_instructions">
+          {{#if @isDynamic}}
+            <li class="is-dynamic">
+              {{dIcon "shuffle"}}
+              <span>{{i18n "poll.dynamic.enabled_hint"}}</span>
+            </li>
+          {{/if}}
+          {{#if @showingVotedChoices}}
+            <li class="vote-recorded">
+              {{dIcon "check"}}
+              <span>{{i18n "poll.vote_recorded"}}</span>
+            </li>
+          {{/if}}
           {{#if this.showMultipleHelpText}}
             <li class="multiple-help-text">
-              {{icon "list-ul"}}
+              {{dIcon "list-ul"}}
               <span>{{this.multipleHelpText}}</span>
             </li>
           {{/if}}
-          {{#if this.poll.close}}
-            {{#if this.isAutomaticallyClosed}}
-              <li title={{this.title}}>
-                {{icon "lock"}}
-                <span>{{this.automaticCloseAgeLabel}}</span>
-              </li>
-            {{else}}
-              <li title={{this.title}}>
-                {{icon "far-clock"}}
-                <span>{{this.automaticCloseClosesInLabel}}</span>
-              </li>
-            {{/if}}
+          {{#if this.showAutomaticClose}}
+            <li title={{this.closeTitle}}>
+              {{dIcon (if @isAutomaticallyClosed "lock" "far-clock")}}
+              <span>{{this.automaticCloseLabel}}</span>
+            </li>
+          {{/if}}
+          {{#if @closedBy}}
+            <li class="poll-info_closed-by">
+              {{dIcon "lock"}}
+              <span>{{this.closedByLabel}}</span>
+            </li>
           {{/if}}
           {{#if this.resultsOnVote}}
             <li class="results-on-vote">
-              {{icon "check"}}
+              {{dIcon "check"}}
               <span>{{this.resultsOnVoteTitle}}</span>
             </li>
           {{/if}}
           {{#if this.resultsOnClose}}
             <li class="results-on-close">
-              {{icon "lock"}}
+              {{dIcon "lock"}}
               <span>{{this.resultsOnCloseTitle}}</span>
             </li>
           {{/if}}
           {{#if this.resultsStaffOnly}}
             <li class="results-staff-only">
-              {{icon "shield-halved"}}
+              {{dIcon "shield-halved"}}
               <span>{{this.resultsStaffOnlyTitle}}</span>
             </li>
           {{/if}}
           {{#if this.publicTitle}}
             <li class="is-public">
-              {{icon "far-eye"}}
+              {{dIcon "far-eye"}}
               <span>{{this.publicTitleLabel}}</span>
             </li>
           {{/if}}

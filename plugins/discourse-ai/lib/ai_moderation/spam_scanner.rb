@@ -3,7 +3,6 @@
 module DiscourseAi
   module AiModeration
     class SpamScanner
-      POSTS_TO_SCAN = 3
       MINIMUM_EDIT_DIFFERENCE = 10
       EDIT_DELAY_MINUTES = 10
       MAX_AGE_TO_SCAN = 1.day
@@ -11,11 +10,31 @@ module DiscourseAi
 
       SHOULD_SCAN_POST_CUSTOM_FIELD = "discourse_ai_should_scan_post"
 
+      DECISION_FEATURE_NAME = "spam_detection"
+      SPAM_QUESTION_NAME = "spam"
+      SPAM_QUESTION_INSTRUCTIONS = <<~TEXT.squish
+        Is this forum post spam? Answer yes for unsolicited promotion or advertising, link
+        dropping, SEO or bot-generated content, gibberish, or replies unrelated to the thread.
+        Answer no for genuine questions, answers, feedback and discussion, even from new users or
+        non-native speakers.
+      TEXT
+      # A decision model settles posts outside these bounds; the LLM decides the rest.
+      CLEARLY_NOT_SPAM_PROBABILITY = 0.05
+      CLEARLY_SPAM_PROBABILITY = 0.9
+      # Without an LLM to settle unsure posts, one cutoff decides them all.
+      DECISION_ONLY_SPAM_PROBABILITY = 0.5
+      MAX_DECISION_IMAGE_PIXELS = 1_600_000
+
       def self.new_post(post)
         return if !enabled?
         return if !should_scan_post?(post)
+        return if approved_from_review_queue?(post)
 
         flag_post_for_scanning(post)
+      end
+
+      def self.approved_from_review_queue?(post)
+        ReviewableQueuedPost.approved.exists?(target: post)
       end
 
       def self.ensure_flagging_user!
@@ -67,14 +86,18 @@ module DiscourseAi
         return if !post.custom_fields[SHOULD_SCAN_POST_CUSTOM_FIELD]
         return if post.updated_at < MAX_AGE_TO_SCAN.ago
 
+        editor = post.last_editor
+        return if editor && (editor.staff? || editor.bot?)
+
+        scan_args = { post_id: post.id, triggering_user_id: post.last_editor_id || post.user_id }
         last_scan = AiSpamLog.where(post_id: post.id).order(created_at: :desc).first
 
         if last_scan && last_scan.created_at > EDIT_DELAY_MINUTES.minutes.ago
           delay_minutes =
             ((last_scan.created_at + EDIT_DELAY_MINUTES.minutes) - Time.current).to_i / 60
-          Jobs.enqueue_in(delay_minutes.minutes, :ai_spam_scan, post_id: post.id)
+          Jobs.enqueue_in(delay_minutes.minutes, :ai_spam_scan, scan_args)
         else
-          Jobs.enqueue(:ai_spam_scan, post_id: post.id)
+          Jobs.enqueue(:ai_spam_scan, scan_args)
         end
       end
 
@@ -82,6 +105,9 @@ module DiscourseAi
         return if !enabled?
         return if !should_scan_post?(post)
         return if scanned_max_times?(post)
+
+        editor = post.last_editor
+        return if editor && (editor.staff? || editor.bot?)
 
         previous_version = post.revisions.last&.modifications&.dig("raw", 0)
         current_version = post.raw
@@ -102,17 +128,21 @@ module DiscourseAi
 
       def self.should_scan_post?(post)
         return false if !post.present?
-        return false if post.user.trust_level > TrustLevel[1]
+        # user or topic may be gone by the time the scan job runs (deletion
+        # race); skip instead of raising through the job's rescue and requeue
+        return false if !post.user || !post.topic
+        return false if post.user.trust_level > SiteSetting.ai_spam_detection_max_trust_level
         return false if post.topic.private_message?
         return false if post.user.bot?
         return false if post.user.staff?
 
+        max_post_count = SiteSetting.ai_spam_detection_max_post_count
         if Post
              .where(user_id: post.user_id)
              .joins(:topic)
              .where(topic: { archetype: Archetype.default })
-             .limit(4)
-             .count > 3
+             .limit(max_post_count + 1)
+             .count > max_post_count
           return false
         end
         true
@@ -132,33 +162,55 @@ module DiscourseAi
         distance >= MINIMUM_EDIT_DIFFERENCE
       end
 
-      def self.test_post(post, custom_instructions: nil, llm_id: nil)
+      def self.test_post(
+        post,
+        custom_instructions: nil,
+        llm_model: AiModerationSetting.spam&.llm_model,
+        decision_model: AiModerationSetting.spam&.decision_model
+      )
         settings = AiModerationSetting.spam
-        custom_instructions = custom_instructions || settings.custom_instructions.presence
+        custom_instructions =
+          staff_instructions(custom_instructions || settings&.custom_instructions.presence)
 
         target_msg =
           build_target_content_msg(
             post,
             post.topic || Topic.with_deleted.find_by(id: post.topic_id),
           )
-        custom_insts = custom_instructions || settings.custom_instructions.presence
-        if custom_insts.present?
-          custom_insts =
-            "\n\nAdditional site-specific instructions provided by Staff:\n#{custom_insts}"
+
+        verdict = {}
+        if decision_model
+          verdict =
+            decision_verdict(
+              decision_model,
+              target_msg,
+              custom_instructions,
+              decides_alone: llm_model.nil?,
+            ) || {}
         end
 
-        ctx =
-          build_bot_context(
-            feature_name: "spam_detection_test",
-            messages: [target_msg],
-            custom_instructions: custom_insts,
-          )
-        bot = build_scanner_bot(settings: settings, llm_id: llm_id)
+        system_prompt = decision_instructions(custom_instructions) if decision_model
+        if verdict[:is_spam].nil?
+          ctx =
+            build_bot_context(
+              feature_name: "spam_detection_test",
+              messages: [target_msg],
+              custom_instructions: custom_instructions,
+            )
+          bot = build_scanner_bot(settings: settings, llm_model: llm_model)
 
-        structured_output = nil
-        llm_args = { feature_context: { post_id: post.id } }
-        bot.reply(ctx, llm_args: llm_args) do |partial, _, type|
-          structured_output = partial if type == :structured_output
+          structured_output = nil
+          llm_args = { feature_context: { post_id: post.id } }
+          bot.reply(ctx, llm_args: llm_args) do |partial, _, type|
+            structured_output = partial if type == :structured_output
+          end
+
+          verdict.merge!(
+            is_spam: is_spam?(structured_output),
+            reason: extract_reason(structured_output),
+            llm_model: bot.model,
+          )
+          system_prompt = bot.agent.craft_prompt(ctx, llm: bot.model.to_llm).system_message_text
         end
 
         history = nil
@@ -168,109 +220,70 @@ module DiscourseAi
           .limit(100)
           .each do |log|
             history ||= +"Scan History:\n"
-            history << "date: #{log.created_at} is_spam: #{log.is_spam}\n"
+            history << "date: #{log.created_at} is_spam: #{log.is_spam}"
+            history << " reason: #{log.reason}" if log.reason.present?
+            history << "\n"
           end
 
-        log = +"Scanning #{post.url}\n\n"
-
-        if history
-          log << history
-          log << "\n"
-        end
-
-        used_llm = bot.model
-        log << "LLM: #{used_llm.name}\n\n"
-
-        spam_persona = bot.persona
-        used_prompt = spam_persona.craft_prompt(ctx, llm: used_llm).system_message_text
-        log << "System Prompt: #{used_prompt}\n\n"
-
-        text_content =
-          if target_msg[:content].is_a?(Array)
-            target_msg[:content].first
-          else
-            target_msg[:content]
-          end
-
-        log << "Context: #{text_content}\n\n"
-
-        is_spam = is_spam?(structured_output)
-
-        reasoning_insts = {
-          type: :user,
-          content: "Don't return a JSON this time. Explain your reasoning in plain text.",
+        {
+          is_spam: verdict[:is_spam],
+          reason: verdict[:reason],
+          llm_name: verdict[:llm_model]&.name,
+          decision_model_name: decision_model&.display_name,
+          spam_probability: verdict[:spam_probability],
+          system_prompt: system_prompt,
+          sent_message: text_content(target_msg),
+          scan_history: history,
+          post_url: post.url,
         }
-        ctx.messages = [
-          target_msg,
-          { type: :model, content: { spam: is_spam }.to_json },
-          reasoning_insts,
-        ]
-        ctx.bypass_response_format = true
-
-        reasoning = +""
-
-        bot.reply(ctx, llm_args: llm_args.merge(max_tokens: 100)) do |partial, _, type|
-          reasoning << partial if type.blank?
-        end
-
-        log << "#{reasoning.strip}"
-
-        { is_spam: is_spam, log: log }
       end
 
-      def self.perform_scan(post)
+      def self.perform_scan(post, triggering_user_id: nil)
         return if !should_scan_post?(post)
 
-        perform_scan!(post)
+        perform_scan!(post, triggering_user_id: triggering_user_id)
       end
 
-      def self.perform_scan!(post)
+      def self.perform_scan!(post, triggering_user_id: nil)
         return if !enabled?
         settings = AiModerationSetting.spam
-        return if !settings || !settings.llm_model || !settings.ai_persona
+        return if !settings
+        decision_model = settings.decision_model
+        return if !decision_model && !llm_configured?(settings)
 
         target_msg = build_target_content_msg(post)
-        custom_instructions = settings.custom_instructions.presence
-        if custom_instructions.present?
-          custom_instructions =
-            "\n\nAdditional site-specific instructions provided by Staff:\n#{custom_instructions}"
-        end
-
-        ctx =
-          build_bot_context(
-            messages: [target_msg],
-            custom_instructions: custom_instructions,
-            user: self.flagging_user,
-          )
-        bot = build_scanner_bot(settings: settings, user: self.flagging_user)
-        structured_output = nil
+        custom_instructions = staff_instructions(settings.custom_instructions.presence)
 
         begin
-          llm_args = { feature_context: { post_id: post.id } }
-          bot.reply(ctx, llm_args: llm_args) do |partial, _, type|
-            structured_output = partial if type == :structured_output
+          verdict = {}
+          if decision_model
+            verdict =
+              decision_verdict(
+                decision_model,
+                target_msg,
+                custom_instructions,
+                decides_alone: !llm_configured?(settings),
+              ) || {}
+          end
+          if verdict[:is_spam].nil?
+            verdict.merge!(llm_verdict(settings, target_msg, custom_instructions, post:))
           end
 
-          is_spam = is_spam?(structured_output)
-
-          log = AiApiAuditLog.order(id: :desc).where(feature_name: "spam_detection").first
-          text_content =
-            if target_msg[:content].is_a?(Array)
-              target_msg[:content].first
-            else
-              target_msg[:content]
-            end
           AiSpamLog.transaction do
             log =
               AiSpamLog.create!(
                 post: post,
-                llm_model: settings.llm_model,
-                ai_api_audit_log: log,
-                is_spam: is_spam,
-                payload: text_content,
+                payload: text_content(target_msg),
+                ai_api_audit_log_id: verdict[:audit_log_id],
+                **verdict.slice(:is_spam, :reason, :spam_probability, :llm_model, :decision_model),
               )
-            handle_spam(post, log) if is_spam
+            handle_spam(post, log, triggering_user_id: triggering_user_id) if log.is_spam
           end
+        rescue DiscourseAi::Decisions::CreditLimitExceeded
+          # with no LLM to fall back on, the post goes unscanned until credits reset
+          Rails.logger.warn(
+            "Discourse AI: Spam scan skipped for post #{post.id}, the decision model is out of credits",
+          )
         rescue StandardError => e
           # we need retries otherwise stuff will not be handled
           Discourse.warn_exception(
@@ -300,10 +313,10 @@ module DiscourseAi
         bypass_response_format: false,
         user: Discourse.system_user
       )
-        DiscourseAi::Personas::BotContext
+        DiscourseAi::Agents::BotContext
           .new(
             user: user,
-            skip_tool_details: true,
+            skip_show_thinking: true,
             feature_name: feature_name,
             messages: messages,
             bypass_response_format: bypass_response_format,
@@ -313,19 +326,138 @@ module DiscourseAi
 
       def self.build_scanner_bot(
         settings:,
-        use_structured_output: true,
-        llm_id: nil,
+        llm_model: settings.llm_model,
         user: Discourse.system_user
       )
-        persona = settings.ai_persona.class_instance&.new
+        ai_agent =
+          settings&.ai_agent ||
+            AiAgent.find_by_id_from_cache(
+              DiscourseAi::Agents::Agent.system_agents[DiscourseAi::Agents::SpamDetector],
+            )
+        agent = ai_agent.class_instance&.new
 
-        llm_model = llm_id ? LlmModel.find(llm_id) : settings.llm_model
+        DiscourseAi::Agents::Bot.as(user, agent: agent, model: llm_model)
+      end
 
-        DiscourseAi::Personas::Bot.as(user, persona: persona, model: llm_model)
+      def self.llm_configured?(settings)
+        settings.llm_model.present? && settings.ai_agent.present?
+      end
+
+      def self.staff_instructions(custom_instructions)
+        return if custom_instructions.blank?
+
+        "\n\nAdditional site-specific instructions provided by Staff:\n#{custom_instructions}"
+      end
+
+      def self.decision_instructions(custom_instructions)
+        "#{SPAM_QUESTION_INSTRUCTIONS}#{custom_instructions}"
+      end
+
+      def self.text_content(target_msg)
+        content = target_msg[:content]
+        content.is_a?(Array) ? content.first : content
+      end
+
+      # @return [Hash, nil] the verdict, with a nil :is_spam when the LLM should decide; nil
+      #   when the decision model could not answer and the LLM should decide
+      # @raise [DiscourseAi::Decisions::Error] when the decision model decides alone
+      def self.decision_verdict(decision_model, target_msg, custom_instructions, decides_alone:)
+        result =
+          decision_model.decide(
+            text_content(target_msg),
+            questions: [
+              {
+                name: SPAM_QUESTION_NAME,
+                type: "yes_no",
+                instructions: decision_instructions(custom_instructions),
+              },
+            ],
+            feature_name: DECISION_FEATURE_NAME,
+            user: Discourse.system_user,
+            images: decision_images(decision_model, target_msg),
+          )
+        verdict = { decision_model:, audit_log_id: result.audit_log_id }
+
+        answer = result[SPAM_QUESTION_NAME]
+        if answer.refusal?
+          return if !decides_alone
+          return(
+            verdict.merge(
+              is_spam: false,
+              reason: I18n.t("discourse_ai.spam_detection.decision_refused"),
+            )
+          )
+        end
+
+        probability = answer.probability
+        is_spam =
+          if decides_alone
+            probability >= DECISION_ONLY_SPAM_PROBABILITY
+          elsif probability >= CLEARLY_SPAM_PROBABILITY
+            true
+          elsif probability <= CLEARLY_NOT_SPAM_PROBABILITY
+            false
+          end
+        reason =
+          if !is_spam.nil?
+            I18n.t(
+              "discourse_ai.spam_detection.decision_reason",
+              probability: (probability * 100).round,
+            )
+          end
+
+        verdict.merge(is_spam:, reason:, spam_probability: probability)
+      rescue DiscourseAi::Decisions::Error => e
+        raise if decides_alone
+
+        Rails.logger.warn("Discourse AI: Spam decision model failed, the LLM decides: #{e.class}")
+        nil
+      end
+
+      # Images only add evidence, so a post whose images cannot be prepared is judged on its text.
+      def self.decision_images(decision_model, target_msg)
+        return [] if !decision_model.vision_enabled || !target_msg[:content].is_a?(Array)
+
+        upload_ids = target_msg[:content].filter_map { |part| part[:upload_id] if part.is_a?(Hash) }
+        DiscourseAi::Completions::UploadEncoder
+          .encode(upload_ids:, max_pixels: MAX_DECISION_IMAGE_PIXELS)
+          .map { |image| "data:#{image[:mime_type]};base64,#{image[:base64]}" }
+      rescue StandardError => e
+        Rails.logger.warn("Discourse AI: Could not prepare images for spam detection: #{e.message}")
+        []
+      end
+
+      def self.llm_verdict(settings, target_msg, custom_instructions, post:)
+        ctx =
+          build_bot_context(
+            messages: [target_msg],
+            custom_instructions: custom_instructions,
+            user: flagging_user,
+          )
+        bot = build_scanner_bot(settings: settings, user: flagging_user)
+        structured_output = nil
+
+        llm_args = { feature_context: { post_id: post.id } }
+        bot.reply(ctx, llm_args: llm_args) do |partial, _, type|
+          structured_output = partial if type == :structured_output
+        end
+
+        {
+          is_spam: is_spam?(structured_output),
+          reason: extract_reason(structured_output),
+          llm_model: settings.llm_model,
+          audit_log_id:
+            AiApiAuditLog.order(id: :desc).where(feature_name: "spam_detection").pick(:id),
+        }
       end
 
       def self.is_spam?(structured_output)
         structured_output.present? && structured_output.read_buffered_property(:spam)
+      end
+
+      def self.extract_reason(structured_output)
+        return nil if structured_output.blank?
+        structured_output.read_buffered_property(:reason)
       end
 
       def self.build_target_content_msg(post, topic = nil)
@@ -408,7 +540,12 @@ module DiscourseAi
         nil
       end
 
-      def self.handle_spam(post, log)
+      def self.handle_spam(post, log, triggering_user_id: nil)
+        if post_has_existing_flag?(post)
+          log.update!(error: "skipped because post already has a flag")
+          return
+        end
+
         url = "#{Discourse.base_url}/admin/plugins/discourse-ai/ai-spam"
         reason = I18n.t("discourse_ai.spam_detection.flag_reason", url: url)
 
@@ -429,20 +566,23 @@ module DiscourseAi
         if result.success?
           log.update!(reviewable: result.reviewable)
 
-          reason = I18n.t("discourse_ai.spam_detection.silence_reason", url: url)
-          silencer =
-            UserSilencer.new(
-              post.user,
-              flagging_user,
-              message: :too_many_spam_flags,
-              post_id: post.id,
-              reason: reason,
-              keep_posts: true,
-            )
-          silencer.silence
+          if triggering_user_id.present? && triggering_user_id.to_i == post.user_id
+            reason = I18n.t("discourse_ai.spam_detection.silence_reason", url: url)
+            silencer =
+              UserSilencer.new(
+                post.user,
+                flagging_user,
+                message: :too_many_spam_flags,
+                post_id: post.id,
+                reviewable_id: result.reviewable&.id,
+                reason: reason,
+                keep_posts: true,
+              )
+            silencer.auto_silence
 
-          # silencer will not hide tl1 posts, so we do this here
-          hide_post(post)
+            # silencer will not hide tl1 posts, so we do this here
+            hide_post(post)
+          end
         else
           log.update!(
             error:
@@ -460,6 +600,10 @@ module DiscourseAi
         )
 
         Topic.where(id: post.topic_id).update_all(visible: false) if post.post_number == 1
+      end
+
+      def self.post_has_existing_flag?(post)
+        PostAction.active.flags.where(post: post).exists?
       end
     end
   end

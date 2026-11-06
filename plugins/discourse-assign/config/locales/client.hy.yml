@@ -17,7 +17,6 @@ hy:
       assigned: "Վերագրված"
       group_everyone: "Բոլորը"
       assigned_to: "Վերագրված է"
-      assigned_to_w_ellipsis: "Վերագրված է..."
       unassign:
         title: "Ետ կանչել վերագրումը"
         title_w_ellipsis: "Ետ կանչել վերագրումը..."
@@ -70,3 +69,21 @@ hy:
     edit_assignments_modal:
       topic: "Թեմա"
       post: "Գրառում"
+    discourse_workflows:
+      nodes:
+        "trigger:assigned": "Վերագրված"
+      assign_topic:
+        resources:
+          topic: "Թեմա"
+          post: "Գրառում"
+        operations:
+          assign: "Վերագրել"
+          unassign: "Ետ կանչել վերագրումը"
+        topic_id: "Թեմայի ID"
+        post_id: "Գրառման ID"
+      check_assignment:
+        target_types:
+          topic: "Թեմա"
+          post: "Գրառում"
+        topic_id: "Թեմայի ID"
+        post_id: "Գրառման ID"

@@ -1,13 +1,8 @@
-import $ from "jquery";
 import { withPluginApi } from "discourse/lib/plugin-api";
 import { i18n } from "discourse-i18n";
-import richEditorExtension from "../lib/rich-editor-extension";
+import richEditorExtension from "../lib/rich-editor-extension.js";
 
 function initializeDetails(api) {
-  api.decorateCooked(($elem) => $("details", $elem), {
-    id: "discourse-details",
-  });
-
   api.addComposerToolbarPopupMenuOption({
     action: function (toolbarEvent) {
       toolbarEvent.applySurround(
@@ -17,8 +12,10 @@ function initializeDetails(api) {
         { multiline: false }
       );
     },
-    icon: "caret-right",
+    icon: "angle-right",
     label: "details.title",
+    name: "details",
+    shortcut: "Shift+D",
   });
 
   api.registerRichEditorExtension(richEditorExtension);

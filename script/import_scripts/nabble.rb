@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require File.expand_path(File.dirname(__FILE__) + "/base.rb")
+require_relative "base"
 require "pg"
 require_relative "base/uploader"
 
@@ -283,7 +283,7 @@ end
 class String
   def indent(count, char = " ")
     gsub(/([^\n]*)(\n|$)/) do |match|
-      last_iteration = ($1 == "" && $2 == "")
+      last_iteration = $1 == "" && $2 == ""
       line = +""
       line << (char * count) unless last_iteration
       line << $1

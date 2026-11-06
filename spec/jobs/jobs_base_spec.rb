@@ -111,7 +111,10 @@ RSpec.describe ::Jobs::Base do
   end
 
   it "converts to an indifferent access hash" do
-    ::Jobs::Base.any_instance.expects(:execute).with(instance_of(HashWithIndifferentAccess))
+    ::Jobs::Base
+      .any_instance
+      .expects(:execute)
+      .with(instance_of(ActiveSupport::HashWithIndifferentAccess))
     ::Jobs::Base.new.perform("hello" => "world")
   end
 
@@ -150,7 +153,7 @@ RSpec.describe ::Jobs::Base do
   end
 
   context "when `Discourse.enable_sidekiq_logging?` is `true`" do
-    let(:tmp_log_file_path) { "#{Rails.root}/tmp/sidekiq_test_log.log" }
+    let(:tmp_log_file_path) { "#{Rails.root.join("tmp/sidekiq_test_log.log")}" }
 
     before do
       Discourse.enable_sidekiq_logging
@@ -163,7 +166,7 @@ RSpec.describe ::Jobs::Base do
       FileUtils.rm(tmp_log_file_path)
     end
 
-    it "should log the job in the sidekiq log file" do
+    it "writes the job to the Sidekiq log" do
       job = GoodJob.new
       job.perform({ some_param: "some_value" })
 

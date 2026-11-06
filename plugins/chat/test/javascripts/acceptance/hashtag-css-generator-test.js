@@ -2,7 +2,7 @@ import { visit } from "@ember/test-helpers";
 import { test } from "qunit";
 import { acceptance } from "discourse/tests/helpers/qunit-helpers";
 
-acceptance("Chat | Hashtag CSS Generator", function (needs) {
+acceptance("Hashtag CSS Generator", function (needs) {
   const category1 = {
     id: 1,
     color: "ff0000",
@@ -23,7 +23,10 @@ acceptance("Chat | Hashtag CSS Generator", function (needs) {
     name: "category3",
   };
 
-  needs.settings({ chat_enabled: true });
+  needs.settings({
+    chat_enabled: true,
+    enable_emoji: true,
+  });
   needs.user({
     has_chat_enabled: true,
   });

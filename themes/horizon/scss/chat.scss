@@ -8,7 +8,9 @@
   background-color: var(--d-content-background);
 
   .full-page-chat & {
-    padding: 0 1.5em;
+    @include viewport.from(sm) {
+      padding: 0 1.5em;
+    }
   }
 
   .chat-drawer.is-collapsed & {
@@ -19,6 +21,13 @@
 
 body.has-full-page-chat {
   background-color: var(--background-color);
+
+  #main-outlet-wrapper {
+    @media screen and (width < 87rem) {
+      // ideal width just slightly larger than our xl viewport variable
+      padding-inline: 0;
+    }
+  }
 }
 
 .chat-drawer-container {
@@ -31,7 +40,7 @@ body.has-full-page-chat {
   }
 
   .c-navbar__title {
-    padding-left: 0.33em; // visual alignment for chat index, which does not havea a backarrow
+    padding-left: 0.33em; // visual alignment for chat index, which does not have a back arrow
   }
 }
 
@@ -43,6 +52,10 @@ body.has-full-page-chat {
   &:has(.is-expanded) {
     z-index: calc(z("composer", "dropdown") + 1);
   }
+
+  &.above-composer {
+    padding-bottom: 0;
+  }
 }
 
 // the below are elements whose z-index needs to be adjusted due to the above change
@@ -52,7 +65,8 @@ body.has-full-page-chat {
   }
 }
 
-.fk-d-menu[data-identifier="usercard"] {
+.fk-d-menu[data-identifier="usercard"],
+.fk-d-menu[data-identifier="chat-message-reaction-users"] {
   .has-drawer-chat & {
     z-index: z("modal", "dialog");
   }

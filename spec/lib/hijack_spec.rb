@@ -45,7 +45,7 @@ RSpec.describe Hijack do
       app =
         lambda do |env|
           tester = Hijack::Tester.new(env)
-          tester.hijack_test { render body: "hello", status: 201 }
+          tester.hijack_test { render body: "hello", status: :created }
         end
 
       env = create_request_env(path: "/")
@@ -64,7 +64,7 @@ RSpec.describe Hijack do
 
     tester.hijack_test do
       copy_req = request
-      render body: "hello world", status: 200
+      render body: "hello world", status: :ok
     end
 
     expect(copy_req.object_id).not_to eq(orig_req.object_id)
@@ -77,7 +77,7 @@ RSpec.describe Hijack do
     app =
       lambda do |env|
         tester = Hijack::Tester.new(env)
-        tester.hijack_test { render body: "hello", status: 201 }
+        tester.hijack_test { render body: "hello", status: :created }
 
         expect(tester.io.string).to include("Access-Control-Allow-Origin: www.rainbows.com")
       end
@@ -112,7 +112,7 @@ RSpec.describe Hijack do
     app =
       lambda do |env|
         tester = Hijack::Tester.new(env)
-        tester.hijack_test { render body: "hello", status: 201 }
+        tester.hijack_test { render body: "hello", status: :created }
 
         expect(tester.io.string).to include("Access-Control-Allow-Origin: https://www.rainbows.com")
       end
@@ -144,7 +144,7 @@ RSpec.describe Hijack do
     tester.response.headers["Hello-World"] = "sam"
     tester.hijack_test do
       expires_in 1.year
-      render body: "hello world", status: 402
+      render body: "hello world", status: :payment_required
     end
 
     expect(tester.io.string).to include("Hello-World: sam")
@@ -153,14 +153,14 @@ RSpec.describe Hijack do
   it "handles expires_in" do
     tester.hijack_test do
       expires_in 1.year
-      render body: "hello world", status: 402
+      render body: "hello world", status: :payment_required
     end
 
     expect(tester.io.string).to include("max-age=31556952")
   end
 
   it "renders non 200 status if asked for" do
-    tester.hijack_test { render body: "hello world", status: 402 }
+    tester.hijack_test { render body: "hello world", status: :payment_required }
 
     expect(tester.io.string).to include("402")
     expect(tester.io.string).to include("world")
@@ -192,7 +192,7 @@ RSpec.describe Hijack do
     end
 
     result =
-      "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 0\r\nConnection: close\r\nX-Runtime: 1.000000\r\n\r\n"
+      "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nVary: Accept, X-Requested-With\r\nContent-Length: 0\r\nConnection: close\r\nX-Runtime: 1.000000\r\n\r\n"
     expect(tester.io.string).to eq(result)
   end
 
@@ -204,7 +204,7 @@ RSpec.describe Hijack do
     end
 
     result =
-      "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 11\r\nConnection: close\r\nX-Runtime: 1.000000\r\n\r\nhello world"
+      "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nVary: Accept, X-Requested-With\r\nContent-Length: 11\r\nConnection: close\r\nX-Runtime: 1.000000\r\n\r\nhello world"
     expect(tester.io.string).to eq(result)
   end
 

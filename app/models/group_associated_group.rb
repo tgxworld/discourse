@@ -3,8 +3,8 @@ class GroupAssociatedGroup < ActiveRecord::Base
   belongs_to :group
   belongs_to :associated_group
 
-  after_commit :add_associated_users, on: %i[create update]
   before_destroy :remove_associated_users
+  after_commit :add_associated_users, on: %i[create update]
 
   def add_associated_users
     with_mutex do
@@ -50,10 +50,10 @@ end
 # Table name: group_associated_groups
 #
 #  id                  :bigint           not null, primary key
-#  group_id            :bigint           not null
-#  associated_group_id :bigint           not null
 #  created_at          :datetime         not null
 #  updated_at          :datetime         not null
+#  associated_group_id :bigint           not null
+#  group_id            :bigint           not null
 #
 # Indexes
 #

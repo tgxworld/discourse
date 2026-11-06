@@ -37,7 +37,7 @@ RSpec.describe Admin::StaffActionLogsController do
             "delete_topic",
           )
           freeze_time 3.days.from_now
-          StaffActionLogger.new(Discourse.system_user).log_grant_admin(user)
+          StaffActionLogger.new(Discourse.system_user).log_silence_user(user, details: "test")
           freeze_time 2.days.from_now
           StaffActionLogger.new(Discourse.system_user).log_user_suspend(user, "reason")
         end
@@ -50,17 +50,17 @@ RSpec.describe Admin::StaffActionLogsController do
 
           expect(json["staff_action_logs"].length).to eq(2)
           expect(json["staff_action_logs"][0]["action_name"]).to eq("suspend_user")
-          expect(json["staff_action_logs"][1]["action_name"]).to eq("grant_admin")
+          expect(json["staff_action_logs"][1]["action_name"]).to eq("silence_user")
         end
 
         it "filter logs by end_date" do
-          get "/admin/logs/staff_action_logs.json", params: { end_date: 1.days.ago.iso8601 }
+          get "/admin/logs/staff_action_logs.json", params: { end_date: 1.day.ago.iso8601 }
 
           json = response.parsed_body
           expect(response.status).to eq(200)
 
           expect(json["staff_action_logs"].length).to eq(2)
-          expect(json["staff_action_logs"][0]["action_name"]).to eq("grant_admin")
+          expect(json["staff_action_logs"][0]["action_name"]).to eq("silence_user")
           expect(json["staff_action_logs"][1]["action_name"]).to eq("delete_topic")
         end
 
@@ -68,14 +68,14 @@ RSpec.describe Admin::StaffActionLogsController do
           get "/admin/logs/staff_action_logs.json",
               params: {
                 start_date: 3.days.ago.iso8601,
-                end_date: 1.days.ago.iso8601,
+                end_date: 1.day.ago.iso8601,
               }
 
           json = response.parsed_body
           expect(response.status).to eq(200)
 
           expect(json["staff_action_logs"].length).to eq(1)
-          expect(json["staff_action_logs"][0]["action_name"]).to eq("grant_admin")
+          expect(json["staff_action_logs"][0]["action_name"]).to eq("silence_user")
         end
       end
 
@@ -87,49 +87,135 @@ RSpec.describe Admin::StaffActionLogsController do
     end
 
     context "when logged in as an admin" do
-      before { sign_in(admin) }
+      before do
+        admin.update!(last_seen_at: 1.day.ago)
+        sign_in(admin)
+      end
 
       include_examples "staff action logs accessible"
 
+      it "filters bot creation as a native staff action" do
+        bot = Fabricate(:user, id: -1234)
+        creation = StaffActionLogger.new(admin).log_bot_creation(bot)
+        StaffActionLogger.new(admin).log_site_setting_change("title", "old", "new")
+
+        get "/admin/logs/staff_action_logs.json",
+            params: {
+              action_id: UserHistory.actions[:create_bot],
+            }
+
+        expect(response.status).to eq(200)
+        expect(response.parsed_body["staff_action_logs"]).to contain_exactly(
+          include("id" => creation.id, "action_name" => "create_bot"),
+        )
+        expect(response.parsed_body["extras"]["user_history_actions"]).to include(
+          "id" => "create_bot",
+          "action_id" => UserHistory.actions[:create_bot],
+        )
+      end
+
+      it "retains stored full names for administrators when names are disabled" do
+        SiteSetting.enable_names = false
+        user.update!(name: "Current Private Name")
+        StaffActionLogger.new(admin).log_user_deletion(user)
+        StaffActionLogger.new(admin).log_name_change(
+          user.id,
+          "Previous Private Name",
+          "New Private Name",
+        )
+
+        get "/admin/logs/staff_action_logs.json"
+
+        expect(response.status).to eq(200)
+        logs_by_action =
+          response.parsed_body["staff_action_logs"].index_by { |log| log["action_name"] }
+        expect(logs_by_action["delete_user"]["details"]).to include(user.name)
+        expect(logs_by_action["change_name"]).to include(
+          "previous_value" => "Previous Private Name",
+          "new_value" => "New Private Name",
+        )
+      end
+
       it "generates logs with pages" do
-        1
-          .upto(4)
-          .each do |idx|
-            StaffActionLogger.new(Discourse.system_user).log_site_setting_change(
-              "title",
-              "value #{idx - 1}",
-              "value #{idx}",
-            )
-          end
+        4.times do |idx|
+          StaffActionLogger.new(Discourse.system_user).log_site_setting_change(
+            "title",
+            "value #{idx}",
+            "value #{idx + 1}",
+          )
+        end
 
         get "/admin/logs/staff_action_logs.json", params: { limit: 3 }
-
-        json = response.parsed_body
-        expect(response.status).to eq(200)
-        expect(json["staff_action_logs"].length).to eq(3)
-        expect(json["staff_action_logs"][0]["new_value"]).to eq("value 4")
+        expect(response.parsed_body["staff_action_logs"].length).to eq(3)
+        expect(response.parsed_body["staff_action_logs"][0]["new_value"]).to eq("value 4")
 
         get "/admin/logs/staff_action_logs.json", params: { limit: 3, page: 1 }
+        expect(response.parsed_body["staff_action_logs"].length).to eq(1)
+        expect(response.parsed_body["staff_action_logs"][0]["new_value"]).to eq("value 1")
+      end
 
-        json = response.parsed_body
-        expect(response.status).to eq(200)
-        expect(json["staff_action_logs"].length).to eq(1)
-        expect(json["staff_action_logs"][0]["new_value"]).to eq("value 1")
+      it "sees admin-only actions" do
+        StaffActionLogger.new(admin).log_site_setting_change("title", "old", "new")
+
+        get "/admin/logs/staff_action_logs.json"
+
+        expect(response.parsed_body["staff_action_logs"].map { |l| l["action_name"] }).to include(
+          "change_site_setting",
+        )
+      end
+
+      it "sees full content for private topics" do
+        pm = Fabricate(:private_message_topic)
+        StaffActionLogger.new(admin).log_topic_delete_recover(pm, "delete_topic")
+
+        get "/admin/logs/staff_action_logs.json"
+
+        expect(response.parsed_body["staff_action_logs"].first["details"]).to include(pm.title)
+      end
+
+      describe "reviewable_id" do
+        it "is included when the staff action log is linked to a reviewable" do
+          reviewable = Fabricate(:reviewable_queued_post_topic)
+          UserHistory.create!(
+            action: UserHistory.actions[:post_approved],
+            acting_user_id: admin.id,
+            reviewable_id: reviewable.id,
+          )
+
+          get "/admin/logs/staff_action_logs.json",
+              params: {
+                action_id: UserHistory.actions[:post_approved],
+              }
+
+          expect(response.parsed_body["staff_action_logs"].first["reviewable_id"]).to eq(
+            reviewable.id,
+          )
+        end
+
+        it "is omitted when the staff action log has no reviewable" do
+          StaffActionLogger.new(admin).log_site_setting_change("title", "old", "new")
+
+          get "/admin/logs/staff_action_logs.json",
+              params: {
+                action_id: UserHistory.actions[:change_site_setting],
+              }
+
+          expect(response.parsed_body["staff_action_logs"].first).not_to have_key("reviewable_id")
+        end
       end
 
       context "when staff actions are extended" do
         let(:plugin_extended_action) { :confirmed_ham }
+
         before { UserHistory.stubs(:staff_actions).returns([plugin_extended_action]) }
         after { UserHistory.unstub(:staff_actions) }
 
-        it "Uses the custom_staff id" do
-          get "/admin/logs/staff_action_logs.json", params: {}
+        it "uses custom_staff id for unknown actions" do
+          get "/admin/logs/staff_action_logs.json"
 
-          json = response.parsed_body
-          action = json["extras"]["user_history_actions"].first
-
-          expect(action["id"]).to eq plugin_extended_action.to_s
-          expect(action["action_id"]).to eq UserHistory.actions[:custom_staff]
+          action = response.parsed_body["extras"]["user_history_actions"].first
+          expect(action["id"]).to eq(plugin_extended_action.to_s)
+          expect(action["action_id"]).to eq(UserHistory.actions[:custom_staff])
         end
       end
     end
@@ -138,6 +224,180 @@ RSpec.describe Admin::StaffActionLogsController do
       before { sign_in(moderator) }
 
       include_examples "staff action logs accessible"
+
+      it "hides stored full names when names are disabled" do
+        SiteSetting.enable_names = false
+        user.update!(name: "Current Private\nFull Name")
+        StaffActionLogger.new(admin).log_user_deletion(user)
+        topic = Fabricate(:topic, user: user, title: "Welcome to the community (2026 edition)")
+        post =
+          Fabricate(
+            :post,
+            user: user,
+            topic: topic,
+            raw: "Quoting the old log (below)\ntopic: Forged title",
+          )
+        StaffActionLogger.new(admin).log_post_deletion(post)
+        StaffActionLogger.new(admin).log_topic_delete_recover(topic)
+        StaffActionLogger.new(admin).log_name_change(
+          user.id,
+          "Previous Private Name",
+          "New Private Name",
+        )
+
+        get "/admin/logs/staff_action_logs.json"
+
+        expect(response.status).to eq(200)
+        expect(response.body).not_to include("Previous Private Name", "New Private Name")
+
+        logs_by_action =
+          response.parsed_body["staff_action_logs"].index_by { |log| log["action_name"] }
+        name_details =
+          logs_by_action
+            .values_at("delete_user", "delete_post", "delete_topic")
+            .pluck("details")
+            .join
+        expect(name_details).not_to include(*user.name.lines(chomp: true))
+        expect(logs_by_action["delete_topic"]["details"]).to include("title: #{topic.title}\n")
+        expect(logs_by_action["delete_user"]["details"]).to include("username: #{user.username}")
+        expect(logs_by_action["delete_post"]["details"]).to include(
+          "user: #{user.username}\ntopic: #{topic.title}\npost_number: #{post.post_number}\n",
+        )
+        expect(logs_by_action["change_name"]).to include(
+          "previous_value" => nil,
+          "new_value" => nil,
+        )
+      end
+
+      it "keeps post content that quotes an author line when the author was deleted" do
+        SiteSetting.enable_names = false
+        post =
+          Fabricate(
+            :post,
+            raw: "Copied from the log:\nuser: someone (quoted in the post)\nraw: more text",
+          )
+        post.update_columns(user_id: nil)
+        StaffActionLogger.new(admin).log_post_recover(post.reload)
+
+        get "/admin/logs/staff_action_logs.json"
+
+        expect(response.status).to eq(200)
+        expect(response.parsed_body["staff_action_logs"].sole["details"]).to include(
+          "user: (deleted user)\nraw: #{post.raw}",
+        )
+      end
+
+      it "does not see admin-only actions" do
+        StaffActionLogger.new(admin).log_site_setting_change("title", "old", "new")
+        StaffActionLogger.new(admin).log_web_hook(
+          Fabricate(:web_hook),
+          UserHistory.actions[:web_hook_create],
+        )
+        StaffActionLogger.new(admin).log_api_key(
+          Fabricate(:api_key),
+          UserHistory.actions[:api_key_create],
+        )
+
+        get "/admin/logs/staff_action_logs.json"
+
+        action_names = response.parsed_body["staff_action_logs"].map { |l| l["action_name"] }
+        expect(action_names).not_to include(
+          "change_site_setting",
+          "web_hook_create",
+          "api_key_create",
+        )
+      end
+
+      it "sees full content for public topics" do
+        topic = Fabricate(:topic)
+        StaffActionLogger.new(admin).log_topic_delete_recover(topic, "delete_topic")
+
+        get "/admin/logs/staff_action_logs.json"
+
+        expect(response.parsed_body["staff_action_logs"].first["details"]).to include(topic.title)
+      end
+
+      it "redacts content for private topics" do
+        pm = Fabricate(:private_message_topic)
+        StaffActionLogger.new(admin).log_topic_delete_recover(pm, "delete_topic")
+
+        get "/admin/logs/staff_action_logs.json"
+
+        log = response.parsed_body["staff_action_logs"].first
+        expect(log["details"]).to eq(I18n.t("staff_action_logs.redacted"))
+        expect(log["context"]).to be_nil
+      end
+
+      it "redacts content for restricted categories" do
+        SiteSetting.moderators_manage_categories = true
+        category = Fabricate(:private_category, group: Fabricate(:group))
+        StaffActionLogger.new(admin).log_category_creation(category)
+
+        get "/admin/logs/staff_action_logs.json"
+
+        expect(response.parsed_body["staff_action_logs"].first["details"]).to eq(
+          I18n.t("staff_action_logs.redacted"),
+        )
+      end
+
+      it "redacts content when referenced topic is deleted" do
+        topic = Fabricate(:topic)
+        StaffActionLogger.new(admin).log_topic_delete_recover(topic, "delete_topic")
+        topic.destroy!
+
+        get "/admin/logs/staff_action_logs.json"
+
+        log = response.parsed_body["staff_action_logs"].first
+        expect(log["details"]).to eq(I18n.t("staff_action_logs.redacted"))
+        expect(log["context"]).to be_nil
+      end
+
+      it "redacts content when referenced post is deleted" do
+        post = Fabricate(:post)
+        StaffActionLogger.new(admin).log_post_edit(post, old_raw: "old content")
+        post.destroy!
+
+        get "/admin/logs/staff_action_logs.json"
+
+        expect(response.parsed_body["staff_action_logs"].first["details"]).to eq(
+          I18n.t("staff_action_logs.redacted"),
+        )
+      end
+
+      it "redacts content when referenced category is deleted" do
+        SiteSetting.moderators_manage_categories = true
+        category = Fabricate(:category)
+        StaffActionLogger.new(admin).log_category_creation(category)
+        category.destroy!
+
+        get "/admin/logs/staff_action_logs.json"
+
+        expect(response.parsed_body["staff_action_logs"].first["details"]).to eq(
+          I18n.t("staff_action_logs.redacted"),
+        )
+      end
+
+      it "hides category actions when moderators_manage_categories is disabled" do
+        SiteSetting.moderators_manage_categories = false
+        category = Fabricate(:category)
+        StaffActionLogger.new(admin).log_category_creation(category)
+
+        get "/admin/logs/staff_action_logs.json"
+
+        action_names = response.parsed_body["staff_action_logs"].map { |l| l["action_name"] }
+        expect(action_names).not_to include("create_category")
+      end
+
+      it "shows category actions when moderators_manage_categories is enabled" do
+        SiteSetting.moderators_manage_categories = true
+        category = Fabricate(:category)
+        StaffActionLogger.new(admin).log_category_creation(category)
+
+        get "/admin/logs/staff_action_logs.json"
+
+        action_names = response.parsed_body["staff_action_logs"].map { |l| l["action_name"] }
+        expect(action_names).to include("create_category")
+      end
     end
 
     context "when logged in as a non-staff user" do
@@ -206,16 +466,60 @@ RSpec.describe Admin::StaffActionLogsController do
         parsed = response.parsed_body
 
         name_diff = <<-HTML
-          <h3>name</h3><p></p><table class="markdown"><tr><td class="diff-del"><del>#{tag_group1.name}</del></td><td class="diff-ins"><ins>#{tag_group2.name}</ins></td></tr></table>
+          <h3>name</h3><p></p><table class="markdown"><tr><td class="--previous"><del>#{tag_group1.name}</del></td><td class="--current"><ins>#{tag_group2.name}</ins></td></tr></table>
         HTML
         expect(parsed["side_by_side"]).to include(name_diff.strip)
+        expect(parsed["side_by_side"]).to include("<del>#{tag1.name}</del>")
+        expect(parsed["side_by_side"]).to include("<ins>#{tag3.name}</ins>")
+      end
+
+      it "generates diffs for old tag_group format with tag_names" do
+        tag1 = Fabricate(:tag)
+        tag2 = Fabricate(:tag)
+        tag3 = Fabricate(:tag)
+
+        old_json = {
+          name: "old_group",
+          tag_names: [tag1.name, tag2.name],
+          parent_tag_name: [],
+          one_per_topic: false,
+          permissions: {
+            "0" => 1,
+          },
+        }.to_json
+
+        new_json = {
+          name: "new_group",
+          tag_names: [tag2.name, tag3.name],
+          parent_tag_name: [],
+          one_per_topic: false,
+          permissions: {
+            "0" => 1,
+          },
+        }.to_json
+
+        record =
+          StaffActionLogger.new(Discourse.system_user).log_tag_group_change(
+            "new_group",
+            old_json,
+            new_json,
+          )
+
+        get "/admin/logs/staff_action_logs/#{record.id}/diff.json"
+        expect(response.status).to eq(200)
+
+        parsed = response.parsed_body
+        expect(parsed["side_by_side"]).to include("<h3>tag_names</h3>")
         expect(parsed["side_by_side"]).to include("<del>#{tag1.name}</del>")
         expect(parsed["side_by_side"]).to include("<ins>#{tag3.name}</ins>")
       end
     end
 
     context "when logged in as an admin" do
-      before { sign_in(admin) }
+      before do
+        admin.update!(last_seen_at: 1.day.ago)
+        sign_in(admin)
+      end
 
       include_examples "theme diffs accessible"
       include_examples "tag_group diffs accessible"
@@ -226,13 +530,45 @@ RSpec.describe Admin::StaffActionLogsController do
         get "/admin/logs/staff_action_logs/#{UserHistory.last.id}/diff.json"
         expect(response.status).to eq(200)
       end
+
+      it "falls back when diff generation exceeds the comparison budget" do
+        theme = Fabricate(:theme)
+        theme.set_field(target: :mobile, name: :scss, value: "body {.up}")
+        original_json =
+          ThemeSerializer.new(theme, root: false, include_theme_field_values: true).to_json
+        theme.set_field(target: :mobile, name: :scss, value: "body {.down}")
+        record = StaffActionLogger.new(Discourse.system_user).log_theme_change(original_json, theme)
+
+        ONPDiff
+          .any_instance
+          .stubs(:compose)
+          .raises(
+            ONPDiff::DiffLimitExceeded.new(
+              comparisons_used: 1,
+              comparison_budget: 0,
+              left_size: 1,
+              right_size: 1,
+            ),
+          )
+
+        get "/admin/logs/staff_action_logs/#{record.id}/diff.json"
+        expect(response.status).to eq(200)
+        expect(response.parsed_body["side_by_side"]).to include(I18n.t("errors.diff_too_complex"))
+      end
     end
 
     context "when logged in as a moderator" do
       before { sign_in(moderator) }
 
-      include_examples "theme diffs accessible"
       include_examples "tag_group diffs accessible"
+
+      it "denies access to theme diffs (admin-only action)" do
+        theme = Fabricate(:theme)
+        record = StaffActionLogger.new(Discourse.system_user).log_theme_change("{}", theme)
+
+        get "/admin/logs/staff_action_logs/#{record.id}/diff.json"
+        expect(response.status).to eq(404)
+      end
     end
 
     context "when logged in as a non-staff user" do

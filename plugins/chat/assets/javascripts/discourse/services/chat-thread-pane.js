@@ -1,8 +1,7 @@
 import { service } from "@ember/service";
-import ChatChannelPane from "./chat-channel-pane";
+import ChatChannelPane from "./chat-channel-pane.js";
 
 export default class ChatThreadPane extends ChatChannelPane {
-  @service chat;
   @service router;
 
   get thread() {
@@ -14,10 +13,6 @@ export default class ChatThreadPane extends ChatChannelPane {
       this.router.currentRoute.name === "chat.channel.thread" ||
       this.router.currentRoute.name === "chat.channel.thread.index"
     );
-  }
-
-  get selectedMessageIds() {
-    return this.thread.messagesManager.selectedMessages.mapBy("id");
   }
 
   async close() {

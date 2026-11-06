@@ -6,8 +6,8 @@ RSpec.describe DiscourseConnect do
 
   before do
     SiteSetting.discourse_connect_url = discourse_connect_url
-    SiteSetting.enable_discourse_connect = true
     SiteSetting.discourse_connect_secret = discourse_connect_secret
+    SiteSetting.enable_discourse_connect = true
     SiteSetting.reserved_usernames = ""
     Jobs.run_immediately!
   end
@@ -39,7 +39,7 @@ RSpec.describe DiscourseConnect do
   end
 
   def new_discourse_sso
-    DiscourseConnect.new(secure_session: secure_session)
+    DiscourseConnect.new(server_session:)
   end
 
   def test_parsed(parsed, sso)
@@ -77,7 +77,7 @@ RSpec.describe DiscourseConnect do
   end
 
   let(:ip_address) { "127.0.0.1" }
-  let(:secure_session) { SecureSession.new("abc") }
+  let(:server_session) { ServerSession.new("abc") }
 
   it "bans bad external id" do
     sso = new_discourse_sso
@@ -117,6 +117,45 @@ RSpec.describe DiscourseConnect do
     user = sso.lookup_or_create_user(ip_address)
 
     expect(user.persisted?).to eq(true)
+  end
+
+  it "allows users with watched-word usernames to be created and log in" do
+    WatchedWord.create!(word: "blockedword", action: WatchedWord.actions[:block])
+
+    sso = new_discourse_sso
+    sso.username = "blockedword"
+    sso.name = ""
+    sso.email = "blockedword@example.com"
+    sso.external_id = "C"
+    sso.suppress_welcome_message = true
+
+    user = sso.lookup_or_create_user(ip_address)
+    returning_user = sso.lookup_or_create_user(ip_address)
+
+    expect(user).to be_persisted
+    expect(user.username).to eq("blockedword")
+    expect(returning_user).to eq(user)
+  end
+
+  it "preserves an authoritative watched-word username across repeated overrides" do
+    SiteSetting.auth_overrides_username = true
+    user = Fabricate(:user, username: "alice")
+    Fabricate(:watched_word, word: "*bad*", action: WatchedWord.actions[:block])
+
+    sso = new_discourse_sso
+    sso.username = "Badger"
+    sso.email = user.email
+    sso.external_id = "watched-word-override"
+    sso.suppress_welcome_message = true
+
+    usernames =
+      2.times.map do
+        returning_user = sso.lookup_or_create_user(ip_address)
+        expect(returning_user.id).to eq(user.id)
+        user.reload.username
+      end
+
+    expect(usernames).to eq(%w[Badger Badger])
   end
 
   it "always creates new users when using plus addressing" do
@@ -497,7 +536,7 @@ RSpec.describe DiscourseConnect do
     expect(user.username).to eq "testuser"
   end
 
-  it "should preserve username when several users login with the same username" do
+  it "preserves usernames when several users log in with the same username" do
     SiteSetting.auth_overrides_username = true
 
     # if several users have username "bill" on the external site,
@@ -756,13 +795,13 @@ RSpec.describe DiscourseConnect do
   end
 
   it "validates nonce" do
-    _, payload = DiscourseConnect.generate_url(secure_session: secure_session).split("?")
+    _, payload = DiscourseConnect.generate_url(server_session:).split("?")
 
-    sso = DiscourseConnect.parse(payload, secure_session: secure_session)
+    sso = DiscourseConnect.parse(payload, server_session:)
     expect(sso.nonce_valid?).to eq true
 
     other_session_sso =
-      DiscourseConnect.parse(payload, secure_session: SecureSession.new("differentsession"))
+      DiscourseConnect.parse(payload, server_session: ServerSession.new("differentsession"))
     expect(other_session_sso.nonce_valid?).to eq false
 
     sso.expire_nonce!
@@ -772,13 +811,13 @@ RSpec.describe DiscourseConnect do
 
   it "allows disabling CSRF protection" do
     SiteSetting.discourse_connect_csrf_protection = false
-    _, payload = DiscourseConnect.generate_url(secure_session: secure_session).split("?")
+    _, payload = DiscourseConnect.generate_url(server_session:).split("?")
 
-    sso = DiscourseConnect.parse(payload, secure_session: secure_session)
+    sso = DiscourseConnect.parse(payload, server_session:)
     expect(sso.nonce_valid?).to eq true
 
     other_session_sso =
-      DiscourseConnect.parse(payload, secure_session: SecureSession.new("differentsession"))
+      DiscourseConnect.parse(payload, server_session: ServerSession.new("differentsession"))
     expect(other_session_sso.nonce_valid?).to eq true
 
     sso.expire_nonce!
@@ -787,18 +826,18 @@ RSpec.describe DiscourseConnect do
   end
 
   it "generates a correct sso url" do
-    url, payload = DiscourseConnect.generate_url(secure_session: secure_session).split("?")
+    url, payload = DiscourseConnect.generate_url(server_session:).split("?")
     expect(url).to eq discourse_connect_url
 
-    sso = DiscourseConnect.parse(payload, secure_session: secure_session)
+    sso = DiscourseConnect.parse(payload, server_session:)
     expect(sso.nonce).to_not be_nil
   end
 
   describe "nonce error" do
     it "generates correct error message when nonce has already been used" do
-      _, payload = DiscourseConnect.generate_url(secure_session: secure_session).split("?")
+      _, payload = DiscourseConnect.generate_url(server_session:).split("?")
 
-      sso = DiscourseConnect.parse(payload, secure_session: secure_session)
+      sso = DiscourseConnect.parse(payload, server_session:)
       expect(sso.nonce_valid?).to eq true
 
       sso.expire_nonce!
@@ -806,9 +845,9 @@ RSpec.describe DiscourseConnect do
     end
 
     it "generates correct error message when nonce is expired" do
-      _, payload = DiscourseConnect.generate_url(secure_session: secure_session).split("?")
+      _, payload = DiscourseConnect.generate_url(server_session:).split("?")
 
-      sso = DiscourseConnect.parse(payload, secure_session: secure_session)
+      sso = DiscourseConnect.parse(payload, server_session:)
       expect(sso.nonce_valid?).to eq true
 
       Discourse.cache.delete(sso.used_nonce_key)
@@ -819,9 +858,9 @@ RSpec.describe DiscourseConnect do
 
     it "generates correct error message when nonce is expired, and csrf protection disabled" do
       SiteSetting.discourse_connect_csrf_protection = false
-      _, payload = DiscourseConnect.generate_url(secure_session: secure_session).split("?")
+      _, payload = DiscourseConnect.generate_url(server_session:).split("?")
 
-      sso = DiscourseConnect.parse(payload, secure_session: secure_session)
+      sso = DiscourseConnect.parse(payload, server_session:)
       expect(sso.nonce_valid?).to eq true
 
       Discourse.cache.delete(sso.used_nonce_key)

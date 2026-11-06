@@ -1,13 +1,15 @@
 import StyleguideExample from "discourse/plugins/styleguide/discourse/components/styleguide-example";
+import SpinnerRegularExample from "../../examples/atoms/spinners/regular.gjs";
+import spinnerRegularSource from "../../examples/atoms/spinners/regular?source=template";
+import SpinnerSmallExample from "../../examples/atoms/spinners/small.gjs";
+import spinnerSmallSource from "../../examples/atoms/spinners/small?source=template";
 
-const Spinners = <template>
-  <StyleguideExample @title="spinner - small">
-    <div class="spinner small"></div>
+export default <template>
+  <StyleguideExample @code={{spinnerSmallSource}} @title="spinner - small">
+    <SpinnerSmallExample />
   </StyleguideExample>
 
-  <StyleguideExample @title="spinner - regular">
-    <div class="spinner"></div>
+  <StyleguideExample @code={{spinnerRegularSource}} @title="spinner - regular">
+    <SpinnerRegularExample />
   </StyleguideExample>
-</template>;
-
-export default Spinners;
+</template>

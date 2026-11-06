@@ -2,7 +2,7 @@
 
 describe DiscourseAi::Embeddings::EmbeddingsController do
   context "when performing a topic search" do
-    fab!(:vector_def) { Fabricate(:open_ai_embedding_def) }
+    fab!(:vector_def, :open_ai_embedding_def)
 
     before do
       enable_current_plugin
@@ -44,7 +44,7 @@ describe DiscourseAi::Embeddings::EmbeddingsController do
 
     def create_api_key(user)
       key = ApiKey.create!(user: user)
-      ApiKeyScope.create!(resource: "discourse_ai", action: "search", api_key_id: key.id)
+      ApiKeyScope.create!(resource: "ai", action: "search", api_key_id: key.id)
       key
     end
 
@@ -69,7 +69,7 @@ describe DiscourseAi::Embeddings::EmbeddingsController do
     context "when rate limiting is enabled" do
       before { RateLimiter.enable }
 
-      it "will rate limit correctly" do
+      it "rate limits repeated requests" do
         stub_const(described_class, :MAX_HYDE_SEARCHES_PER_MINUTE, 1) do
           stub_const(described_class, :MAX_SEARCHES_PER_MINUTE, 2) do
             query = "test #{SecureRandom.hex}"
@@ -85,6 +85,64 @@ describe DiscourseAi::Embeddings::EmbeddingsController do
             query = "test #{SecureRandom.hex}"
             stub_embedding(query)
             get "/discourse-ai/embeddings/semantic-search.json?q=#{query}&hyde=false"
+            expect(response.status).to eq(429)
+          end
+        end
+      end
+
+      it "applies per-IP rate limiting for anonymous users" do
+        stub_const(described_class, :MAX_SEARCHES_PER_MINUTE, 1) do
+          query = "test #{SecureRandom.hex}"
+          stub_embedding(query)
+          get "/discourse-ai/embeddings/semantic-search.json?q=#{query}&hyde=false",
+              env: {
+                "REMOTE_ADDR" => "1.2.3.4",
+              }
+          expect(response.status).to eq(200)
+
+          query = "test #{SecureRandom.hex}"
+          stub_embedding(query)
+          get "/discourse-ai/embeddings/semantic-search.json?q=#{query}&hyde=false",
+              env: {
+                "REMOTE_ADDR" => "1.2.3.4",
+              }
+          expect(response.status).to eq(429)
+
+          query = "test #{SecureRandom.hex}"
+          stub_embedding(query)
+          get "/discourse-ai/embeddings/semantic-search.json?q=#{query}&hyde=false",
+              env: {
+                "REMOTE_ADDR" => "5.6.7.8",
+              }
+          expect(response.status).to eq(200)
+        end
+      end
+
+      it "applies a global anonymous rate limit across all IPs" do
+        stub_const(described_class, :MAX_SEARCHES_PER_MINUTE, 100) do
+          stub_const(described_class, :MAX_ANON_SEARCHES_PER_MINUTE, 2) do
+            query = "test #{SecureRandom.hex}"
+            stub_embedding(query)
+            get "/discourse-ai/embeddings/semantic-search.json?q=#{query}&hyde=false",
+                env: {
+                  "REMOTE_ADDR" => "1.2.3.4",
+                }
+            expect(response.status).to eq(200)
+
+            query = "test #{SecureRandom.hex}"
+            stub_embedding(query)
+            get "/discourse-ai/embeddings/semantic-search.json?q=#{query}&hyde=false",
+                env: {
+                  "REMOTE_ADDR" => "5.6.7.8",
+                }
+            expect(response.status).to eq(200)
+
+            query = "test #{SecureRandom.hex}"
+            stub_embedding(query)
+            get "/discourse-ai/embeddings/semantic-search.json?q=#{query}&hyde=false",
+                env: {
+                  "REMOTE_ADDR" => "9.10.11.12",
+                }
             expect(response.status).to eq(429)
           end
         end
@@ -212,6 +270,217 @@ describe DiscourseAi::Embeddings::EmbeddingsController do
           get "/discourse-ai/embeddings/semantic-search.json?q=#{query}&hyde=1"
 
           expect(response.status).to eq(200)
+        end
+      end
+    end
+  end
+
+  context "when embedding API fails" do
+    fab!(:vector_def, :open_ai_embedding_def)
+    fab!(:user)
+
+    before do
+      enable_current_plugin
+      SiteSetting.min_search_term_length = 3
+      SiteSetting.ai_embeddings_selected_model = vector_def.id
+      DiscourseAi::Embeddings::SemanticSearch.clear_cache_for("test")
+      sign_in(user)
+    end
+
+    it "returns empty results instead of 500 error for semantic search" do
+      stub_request(:post, "https://api.openai.com/v1/embeddings").to_return(
+        status: 429,
+        body: JSON.dump({ error: { message: "You exceeded your current quota" } }),
+      )
+
+      get "/discourse-ai/embeddings/semantic-search.json?q=test&hyde=false"
+
+      expect(response.status).to eq(200)
+      expect(response.parsed_body["topics"]).to be_blank
+    end
+
+    it "returns empty results instead of 500 error for quick search" do
+      SiteSetting.ai_embeddings_semantic_quick_search_enabled = true
+
+      stub_request(:post, "https://api.openai.com/v1/embeddings").to_return(
+        status: 429,
+        body: JSON.dump({ error: { message: "You exceeded your current quota" } }),
+      )
+
+      get "/discourse-ai/embeddings/quick-search.json?q=test"
+
+      expect(response.status).to eq(200)
+      expect(response.parsed_body["topics"]).to be_blank
+    end
+  end
+
+  context "when performing a quick search" do
+    fab!(:vector_def, :open_ai_embedding_def)
+    fab!(:user)
+
+    before do
+      enable_current_plugin
+      SiteSetting.min_search_term_length = 3
+      SiteSetting.ai_embeddings_selected_model = vector_def.id
+      SiteSetting.ai_embeddings_semantic_quick_search_enabled = true
+      DiscourseAi::Embeddings::SemanticSearch.clear_cache_for("test")
+      SearchIndexer.enable
+      sign_in(user)
+    end
+
+    fab!(:topic)
+    fab!(:post) { Fabricate(:post, topic: topic, raw: "This is a test post") }
+
+    def index(topic)
+      vector = DiscourseAi::Embeddings::Vector.instance
+
+      stub_request(:post, "https://api.openai.com/v1/embeddings").to_return(
+        status: 200,
+        body: JSON.dump({ data: [{ embedding: [0.1] * 1536 }] }),
+      )
+
+      vector.generate_representation_from(topic)
+    end
+
+    def stub_embedding(query)
+      embedding = [0.049382] * 1536
+
+      EmbeddingsGenerationStubs.openai_service(
+        vector_def.lookup_custom_param("model_name"),
+        query,
+        embedding,
+      )
+    end
+
+    it "returns 400 when query is too short" do
+      get "/discourse-ai/embeddings/quick-search.json?q=ab"
+
+      expect(response.status).to eq(400)
+    end
+
+    it "returns results successfully with valid query" do
+      index(topic)
+      stub_embedding("test")
+
+      get "/discourse-ai/embeddings/quick-search.json?q=test"
+
+      expect(response.status).to eq(200)
+      expect(response.parsed_body["posts"]).to be_present
+      expect(response.parsed_body["topics"].map { |t| t["id"] }).to contain_exactly(topic.id)
+    end
+
+    context "when rate limiting is enabled" do
+      before { RateLimiter.enable }
+
+      it "rate limits non-cached queries" do
+        limiter = RateLimiter.new(user, "semantic-search", 60, 1.minute)
+        59.times { limiter.performed! }
+
+        stub_embedding("last_allowed_query")
+        get "/discourse-ai/embeddings/quick-search.json?q=last_allowed_query"
+        expect(response.status).to eq(200)
+
+        get "/discourse-ai/embeddings/quick-search.json?q=over_limit_query"
+        expect(response.status).to eq(429)
+      end
+
+      it "does not rate limit cached queries" do
+        query = "cached_query"
+        semantic_search = instance_double(DiscourseAi::Embeddings::SemanticSearch)
+        allow(DiscourseAi::Embeddings::SemanticSearch).to receive(:new).and_return(semantic_search)
+        allow(semantic_search).to receive(:cached_query?).with(query).and_return(true)
+        allow(semantic_search).to receive(:search_for_topics).with(
+          query,
+          1,
+          hyde: false,
+        ).and_return([])
+
+        limiter = RateLimiter.new(user, "semantic-search", 60, 1.minute)
+        60.times { limiter.performed! }
+
+        2.times do
+          get "/discourse-ai/embeddings/quick-search.json?q=#{query}"
+          expect(response.status).to eq(200)
+        end
+      end
+    end
+  end
+
+  context "when anonymous quick search rate limiting" do
+    fab!(:vector_def, :open_ai_embedding_def)
+
+    before do
+      enable_current_plugin
+      SiteSetting.min_search_term_length = 3
+      SiteSetting.ai_embeddings_selected_model = vector_def.id
+      SiteSetting.ai_embeddings_semantic_quick_search_enabled = true
+      RateLimiter.enable
+    end
+
+    def stub_embedding(query)
+      embedding = [0.049382] * 1536
+      EmbeddingsGenerationStubs.openai_service(
+        vector_def.lookup_custom_param("model_name"),
+        query,
+        embedding,
+      )
+    end
+
+    it "applies per-IP rate limiting for anonymous users" do
+      semantic_search = instance_double(DiscourseAi::Embeddings::SemanticSearch)
+      allow(DiscourseAi::Embeddings::SemanticSearch).to receive(:new).and_return(semantic_search)
+      allow(semantic_search).to receive(:cached_query?).and_return(false)
+      allow(semantic_search).to receive(:search_for_topics).and_return([])
+
+      stub_const(described_class, :MAX_SEARCHES_PER_MINUTE, 1) do
+        query = "test_query1"
+        get "/discourse-ai/embeddings/quick-search.json?q=#{query}",
+            env: {
+              "REMOTE_ADDR" => "1.2.3.4",
+            }
+        expect(response.status).to eq(200)
+
+        query = "test_query2"
+        get "/discourse-ai/embeddings/quick-search.json?q=#{query}",
+            env: {
+              "REMOTE_ADDR" => "1.2.3.4",
+            }
+        expect(response.status).to eq(429)
+
+        query = "test_query3"
+        get "/discourse-ai/embeddings/quick-search.json?q=#{query}",
+            env: {
+              "REMOTE_ADDR" => "5.6.7.8",
+            }
+        expect(response.status).to eq(200)
+      end
+    end
+
+    it "applies a global anonymous rate limit across all IPs" do
+      semantic_search = instance_double(DiscourseAi::Embeddings::SemanticSearch)
+      allow(DiscourseAi::Embeddings::SemanticSearch).to receive(:new).and_return(semantic_search)
+      allow(semantic_search).to receive(:cached_query?).and_return(false)
+      allow(semantic_search).to receive(:search_for_topics).and_return([])
+
+      stub_const(described_class, :MAX_SEARCHES_PER_MINUTE, 100) do
+        stub_const(described_class, :MAX_ANON_SEARCHES_PER_MINUTE, 2) do
+          get "/discourse-ai/embeddings/quick-search.json?q=test_q1",
+              env: {
+                "REMOTE_ADDR" => "1.2.3.4",
+              }
+          expect(response.status).to eq(200)
+
+          get "/discourse-ai/embeddings/quick-search.json?q=test_q2",
+              env: {
+                "REMOTE_ADDR" => "5.6.7.8",
+              }
+          expect(response.status).to eq(200)
+
+          get "/discourse-ai/embeddings/quick-search.json?q=test_q3",
+              env: {
+                "REMOTE_ADDR" => "9.10.11.12",
+              }
+          expect(response.status).to eq(429)
         end
       end
     end

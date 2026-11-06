@@ -12,13 +12,16 @@ export default class AiLlm extends RestModel {
       "max_prompt_tokens",
       "max_output_tokens",
       "url",
-      "api_key",
-      "enabled_chat_bot",
+      "ai_secret_id",
       "provider_params",
       "vision_enabled",
+      "vision_mode",
+      "vision_llm_model_id",
       "input_cost",
       "cached_input_cost",
-      "output_cost"
+      "cache_write_cost",
+      "output_cost",
+      "allowed_attachment_types"
     );
   }
 
@@ -31,6 +34,7 @@ export default class AiLlm extends RestModel {
 
   async testConfig(llmConfig) {
     return await ajax("/admin/plugins/discourse-ai/ai-llms/test.json", {
+      type: "POST",
       data: { ai_llm: llmConfig ?? this.createProperties() },
     });
   }

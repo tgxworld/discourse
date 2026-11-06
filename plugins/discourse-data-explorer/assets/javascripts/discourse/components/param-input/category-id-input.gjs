@@ -1,6 +1,6 @@
 import Component from "@glimmer/component";
 import { hash } from "@ember/helper";
-import CategoryChooser from "select-kit/components/category-chooser";
+import CategoryChooser from "discourse/select-kit/components/category-chooser";
 
 export default class CategoryIdInput extends Component {
   // CategoryChooser will try to modify the value of value,
@@ -12,17 +12,17 @@ export default class CategoryIdInput extends Component {
   }
 
   <template>
-    <@field.Custom id={{@field.id}}>
+    <@Control id={{@field.id}}>
       <CategoryChooser
-        @value={{this.data.value}}
+        name={{@info.identifier}}
         @onChange={{@field.set}}
         @options={{hash
           allowUncategorized=null
           autoInsertNoneItem=true
           none=true
         }}
-        name={{@info.identifier}}
+        @value={{this.data.value}}
       />
-    </@field.Custom>
+    </@Control>
   </template>
 }

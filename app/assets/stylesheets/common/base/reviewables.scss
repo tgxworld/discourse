@@ -3,10 +3,8 @@
 .reviewable {
   background: var(--d-content-background);
 
-  .flagged-post-header {
-    width: 100%;
-    display: flex;
-    justify-content: space-between;
+  .reviewable-top-nav {
+    margin-bottom: 1em;
   }
 
   .status {
@@ -39,8 +37,9 @@
 
   .reviewable-container {
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     margin-top: 1em;
+    gap: var(--space-4);
 
     @include viewport.until(sm) {
       flex-direction: column;
@@ -49,9 +48,8 @@
     .reviewable-list {
       flex: 1;
       box-sizing: border-box;
-      max-width: 760px; // Match topic post width
       min-width: 0;
-      margin-right: auto;
+      width: 100%;
 
       @include viewport.until(sm) {
         order: 2;
@@ -61,21 +59,76 @@
     }
 
     .reviewable-filters {
-      width: 250px;
+      width: 100%;
       height: 100%;
       box-sizing: border-box;
 
+      &.--expanded {
+        --column-gap: 5em;
+        gap: 0 var(--column-gap);
+
+        @include viewport.from(sm) {
+          display: grid;
+          grid-template-columns: repeat(2, calc(50% - (var(--column-gap) / 2)));
+        }
+
+        @include viewport.until(lg) {
+          --column-gap: 2em;
+        }
+
+        .reviewable-filters-actions {
+          grid-column: 1 / -1;
+          margin-top: var(--space-4);
+        }
+
+        .reviewable-filter {
+          margin: 0 0 1em 0;
+        }
+      }
+
+      &.--collapsed {
+        display: flex;
+        gap: var(--space-2);
+        align-items: end;
+
+        @include viewport.until(sm) {
+          flex-wrap: wrap;
+        }
+
+        .reviewable-filter {
+          flex: 1 1 50%;
+          min-width: 5em;
+
+          @include viewport.until(sm) {
+            &:nth-child(2) {
+              display: none;
+            }
+          }
+
+          .name {
+            min-width: 0;
+            display: block;
+
+            @include ellipsis;
+          }
+        }
+      }
+
+      .reviewable-filters-actions {
+        display: flex;
+        gap: var(--space-2);
+        justify-content: space-between;
+
+        @include viewport.until(sm) {
+          width: 100%;
+        }
+      }
+
       @include viewport.until(sm) {
         order: 1;
-        margin: 0 0 1em 0;
         padding: 0.5em 1em 1em 1em;
         width: 100%;
         background-color: var(--primary-very-low);
-
-        .reviewable-filters-actions {
-          display: flex;
-          justify-content: space-between;
-        }
 
         .reviewable-filter {
           .filter-label {
@@ -83,6 +136,20 @@
           }
         }
       }
+    }
+
+    .d-date-time-input-range {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+
+      .from {
+        margin: 0;
+      }
+    }
+
+    .d-date-time-input {
+      flex: 1 1 auto;
     }
 
     .reviewable-list + .reviewable-filters {
@@ -128,22 +195,40 @@
   }
 
   .reviewable-user-details {
-    border-bottom: 1px solid var(--content-border-color);
+    --name-width: 8em;
+    --name-margin: 1em;
     padding-bottom: 0.25em;
     display: flex;
     margin-bottom: 0.5em;
 
+    @include viewport.until(sm) {
+      flex-direction: column;
+    }
+
+    &:not(:last-child) {
+      border-bottom: 1px solid var(--content-border-color);
+    }
+
     .name {
-      width: 8em;
+      width: var(--name-width);
       font-weight: bold;
-      margin-right: 1em;
+      margin-right: var(--name-margin);
     }
 
     .value {
-      max-width: calc(
-        100% - 8em - 1em
-      ); // subtracting width of name and margin-right
-      word-wrap: break-word;
+      max-width: calc(100% - var(--name-width) - var(--name-margin));
+      overflow-wrap: anywhere;
+
+      @include viewport.until(sm) {
+        width: auto;
+      }
+    }
+
+    .reviewable-user-avatar {
+      width: 6em;
+      height: 6em;
+      object-fit: cover;
+      border-radius: var(--d-border-radius);
     }
   }
 }
@@ -157,31 +242,18 @@
 }
 
 .reviewable-filters {
-  background-color: var(--primary-very-low);
-  padding: 1em;
-  margin-bottom: 1em;
-
-  .topic-filter .btn {
-    display: flex;
-    width: auto;
-  }
-
-  .score-filter {
-    width: 5em;
-  }
+  padding: var(--space-4) var(--space-6);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--content-border-color);
+  border-radius: var(--d-border-radius);
 
   .reviewable-filter {
     display: flex;
     flex-direction: column;
-    margin: 0 0 1em 0;
+    break-inside: avoid;
 
     .filter-label {
       margin: 0 0 0.5em 0;
-    }
-
-    .score-filter {
-      margin: 0;
-      width: 100%;
     }
 
     .category-chooser {
@@ -195,23 +267,6 @@
   align-items: center;
 
   .btn-small {
-    margin-left: 0.5em;
-  }
-}
-
-.claimed-actions {
-  display: flex;
-  flex: 1 1 100%;
-  margin-right: 0;
-  align-items: center;
-  margin-bottom: 0.5em;
-}
-
-.claimed-by {
-  display: flex;
-  align-items: center;
-
-  .claimed-username {
     margin-left: 0.5em;
   }
 }
@@ -277,6 +332,10 @@
   margin-block: 3rem;
   padding-bottom: 1em;
 
+  &:first-of-type {
+    margin-top: var(--space-4);
+  }
+
   .show-raw-email {
     color: var(--primary-medium);
     font-size: var(--font-down-2);
@@ -296,10 +355,6 @@
     }
   }
 
-  .names {
-    font-weight: bold;
-  }
-
   .post-contents-wrapper {
     width: 100%;
     margin-top: 1em;
@@ -311,25 +366,6 @@
     }
   }
 
-  .reviewable-post-header {
-    display: flex;
-    justify-content: space-between;
-    width: var(--topic-body-width);
-    align-items: center;
-    max-width: 100%;
-
-    .reviewable-reply-to {
-      display: flex;
-      align-items: center;
-      color: var(--primary-medium);
-      font-size: 0.9em;
-
-      .d-icon {
-        margin-right: 0.5em;
-      }
-    }
-  }
-
   .post-contents {
     width: 100%;
     min-width: 0; // Flexbox fix
@@ -337,7 +373,6 @@
 
   .post-body {
     position: relative;
-    max-width: var(--topic-body-width);
     margin-top: 0.5em;
 
     &.is-collapsed {
@@ -448,17 +483,6 @@
       color: var(--secondary);
       border-radius: 8px;
       background-color: var(--secondary-high);
-
-      &.-flagged-post,
-      &.-flagged-chat-message {
-        background-color: var(--danger);
-      }
-
-      &.-queued-post,
-      &.-queued-topic,
-      &.-user {
-        background-color: var(--tertiary);
-      }
     }
 
     .reply-count {
@@ -479,23 +503,8 @@
     }
   }
 
-  .reviewable-contents {
-    display: flex;
-    flex-wrap: wrap;
-    margin: 1.5rem 0 1rem;
-    background: var(--secondary);
-    padding: 1rem;
-
-    @include viewport.until(sm) {
-      .reviewable-post-header,
-      .post-body {
-        max-width: 100%;
-
-        p {
-          overflow-x: scroll;
-        }
-      }
-    }
+  &__meta-label {
+    font-weight: bold;
   }
 
   .reviewable-actions {
@@ -512,13 +521,6 @@
 
 .reviewable-stale {
   opacity: 0.7;
-}
-
-.reviewable-deleted {
-  .reviewable-contents .post-contents .post-body {
-    background-color: var(--danger-low-mid);
-    padding: 0.5em;
-  }
 }
 
 .blur-images {
@@ -545,26 +547,19 @@
   @include viewport.until(sm) {
     display: flex;
     width: 100%;
-    overflow-x: scroll;
+    overflow-x: auto;
     border-top: 1px solid var(--content-border-color);
   }
 
   &__table-wrapper {
-    overflow-x: scroll;
+    overflow-x: auto;
   }
 
   th {
     white-space: nowrap;
   }
 
-  .reviewed-by {
-    .date {
-      margin-left: 0.5em;
-    }
-  }
-
-  .user,
-  .reviewed-by {
+  .user {
     display: flex;
     align-items: center;
   }
@@ -624,8 +619,7 @@
       white-space: nowrap;
       vertical-align: baseline;
 
-      &.user a,
-      &.reviewed-by a {
+      &.user a {
         max-width: 150px;
 
         @include ellipsis;
@@ -652,7 +646,6 @@
 
 .reviewable-score-reason {
   margin: 0.5em 0;
-  max-width: var(--topic-body-width);
   margin-bottom: 0.5em;
 }
 
@@ -660,7 +653,6 @@
   margin: 0.5em 0;
 
   .reviewable-conversation-post {
-    max-width: var(--topic-body-width);
     margin-bottom: 0.5em;
 
     .username {
@@ -675,20 +667,12 @@
 }
 
 .editable-fields {
+  display: flex;
+  flex-wrap: wrap;
   width: 100%;
-
-  .editable-created-by {
-    display: flex;
-    margin-bottom: 0.5em;
-
-    .avatar {
-      margin-right: 0.25em;
-    }
-  }
+  gap: var(--space-2) var(--space-4);
 
   .editable-field {
-    margin-bottom: 0.5em;
-
     .mini-tag-chooser {
       margin: 0;
     }
@@ -702,6 +686,32 @@
       width: 100%;
       height: 10em;
     }
+  }
+
+  .created-by,
+  .payload-title,
+  .payload-raw {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .category-id {
+    .category-chooser {
+      height: 100%;
+    }
+  }
+
+  .category-id,
+  .payload-tags {
+    flex: 1 1 calc(50% - var(--space-4) / 2);
+
+    .select-kit {
+      width: 100%;
+    }
+  }
+
+  .composer-toggle-switch {
+    display: none;
   }
 }
 

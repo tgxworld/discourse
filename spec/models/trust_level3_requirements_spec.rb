@@ -101,7 +101,7 @@ RSpec.describe TrustLevel3Requirements do
 
       it "does not return if the user been silenced or suspended over 6 months ago" do
         freeze_time 1.year.ago do
-          UserSilencer.new(user, moderator, silenced_till: 1.months.from_now).silence
+          UserSilencer.new(user, moderator, silenced_till: 1.month.from_now).silence
           UserHistory.create!(target_user_id: user.id, action: UserHistory.actions[:suspend_user])
         end
 
@@ -111,7 +111,7 @@ RSpec.describe TrustLevel3Requirements do
 
         freeze_time 3.months.ago do
           UserSilencer.new(user).unsilence
-          UserSilencer.new(user, moderator, silenced_till: 1.months.from_now).silence
+          UserSilencer.new(user, moderator, silenced_till: 1.month.from_now).silence
           UserHistory.create!(target_user_id: user.id, action: UserHistory.actions[:suspend_user])
         end
 
@@ -624,12 +624,16 @@ RSpec.describe TrustLevel3Requirements do
       expect(tl3_requirements.requirements_lost?).to eq(true)
     end
 
-    [3, 4].each do |default_tl|
-      it "is not lost if default_trust_level is #{default_tl}" do
-        SiteSetting.default_trust_level = default_tl
-        tl3_requirements.stubs(:days_visited).returns(1)
-        expect(tl3_requirements.requirements_lost?).to eq(false)
-      end
+    it "is not lost if default_trust_level is 3" do
+      SiteSetting.default_trust_level = 3
+      tl3_requirements.stubs(:days_visited).returns(1)
+      expect(tl3_requirements.requirements_lost?).to eq(false)
+    end
+
+    it "is not lost if default_trust_level is 4" do
+      SiteSetting.default_trust_level = 4
+      tl3_requirements.stubs(:days_visited).returns(1)
+      expect(tl3_requirements.requirements_lost?).to eq(false)
     end
   end
 end

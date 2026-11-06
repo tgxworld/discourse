@@ -1,14 +1,15 @@
 import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
-import { Input } from "@ember/component";
+import { fn } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
-import { htmlSafe } from "@ember/template";
-import DButton from "discourse/components/d-button";
-import DToggleSwitch from "discourse/components/d-toggle-switch";
-import DMenu from "float-kit/components/d-menu";
-import { MENU } from "float-kit/lib/constants";
+import { trustHTML } from "@ember/template";
+import DMenu from "discourse/float-kit/components/d-menu";
+import { MENU } from "discourse/float-kit/lib/constants";
+import withEventValue from "discourse/helpers/with-event-value";
+import DButton from "discourse/ui-kit/d-button";
+import DToggleSwitch from "discourse/ui-kit/d-toggle-switch";
 import DummyComponent from "discourse/plugins/styleguide/discourse/components/dummy-component";
 import StyleguideComponent from "discourse/plugins/styleguide/discourse/components/styleguide/component";
 import Controls from "discourse/plugins/styleguide/discourse/components/styleguide/controls";
@@ -27,46 +28,27 @@ export default class Menus extends Component {
   @tracked maxWidth = MENU.options.maxWidth;
   @tracked identifier;
   @tracked offset = MENU.options.offset;
-  @tracked _content = htmlSafe("<ul><li>Hello</li><li>World!</li></ul>");
+  @tracked _content = trustHTML("<ul><li>Hello</li><li>World!</li></ul>");
 
   get content() {
     return this._content;
   }
 
   set content(value) {
-    this._content = htmlSafe(value);
+    this._content = trustHTML(value);
   }
 
-  get templateCode() {
-    return `<DMenu
-  @label={{html-safe "${this.label}"}}
-  @content={{html-safe "${this.content}"}}
-/>`;
-  }
-
-  get templateCodeContent() {
-    return `<DMenu @maxWidth={{100}}>
-  <:trigger>
-     ${this.label}
-  </:trigger>
-  <:content>
-    ${this.content}
-  </:content>
-</DMenu>`;
-  }
-
-  get serviceCode() {
-    return `this.menu.register(
-  document.queryselector(".my-element"),
-  { content: htmlSafe(${this.content}) }
-);`;
-  }
-
-  get serviceCodeComponent() {
-    return `this.menu.register(
-  document.queryselector(".my-element"),
-  { component: MyComponent, data: { foo: 1 } }
-);`;
+  get options() {
+    return {
+      offset: this.offset,
+      arrow: this.arrow,
+      maxWidth: this.maxWidth,
+      identifier: this.identifier,
+      interactive: this.interactive,
+      triggers: this.triggers ?? ["click"],
+      untriggers: this.untriggers ?? ["click"],
+      content: this.content,
+    };
   }
 
   @action
@@ -106,33 +88,20 @@ export default class Menus extends Component {
     );
   }
 
-  get options() {
-    return {
-      offset: this.offset,
-      arrow: this.arrow,
-      maxWidth: this.maxWidth,
-      identifier: this.identifier,
-      interactive: this.interactive,
-      triggers: this.triggers ?? ["click"],
-      untriggers: this.untriggers ?? ["click"],
-      content: this.content,
-    };
-  }
-
   <template>
     <StyleguideExample @title="<Dmenu />">
       <StyleguideComponent @tag="dmenu component">
         <:sample>
           <DMenu
-            @label={{this.label}}
-            @offset={{this.offset}}
             @arrow={{this.arrow}}
-            @maxWidth={{this.maxWidth}}
+            @content={{this.content}}
             @identifier={{this.identifier}}
             @interactive={{this.interactive}}
+            @label={{this.label}}
+            @maxWidth={{this.maxWidth}}
+            @offset={{this.offset}}
             @triggers={{this.triggers}}
             @untriggers={{this.untriggers}}
-            @content={{this.content}}
           >
             {{this.content}}
           </DMenu>
@@ -142,14 +111,14 @@ export default class Menus extends Component {
       <StyleguideComponent @tag="dmenu component">
         <:sample>
           <DMenu
-            @offset={{this.offset}}
             @arrow={{this.arrow}}
-            @maxWidth={{this.maxWidth}}
+            @content={{this.content}}
             @identifier={{this.identifier}}
             @interactive={{this.interactive}}
+            @maxWidth={{this.maxWidth}}
+            @offset={{this.offset}}
             @triggers={{this.triggers}}
             @untriggers={{this.untriggers}}
-            @content={{this.content}}
           >
             <:trigger>
               {{this.label}}
@@ -164,9 +133,9 @@ export default class Menus extends Component {
       <StyleguideComponent @tag="menu service">
         <:sample>
           <button
-            type="button"
             class="btn btn-default"
             id="menu-instance"
+            type="button"
           >{{this.label}}</button>
         </:sample>
         <:actions>
@@ -177,9 +146,9 @@ export default class Menus extends Component {
       <StyleguideComponent @tag="menu service">
         <:sample>
           <button
-            type="button"
             class="btn btn-default"
             id="menu-instance-with-component"
+            type="button"
           >{{this.label}}</button>
         </:sample>
         <:actions>
@@ -189,25 +158,53 @@ export default class Menus extends Component {
 
       <Controls>
         <Row @name="Example label">
-          <Input @value={{this.label}} />
+          <input
+            type="text"
+            value={{this.label}}
+            {{on "input" (withEventValue (fn (mut this.label)))}}
+          />
         </Row>
         <Row @name="[@content]">
-          <Input @value={{this.content}} />
+          <input
+            type="text"
+            value={{this.content}}
+            {{on "input" (withEventValue (fn (mut this.content)))}}
+          />
         </Row>
         <Row @name="[@identifier]">
-          <Input @value={{this.identifier}} />
+          <input
+            type="text"
+            value={{this.identifier}}
+            {{on "input" (withEventValue (fn (mut this.identifier)))}}
+          />
         </Row>
         <Row @name="[@offset]">
-          <Input @value={{this.offset}} @type="number" />
+          <input
+            type="number"
+            value={{this.offset}}
+            {{on "input" (withEventValue (fn (mut this.offset)))}}
+          />
         </Row>
         <Row @name="[@triggers]">
-          <Input @value={{this.triggers}} />
+          <input
+            type="text"
+            value={{this.triggers}}
+            {{on "input" (withEventValue (fn (mut this.triggers)))}}
+          />
         </Row>
         <Row @name="[@untriggers]">
-          <Input @value={{this.untriggers}} />
+          <input
+            type="text"
+            value={{this.untriggers}}
+            {{on "input" (withEventValue (fn (mut this.untriggers)))}}
+          />
         </Row>
         <Row @name="[@maxWidth]">
-          <Input @value={{this.maxWidth}} @type="number" />
+          <input
+            type="number"
+            value={{this.maxWidth}}
+            {{on "input" (withEventValue (fn (mut this.maxWidth)))}}
+          />
         </Row>
         <Row @name="[@interactive]">
           <DToggleSwitch

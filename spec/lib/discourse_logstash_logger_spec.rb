@@ -74,7 +74,8 @@ RSpec.describe DiscourseLogstashLogger do
         expect(parsed["exception.class"]).to eq("Some::StandardError")
         expect(parsed["exception.message"]).to eq("some job error message")
         expect(parsed["job.class"]).to eq("SomeJob")
-        expect(parsed["job.opts"]).to eq("{\"user_id\"=>1}")
+        # first option is for ruby 3.3 and the other for 3.4
+        expect(parsed["job.opts"]).to eq('{"user_id"=>1}').or eq('{"user_id" => 1}')
         expect(parsed["job.problem_db"]).to eq("some_db")
       end
     end
@@ -112,6 +113,7 @@ RSpec.describe DiscourseLogstashLogger do
         expect(parsed["exception.message"]).to eq("some error message\n\nsomething else")
       end
 
+      # rubocop:disable Discourse/NoIterationOverRSpecDefinitions
       described_class::ALLOWED_HEADERS_FROM_ENV.each do |header|
         it "includes `#{header}` from `env` keyword argument in the logged JSON string" do
           logger.add(
@@ -129,6 +131,7 @@ RSpec.describe DiscourseLogstashLogger do
           expect(parsed["request.headers.#{header.downcase}"]).to eq("header")
         end
       end
+      # rubocop:enable Discourse/NoIterationOverRSpecDefinitions
 
       it "does not include keys from `env` keyword argument in the logged JSOn string which are not in the allow list" do
         logger.add(

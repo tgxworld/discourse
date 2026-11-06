@@ -1,9 +1,11 @@
 # frozen_string_literal: true
 
-describe "User preferences | Security", type: :system do
+describe "User preferences | Security" do
   fab!(:password) { "kungfukenny" }
   fab!(:email) { "email@user.com" }
+  fab!(:admin)
   fab!(:user) { Fabricate(:user, email: email, password: password) }
+  fab!(:staged_user) { Fabricate(:user, staged: true) }
   let(:user_preferences_security_page) { PageObjects::Pages::UserPreferencesSecurity.new }
   let(:user_menu) { PageObjects::Components::UserMenu.new }
 
@@ -20,6 +22,8 @@ describe "User preferences | Security", type: :system do
 
   shared_examples "security keys" do
     it "adds a 2FA security key and logs in with it" do
+      SiteSetting.enable_local_logins_via_code = false
+
       with_virtual_authenticator do
         confirm_session_modal =
           user_preferences_security_page
@@ -148,11 +152,54 @@ describe "User preferences | Security", type: :system do
     include_examples "security keys"
     include_examples "passkeys"
     include_examples "enforced second factor"
+
+    it "shows backup codes button after adding first TOTP" do
+      user_preferences_security_page.visit(user).visit_second_factor(user, password)
+
+      expect(page).to have_text(I18n.t("js.user.second_factor_backup.enable_prerequisites"))
+      expect(page).to have_no_css(".new-second-factor-backup")
+
+      find(".totp .new-totp").click
+      find(".show-second-factor-key").click
+      totp = ROTP::TOTP.new(find(".second-factor-key").text.gsub(/\s+/, ""))
+      find("#second-factor-name").fill_in(with: "My Authenticator")
+      find("#second-factor-token").fill_in(with: totp.now)
+      find(".add-totp").click
+
+      expect(page).to have_css(".new-second-factor-backup")
+      expect(page).to have_no_text(I18n.t("js.user.second_factor_backup.enable_prerequisites"))
+    end
   end
 
   context "when mobile", mobile: true do
     include_examples "security keys"
     include_examples "passkeys"
     include_examples "enforced second factor"
+  end
+
+  context "when viewing a user's page as an admin" do
+    before { sign_in(admin) }
+
+    describe "password reset" do
+      it "disables the password reset button for staged users" do
+        visit("/u/#{staged_user.username}/preferences/security")
+
+        expect(page.find("#change-password-button")).to be_disabled
+        expect(page).to have_css(
+          ".instructions",
+          text: I18n.t("js.user.change_password.staged_user"),
+        )
+      end
+
+      it "does not disable password reset for non-staged users" do
+        visit("/u/#{user.username}/preferences/security")
+
+        expect(page.find("#change-password-button")).not_to be_disabled
+        expect(page).to have_no_css(
+          ".instructions",
+          text: I18n.t("js.user.change_password.staged_user"),
+        )
+      end
+    end
   end
 end

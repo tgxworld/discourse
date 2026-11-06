@@ -5,69 +5,48 @@ class ContentSecurityPolicy
   class Default
     attr_reader :directives
 
-    def initialize(base_url:)
-      @base_url = base_url
+    def initialize(report_only: false)
       @directives =
         {}.tap do |directives|
-          directives[:upgrade_insecure_requests] = [] if SiteSetting.force_https
+          # `upgrade-insecure-requests` is ignored in a report-only policy, and
+          # browsers log a console warning when it is present there, so only
+          # emit it for the enforced policy.
+          directives[:upgrade_insecure_requests] = [] if SiteSetting.force_https && !report_only
           directives[:base_uri] = [:self]
           directives[:object_src] = [:none]
           directives[:script_src] = script_src
-          directives[:worker_src] = []
-          directives[
-            :report_uri
-          ] = report_uri if SiteSetting.content_security_policy_collect_reports
+          directives[:worker_src] = worker_src
           directives[:frame_ancestors] = frame_ancestors if restrict_embed?
           directives[:manifest_src] = ["'self'"]
+          directives[:report_uri] = [report_uri] if report_uri.present?
         end
     end
 
     private
 
-    def base_url
-      @base_url
-    end
-
-    SCRIPT_ASSET_DIRECTORIES = [
-      # [dir, can_use_s3_cdn, can_use_cdn, for_worker]
-      ["/assets/", true, true, true],
-      ["/extra-locales/", false, false, false],
-      ["/highlight-js/", false, true, false],
-      ["/javascripts/", false, true, true],
-      ["/plugins/", false, true, true],
-      ["/theme-javascripts/", false, true, false],
-      ["/svg-sprite/", false, true, false],
-    ]
-
-    def script_assets(
-      base = base_url,
-      s3_cdn = GlobalSetting.s3_asset_cdn_url.presence || GlobalSetting.s3_cdn_url,
-      cdn = GlobalSetting.cdn_url,
-      worker: false
-    )
-      SCRIPT_ASSET_DIRECTORIES
-        .map do |dir, can_use_s3_cdn, can_use_cdn, for_worker|
-          next if worker && !for_worker
-          if can_use_s3_cdn && s3_cdn
-            s3_cdn + dir
-          elsif can_use_cdn && cdn
-            cdn + Discourse.base_path + dir
-          else
-            base + dir
-          end
-        end
-        .compact
-    end
-
     def script_src
-      sources = ["'strict-dynamic'"]
-      sources << :report_sample if SiteSetting.content_security_policy_collect_reports
-
+      sources = %w['strict-dynamic' 'wasm-unsafe-eval']
+      sources << "'report-sample'" if report_uri.present?
       sources
     end
 
     def report_uri
-      "#{base_url}/csp_reports"
+      SiteSetting.content_security_policy_report_uri.presence
+    end
+
+    def worker_src
+      [:self, "blob:", *worker_asset_host]
+    end
+
+    def worker_asset_host
+      if GlobalSetting.use_s3? && GlobalSetting.s3_cdn_url.present?
+        s3_cdn = GlobalSetting.s3_asset_cdn_url.presence || GlobalSetting.s3_cdn_url
+        ["#{s3_cdn}/assets/"]
+      elsif GlobalSetting.cdn_url.present?
+        ["#{GlobalSetting.cdn_url}#{Discourse.base_path}/assets/"]
+      else
+        []
+      end
     end
 
     def frame_ancestors

@@ -11,6 +11,7 @@ export default class Query extends RestModel {
     "created_at",
     "group_ids",
     "last_run_at",
+    "tags",
   ];
 
   params = {};
@@ -21,7 +22,9 @@ export default class Query extends RestModel {
   }
 
   get downloadUrl() {
-    return getURL(`/admin/plugins/explorer/queries/${this.id}.json?export=1`);
+    return getURL(
+      `/admin/plugins/discourse-data-explorer/queries/${this.id}.json?export=1`
+    );
   }
 
   @computed("param_info", "updating")
@@ -64,6 +67,8 @@ export default class Query extends RestModel {
 
   updateProperties() {
     const props = this.getProperties(Query.updatePropertyNames);
+    props.group_ids_present = true;
+    props.tags_present = true;
     if (this.destroyed) {
       props.id = this.id;
     }
@@ -72,9 +77,8 @@ export default class Query extends RestModel {
 
   createProperties() {
     if (this.sql) {
-      // Importing
       return this.updateProperties();
     }
-    return this.getProperties("name");
+    return this.getProperties("name", "description", "group_ids", "tags");
   }
 }

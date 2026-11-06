@@ -3,8 +3,8 @@
 class PostDetail < ActiveRecord::Base
   belongs_to :post
 
-  validates_presence_of :key, :value
-  validates_uniqueness_of :key, scope: :post_id
+  validates :key, :value, presence: true
+  validates :key, uniqueness: { scope: :post_id }
 end
 
 # == Schema Information
@@ -12,12 +12,12 @@ end
 # Table name: post_details
 #
 #  id         :integer          not null, primary key
-#  post_id    :integer
+#  extra      :text
 #  key        :string
 #  value      :string
-#  extra      :text
 #  created_at :datetime         not null
 #  updated_at :datetime         not null
+#  post_id    :integer
 #
 # Indexes
 #

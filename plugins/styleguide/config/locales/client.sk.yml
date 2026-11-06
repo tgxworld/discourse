@@ -13,7 +13,9 @@ sk:
   js:
     styleguide:
       title: "Sprievodca štýlom"
-      welcome: "Ak chcete začať, vyberte si z ponuky na ľavej strane."
+      example:
+        kind:
+          component: "Komponent"
       categories:
         syntax: Syntax
         atoms: Atómy
@@ -30,8 +32,18 @@ sk:
           title: "Pole pre dátum a čas"
         menus:
           title: "Menu"
+        context_menu:
+          actions:
+            duplicate: "Duplikát"
+            delete: "Odstrániť"
         multi_select:
           title: "Viacnásobný výber"
+        reorderable_list:
+          policies_pinned: "Pripnutý"
+          policies_required: "Povinné"
+          table_field: "Pole"
+          table_type: "Typ"
+          cross_list_primary: "Primárne"
         toasts:
           title: "Toasty"
         font_scale:
@@ -59,8 +71,6 @@ sk:
           title: "Navigácia"
         categories_list:
           title: "Zoznam kategórií"
-        topic_link:
-          title: "Odkaz na tému"
         topic_list_item:
           title: "Položka zoznamu tém"
         topic_statuses:
@@ -69,8 +79,6 @@ sk:
           title: "Zoznam tém"
         basic_topic_list:
           title: "Základný zoznam tém"
-        footer_message:
-          title: "Správa v päte"
         signup_cta:
           title: "Tlačidlo pre registráciu"
         topic_timer_info:
@@ -89,10 +97,28 @@ sk:
           title: "Mapa tém"
         site_header:
           title: "Záhlavie stránky"
-        suggested_topics:
-          title: "Odporúčané témy"
+        more_topics:
+          title: "Viac tém"
         post_menu:
           title: "Ponuka príspevkov"
+        roving_focus:
+          toolbar:
+            copy: "Kopírovať"
+          adjacent:
+            label: "Filtre"
+            field: "Hľadať"
+            open: "Zahájiť"
+            recent: "Nedávne"
+          listbox:
+            apple: "Apple"
+          combobox:
+            daily: "Denne"
+            weekly: "Týždenne"
+            monthly: "Mesačne"
+            never: "Nikdy"
+          tree:
+            components: "Komponenty"
+            select: "Vyberte"
         modal:
           title: "Okno"
           header: "Nadpis okna"

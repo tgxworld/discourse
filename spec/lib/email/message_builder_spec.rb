@@ -30,6 +30,60 @@ RSpec.describe Email::MessageBuilder do
     expect(builder.body).to eq(body)
   end
 
+  context "with an appended paragraph" do
+    let(:builder) do
+      Email::MessageBuilder.new(
+        to_address,
+        subject: email_subject,
+        body:,
+        body_suffix_key: "system_messages.private_topic_title",
+        id: 42,
+      )
+    end
+
+    it "interpolates the paragraph after the supplied body" do
+      expect(builder.body).to eq("#{body}\n\nTopic #42")
+    end
+
+    it "uses the same locale as the email template" do
+      TranslationOverride.upsert!(:fr, "system_messages.private_topic_title", "Sujet %{id}")
+      TranslationOverride.upsert!(
+        :fr,
+        "system_messages.welcome_invite.text_body_template",
+        "Bienvenue %{username}.",
+      )
+      localized_builder =
+        Email::MessageBuilder.new(
+          to_address,
+          template: "system_messages.welcome_invite",
+          username: "Jake",
+          locale: :fr,
+          body_suffix_key: "system_messages.private_topic_title",
+          id: 42,
+        )
+
+      expect(localized_builder.body).to eq("Bienvenue Jake.\n\nSujet 42")
+    end
+
+    it "places the paragraph before unsubscribe instructions and the body modifier" do
+      modifier = ->(rendered, *) { "#{rendered}\nModified." }
+      plugin_instance = Plugin::Instance.new
+      plugin_instance.register_modifier(:message_builder_body, &modifier)
+      footer_builder =
+        Email::MessageBuilder.new(
+          to_address,
+          body:,
+          body_suffix_key: "system_messages.private_topic_title",
+          id: 42,
+          unsubscribe_instructions: "Unsubscribe here.",
+        )
+
+      expect(footer_builder.body).to eq("#{body}\n\nTopic #42\nUnsubscribe here.\nModified.")
+    ensure
+      DiscoursePluginRegistry.unregister_modifier(plugin_instance, :message_builder_body, &modifier)
+    end
+  end
+
   it "uses the message_builder subject modifier properly" do
     plugin_instance = Plugin::Instance.new
     plugin_instance.register_modifier(:message_builder_subject, &subject_modifier_block)
@@ -109,6 +163,24 @@ RSpec.describe Email::MessageBuilder do
 
   it "ask politely not to receive automated responses" do
     expect(header_args["X-Auto-Response-Suppress"]).to eq("All")
+  end
+
+  it "disables Outlook's reaction via email feature" do
+    expect(header_args["x-ms-reactions"]).to eq("disallow")
+  end
+
+  describe "recipient_username" do
+    it "sets recipient_username when recipient_user is provided" do
+      user = Fabricate(:user, username: "recipient_user")
+      builder =
+        Email::MessageBuilder.new(user.email, subject: "test", body: "test", recipient_user: user)
+      expect(builder.template_args[:recipient_username]).to eq("recipient_user")
+    end
+
+    it "does not set recipient_username when recipient_user is not provided" do
+      builder = Email::MessageBuilder.new("test@test.com", subject: "test", body: "test")
+      expect(builder.template_args[:recipient_username]).to be_nil
+    end
   end
 
   describe "include_respond_instructions" do
@@ -533,12 +605,31 @@ RSpec.describe Email::MessageBuilder do
     let(:templated_builder) { Email::MessageBuilder.new(to_address, template: "mystery") }
     let(:rendered_template) { "rendered template" }
 
-    it "has the body rendered from a template" do
-      I18n
-        .expects(:t)
-        .with("mystery.text_body_template", templated_builder.template_args)
-        .returns(rendered_template)
-      expect(templated_builder.body).to eq(rendered_template)
+    it "renders the body without querying for unused tags" do
+      template = "user_notifications.user_replied"
+      TranslationOverride.upsert!(I18n.locale, "#{template}.text_body_template", "%{message}")
+      builder = described_class.new(to_address, template:, message: body, tag_names: ["bug"])
+
+      expect(builder.body).to eq(body)
+
+      queries = track_sql_queries { builder.body }
+
+      expect(queries).to be_empty
+    end
+
+    it "renders plain tag names when tagging is disabled" do
+      SiteSetting.tagging_enabled = false
+      template = "user_notifications.user_replied"
+      TranslationOverride.upsert!(I18n.locale, "#{template}.text_body_template", "%{optional_tags}")
+      builder =
+        described_class.new(
+          to_address,
+          template:,
+          tag_names: %w[bug support],
+          show_tags_in_subject: "bug support",
+        )
+
+      expect(builder.body).to eq("bug support ")
     end
 
     it "has the subject rendered from a template" do
@@ -558,6 +649,8 @@ RSpec.describe Email::MessageBuilder do
           topic_title: "Topic Title",
         )
       end
+
+      after { I18n.reload! }
 
       it "can use subject override" do
         override =

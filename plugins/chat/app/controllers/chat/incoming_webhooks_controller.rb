@@ -2,7 +2,7 @@
 
 module Chat
   class IncomingWebhooksController < ::ApplicationController
-    requires_plugin Chat::PLUGIN_NAME
+    requires_plugin PLUGIN_NAME
 
     WEBHOOK_MESSAGES_PER_MINUTE_LIMIT = 10
 
@@ -15,7 +15,10 @@ module Chat
     def create_message
       debug_payload
 
-      process_webhook_payload(text: params[:text], key: params[:key])
+      process_webhook_payload(
+        text: params[:text],
+        webhook: find_and_rate_limit_webhook(params[:key]),
+      )
     end
 
     # See https://api.slack.com/reference/messaging/payload for the
@@ -24,6 +27,8 @@ module Chat
     # in the formatting.
     def create_message_slack_compatible
       debug_payload
+
+      webhook = find_and_rate_limit_webhook(params[:key])
 
       # See note in validate_payload on why this is needed
       attachments =
@@ -38,21 +43,17 @@ module Chat
           params[:attachments]
         end
 
-      if params[:text].present?
-        text = Chat::SlackCompatibility.process_text(params[:text])
-      else
-        text = Chat::SlackCompatibility.process_legacy_attachments(attachments)
-      end
+      text = params[:text].presence || Chat::SlackCompatibility.legacy_attachment_text(attachments)
+      validate_text_length!(text)
 
-      process_webhook_payload(text: text, key: params[:key])
+      process_webhook_payload(text: Chat::SlackCompatibility.process_text(text), webhook: webhook)
     rescue JSON::ParserError
       raise Discourse::InvalidParameters
     end
 
     private
 
-    def process_webhook_payload(text:, key:)
-      webhook = find_and_rate_limit_webhook(key)
+    def process_webhook_payload(text:, webhook:)
       webhook.chat_channel.add(Discourse.system_user)
 
       Chat::CreateMessage.call(
@@ -64,16 +65,15 @@ module Chat
         incoming_chat_webhook: webhook,
       ) do
         on_success { render json: success_json }
-        on_failure { render(json: failed_json, status: 422) }
+        on_failure { render(json: failed_json, status: :unprocessable_entity) }
         on_failed_contract do |contract|
           raise Discourse::InvalidParameters.new(contract.errors.full_messages)
         end
         on_failed_policy(:no_silenced_user) { raise Discourse::InvalidAccess }
         on_model_not_found(:channel) { raise Discourse::NotFound }
-        on_failed_policy(:allowed_to_join_channel) { raise Discourse::InvalidAccess }
-        on_model_not_found(:channel_membership) { raise Discourse::InvalidAccess }
+        on_model_not_found(:membership) { raise Discourse::InvalidAccess }
         on_failed_policy(:ensure_reply_consistency) { raise Discourse::NotFound }
-        on_failed_policy(:allowed_to_create_message_in_channel) do |policy|
+        on_failed_policy(:channel_allows_message_creation) do |policy|
           render_json_error(policy.reason)
         end
         on_failed_policy(:ensure_valid_thread_for_channel) do
@@ -86,6 +86,16 @@ module Chat
           render_json_error(model.errors.map(&:full_message).join(", "))
         end
       end
+    end
+
+    def validate_text_length!(text)
+      return if text.length <= SiteSetting.chat_maximum_message_length
+
+      raise Discourse::InvalidParameters.new(
+              [
+                "Message is too long (maximum is #{SiteSetting.chat_maximum_message_length} characters)",
+              ],
+            )
     end
 
     def find_and_rate_limit_webhook(key)

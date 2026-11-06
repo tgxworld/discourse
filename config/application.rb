@@ -12,6 +12,7 @@ require_relative "../lib/discourse_event"
 require_relative "../lib/discourse_plugin_registry"
 
 require_relative "../lib/plugin_gem"
+require_relative "../lib/vendored_assets"
 
 # Global config
 require_relative "../app/models/global_setting"
@@ -20,8 +21,9 @@ if GlobalSetting.load_plugins?
   # Support for plugins to register custom setting providers. They can do this
   # by having a file, `register_provider.rb` in their root that will be run
   # at this point.
-
+  allowed_plugins = GlobalSetting.plugins_to_load
   Dir.glob(File.join(File.dirname(__FILE__), "../plugins", "*", "register_provider.rb")) do |p|
+    next if allowed_plugins && !allowed_plugins.include?(File.basename(File.dirname(p)))
     require p
   end
 end
@@ -40,11 +42,10 @@ require "rails_failover/active_record" if !GlobalSetting.skip_db?
 require "rails_failover/redis" if !GlobalSetting.skip_redis?
 
 require "pry-rails" if Rails.env.development?
-require "pry-byebug" if Rails.env.development?
 
 require "discourse_fonts"
 
-require_relative "../lib/ember_cli"
+require_relative "../lib/ember_assets"
 
 if defined?(Bundler)
   bundler_groups = [:default]
@@ -56,15 +57,26 @@ if defined?(Bundler)
   Bundler.require(*bundler_groups)
 end
 
+if Rails.env.production?
+  require "json_schemer"
+  require "omniauth-facebook"
+  require "omniauth-github"
+  require "omniauth-google-oauth2"
+  require "omniauth-twitter"
+  require "rqrcode"
+end
+
+require "discourse_dev_assets" if Rails.env.development?
+
 require_relative "../lib/require_dependency_backward_compatibility"
 
 module Discourse
   class Application < Rails::Application
-    def config.database_configuration
+    def config.database_configuration(variables_overrides: {})
       if Rails.env.production?
-        GlobalSetting.database_config
+        GlobalSetting.database_config(variables_overrides:)
       else
-        super
+        super()
       end
     end
 
@@ -78,21 +90,27 @@ module Discourse
     # tiny file needed by site settings
     require "highlight_js"
 
-    config.load_defaults 8.0
+    config.load_defaults 8.1
+    # Existing permalink targets and redirect settings can contain path-relative URLs.
+    config.action_controller.action_on_path_relative_redirect = :log
     config.yjit = GlobalSetting.yjit_enabled
     config.active_record.cache_versioning = false # our custom cache class doesn’t support this
     config.action_controller.forgery_protection_origin_check = false
     config.active_record.belongs_to_required_by_default = false
     config.active_record.yaml_column_permitted_classes = [
       Hash,
-      HashWithIndifferentAccess,
+      ActiveSupport::HashWithIndifferentAccess,
       Time,
       Symbol,
     ]
     config.active_support.key_generator_hash_digest_class = OpenSSL::Digest::SHA1
-    config.action_dispatch.cookies_serializer = :hybrid
+    config.action_dispatch.cookies_serializer = :message_pack
+
+    # Missing controllers use the same not-found response as missing routes.
+    config.action_dispatch.rescue_responses["ActionDispatch::MissingController"] = :not_found
     config.action_controller.wrap_parameters_by_default = false
     config.active_support.cache_format_version = 7.1
+    config.active_record.dump_schema_after_migration = false
 
     # we skip it cause we configure it in the initializer
     # the railtie for message_bus would insert it in the
@@ -112,6 +130,10 @@ module Discourse
     config.autoload_paths << "#{root}/lib/i18n"
     config.autoload_paths << "#{root}/lib/validators"
 
+    # `lib` directories under a service namespace hold supporting classes
+    # (value objects, caches, etc.) without adding a `Lib` constant.
+    Rails.autoloaders.main.collapse("#{root}/app/services/*/lib")
+
     # Only load the plugins named here, in the order given (default is alphabetical).
     # :all can be used as a placeholder for all plugins not explicitly named.
     # config.plugins = [ :exception_notification, :ssl_requirement, :all ]
@@ -122,7 +144,7 @@ module Discourse
 
     # auto-load locales in plugins
     # NOTE: we load both client & server locales since some might be used by PrettyText
-    config.i18n.load_path += Dir["#{Rails.root}/plugins/*/config/locales/*.yml"]
+    config.i18n.load_path += Dir["#{Rails.root.join("plugins/*/config/locales/*.yml")}"]
 
     # Configure the default encoding used in templates for Ruby 1.9.
     config.encoding = "utf-8"
@@ -157,12 +179,18 @@ module Discourse
     require "middleware/default_headers"
     config.middleware.insert_before ActionDispatch::ShowExceptions, Middleware::DefaultHeaders
 
+    require "middleware/crawler_hooks"
+    config.middleware.use Middleware::CrawlerHooks
+
     require "content_security_policy/middleware"
     config.middleware.swap ActionDispatch::ContentSecurityPolicy::Middleware,
                            ContentSecurityPolicy::Middleware
 
     require "middleware/csp_script_nonce_injector"
     config.middleware.insert_after(ActionDispatch::Flash, Middleware::CspScriptNonceInjector)
+
+    require "middleware/track_view_session_id_injector"
+    config.middleware.insert_after(ActionDispatch::Flash, Middleware::TrackViewSessionIdInjector)
 
     require "middleware/discourse_public_exceptions"
     config.exceptions_app = Middleware::DiscoursePublicExceptions.new(Rails.public_path)
@@ -220,6 +248,14 @@ module Discourse
           controller.action_methods
         end
       end
+
+      puts <<~WARNING if Rails.env.local? && Rails.application.assets.config.manifest_path.exist?
+          \e[1;31m==========================================================================
+          WARNING: an asset manifest file exists. This means the assets won’t be
+          compiled automatically, and will be served statically instead.
+          To re-enable automatic compilation, you can run `bin/rails assets:clobber`
+          ==========================================================================\e[0m
+        WARNING
     end
 
     require "rbtrace" if ENV["RBTRACE"] == "1"

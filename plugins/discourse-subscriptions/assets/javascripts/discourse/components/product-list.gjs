@@ -1,25 +1,22 @@
-/* eslint-disable ember/no-classic-components */
-import Component from "@ember/component";
+import Component from "@glimmer/component";
 import { isEmpty } from "@ember/utils";
-import { classNames } from "@ember-decorators/component";
-import discourseComputed from "discourse/lib/decorators";
 import { i18n } from "discourse-i18n";
-import ProductItem from "./product-item";
+import ProductItem from "./product-item.gjs";
 
-@classNames("product-list")
 export default class ProductList extends Component {
-  @discourseComputed("products")
-  emptyProducts(products) {
-    return isEmpty(products);
+  get emptyProducts() {
+    return isEmpty(this.args.products);
   }
 
   <template>
-    {{#if this.emptyProducts}}
-      <p>{{i18n "discourse_subscriptions.subscribe.no_products"}}</p>
-    {{else}}
-      {{#each this.products as |product|}}
-        <ProductItem @product={{product}} @isLoggedIn={{this.isLoggedIn}} />
-      {{/each}}
-    {{/if}}
+    <div class="product-list" ...attributes>
+      {{#if this.emptyProducts}}
+        <p>{{i18n "discourse_subscriptions.subscribe.no_products"}}</p>
+      {{else}}
+        {{#each @products as |product|}}
+          <ProductItem @isLoggedIn={{@isLoggedIn}} @product={{product}} />
+        {{/each}}
+      {{/if}}
+    </div>
   </template>
 }

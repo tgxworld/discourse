@@ -7,8 +7,30 @@ RSpec.describe TopicStatusUpdater do
   fab!(:user) { Fabricate(:user, refresh_auto_groups: true) }
   fab!(:admin)
 
-  it "avoids notifying on automatically closed topics" do
-    # TODO: TopicStatusUpdater should suppress message bus updates from the users it "pretends to read"
+  it "retries a status change when an event listener fails" do
+    topic = create_topic
+    handler = proc { raise "Listener unavailable" }
+    DiscourseEvent.on(:topic_status_updated, &handler)
+
+    expect do described_class.new(topic, admin).update!("closed", true) end.to raise_error(
+      "Listener unavailable",
+    )
+    expect(topic.reload).not_to be_closed
+
+    DiscourseEvent.off(:topic_status_updated, &handler)
+    events =
+      DiscourseEvent.track_events(:topic_status_updated) do
+        described_class.new(topic, admin).update!("closed", true)
+      end
+
+    expect(events.map { |event| event[:params] }).to eq(
+      [[topic, "closed", true, { acting_user: admin }]],
+    )
+  ensure
+    DiscourseEvent.off(:topic_status_updated, &handler) if handler
+  end
+
+  it "does not advance read state when a topic is automatically closed" do
     post =
       PostCreator.create(
         user,
@@ -23,8 +45,36 @@ RSpec.describe TopicStatusUpdater do
 
     expect(post.topic.posts.count).to eq(2)
 
+    # The autoclose small_action advances no counter, so the author's read state
+    # stays on the original post.
     tu = TopicUser.find_by(user_id: user.id)
-    expect(tu.last_read_post_number).to eq(2)
+    expect(tu.last_read_post_number).to eq(1)
+  end
+
+  it "does not advance read state when a private message is closed" do
+    recipient = Fabricate(:user)
+
+    post =
+      PostCreator.create(
+        user,
+        raw: "this is a private message",
+        title: "private message title",
+        archetype: Archetype.private_message,
+        target_usernames: [recipient.username],
+      )
+
+    TopicUser.update_last_read(recipient, post.topic.id, 1, 1, 0)
+    PostTiming.create!(topic: post.topic, post_number: 1, user: recipient, msecs: 1000)
+
+    TopicStatusUpdater.new(post.topic, admin).update!("closed", true)
+
+    # Should have 2 posts (original + close action)
+    expect(post.topic.posts.count).to eq(2)
+
+    # The close small_action advances no counter, so the recipient's read state
+    # stays on the original post.
+    tu = TopicUser.find_by(user: recipient, topic: post.topic)
+    expect(tu.last_read_post_number).to eq(1)
   end
 
   it "adds an autoclosed message" do
@@ -39,18 +89,42 @@ RSpec.describe TopicStatusUpdater do
     expect(last_post.raw).to eq(I18n.t("topic_statuses.autoclosed_enabled_minutes", count: 0))
   end
 
-  it "triggers a DiscourseEvent on close" do
+  it "triggers a DiscourseEvent with :manually when manually closing a topic" do
     topic = create_topic
 
-    called = false
-    updater = ->(_) { called = true }
+    closure_type = nil
+    captured_topic = nil
+    updater = ->(t, type) do
+      captured_topic = t
+      closure_type = type
+    end
 
     DiscourseEvent.on(:topic_closed, &updater)
     TopicStatusUpdater.new(topic, admin).update!("closed", true)
     DiscourseEvent.off(:topic_closed, &updater)
 
     expect(topic).to be_closed
-    expect(called).to eq(true)
+    expect(captured_topic).to eq(topic)
+    expect(closure_type).to eq(:manually)
+  end
+
+  it "triggers a DiscourseEvent with :automatically when auto-closing a topic" do
+    topic = create_topic
+
+    closure_type = nil
+    captured_topic = nil
+    updater = ->(t, type) do
+      captured_topic = t
+      closure_type = type
+    end
+
+    DiscourseEvent.on(:topic_closed, &updater)
+    TopicStatusUpdater.new(topic, admin).update!("autoclosed", true)
+    DiscourseEvent.off(:topic_closed, &updater)
+
+    expect(topic).to be_closed
+    expect(captured_topic).to eq(topic)
+    expect(closure_type).to eq(:automatically)
   end
 
   it "adds an autoclosed message based on last post" do
@@ -146,7 +220,7 @@ RSpec.describe TopicStatusUpdater do
           timer = TopicTimer.find_by(topic: topic)
           expect(timer).not_to eq(nil)
           expect(timer.duration_minutes).to eq(72 * 60)
-          expect(timer.execute_at).to be_within_one_second_of(Time.zone.now + 72.hours)
+          expect(timer.execute_at).to be_within_one_second_of(72.hours.from_now)
         end
       end
     end
@@ -222,6 +296,56 @@ RSpec.describe TopicStatusUpdater do
       expect(updated).to eq(true)
       expect(topic.visible).to eq(true)
       expect(topic.visibility_reason_id).to eq(Topic.visibility_reasons[:manually_relisted])
+    end
+
+    it "deletes hot score when topic is unlisted" do
+      topic = Fabricate(:topic)
+      TopicHotScore.create!(topic_id: topic.id, score: 1.0)
+
+      TopicStatusUpdater.new(topic, admin).update!("visible", false)
+
+      expect(TopicHotScore.find_by(topic_id: topic.id)).to be_nil
+    end
+  end
+
+  describe "tracking state notifications on visibility change" do
+    before { SiteSetting.experimental_topic_category_change_notification = true }
+
+    it "publishes delete when topic becomes invisible" do
+      topic = Fabricate(:topic)
+
+      messages =
+        MessageBus.track_publish("/delete") do
+          TopicStatusUpdater.new(topic, admin).update!("visible", false)
+        end
+
+      expect(messages.length).to eq(1)
+      expect(messages.first.data["topic_id"]).to eq(topic.id)
+      expect(messages.first.data["message_type"]).to eq(TopicTrackingState::DELETE_MESSAGE_TYPE)
+    end
+
+    it "publishes recover when topic becomes visible again" do
+      topic = Fabricate(:topic, visible: false)
+
+      messages =
+        MessageBus.track_publish("/recover") do
+          TopicStatusUpdater.new(topic, admin).update!("visible", true)
+        end
+
+      expect(messages.length).to eq(1)
+      expect(messages.first.data["topic_id"]).to eq(topic.id)
+      expect(messages.first.data["message_type"]).to eq(TopicTrackingState::RECOVER_MESSAGE_TYPE)
+    end
+
+    it "does not publish for non-regular topics" do
+      topic = Fabricate(:private_message_topic)
+
+      messages =
+        MessageBus.track_publish("/delete") do
+          TopicStatusUpdater.new(topic, admin).update!("visible", false)
+        end
+
+      expect(messages.length).to eq(0)
     end
   end
 end

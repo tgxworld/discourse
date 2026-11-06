@@ -5,11 +5,20 @@
 # https://translate.discourse.org/
 
 de:
+  admin_js:
+    admin:
+      api:
+        scopes:
+          descriptions:
+            automation:
+              trigger_automation: "Löse eine Automatisierung über die API aus"
   js:
     admin:
       logs:
         staff_actions:
           actions:
+            create_automation: Automatisierung erstellen
+            update_automation: Automatisierung aktualisieren
             delete_automation: Automatisierung löschen
     discourse_automation:
       title: Automatisierung
@@ -58,13 +67,19 @@ de:
             label: Hauptteil
           delay:
             label: Verzögerung (Minuten)
-          prefers_encrypt:
-            label: Verschlüsselt PN, falls verfügbar
         group:
           label: Gruppe
         text:
           label: Text
       triggerables:
+        post_flag_created:
+          fields:
+            categories:
+              label: Kategorien
+              description: Wird nur ausgelöst, wenn das gemeldete Thema in einer dieser Kategorien ist
+            tags:
+              label: Schlagwörter
+              description: Wird nur ausgelöst, wenn das gemeldete Thema eines dieser Schlagwörter aufweist.
         not_found: Konnte den Auslöser `%{trigger}` für die Automatisierung `%{automation}` nicht finden. Stelle sicher, dass das zugehörige Plug-in installiert ist
         user_badge_granted:
           fields:
@@ -173,7 +188,7 @@ de:
               description: Optional, wird nur ausgelöst, wenn das Thema des Beitrags genau in die oben angegebenen Kategorien fällt
             restricted_archetype:
               label: Thementyp
-              description: Optional, nur bei Themen oder persönlichen Nachrichten auslösen lassen
+              description: Optional, erlaube das Auslösen nur bei Themen oder persönlichen Nachrichten
             restricted_groups:
               label: Eingeschränkte Gruppen
               description: Optional, wird nur ausgelöst, wenn der Beitragsbenutzer in einer dieser Gruppen ist
@@ -200,9 +215,9 @@ de:
               description: "Optional, beschränke die Auslösung auf Beiträge mit diesen Merkmalen"
           created: Erstellt
           edited: Bearbeitet
-          topics: Alle Themen
-          personal_messages: Persönliche Nachrichten
-          public_topics: Öffentliche Themen (alle sicheren Kategorien ausschließen)
+          topics: Themen (alle Kategorien)
+          personal_messages: Nur persönliche Nachrichten
+          public_topics: Themen (nur öffentliche Kategorien)
           with_images: Bilder
           with_links: Links
           with_code: Code
@@ -275,6 +290,14 @@ de:
               label: Schlagwörter
               description: Optional. Wird nur ausgelöst, wenn der Beitrag eines dieser Schlagwörter enthält
       scriptables:
+        email_on_flagged_post:
+          fields:
+            email_template:
+              label: E-Mail-Vorlage
+              description: Unterstützt Automatisierungsplatzhalter
+            recipients:
+              label: Empfänger
+              description: Benutzer oder E-Mail-Adressen, die benachrichtigt werden sollen
         not_found: Konnte das Skript `%{script}` für die Automatisierung `%{automation}` nicht finden. Stelle sicher, dass das zugehörige Plug-in installiert ist
         zapier_webhook:
           fields:
@@ -297,6 +320,12 @@ de:
             tags:
               label: Schlagwörter
               description: Liste der Schlagwörter, die dem Thema hinzugefügt werden sollen.
+            closed_automatically:
+              label: Automatisch geschlossene Themen
+              description: Füge automatisch geschlossenen Themen Schlagwörter hinzu.
+            closed_manually:
+              label: Manuell geschlossene Themen
+              description: Füge manuell geschlossenen Themen Schlagwörter hinzu.
         post:
           fields:
             creator:
@@ -407,7 +436,7 @@ de:
               label: PN
             sender:
               label: PN-Absender
-              description: "Stelle sicher, dass der Absender über die erforderlichen Berechtigungen verfügt, um PNs an den Empfänger zu senden."
+              description: "Stelle sicher, dass der Absender über die erforderlichen Berechtigungen verfügt, um PN an den Empfänger zu senden."
         close_topic:
           fields:
             topic:
@@ -422,6 +451,13 @@ de:
           fields:
             custom_field_name:
               label: "Name des benutzerdefinierten Benutzerfelds"
+        set_topic_timer:
+          title: Themen-Timer einstellen
+          fields:
+            type:
+              label: Timer-Typ
+            duration:
+              label: Dauer des Timers
       unnamed_automation: "Automatisierung ohne Titel"
       models:
         script:
@@ -434,8 +470,11 @@ de:
           runs_today: "%{count} heute"
           runs_this_week: "%{count} diese Woche"
           runs_this_month: "%{count} diesen Monat"
+          recent_errors:
+            one: "%{count} Fehler in letzter Zeit"
+            other: "%{count} Fehler in letzter Zeit"
           runs:
-            label: Läuft
+            label: Ausführungen
           name:
             label: Name
           trigger:
@@ -447,7 +486,7 @@ de:
           status:
             label: Status
           enabled:
-            label: Aktiviert
+            label: "Automatisierung aktivieren"
           disabled:
             label: Deaktiviert
           placeholders:
@@ -455,6 +494,7 @@ de:
           last_updated_at:
             label: Letzte Aktualisierung
           last_run:
-            label: Letzter Lauf
+            label: Letzte Ausführung
           last_updated_by:
             label: Aktualisiert von
+          enable_toggle_disabled: "Du kannst diese Automatisierung aktivieren, sobald alle erforderlichen Felder ausgefüllt sind."

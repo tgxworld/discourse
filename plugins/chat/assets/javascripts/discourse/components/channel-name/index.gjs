@@ -1,12 +1,12 @@
 import Component from "@glimmer/component";
 import { get } from "@ember/helper";
 import { service } from "@ember/service";
-import { htmlSafe } from "@ember/template";
+import { trustHTML } from "@ember/template";
 import PluginOutlet from "discourse/components/plugin-outlet";
-import UserStatusMessage from "discourse/components/user-status-message";
 import lazyHash from "discourse/helpers/lazy-hash";
-import replaceEmoji from "discourse/helpers/replace-emoji";
-import ChatChannelUnreadIndicator from "../chat-channel-unread-indicator";
+import DUserStatusMessage from "discourse/ui-kit/d-user-status-message";
+import dReplaceEmoji from "discourse/ui-kit/helpers/d-replace-emoji";
+import ChatChannelUnreadIndicator from "../chat-channel-unread-indicator.gjs";
 
 export default class ChatChannelName extends Component {
   @service currentUser;
@@ -36,11 +36,11 @@ export default class ChatChannelName extends Component {
     }
     return this.prefersName
       ? this.users.map((user) => user.name || user.username).join(", ")
-      : this.users.mapBy("username").join(", ");
+      : this.users.map((user) => user.username).join(", ");
   }
 
   get channelColorStyle() {
-    return htmlSafe(`color: #${this.args.channel.chatable.color}`);
+    return trustHTML(`color: #${this.args.channel.chatable.color}`);
   }
 
   get showUserStatus() {
@@ -52,10 +52,10 @@ export default class ChatChannelName extends Component {
 
   get channelTitle() {
     if (this.args.channel.isDirectMessageChannel) {
-      return this.args.channel.title ?? this.directMessageTitle;
+      return this.args.channel.displayTitle ?? this.directMessageTitle;
     }
 
-    return this.args.channel.title;
+    return this.args.channel.displayTitle;
   }
 
   get showPluginOutlet() {
@@ -68,24 +68,20 @@ export default class ChatChannelName extends Component {
   <template>
     <div class="chat-channel-name">
       <div class="chat-channel-name__label">
-        {{replaceEmoji this.channelTitle}}
+        {{dReplaceEmoji this.channelTitle}}
 
         {{#if this.showUserStatus}}
-          <UserStatusMessage
-            @status={{get this.users "0.status"}}
-            @showDescription={{if this.site.mobileView "true"}}
+          <DUserStatusMessage
             class="chat-channel__user-status-message"
+            @showDescription={{if this.site.mobileView "true"}}
+            @status={{get this.users "0.status"}}
           />
         {{/if}}
 
-        {{#if this.showPluginOutlet}}
-          <PluginOutlet
-            @name="after-chat-channel-username"
-            @outletArgs={{lazyHash user=@user}}
-            @tagName=""
-            @connectorTagName=""
-          />
-        {{/if}}
+        <PluginOutlet
+          @name="after-chat-channel-username"
+          @outletArgs={{if this.showPluginOutlet (lazyHash user=@user)}}
+        />
 
         {{#if (has-block)}}
           {{yield}}

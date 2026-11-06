@@ -24,6 +24,7 @@ describe UserNotifications do
   before do
     SiteSetting.chat_enabled = true
     SiteSetting.chat_allowed_groups = Group::AUTO_GROUPS[:everyone]
+    SiteSetting.simple_email_subject = false
   end
 
   def create_message(chat_channel, message, mention_klass = nil)
@@ -90,6 +91,21 @@ describe UserNotifications do
         expect(html).to include(I18n.t("user_notifications.chat_summary.view_messages", count: 1))
       end
 
+      it "renders upload filenames as text in chat summary emails" do
+        upload =
+          Fabricate(
+            :upload,
+            original_filename: "<svg data-chat-summary-filename-xss='true'></svg>.png",
+          )
+        chat_mention.update!(message: "", cooked: "", uploads: [upload])
+
+        html = chat_summary_email.html_part.body.to_s
+        document = Nokogiri::HTML5.fragment(html)
+
+        expect(document.text).to include(upload.original_filename)
+        expect(document.css("svg[data-chat-summary-filename-xss='true']")).to be_empty
+      end
+
       it "sends a chat summary email with view more link" do
         create_message(followed_channel, "how are you...")
         create_message(followed_channel, "doing...")
@@ -123,6 +139,11 @@ describe UserNotifications do
         end
       end
 
+      it "sends an email even if the user has disabled chat emails" do
+        user.user_option.update!(chat_email_frequency: UserOption.chat_email_frequencies[:never])
+        chat_summary_email
+      end
+
       it "does not send an email if user can't chat" do
         SiteSetting.chat_allowed_groups = Group::AUTO_GROUPS[:admins]
         no_chat_summary_email
@@ -130,11 +151,6 @@ describe UserNotifications do
 
       it "does not send an email if the user has been seen recently" do
         user.update!(last_seen_at: 5.minutes.ago)
-        no_chat_summary_email
-      end
-
-      it "does not send an email if the user has disabled chat emails" do
-        user.user_option.update!(chat_email_frequency: UserOption.chat_email_frequencies[:never])
         no_chat_summary_email
       end
 
@@ -424,6 +440,11 @@ describe UserNotifications do
       chat_summary_with_subject(:chat_dm_1, name: direct_message.title(user), count: 2)
     end
 
+    it "sends an email even if the user has disabled core emails" do
+      user.user_option.update!(email_level: UserOption.email_level_types[:never])
+      chat_summary_with_subject(:chat_dm_1, name: direct_message.title(user), count: 1)
+    end
+
     it "does not send an email if the user has disabled private messages" do
       user.user_option.update!(allow_private_messages: false)
       no_chat_summary_email
@@ -639,6 +660,25 @@ describe UserNotifications do
       it "does not send current user a chat summary email" do
         no_chat_summary_email
       end
+    end
+  end
+
+  describe "when SiteSetting.simple_email_subject is enabled" do
+    before do
+      SiteSetting.simple_email_subject = true
+      followed_channel.add(user)
+      create_message(followed_channel, "hello @#{user.username}", Chat::UserMention)
+    end
+
+    it "uses the improved chat summary subject" do
+      expect(chat_summary_email.subject).to eq(
+        I18n.t(
+          "user_notifications.chat_summary.subject.chat_channel_1_improved",
+          site_name:,
+          channel: followed_channel.name,
+          count: 1,
+        ),
+      )
     end
   end
 end

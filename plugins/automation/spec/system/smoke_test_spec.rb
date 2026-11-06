@@ -1,9 +1,11 @@
 # frozen_string_literal: true
 
-describe "DiscourseAutomation | smoke test", type: :system do
+describe "DiscourseAutomation | smoke test" do
   fab!(:admin)
   fab!(:group) { Fabricate(:group, name: "test") }
   fab!(:badge) { Fabricate(:badge, name: "badge") }
+
+  let(:automation_page) { PageObjects::Pages::Automation.new }
 
   before do
     SiteSetting.discourse_automation_enabled = true
@@ -47,13 +49,11 @@ describe "DiscourseAutomation | smoke test", type: :system do
 
       expect(page).not_to have_css(".automations__name", text: "automation-test")
 
-      try_until_success do
-        expect(DiscourseAutomation::Automation.exists?(id: automation.id)).to be(false)
-      end
+      expect(DiscourseAutomation::Automation.exists?(id: automation.id)).to be(false)
     end
   end
 
-  it "works" do
+  it "creates an enabled group membership automation" do
     visit("/admin/plugins/automation")
 
     find(".admin-config-area-empty-list__cta-button").click
@@ -70,7 +70,7 @@ describe "DiscourseAutomation | smoke test", type: :system do
     select_kit = PageObjects::Components::SelectKit.new(".group-chooser")
     select_kit.expand
     select_kit.select_row_by_name("test")
-    find(".automation-enabled input").click
+    automation_page.enabled_toggle.toggle
     find(".update-automation").click
 
     expect(page).to have_css(".automations__name", text: "aaaaa")

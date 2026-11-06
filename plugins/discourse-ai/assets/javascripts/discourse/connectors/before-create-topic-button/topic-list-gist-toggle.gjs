@@ -1,6 +1,6 @@
 import Component from "@glimmer/component";
 import { service } from "@ember/service";
-import AiGistToggle from "../../components/ai-gist-toggle";
+import AiGistToggle from "../../components/ai-gist-toggle.gjs";
 
 export default class AiTopicGist extends Component {
   @service topicThumbnails; // avoid Topic Thumbnails theme component
@@ -9,5 +9,9 @@ export default class AiTopicGist extends Component {
     return !this.topicThumbnails?.enabledForRoute;
   }
 
-  <template><AiGistToggle /></template>
+  <template>
+    {{#if this.shouldShow}}
+      <AiGistToggle />
+    {{/if}}
+  </template>
 }

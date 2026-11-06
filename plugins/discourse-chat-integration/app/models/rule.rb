@@ -61,7 +61,7 @@ class DiscourseChatIntegration::Rule < DiscourseChatIntegration::PluginModel
   validate :channel_valid?, :category_valid?, :group_valid?, :tags_valid?
 
   def self.key_prefix
-    "rule:".freeze
+    "rule:"
   end
 
   # We never want an empty array, set it to nil instead
@@ -97,7 +97,7 @@ class DiscourseChatIntegration::Rule < DiscourseChatIntegration::PluginModel
   private
 
   def channel_valid?
-    if !(DiscourseChatIntegration::Channel.where(id: channel_id).exists?)
+    if !DiscourseChatIntegration::Channel.where(id: channel_id).exists?
       errors.add(:channel_id, "#{channel_id} is not a valid channel id")
     end
   end

@@ -13,17 +13,26 @@ class Auth::TwitterAuthenticator < Auth::ManagedAuthenticator
     "https://x.com"
   end
 
-  def enabled?
-    SiteSetting.enable_twitter_logins
+  def enable_setting
+    :enable_twitter_logins
+  end
+
+  def required_settings
+    %i[twitter_consumer_key twitter_consumer_secret]
   end
 
   def healthy?
-    connection =
-      Faraday.new(url: "https://api.twitter.com") do |config|
-        config.basic_auth(SiteSetting.twitter_consumer_key, SiteSetting.twitter_consumer_secret)
-      end
-    connection.post("/oauth2/token").status == 200
-  rescue Faraday::Error
+    require "omniauth-twitter"
+
+    return false if !configured?
+
+    OmniAuth::Strategies::Twitter
+      .new(nil, SiteSetting.twitter_consumer_key, SiteSetting.twitter_consumer_secret)
+      .consumer
+      .get_request_token(oauth_callback: "oob")
+
+    true
+  rescue OAuth::Error, Net::HTTPExceptions
     false
   end
 
@@ -34,6 +43,7 @@ class Auth::TwitterAuthenticator < Auth::ManagedAuthenticator
   end
 
   def register_middleware(omniauth)
+    require "omniauth-twitter"
     omniauth.provider :twitter,
                       setup:
                         lambda { |env|

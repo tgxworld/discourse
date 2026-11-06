@@ -1,7 +1,6 @@
 import { fn } from "@ember/helper";
-import { eq } from "truth-helpers";
+import ComboBox from "discourse/select-kit/components/combo-box";
 import { i18n } from "discourse-i18n";
-import ComboBox from "select-kit/components/combo-box";
 
 const EMAIL_FREQUENCY_OPTIONS = [
   {
@@ -33,13 +32,13 @@ const PreferencesPolicyEmails = <template>
     </label>
 
     <ComboBox
-      @valueProperty="value"
       @content={{EMAIL_FREQUENCY_OPTIONS}}
-      @value={{@outletArgs.model.user_option.policy_email_frequency}}
+      @id="user_policy_email_frequency"
       @onChange={{fn
         (mut @outletArgs.model.user_option.policy_email_frequency)
       }}
-      @id="user_policy_email_frequency"
+      @value={{@outletArgs.model.user_option.policy_email_frequency}}
+      @valueProperty="value"
     />
 
     {{#if (eq @outletArgs.model.user_option.policy_email_frequency "always")}}

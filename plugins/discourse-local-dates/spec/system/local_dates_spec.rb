@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "Local dates", type: :system do
+describe "Local dates" do
   fab!(:topic)
   fab!(:current_user) { Fabricate(:user, refresh_auto_groups: true) }
   let(:year) { Time.zone.now.year + 1 }
@@ -19,6 +19,8 @@ describe "Local dates", type: :system do
   end
 
   let(:topic_page) { PageObjects::Pages::Topic.new }
+  let(:local_date) { PageObjects::Components::LocalDate.new }
+  let(:markup) { "<img src=x>" }
 
   def formatted_date_for_year(month, day)
     Date.parse("#{year}-#{month}-#{day}").strftime("%A, %B %-d, %Y")
@@ -75,6 +77,20 @@ describe "Local dates", type: :system do
     end
   end
 
+  it "renders a custom date format containing markup as plain text" do
+    create_post(
+      user: current_user,
+      topic: topic,
+      raw:
+        %(<span class="discourse-local-date" data-date="2025-01-01" data-time="05:00:00" data-format="[#{CGI.escapeHTML(markup)}]"></span>),
+    )
+    sign_in(current_user)
+    topic_page.visit_topic(topic)
+
+    expect(local_date).to have_rendered_date
+    expect(local_date).to have_text_in_date(markup)
+  end
+
   describe "insert modal" do
     let(:timezone) { "Australia/Brisbane" }
 
@@ -93,7 +109,7 @@ describe "Local dates", type: :system do
       insert_datetime_modal.calendar_date_time_picker.select_day(16)
       insert_datetime_modal.click_primary_button
       expect(composer).to have_value(
-        "[date=#{Date.parse("#{year}-#{month}-16").strftime("%Y-%m-%d")} timezone=\"#{timezone}\"]",
+        "[date=#{Date.parse("#{year}-#{month}-16").strftime("%Y-%m-%d")} timezone=#{timezone}]",
       )
     end
 
@@ -109,7 +125,7 @@ describe "Local dates", type: :system do
       insert_datetime_modal.click_primary_button
 
       expect(composer).to have_value(
-        "[date=#{Date.parse("#{year}-#{month}-16").strftime("%Y-%m-%d")} time=11:45:00 timezone=\"#{timezone}\"]",
+        "[date=#{Date.parse("#{year}-#{month}-16").strftime("%Y-%m-%d")} time=11:45:00 timezone=#{timezone}]",
       )
     end
 
@@ -130,7 +146,7 @@ describe "Local dates", type: :system do
 
       insert_datetime_modal.click_primary_button
       expect(composer).to have_value(
-        "[date-range from=#{Date.parse("#{year}-#{month}-16").strftime("%Y-%m-%d")}T11:45:00 to=#{Date.parse("#{year}-#{month}-23").strftime("%Y-%m-%d")}T12:45:00 timezone=\"#{timezone}\"]",
+        "[date-range from=#{Date.parse("#{year}-#{month}-16").strftime("%Y-%m-%d")}T11:45:00 to=#{Date.parse("#{year}-#{month}-23").strftime("%Y-%m-%d")}T12:45:00 timezone=#{timezone}]",
       )
     end
 
@@ -155,7 +171,7 @@ describe "Local dates", type: :system do
       insert_datetime_modal.click_primary_button
 
       expect(composer).to have_value(
-        "[date=#{Date.parse("#{year}-#{month}-16").strftime("%Y-%m-%d")} time=11:45:00 timezone=\"#{timezone}\"]",
+        "[date=#{Date.parse("#{year}-#{month}-16").strftime("%Y-%m-%d")} time=11:45:00 timezone=#{timezone}]",
       )
     end
   end

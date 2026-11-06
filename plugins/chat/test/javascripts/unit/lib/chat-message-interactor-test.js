@@ -8,12 +8,13 @@ import {
 import ChatMessageInteractor from "discourse/plugins/chat/discourse/lib/chat-message-interactor";
 import ChatFabricators from "discourse/plugins/chat/discourse/lib/fabricators";
 
-module("Discourse Chat | Unit | chat-message-interactor", function (hooks) {
+module("Unit | chat-message-interactor", function (hooks) {
   setupTest(hooks);
 
   hooks.beforeEach(function () {
-    logIn(getOwner(this));
-    const message = new ChatFabricators(getOwner(this)).message();
+    this.currentUser = logIn(getOwner(this));
+    this.chatFabricators = new ChatFabricators(getOwner(this));
+    const message = this.chatFabricators.message();
     this.messageInteractor = new ChatMessageInteractor(getOwner(this), message);
     this.emojiStore = getOwner(this).lookup("service:emoji-store");
     this.siteSettings = getOwner(this).lookup("service:site-settings");
@@ -132,6 +133,87 @@ module("Discourse Chat | Unit | chat-message-interactor", function (hooks) {
     assert.deepEqual(
       this.messageInteractor.emojiReactions.map((r) => r.emoji),
       ["+1", "butterfly", "heart"]
+    );
+  });
+
+  test("emojiReactions keeps its order once read", function (assert) {
+    assert.deepEqual(
+      this.messageInteractor.emojiReactions.map((r) => r.emoji),
+      ["+1", "heart", "tada"]
+    );
+
+    this.emojiStore.trackEmojiForContext("butterfly", "chat");
+
+    assert.deepEqual(
+      this.messageInteractor.emojiReactions.map((r) => r.emoji),
+      ["+1", "heart", "tada"],
+      "reacting does not reorder the controls under the user"
+    );
+  });
+
+  test("emojiReactions keeps the identity of the models it did not change", function (assert) {
+    const before = this.messageInteractor.emojiReactions;
+
+    this.messageInteractor.message.react(
+      "+1",
+      "add",
+      this.currentUser,
+      this.currentUser.id
+    );
+
+    const after = this.messageInteractor.emojiReactions;
+
+    assert.notStrictEqual(
+      after[0],
+      before[0],
+      "the reacted emoji gets a model"
+    );
+    assert.strictEqual(after[1], before[1], "heart is the same model");
+    assert.strictEqual(after[2], before[2], "tada is the same model");
+  });
+
+  test("canRestoreMessage allows moderators to restore deleted messages", function (assert) {
+    updateCurrentUser({ admin: false, moderator: false, staff: false });
+
+    const otherUser = this.chatFabricators.coreFabricators.user();
+    const channel = this.chatFabricators.channel({
+      meta: { can_moderate: true },
+    });
+    const message = this.chatFabricators.message({
+      channel,
+      user: otherUser,
+      deleted_at: new Date(),
+      deleted_by_id: otherUser.id,
+    });
+
+    const interactor = new ChatMessageInteractor(getOwner(this), message);
+
+    assert.true(interactor.canRestoreMessage);
+    assert.true(
+      interactor.secondaryActions.some(({ id }) => id === "restore"),
+      "restore action is visible to moderators"
+    );
+  });
+
+  test("canRestoreMessage disallows regular users from restoring moderator-deleted messages", function (assert) {
+    updateCurrentUser({ admin: false, moderator: false, staff: false });
+
+    const channel = this.chatFabricators.channel({
+      meta: { can_moderate: false },
+    });
+    const message = this.chatFabricators.message({
+      channel,
+      user: this.currentUser,
+      deleted_at: new Date(),
+      deleted_by_id: this.currentUser.id + 1,
+    });
+
+    const interactor = new ChatMessageInteractor(getOwner(this), message);
+
+    assert.false(interactor.canRestoreMessage);
+    assert.false(
+      interactor.secondaryActions.some(({ id }) => id === "restore"),
+      "restore action stays hidden for non-moderators"
     );
   });
 });

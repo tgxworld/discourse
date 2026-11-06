@@ -1,10 +1,9 @@
-import BasicTopicList from "discourse/components/basic-topic-list";
 import StyleguideExample from "discourse/plugins/styleguide/discourse/components/styleguide-example";
+import BasicTopicListExample from "../../examples/organisms/basic-topic-list.gjs";
+import basicTopicListSource from "../../examples/organisms/basic-topic-list?source=file";
 
-const BasicTopicListOrganism = <template>
-  <StyleguideExample @title="<BasicTopicList>" class="half-size">
-    <BasicTopicList @topics={{@dummy.topics}} />
+export default <template>
+  <StyleguideExample @code={{basicTopicListSource}} @title="<BasicTopicList>">
+    <BasicTopicListExample @topics={{@dummy.topics}} />
   </StyleguideExample>
-</template>;
-
-export default BasicTopicListOrganism;
+</template>

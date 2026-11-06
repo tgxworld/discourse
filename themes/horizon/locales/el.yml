@@ -5,3 +5,19 @@
 # https://translate.discourse.org/
 
 el:
+  solved: "Λυμένο"
+  unsolved: "Άλυτο"
+  posted: "ανάρτησε"
+  vote_count:
+    one: "%{count} ψήφος"
+    other: "%{count} ψήφοι"
+  like_count:
+    one: "%{count} «μου αρέσει»"
+    other: "%{count} «μου αρέσει»"
+  reply_count:
+    one: "%{count} απάντηση"
+    other: "%{count} απαντήσεις"
+  theme_metadata:
+    settings:
+      topic_card_high_context:
+        description: "Όταν είναι ενεργοποιημένη, εμφανίζει πρόσθετο περιεχόμενο στις κάρτες θεμάτων, συμπεριλαμβανομένων ετικετών, αποσπασμάτων, κατάστασης επίλυσης, χρηστών με ανάθεση και αριθμού ψήφων."

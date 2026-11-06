@@ -110,7 +110,29 @@ RSpec.describe WebhooksController do
     fab!(:user) { Fabricate(:user, email:) }
     fab!(:email_log) { Fabricate(:email_log, user:, message_id: message_id, to_address: email) }
 
-    it "works" do
+    it "returns an error when no verification key is configured" do
+      SiteSetting.sendgrid_verification_key = ""
+
+      post "/webhooks/sendgrid.json",
+           params: {
+             "_json" => [
+               {
+                 "email" => email,
+                 "smtp-id" => "<12345@il.com>",
+                 "event" => "bounce",
+                 "status" => "5.0.0",
+               },
+             ],
+           }
+
+      expect(response.status).to eq(406)
+      expect(email_log.reload.bounced).to eq(false)
+    end
+
+    it "hard bounces" do
+      SiteSetting.sendgrid_verification_key = "test"
+      WebhooksController.any_instance.stubs(:valid_sendgrid_signature?).returns(true)
+
       post "/webhooks/sendgrid.json",
            params: {
              "_json" => [
@@ -132,6 +154,9 @@ RSpec.describe WebhooksController do
     end
 
     it "sets the bounce error code to 5.1.2 when payload's `event` is `bounce`, `type` is `blocked` and `status` is blank" do
+      SiteSetting.sendgrid_verification_key = "test"
+      WebhooksController.any_instance.stubs(:valid_sendgrid_signature?).returns(true)
+
       post "/webhooks/sendgrid.json",
            params: {
              "_json" => [
@@ -157,6 +182,7 @@ RSpec.describe WebhooksController do
 
       post "/webhooks/sendgrid.json",
            headers: {
+             "Content-Type" => "application/json",
              "X-Twilio-Email-Event-Webhook-Signature" =>
                "MEUCIGHQVtGj+Y3LkG9fLcxf3qfI10QysgDWmMOVmxG0u6ZUAiEAyBiXDWzM+uOe5W0JuG+luQAbPIqHh89M15TluLtEZtM=",
              "X-Twilio-Email-Event-Webhook-Timestamp" => "1600112502",
@@ -173,6 +199,7 @@ RSpec.describe WebhooksController do
 
       post "/webhooks/sendgrid.json",
            headers: {
+             "Content-Type" => "application/json",
              "X-Twilio-Email-Event-Webhook-Signature" =>
                "MEUCIQCtIHJeH93Y+qpYeWrySphQgpNGNr/U+UyUlBkU6n7RAwIgJTz2C+8a8xonZGi6BpSzoQsbVRamr2nlxFDWYNH3j/0=",
              "X-Twilio-Email-Event-Webhook-Timestamp" => "1600112502",
@@ -188,6 +215,7 @@ RSpec.describe WebhooksController do
 
       post "/webhooks/sendgrid.json",
            headers: {
+             "Content-Type" => "application/json",
              "X-Twilio-Email-Event-Webhook-Signature" =>
                "MEUCIQCtIHJeH93Y+qpYeWrySphQgpNGNr/U+UyUlBkU6n7RAwIgJTz2C+8a8xonZGi6BpSzoQsbVRamr2nlxFDWYNH3j/0=",
              "X-Twilio-Email-Event-Webhook-Timestamp" => "1600112502",
@@ -197,14 +225,63 @@ RSpec.describe WebhooksController do
 
       expect(response.status).to eq(406)
     end
+
+    it "returns error if signature header is missing" do
+      SiteSetting.sendgrid_verification_key =
+        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE83T4O/n84iotIvIW4mdBgQ/7dAfSmpqIM8kF9mN1flpVKS3GRqe62gw+2fNNRaINXvVpiglSI8eNEc6wEA3F+g=="
+
+      post "/webhooks/sendgrid.json",
+           headers: {
+             "Content-Type" => "application/json",
+             "X-Twilio-Email-Event-Webhook-Timestamp" => "1600112492",
+           },
+           params:
+             "[{\"email\":\"hello@world.com\",\"event\":\"dropped\",\"reason\":\"Bounced Address\",\"sg_event_id\":\"ZHJvcC0xMDk5NDkxOS1MUnpYbF9OSFN0T0doUTRrb2ZTbV9BLTA\",\"sg_message_id\":\"LRzXl_NHStOGhQ4kofSm_A.filterdrecv-p3mdw1-756b745b58-kmzbl-18-5F5FC76C-9.0\",\"smtp-id\":\"<LRzXl_NHStOGhQ4kofSm_A@ismtpd0039p1iad1.sendgrid.net>\",\"timestamp\":1600112492}]\r\n"
+
+      expect(response.status).to eq(406)
+    end
+
+    it "returns error if timestamp header is missing" do
+      SiteSetting.sendgrid_verification_key =
+        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE83T4O/n84iotIvIW4mdBgQ/7dAfSmpqIM8kF9mN1flpVKS3GRqe62gw+2fNNRaINXvVpiglSI8eNEc6wEA3F+g=="
+
+      post "/webhooks/sendgrid.json",
+           headers: {
+             "Content-Type" => "application/json",
+             "X-Twilio-Email-Event-Webhook-Signature" =>
+               "MEUCIGHQVtGj+Y3LkG9fLcxf3qfI10QysgDWmMOVmxG0u6ZUAiEAyBiXDWzM+uOe5W0JuG+luQAbPIqHh89M15TluLtEZtM=",
+           },
+           params:
+             "[{\"email\":\"hello@world.com\",\"event\":\"dropped\",\"reason\":\"Bounced Address\",\"sg_event_id\":\"ZHJvcC0xMDk5NDkxOS1MUnpYbF9OSFN0T0doUTRrb2ZTbV9BLTA\",\"sg_message_id\":\"LRzXl_NHStOGhQ4kofSm_A.filterdrecv-p3mdw1-756b745b58-kmzbl-18-5F5FC76C-9.0\",\"smtp-id\":\"<LRzXl_NHStOGhQ4kofSm_A@ismtpd0039p1iad1.sendgrid.net>\",\"timestamp\":1600112492}]\r\n"
+
+      expect(response.status).to eq(406)
+    end
   end
 
   describe "#mailjet" do
-    it "works" do
+    it "returns an error when no webhook token is configured" do
+      SiteSetting.mailjet_webhook_token = ""
       user = Fabricate(:user, email: email)
       email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
 
       post "/webhooks/mailjet.json",
+           params: {
+             "event" => "bounce",
+             "email" => email,
+             "hard_bounce" => true,
+             "CustomID" => message_id,
+           }
+
+      expect(response.status).to eq(406)
+      expect(email_log.reload.bounced).to eq(false)
+    end
+
+    it "hard bounces" do
+      SiteSetting.mailjet_webhook_token = "foo"
+      user = Fabricate(:user, email: email)
+      email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
+
+      post "/webhooks/mailjet.json?t=foo",
            params: {
              "event" => "bounce",
              "email" => email,
@@ -253,14 +330,32 @@ RSpec.describe WebhooksController do
       expect(response.status).to eq(406)
       expect(email_log.reload.bounced).to eq(false)
     end
-  end
 
-  describe "#mailpace" do
-    it "works" do
+    it "returns error if token param is missing" do
+      SiteSetting.mailjet_webhook_token = "foo"
       user = Fabricate(:user, email: email)
       email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
 
-      post "/webhooks/mailpace.json",
+      post "/webhooks/mailjet.json",
+           params: {
+             "event" => "bounce",
+             "email" => email,
+             "hard_bounce" => true,
+             "CustomID" => message_id,
+           }
+
+      expect(response.status).to eq(406)
+      expect(email_log.reload.bounced).to eq(false)
+    end
+  end
+
+  describe "#mailpace" do
+    it "hard bounces" do
+      SiteSetting.mailpace_webhook_token = "foo"
+      user = Fabricate(:user, email: email)
+      email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
+
+      post "/webhooks/mailpace.json?t=foo",
            params: {
              event: "email.bounced",
              payload: {
@@ -279,10 +374,11 @@ RSpec.describe WebhooksController do
     end
 
     it "soft bounces" do
+      SiteSetting.mailpace_webhook_token = "foo"
       user = Fabricate(:user, email: email)
       email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
 
-      post "/webhooks/mailpace.json",
+      post "/webhooks/mailpace.json?t=foo",
            params: {
              event: "email.deferred",
              payload: {
@@ -299,14 +395,49 @@ RSpec.describe WebhooksController do
       expect(email_log.bounce_error_code).to eq(nil) # mailpace doesn't give us this
       expect(email_log.user.user_stat.bounce_score).to eq(SiteSetting.soft_bounce_score)
     end
+
+    it "verifies webhook tokens" do
+      SiteSetting.mailpace_webhook_token = "foo"
+      user = Fabricate(:user, email: email)
+      email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
+
+      post "/webhooks/mailpace.json?t=foo",
+           params: {
+             event: "email.bounced",
+             payload: {
+               status: "bounced",
+               to: email,
+               message_id: "<#{message_id}>",
+             },
+           }
+
+      expect(response.status).to eq(200)
+      expect(email_log.reload.bounced).to eq(true)
+    end
+
+    it "returns error if token verification fails" do
+      SiteSetting.mailpace_webhook_token = "foo"
+      user = Fabricate(:user, email: email)
+      email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
+
+      post "/webhooks/mailpace.json?t=bar",
+           params: {
+             event: "email.bounced",
+             payload: {
+               status: "bounced",
+               to: email,
+               message_id: "<#{message_id}>",
+             },
+           }
+
+      expect(response.status).to eq(406)
+      expect(email_log.reload.bounced).to eq(false)
+    end
   end
 
   describe "#mandrill" do
-    let(:payload) do
-      "mandrill_events=%5B%7B%22event%22%3A%22hard_bounce%22%2C%22msg%22%3A%7B%22email%22%3A%22em%40il.com%22%2C%22diag%22%3A%225.1.1%22%2C%22bounce_description%22%3A%22smtp%3B+550-5.1.1+The+email+account+that+you+tried+to+reach+does+not+exist.%22%2C%22metadata%22%3A%7B%22message_id%22%3A%2212345%40il.com%22%7D%7D%7D%5D"
-    end
-
-    it "works" do
+    it "returns an error when no authentication key is configured" do
+      SiteSetting.mandrill_authentication_key = ""
       user = Fabricate(:user, email: email)
       email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
 
@@ -318,7 +449,37 @@ RSpec.describe WebhooksController do
                  "msg" => {
                    "email" => email,
                    "diag" => "5.1.1",
-                   :"bounce_description" =>
+                   "metadata" => {
+                     "message_id" => message_id,
+                   },
+                 },
+               },
+             ].to_json,
+           }
+
+      expect(response.status).to eq(406)
+      expect(email_log.reload.bounced).to eq(false)
+    end
+
+    let(:payload) do
+      "mandrill_events=%5B%7B%22event%22%3A%22hard_bounce%22%2C%22msg%22%3A%7B%22email%22%3A%22em%40il.com%22%2C%22diag%22%3A%225.1.1%22%2C%22bounce_description%22%3A%22smtp%3B+550-5.1.1+The+email+account+that+you+tried+to+reach+does+not+exist.%22%2C%22metadata%22%3A%7B%22message_id%22%3A%2212345%40il.com%22%7D%7D%7D%5D"
+    end
+
+    it "hard bounces" do
+      SiteSetting.mandrill_authentication_key = "test"
+      WebhooksController.any_instance.stubs(:valid_mandrill_signature?).returns(true)
+      user = Fabricate(:user, email: email)
+      email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
+
+      post "/webhooks/mandrill.json",
+           params: {
+             mandrill_events: [
+               {
+                 "event" => "hard_bounce",
+                 "msg" => {
+                   "email" => email,
+                   "diag" => "5.1.1",
+                   :bounce_description =>
                      "smtp; 550-5.1.1 The email account that you tried to reach does not exist.",
                    "metadata" => {
                      "message_id" => message_id,
@@ -367,10 +528,18 @@ RSpec.describe WebhooksController do
 
       expect(response.status).to eq(406)
     end
+
+    it "returns error if signature header is missing" do
+      SiteSetting.mandrill_authentication_key = "wr_JeJNO9OI65RFDrvk3Zw"
+
+      post "/webhooks/mandrill.json", params: payload
+
+      expect(response.status).to eq(406)
+    end
   end
 
   describe "#mandrill_head" do
-    it "works" do
+    it "returns 200 for a Mandrill HEAD request" do
       head "/webhooks/mandrill.json"
 
       expect(response.status).to eq(200)
@@ -378,11 +547,28 @@ RSpec.describe WebhooksController do
   end
 
   describe "#postmark" do
-    it "works" do
+    it "returns an error when no webhook token is configured" do
+      SiteSetting.postmark_webhook_token = ""
       user = Fabricate(:user, email: email)
       email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
 
       post "/webhooks/postmark.json",
+           params: {
+             "Type" => "HardBounce",
+             "MessageID" => message_id,
+             "Email" => email,
+           }
+
+      expect(response.status).to eq(406)
+      expect(email_log.reload.bounced).to eq(false)
+    end
+
+    it "hard bounces" do
+      SiteSetting.postmark_webhook_token = "foo"
+      user = Fabricate(:user, email: email)
+      email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
+
+      post "/webhooks/postmark.json?t=foo",
            params: {
              "Type" => "HardBounce",
              "MessageID" => message_id,
@@ -397,10 +583,11 @@ RSpec.describe WebhooksController do
     end
 
     it "soft bounces" do
+      SiteSetting.postmark_webhook_token = "foo"
       user = Fabricate(:user, email: email)
       email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
 
-      post "/webhooks/postmark.json",
+      post "/webhooks/postmark.json?t=foo",
            params: {
              "Type" => "SoftBounce",
              "MessageID" => message_id,
@@ -445,14 +632,58 @@ RSpec.describe WebhooksController do
       expect(response.status).to eq(406)
       expect(email_log.reload.bounced).to eq(false)
     end
+
+    it "returns error if token param is missing" do
+      SiteSetting.postmark_webhook_token = "foo"
+      user = Fabricate(:user, email: email)
+      email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
+
+      post "/webhooks/postmark.json",
+           params: {
+             "Type" => "HardBounce",
+             "MessageID" => message_id,
+             "Email" => email,
+           }
+
+      expect(response.status).to eq(406)
+      expect(email_log.reload.bounced).to eq(false)
+    end
   end
 
   describe "#sparkpost" do
-    it "works" do
+    it "returns an error when no webhook token is configured" do
+      SiteSetting.sparkpost_webhook_token = ""
       user = Fabricate(:user, email: email)
       email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
 
       post "/webhooks/sparkpost.json",
+           params: {
+             "_json" => [
+               {
+                 "msys" => {
+                   "message_event" => {
+                     "bounce_class" => 10,
+                     "error_code" => "554",
+                     "rcpt_to" => email,
+                     "rcpt_meta" => {
+                       "message_id" => message_id,
+                     },
+                   },
+                 },
+               },
+             ],
+           }
+
+      expect(response.status).to eq(406)
+      expect(email_log.reload.bounced).to eq(false)
+    end
+
+    it "hard bounces" do
+      SiteSetting.sparkpost_webhook_token = "foo"
+      user = Fabricate(:user, email: email)
+      email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
+
+      post "/webhooks/sparkpost.json?t=foo",
            params: {
              "_json" => [
                {
@@ -530,82 +761,315 @@ RSpec.describe WebhooksController do
       expect(response.status).to eq(406)
       expect(email_log.reload.bounced).to eq(false)
     end
-  end
 
-  describe "#aws" do
-    let(:payload) do
-      {
-        "Type" => "Notification",
-        "Message" => {
-          "notificationType" => "Bounce",
-          :"bounce" => {
-            "bounceType" => "Permanent",
-            "reportingMTA" => "dns; email.example.com",
-            :"bouncedRecipients" => [
-              {
-                "emailAddress" => email,
-                "status" => "5.1.1",
-                "action" => "failed",
-                "diagnosticCode" => "smtp; 550 5.1.1 <#{email}>... User",
-              },
-            ],
-            "bounceSubType" => "General",
-            "timestamp" => "2016-01-27T14:59:38.237Z",
-            "feedbackId" => "00000138111222aa-33322211-cccc-cccc-cccc-ddddaaaa068a-000000",
-            "remoteMtaIp" => "127.0.2.0",
-          },
-          :"mail" => {
-            "timestamp" => "2016-01-27T14:59:38.237Z",
-            "source" => "john@example.com",
-            "sourceArn" => "arn:aws:ses:us-east-1:888888888888:identity/example.com",
-            "sourceIp" => "127.0.3.0",
-            "sendingAccountId" => "123456789012",
-            "callerIdentity" => "IAM_user_or_role_name",
-            "messageId" => message_id,
-            "destination" => [email, "jane@example.com", "mary@example.com", "richard@example.com"],
-            "headersTruncated" => false,
-            "headers" => [
-              { "name" => "From", "value" => "\"John Doe\" <john@example.com>" },
-              {
-                "name" => "To",
-                "value" =>
-                  "\"Test\" <#{email}>, \"Jane Doe\" <jane@example.com>, \"Mary Doe\" <mary@example.com>, \"Richard Doe\" <richard@example.com>",
-              },
-              { "name" => "Message-ID", "value" => message_id },
-              { "name" => "Subject", "value" => "Hello" },
-              { "name" => "Content-Type", "value" => "text/plain; charset=\"UTF-8\"" },
-              { "name" => "Content-Transfer-Encoding", "value" => "base64" },
-              { "name" => "Date", "value" => "Wed, 27 Jan 2016 14:05:45 +0000" },
-            ],
-            "commonHeaders" => {
-              "from" => ["John Doe <john@example.com>"],
-              "date" => "Wed, 27 Jan 2016 14:05:45 +0000",
-              "to" => [
-                "\"Test\" <#{email}>, Jane Doe <jane@example.com>, Mary Doe <mary@example.com>, Richard Doe <richard@example.com>",
-              ],
-              "messageId" => message_id,
-              "subject" => "Hello",
-            },
-          },
-        }.to_json,
-      }.to_json
-    end
-
-    before { Jobs.run_immediately! }
-
-    it "works" do
+    it "returns error if token param is missing" do
+      SiteSetting.sparkpost_webhook_token = "foo"
       user = Fabricate(:user, email: email)
       email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
 
+      post "/webhooks/sparkpost.json",
+           params: {
+             "_json" => [
+               {
+                 "msys" => {
+                   "message_event" => {
+                     "bounce_class" => 10,
+                     "error_code" => "554",
+                     "rcpt_to" => email,
+                     "rcpt_meta" => {
+                       "message_id" => message_id,
+                     },
+                   },
+                 },
+               },
+             ],
+           }
+
+      expect(response.status).to eq(406)
+      expect(email_log.reload.bounced).to eq(false)
+    end
+  end
+
+  describe "#aws" do
+    let(:topic_arn) { "arn:aws:sns:us-east-1:123456789012:discourse-bounces" }
+    let(:other_topic_arn) { "arn:aws:sns:us-east-1:999999999999:attacker-topic" }
+    let(:ses_message_id) { "000001378603177f-7a5433e7-8edb-42ae-af10-f0181f34d6ee-000000" }
+    let(:bounce_status) { "5.1.1" }
+    let(:payload) do
+      {
+        "Type" => "Notification",
+        "TopicArn" => topic_arn,
+        "Message" => notification.to_json,
+      }.to_json
+    end
+    let(:notification) do
+      {
+        "notificationType" => "Bounce",
+        :bounce => {
+          "bounceType" => "Permanent",
+          "reportingMTA" => "dns; email.example.com",
+          :bouncedRecipients => [
+            {
+              "emailAddress" => email,
+              "status" => bounce_status,
+              "action" => "failed",
+              "diagnosticCode" => "smtp; 550 5.1.1 <#{email}>... User",
+            },
+          ],
+          "bounceSubType" => "General",
+          "timestamp" => "2016-01-27T14:59:38.237Z",
+          "feedbackId" => "00000138111222aa-33322211-cccc-cccc-cccc-ddddaaaa068a-000000",
+          "remoteMtaIp" => "127.0.2.0",
+        },
+        :mail => {
+          "timestamp" => "2016-01-27T14:59:38.237Z",
+          "source" => "john@example.com",
+          "sourceArn" => "arn:aws:ses:us-east-1:888888888888:identity/example.com",
+          "sourceIp" => "127.0.3.0",
+          "sendingAccountId" => "123456789012",
+          "callerIdentity" => "IAM_user_or_role_name",
+          "messageId" => ses_message_id,
+          "destination" => [email, "jane@example.com", "mary@example.com", "richard@example.com"],
+          "headersTruncated" => false,
+          "headers" => [
+            { "name" => "From", "value" => "\"John Doe\" <john@example.com>" },
+            {
+              "name" => "To",
+              "value" =>
+                "\"Test\" <#{email}>, \"Jane Doe\" <jane@example.com>, \"Mary Doe\" <mary@example.com>, \"Richard Doe\" <richard@example.com>",
+            },
+            { "name" => "Message-ID", "value" => " <#{message_id}> " },
+            { "name" => "Subject", "value" => "Hello" },
+            { "name" => "Content-Type", "value" => "text/plain; charset=\"UTF-8\"" },
+            { "name" => "Content-Transfer-Encoding", "value" => "base64" },
+            { "name" => "Date", "value" => "Wed, 27 Jan 2016 14:05:45 +0000" },
+          ],
+          "commonHeaders" => {
+            "from" => ["John Doe <john@example.com>"],
+            "date" => "Wed, 27 Jan 2016 14:05:45 +0000",
+            "to" => [
+              "\"Test\" <#{email}>, Jane Doe <jane@example.com>, Mary Doe <mary@example.com>, Richard Doe <richard@example.com>",
+            ],
+            "messageId" => " <#{message_id}> ",
+            "subject" => "Hello",
+          },
+        },
+      }
+    end
+    let(:subscription_confirmation_payload) do
+      {
+        "Type" => "SubscriptionConfirmation",
+        "TopicArn" => topic_arn,
+        "Token" => "abc123",
+        "Message" => "You have chosen to subscribe to the topic #{topic_arn}",
+        "SubscribeURL" =>
+          "https://sns.us-east-1.amazonaws.com/?Action=ConfirmSubscription&TopicArn=#{topic_arn}&Token=abc123",
+      }.to_json
+    end
+
+    before do
+      Jobs.run_immediately!
       require "aws-sdk-sns"
-      Aws::SNS::MessageVerifier.any_instance.stubs(:authentic?).with(payload).returns(true)
+      Aws::SNS::MessageVerifier.any_instance.stubs(:authentic?).returns(true)
+      SiteSetting.aws_sns_topic_arn_allowlist = topic_arn
+    end
+
+    it "hard bounces using the original message ID" do
+      user = Fabricate(:user, email: email)
+      email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
 
       post "/webhooks/aws.json", headers: { "RAW_POST_DATA" => payload }
       expect(response.status).to eq(200)
 
       email_log.reload
       expect(email_log.bounced).to eq(true)
+      expect(email_log.bounce_error_code).to eq("5.1.1")
       expect(email_log.user.user_stat.bounce_score).to eq(SiteSetting.hard_bounce_score)
+    end
+
+    it "does not bounce an email log with a different original message ID" do
+      user = Fabricate(:user, email: email)
+      email_log =
+        Fabricate(:email_log, user: user, message_id: "other-message-id", to_address: email)
+
+      post "/webhooks/aws.json", headers: { "RAW_POST_DATA" => payload }
+      expect(response.status).to eq(200)
+
+      expect(email_log.reload.bounced).to eq(false)
+      expect(email_log.user.user_stat.bounce_score).to eq(0)
+    end
+
+    it "matches the original message ID from raw headers without common headers" do
+      notification[:mail].delete("commonHeaders")
+      header = notification[:mail]["headers"].find { |entry| entry["name"] == "Message-ID" }
+      header["name"] = "mEsSaGe-Id"
+      user = Fabricate(:user, email: email)
+      email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
+
+      post "/webhooks/aws.json", headers: { "RAW_POST_DATA" => payload }
+
+      expect(response.status).to eq(200)
+      expect(email_log.reload.bounced).to eq(true)
+      expect(user.user_stat.bounce_score).to eq(SiteSetting.hard_bounce_score)
+    end
+
+    it "matches the original message ID from common headers without raw headers" do
+      notification[:mail].delete("headers")
+      user = Fabricate(:user, email: email)
+      email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
+
+      post "/webhooks/aws.json", headers: { "RAW_POST_DATA" => payload }
+
+      expect(response.status).to eq(200)
+      expect(email_log.reload.bounced).to eq(true)
+      expect(user.user_stat.bounce_score).to eq(SiteSetting.hard_bounce_score)
+    end
+
+    it "uses common headers when the raw message ID is blank" do
+      header = notification[:mail]["headers"].find { |entry| entry["name"] == "Message-ID" }
+      header["value"] = " "
+      user = Fabricate(:user, email: email)
+      email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
+
+      post "/webhooks/aws.json", headers: { "RAW_POST_DATA" => payload }
+
+      expect(response.status).to eq(200)
+      expect(email_log.reload.bounced).to eq(true)
+    end
+
+    it "prefers the raw original message ID over the common headers message ID" do
+      notification[:mail]["commonHeaders"]["messageId"] = ses_message_id
+      user = Fabricate(:user, email: email)
+      email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
+      other_email_log =
+        Fabricate(:email_log, user: user, message_id: ses_message_id, to_address: email)
+
+      post "/webhooks/aws.json", headers: { "RAW_POST_DATA" => payload }
+
+      expect(response.status).to eq(200)
+      expect(email_log.reload.bounced).to eq(true)
+      expect(other_email_log.reload.bounced).to eq(false)
+    end
+
+    it "ignores notifications without an original message ID even if the SES ID matches a log" do
+      notification[:mail].delete("headers")
+      notification[:mail].delete("commonHeaders")
+      user = Fabricate(:user, email: email)
+      email_log = Fabricate(:email_log, user: user, message_id: ses_message_id, to_address: email)
+
+      post "/webhooks/aws.json", headers: { "RAW_POST_DATA" => payload }
+
+      expect(response.status).to eq(200)
+      expect(email_log.reload.bounced).to eq(false)
+      expect(user.user_stat.bounce_score).to eq(0)
+    end
+
+    it "ignores a matching message ID sent to a different recipient" do
+      user = Fabricate(:user)
+      email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: user.email)
+
+      post "/webhooks/aws.json", headers: { "RAW_POST_DATA" => payload }
+
+      expect(response.status).to eq(200)
+      expect(email_log.reload.bounced).to eq(false)
+      expect(user.user_stat.bounce_score).to eq(0)
+    end
+
+    it "does not increase the bounce score for duplicate notifications" do
+      user = Fabricate(:user, email: email)
+      email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
+
+      post "/webhooks/aws.json", headers: { "RAW_POST_DATA" => payload }
+      expect(response.status).to eq(200)
+
+      post "/webhooks/aws.json", headers: { "RAW_POST_DATA" => payload }
+      expect(response.status).to eq(200)
+
+      expect(email_log.reload.bounced).to eq(true)
+      expect(email_log.user.user_stat.reload.bounce_score).to eq(SiteSetting.hard_bounce_score)
+    end
+
+    context "with a non-normalized bounce status" do
+      let(:bounce_status) { "5.0.0 (permanent failure)" }
+
+      it "stores the normalized bounce error code" do
+        user = Fabricate(:user, email: email)
+        email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
+
+        post "/webhooks/aws.json", headers: { "RAW_POST_DATA" => payload }
+        expect(response.status).to eq(200)
+
+        expect(email_log.reload.bounce_error_code).to eq("5.0.0")
+      end
+    end
+
+    context "when the allowlist is empty" do
+      before { SiteSetting.aws_sns_topic_arn_allowlist = "" }
+
+      it "rejects notifications with 406 and does not process the bounce" do
+        user = Fabricate(:user, email: email)
+        email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
+
+        post "/webhooks/aws.json", headers: { "RAW_POST_DATA" => payload }
+        expect(response.status).to eq(406)
+
+        expect(email_log.reload.bounced).to eq(false)
+        expect(email_log.user.user_stat.bounce_score).to eq(0)
+      end
+    end
+
+    context "when the TopicArn is not on the allowlist" do
+      let(:payload_with_other_topic) do
+        parsed = JSON.parse(payload)
+        parsed["TopicArn"] = other_topic_arn
+        parsed.to_json
+      end
+
+      it "rejects with 406 and does not process the bounce" do
+        user = Fabricate(:user, email: email)
+        email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
+
+        post "/webhooks/aws.json", headers: { "RAW_POST_DATA" => payload_with_other_topic }
+        expect(response.status).to eq(406)
+
+        expect(email_log.reload.bounced).to eq(false)
+        expect(email_log.user.user_stat.bounce_score).to eq(0)
+      end
+    end
+
+    context "when the SNS signature is invalid" do
+      before { Aws::SNS::MessageVerifier.any_instance.stubs(:authentic?).returns(false) }
+
+      it "rejects with 406" do
+        user = Fabricate(:user, email: email)
+        email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
+
+        post "/webhooks/aws.json", headers: { "RAW_POST_DATA" => payload }
+        expect(response.status).to eq(406)
+
+        expect(email_log.reload.bounced).to eq(false)
+      end
+    end
+
+    context "with a SubscriptionConfirmation" do
+      before { Net::HTTP.stubs(:get).returns("") }
+
+      it "enqueues the confirmation job when the TopicArn is allowlisted" do
+        Jobs::ConfirmSnsSubscription.any_instance.expects(:execute).once
+
+        post "/webhooks/aws.json", headers: { "RAW_POST_DATA" => subscription_confirmation_payload }
+        expect(response.status).to eq(200)
+      end
+
+      it "rejects with 406 when the TopicArn is not allowlisted" do
+        Jobs::ConfirmSnsSubscription.any_instance.expects(:execute).never
+
+        attacker_payload =
+          JSON.parse(subscription_confirmation_payload).merge("TopicArn" => other_topic_arn).to_json
+
+        post "/webhooks/aws.json", headers: { "RAW_POST_DATA" => attacker_payload }
+        expect(response.status).to eq(406)
+      end
     end
   end
 end

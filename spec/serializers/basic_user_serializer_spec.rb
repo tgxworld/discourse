@@ -18,6 +18,7 @@ RSpec.describe BasicUserSerializer do
       let(:serializer) do
         PostActionUserSerializer.new(post_action, scope: Guardian.new(user), root: false)
       end
+
       it "returns the user correctly" do
         expect(serializer.user.username).to eq(user.username)
       end
@@ -56,7 +57,7 @@ RSpec.describe BasicUserSerializer do
         end
 
         it "doesn't add expired user status" do
-          user.user_status.ends_at = 1.minutes.ago
+          user.user_status.ends_at = 1.minute.ago
           json = serializer.as_json
           expect(json.keys).not_to include :status
         end

@@ -1,7 +1,9 @@
-import ChatDirectMessageButton from "../../components/chat/direct-message-button";
+import ChatDirectMessageButton from "../../components/chat/direct-message-button.gjs";
 
 const ChatButton = <template>
-  {{#if @outletArgs.model.can_chat_user}}
+  {{#if
+    (and @outletArgs.model.can_chat_user (not @outletArgs.model.isCurrent))
+  }}
     <li class="user-card-below-message-button chat-button">
       <ChatDirectMessageButton @user={{@outletArgs.model}} />
     </li>

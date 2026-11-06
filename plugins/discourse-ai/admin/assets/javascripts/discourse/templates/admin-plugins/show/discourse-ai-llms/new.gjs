@@ -1,12 +1,9 @@
-import RouteTemplate from "ember-route-template";
-import AiLlmsListEditor from "../../../../../discourse/components/ai-llms-list-editor";
+import AiLlmsListEditor from "../../../../components/ai-llms-list-editor.gjs";
 
-export default RouteTemplate(
-  <template>
-    <AiLlmsListEditor
-      @llms={{@controller.allLlms}}
-      @currentLlm={{@controller.model}}
-      @llmTemplate={{@controller.llmTemplate}}
-    />
-  </template>
-);
+export default <template>
+  <AiLlmsListEditor
+    @currentLlm={{@controller.model}}
+    @llms={{@controller.allLlms}}
+    @llmTemplate={{@controller.llmTemplate}}
+  />
+</template>

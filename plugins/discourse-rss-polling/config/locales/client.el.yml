@@ -8,6 +8,17 @@ el:
   js:
     admin:
       rss_polling:
+        author: Συντάκτης
         feed_url: URL
         discourse_category: Κατηγορία
         discourse_tags: Ετικέτες
+        feeds:
+          edit: Επεξεργασία
+          delete: Σβήσιμο
+          save: Αποθήκευση
+        test:
+          title: Προεπισκόπηση
+          dismiss: Παράβλεψη
+        status:
+          enabled: Ενεργοποιημένη
+          disabled: Απενεργοποιημένος

@@ -42,13 +42,21 @@ module PageObjects
       end
 
       def select_enum_value(setting_name, value)
-        setting =
-          PageObjects::Components::SelectKit.new(
-            ".row.setting[data-setting='#{setting_name}'] .single-select",
-          )
-        setting.expand
-        setting.select_row_by_value(value)
+        enum_setting(setting_name).select(value)
         self
+      end
+
+      def enum_setting(setting_name)
+        PageObjects::Components::FormKitField.new(
+          find_setting(setting_name).find("[data-name='#{setting_name}']"),
+        )
+      end
+
+      def has_enum_value?(setting_name, value, text: nil)
+        has_css?(
+          "#{setting_row_selector(setting_name)} select option[value='#{value}']:checked",
+          text:,
+        )
       end
 
       def has_setting?(setting_name)
@@ -70,6 +78,32 @@ module PageObjects
         setting = find_setting(setting_name)
         setting.find(".setting-value span", text: text).click
         save_setting(setting)
+      end
+
+      def toggle_bool_setting(setting_name)
+        setting = find_setting(setting_name)
+        PageObjects::Components::FormKitField.new(setting.find(".form-kit__field")).toggle
+        save_setting(setting)
+      end
+
+      def bool_setting_checkbox(setting_name)
+        find_setting(setting_name).find(".setting-value input[type=checkbox]", visible: :all)
+      end
+
+      def secret_setting_input(setting_name)
+        find_setting(setting_name).find(".form-kit__control-password")
+      end
+
+      def reveal_secret_setting(setting_name)
+        setting = find_setting(setting_name)
+        PageObjects::Components::FormKitField.new(setting.find(".form-kit__field")).toggle
+        self
+      end
+
+      def submit_setting_with_keyboard(setting_name, value)
+        input = find_setting(setting_name).find(".form-kit__field input")
+        input.fill_in(with: value)
+        input.send_keys(:enter)
       end
 
       def change_number_setting(setting_name, value, save_changes = true)
@@ -94,6 +128,12 @@ module PageObjects
       def has_overridden_setting?(setting_name, value: nil)
         setting_field = find_setting(setting_name, overridden: true)
         return setting_field.find(".setting-value input").value == value.to_s if value
+        true
+      end
+
+      def has_overridden_topic_setting?(setting_name, value: nil)
+        setting_field = find_setting(setting_name, overridden: true)
+        return setting_field.find(".selected-name")["data-value"] == value.to_s if value
         true
       end
 
@@ -140,6 +180,90 @@ module PageObjects
       def error_message(setting_name)
         setting = find_setting(setting_name)
         setting.find(".setting-value .validation-error").text
+      end
+
+      def has_theme_warning?(setting_name, theme_name, theme_id)
+        find_setting(setting_name).find(".setting-theme-warning__text").has_text?(theme_name) &&
+          find_setting(setting_name).find(".setting-theme-warning__text").has_link?(
+            href: "/admin/customize/themes/#{theme_id}",
+          )
+      end
+
+      def has_upcoming_change_default_warning?(setting_name, old_default:, new_default:)
+        find_setting(setting_name).find(".setting-upcoming-change-warning__text").has_text?(
+          "The default for this setting has changed from #{old_default} to #{new_default}",
+        ) &&
+          find_setting(setting_name).find(".setting-upcoming-change-warning__text").has_link?(
+            href: "/admin/config/upcoming-changes?changeNamesFilter=enable_upload_debug_mode",
+          )
+      end
+
+      def has_disabled_input?(setting_name)
+        find_setting(setting_name).has_css?("input[disabled]", visible: :all)
+      end
+
+      def has_visible_reorder_buttons?(setting_name)
+        has_css?("#{setting_row_selector(setting_name)} .shift-up-value-btn", visible: :visible) &&
+          has_css?("#{setting_row_selector(setting_name)} .shift-down-value-btn", visible: :visible)
+      end
+
+      def has_hidden_reorder_buttons?(setting_name)
+        has_css?("#{setting_row_selector(setting_name)} .shift-up-value-btn", visible: :hidden) &&
+          has_css?("#{setting_row_selector(setting_name)} .shift-down-value-btn", visible: :hidden)
+      end
+
+      # Methods for when the enable_new_reordering_controls upcoming change is
+      # enabled. The two predicates above keep main's arrow-button behaviour.
+      #
+      # TODO (ui-kit-reorderable-list-cleanup) fold these over them once the
+      # change ships.
+      def has_reorder_handle?(setting_name)
+        has_css?("#{setting_row_selector(setting_name)} .d-reorderable-list__handle")
+      end
+
+      def open_reorder_menu(setting_name)
+        find(
+          "#{setting_row_selector(setting_name)} .d-reorderable-list__handle",
+          match: :first,
+        ).click
+        has_css?(".d-reorderable-list__move-item")
+        self
+      end
+
+      def move_list_value_to_top(setting_name, value)
+        PageObjects::Components::ReorderableList.new(
+          "#{setting_row_selector(setting_name)} .value[data-reorderable-key='#{value}']",
+        ).move(:top)
+        self
+      end
+
+      def has_list_values_in_order?(setting_name, values)
+        list = "#{setting_row_selector(setting_name)} .values"
+        has_css?("#{list} .value", count: values.size) &&
+          values.each_with_index.all? do |value, index|
+            has_css?("#{list} .value:nth-child(#{index + 1})[data-reorderable-key='#{value}']")
+          end
+      end
+
+      def category_setting(setting_name)
+        PageObjects::Components::SelectKit.new(
+          "#{setting_row_selector(setting_name)} .category-chooser",
+        )
+      end
+
+      def group_setting(setting_name)
+        PageObjects::Components::SelectKit.new("#{setting_row_selector(setting_name)} .combo-box")
+      end
+
+      def tag_list_setting(setting_name)
+        PageObjects::Components::SelectKit.new("#{setting_row_selector(setting_name)} .tag-chooser")
+      end
+
+      def has_tags_in_setting?(setting_name, tags)
+        tag_chooser = tag_list_setting(setting_name)
+        tag_names = tags.map(&:name).sort
+        selected_names = tag_chooser.value&.split(",")&.sort || []
+        tag_names == selected_names
       end
     end
   end

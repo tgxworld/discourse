@@ -1,10 +1,6 @@
-/* eslint-disable ember/no-classic-components */
-import Component from "@ember/component";
-import { classNames, tagName } from "@ember-decorators/component";
-import CampaignBanner from "../../components/campaign-banner";
+import Component from "@glimmer/component";
+import CampaignBanner from "../../components/campaign-banner.gjs";
 
-@tagName("div")
-@classNames("above-main-container-outlet", "subscriptions-campaign")
 export default class SubscriptionsCampaign extends Component {
   static shouldRender(args, context) {
     const { siteSettings } = context;
@@ -16,5 +12,12 @@ export default class SubscriptionsCampaign extends Component {
     );
   }
 
-  <template><CampaignBanner @connectorName="above-main-container" /></template>
+  <template>
+    <div
+      class="above-main-container-outlet subscriptions-campaign"
+      ...attributes
+    >
+      <CampaignBanner @connectorName="above-main-container" />
+    </div>
+  </template>
 }

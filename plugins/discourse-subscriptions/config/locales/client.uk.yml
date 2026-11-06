@@ -404,8 +404,8 @@ uk:
         confirm_payment: Підтвердити платіж
         success: Повернутися назад
       admin:
-        unconfigured: 'Stripe налаштовано неправильно. Для отримання інформації, будь ласка, перегляньте Discourse.'
-        on_meta: Discourse Підписки на Meta
+        unconfigured: "Stripe налаштовано неправильно. Будь ласка, дивіться <a href='%{url}' target='_blank'>документацію на Discourse Meta</a> для отримання детальної інформації."
+        configure_stripe: Перейдіть до налаштувань
         dashboard:
           title: Майстерня
           table:
@@ -430,7 +430,7 @@ uk:
             plan_help: Створіть ціновий план для підписки клієнтів на цей продукт.
             description: Опис
             description_help: Опис вашого продукту за передплатою.
-            repurchaseable: Можна викупити?
+            repurchaseable: З можливістю викупу?
             repurchase_help: Дозволити купівлю продукту та пов'язаних з ним планів кілька разів
             active: Активний
             active_help: Вимкніть цю функцію, доки ваш продукт не буде готовий для споживачів.

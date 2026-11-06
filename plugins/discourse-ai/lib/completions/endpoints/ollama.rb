@@ -4,8 +4,8 @@ module DiscourseAi
   module Completions
     module Endpoints
       class Ollama < Base
-        def self.can_contact?(model_provider)
-          model_provider == "ollama"
+        def self.can_contact?(llm_model)
+          llm_model.provider == "ollama"
         end
 
         def normalize_model_params(model_params)
@@ -20,7 +20,7 @@ module DiscourseAi
         end
 
         def default_options
-          { max_tokens: 2000, model: llm_model.name }
+          { model: llm_model.name }
         end
 
         def provider_id

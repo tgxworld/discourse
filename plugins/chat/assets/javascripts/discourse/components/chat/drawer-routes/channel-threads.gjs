@@ -1,7 +1,7 @@
 import Component from "@glimmer/component";
 import { service } from "@ember/service";
-import { htmlSafe } from "@ember/template";
-import replaceEmoji from "discourse/helpers/replace-emoji";
+import { trustHTML } from "@ember/template";
+import dReplaceEmoji from "discourse/ui-kit/helpers/d-replace-emoji";
 import { i18n } from "discourse-i18n";
 import Navbar from "discourse/plugins/chat/discourse/components/chat/navbar";
 import ChatThreadList from "discourse/plugins/chat/discourse/components/chat-thread-list";
@@ -13,10 +13,10 @@ export default class ChatDrawerRoutesChannelThreads extends Component {
   backLinkTitle = i18n("chat.return_to_list");
 
   get title() {
-    return htmlSafe(
+    return trustHTML(
       i18n("chat.threads.list") +
         " - " +
-        replaceEmoji(this.args.model.channel.title)
+        dReplaceEmoji(this.args.model.channel.escapedTitle)
     );
   }
 
@@ -25,11 +25,11 @@ export default class ChatDrawerRoutesChannelThreads extends Component {
       {{#if @model}}
         <Navbar @onClick={{this.chat.toggleDrawer}} as |navbar|>
           <navbar.BackButton
-            @title={{this.backLinkTitle}}
             @route="chat.channel"
             @routeModels={{@model.channel.routeModels}}
+            @title={{this.backLinkTitle}}
           />
-          <navbar.Title @title={{this.title}} @icon="discourse-threads" />
+          <navbar.Title @icon="discourse-threads" @title={{this.title}} />
           <navbar.Actions as |a|>
             <a.ToggleDrawerButton />
             <a.FullPageButton />
@@ -39,10 +39,7 @@ export default class ChatDrawerRoutesChannelThreads extends Component {
 
         {{#if this.chatStateManager.isDrawerExpanded}}
           <div class="chat-drawer-content">
-            <ChatThreadList
-              @channel={{@model.channel}}
-              @includeHeader={{false}}
-            />
+            <ChatThreadList @channel={{@model.channel}} />
           </div>
         {{/if}}
       {{/if}}

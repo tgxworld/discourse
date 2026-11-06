@@ -5,3 +5,5 @@
 # https://translate.discourse.org/
 
 cs:
+  site_settings:
+    discourse_graphviz_enabled: "Povolte plugin Graphviz"

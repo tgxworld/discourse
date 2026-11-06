@@ -1,21 +1,26 @@
 # frozen_string_literal: true
 
 class Admin::SiteTextsController < Admin::AdminController
-  def self.preferred_keys
-    %w[
-      system_messages.usage_tips.text_body_template
-      education.new-topic
-      education.new-reply
-      login_required.welcome_message
-    ]
-  end
+  PREFERRED_KEYS = %w[
+    education.new-reply
+    education.new-topic
+    login_required.welcome_message
+    system_messages.usage_tips.text_body_template
+  ]
 
-  def self.restricted_keys
-    %w[
-      user_notifications.confirm_old_email.title
-      user_notifications.confirm_old_email.subject_template
-      user_notifications.confirm_old_email.text_body_template
-    ]
+  RESTRICTED_KEYS =
+    Set[
+      "user_notifications.confirm_old_email.title",
+      "user_notifications.confirm_old_email.subject_template",
+      "user_notifications.confirm_old_email.text_body_template",
+      "user_notifications.confirm_old_email_add.title",
+      "user_notifications.confirm_old_email_add.subject_template",
+      "user_notifications.confirm_old_email_add.text_body_template",
+      "js.powered_by_discourse"
+    ].freeze
+
+  def self.restricted_key?(key)
+    RESTRICTED_KEYS.include?(key)
   end
 
   def index
@@ -23,18 +28,51 @@ class Admin::SiteTextsController < Admin::AdminController
     outdated = params[:outdated] == "true"
     untranslated = params[:untranslated] == "true"
     only_selected_locale = params[:only_selected_locale] == "true"
-    extras = {}
+    extras = {
+      themes:
+        Theme
+          .order(:name, :id)
+          .pluck(:id, :name, :enabled)
+          .map { |id, name, enabled| { id:, name:, enabled: } },
+    }
+    theme = Theme.find(params[:theme_id]) if params[:theme_id].present?
 
     query = params[:q] || ""
 
     locale = fetch_locale(params[:locale])
 
-    if query.blank? && !overridden && !outdated && !untranslated
+    if query.blank? && !overridden && !outdated && !untranslated && !theme
       extras[:recommended] = true
-      results = self.class.preferred_keys.map { |k| record_for(key: k, locale: locale) }
+      results = PREFERRED_KEYS.map { |key| record_for(key:, locale:) }
     else
       results =
-        find_translations(query, overridden, outdated, locale, untranslated, only_selected_locale)
+        (
+          if theme
+            []
+          else
+            find_translations(
+              query,
+              overridden,
+              outdated,
+              locale,
+              untranslated,
+              only_selected_locale,
+            )
+          end
+        )
+      results.concat(
+        ThemeTranslationManager.search_site_texts(
+          query,
+          locale:,
+          theme:,
+          overridden:,
+          outdated:,
+          untranslated:,
+          only_selected_locale:,
+        ),
+      )
+
+      results.reject! { |r| RESTRICTED_KEYS.include?(r[:id]) }
 
       if results.any?
         extras[:regex] = I18n::Backend::DiscourseI18n.create_search_regexp(query, as_string: true)
@@ -65,24 +103,31 @@ class Admin::SiteTextsController < Admin::AdminController
     end
 
     overridden = overridden_keys(locale)
-    render_serialized(
-      results[first..last - 1],
-      SiteTextSerializer,
-      root: "site_texts",
-      rest_serializer: true,
-      extras: extras,
-      overridden_keys: overridden,
-    )
+    records =
+      (results[first..last - 1] || []).map do |record|
+        if ThemeTranslationManager::SITE_TEXT_ID_PATTERN.match?(record[:id])
+          record
+        else
+          serialize_data(record, SiteTextSerializer, root: false, overridden_keys: overridden)
+        end
+      end
+    render_json_dump({ site_texts: records }, rest_serializer: true, extras:)
   end
 
   def show
     locale = fetch_locale(params[:locale])
+    if theme_site_text?
+      text = ThemeTranslationManager.find_site_text(params[:id], locale:)
+      raise Discourse::NotFound unless text
+      return render_json_dump({ site_text: text.site_text }, rest_serializer: true)
+    end
     site_text = find_site_text(locale)
     render_serialized(site_text, SiteTextSerializer, root: "site_text", rest_serializer: true)
   end
 
   def update
     locale = fetch_locale(params.dig(:site_text, :locale))
+    return update_theme_text(locale) if theme_site_text?
 
     site_text = find_site_text(locale)
     value = site_text[:value] = params.dig(:site_text, :value)
@@ -106,12 +151,13 @@ class Admin::SiteTextsController < Admin::AdminController
     else
       render json:
                failed_json.merge(message: translation_override.errors.full_messages.join("\n\n")),
-             status: 422
+             status: :unprocessable_entity
     end
   end
 
   def revert
     locale = fetch_locale(params[:locale])
+    return update_theme_text(locale, revert: true) if theme_site_text?
 
     site_text = find_site_text(locale)
     id = site_text[:id]
@@ -140,7 +186,8 @@ class Admin::SiteTextsController < Admin::AdminController
     if override.make_up_to_date!
       render json: success_json
     else
-      render json: failed_json.merge(message: "Can only dismiss outdated translations"), status: 422
+      render json: failed_json.merge(message: "Can only dismiss outdated translations"),
+             status: :unprocessable_entity
     end
   end
 
@@ -167,6 +214,31 @@ class Admin::SiteTextsController < Admin::AdminController
 
   protected
 
+  def theme_site_text?
+    ThemeTranslationManager::SITE_TEXT_ID_PATTERN.match?(params[:id])
+  end
+
+  def update_theme_text(locale, revert: false)
+    text = ThemeTranslationManager.find_site_text(params[:id], locale:)
+    raise Discourse::NotFound unless text
+    guardian.ensure_can_edit_theme!(text.theme)
+
+    old_value = text.value
+    if revert
+      text.revert!
+    else
+      value = params.require(:site_text)[:value]
+      raise Discourse::InvalidParameters.new(:value) unless value.is_a?(String)
+      text.theme.with_lock do
+        text.theme.theme_translation_overrides.reload
+        text.value = value
+      end
+    end
+    record = text.site_text
+    StaffActionLogger.new(current_user).log_site_text_change(record[:id], record[:value], old_value)
+    render_json_dump({ site_text: record }, rest_serializer: true)
+  end
+
   def is_badge_title?(id = "")
     badge_parts = id.split(".")
     badge_parts[0] == "badges" && badge_parts[2] == "name"
@@ -179,13 +251,13 @@ class Admin::SiteTextsController < Admin::AdminController
     interpolation_keys =
       I18nInterpolationKeysFinder.find(I18n.overrides_disabled { I18n.t(en_key, locale: :en) })
     custom_keys = TranslationOverride.custom_interpolation_keys(en_key)
-    { id: key, value: value, locale: locale, interpolation_keys: interpolation_keys + custom_keys }
+    { id: key, value:, locale:, interpolation_keys: (interpolation_keys | custom_keys).sort }
   end
 
   PLURALIZED_REGEX = /(.*)\.(zero|one|two|few|many|other)\z/
 
   def find_site_text(locale)
-    if self.class.restricted_keys.include?(params[:id])
+    if RESTRICTED_KEYS.include?(params[:id])
       raise Discourse::InvalidAccess.new(
               nil,
               nil,

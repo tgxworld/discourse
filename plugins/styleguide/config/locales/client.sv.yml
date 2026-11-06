@@ -8,7 +8,9 @@ sv:
   js:
     styleguide:
       title: "Stilguide"
-      welcome: "Kom igång genom att välja ett avsnitt i menyn till vänster."
+      example:
+        kind:
+          component: "Komponent"
       categories:
         syntax: Syntax
         atoms: Atomer
@@ -25,6 +27,15 @@ sv:
           title: "Inmatad datum/tid"
         menus:
           title: "Menyer"
+        context_menu:
+          actions:
+            duplicate: "Duplicera"
+            delete: "Ta bort"
+        reorderable_list:
+          policies_pinned: "Fäst"
+          policies_required: "Krävs"
+          table_type: "Typ"
+          cross_list_primary: "Primär"
         toasts:
           title: "Popup-fönster"
         font_scale:
@@ -50,8 +61,6 @@ sv:
           title: "Staplad navigering"
         categories_list:
           title: "Kategorilista"
-        topic_link:
-          title: "Ämneslänk"
         topic_list_item:
           title: "Punkt i ämneslista"
         topic_statuses:
@@ -60,8 +69,6 @@ sv:
           title: "Ämneslista"
         basic_topic_list:
           title: "Grundläggande ämneslista"
-        footer_message:
-          title: "Sidfotsmeddelande"
         signup_cta:
           title: "Registrera CTA"
         topic_timer_info:
@@ -76,10 +83,28 @@ sv:
           title: "Ämneskarta"
         site_header:
           title: "Sajtens sidhuvud"
-        suggested_topics:
-          title: "Föreslagna ämnen"
+        more_topics:
+          title: "Fler ämnen"
         post_menu:
           title: "Inläggsmeny"
+        roving_focus:
+          toolbar:
+            copy: "Kopiera"
+          tags:
+            support: "Stöd"
+          adjacent:
+            label: "Filter"
+            field: "Sök"
+            open: "Öppen"
+            recent: "Senaste"
+          combobox:
+            daily: "Dagligen"
+            weekly: "Veckovis"
+            monthly: "Månadsvis"
+            never: "Aldrig"
+          tree:
+            components: "Komponenter"
+            select: "Välj"
         modal:
           title: "Modal"
           header: "Modal titel"

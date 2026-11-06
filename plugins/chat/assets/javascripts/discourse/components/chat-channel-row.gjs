@@ -5,29 +5,31 @@ import { action } from "@ember/object";
 import didInsert from "@ember/render-modifiers/modifiers/did-insert";
 import willDestroy from "@ember/render-modifiers/modifiers/will-destroy";
 import { LinkTo } from "@ember/routing";
+import { cancel } from "@ember/runloop";
 import { service } from "@ember/service";
-import { htmlSafe } from "@ember/template";
+import { trustHTML } from "@ember/template";
 import { modifier as modifierFn } from "ember-modifier";
-import { and, eq } from "truth-helpers";
-import concatClass from "discourse/helpers/concat-class";
-import icon from "discourse/helpers/d-icon";
-import replaceEmoji from "discourse/helpers/replace-emoji";
 import { popupAjaxError } from "discourse/lib/ajax-error";
 import { bind } from "discourse/lib/decorators";
+import discourseLater from "discourse/lib/later";
+import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
+import dIcon from "discourse/ui-kit/helpers/d-icon";
+import dReplaceEmoji from "discourse/ui-kit/helpers/d-replace-emoji";
 import { i18n } from "discourse-i18n";
 import ChannelIcon from "discourse/plugins/chat/discourse/components/channel-icon";
 import ChannelName from "discourse/plugins/chat/discourse/components/channel-name";
 import ChatChannelMetadata from "discourse/plugins/chat/discourse/components/chat-channel-metadata";
+import ChatChannelSidebarContextMenu from "discourse/plugins/chat/discourse/components/chat-channel-sidebar-context-menu";
 import ToggleChannelMembershipButton from "discourse/plugins/chat/discourse/components/toggle-channel-membership-button";
+import ChatOnLongPress from "discourse/plugins/chat/discourse/modifiers/chat/on-long-press";
 
 const FADEOUT_CLASS = "-fade-out";
 
 export default class ChatChannelRow extends Component {
-  @service api;
   @service capabilities;
   @service chat;
-  @service currentUser;
-  @service router;
+  @service chatApi;
+  @service menu;
   @service site;
 
   @tracked isAtThreshold = false;
@@ -37,7 +39,7 @@ export default class ChatChannelRow extends Component {
   @tracked shouldReset = false;
   @tracked diff = 0;
   @tracked rowStyle = null;
-  @tracked canSwipe = true;
+  @tracked isLongPressing = false;
 
   registerSwipableRow = modifierFn((element) => {
     this.swipableRow = element;
@@ -45,7 +47,7 @@ export default class ChatChannelRow extends Component {
 
   onReset = modifierFn((element) => {
     const handler = () => {
-      this.rowStyle = htmlSafe("margin-right: 0px;");
+      this.rowStyle = trustHTML("margin-right: 0px;");
       this.showRemoveButton = false;
       this.shouldReset = false;
     };
@@ -54,7 +56,7 @@ export default class ChatChannelRow extends Component {
 
     return () => {
       element.removeEventListener("transitionend", handler);
-      this.rowStyle = htmlSafe("margin-right: 0px;");
+      this.rowStyle = trustHTML("margin-right: 0px;");
       this.showRemoveButton = false;
       this.shouldReset = false;
     };
@@ -88,47 +90,24 @@ export default class ChatChannelRow extends Component {
     };
   });
 
-  @bind
-  onSwipeStart(event) {
-    this._initialX = event.changedTouches[0].screenX;
-  }
-
-  @bind
-  onSwipe(event) {
-    this.showRemoveButton = true;
-    this.shouldReset = false;
-    this.isAtThreshold = false;
-
-    const threshold = window.innerWidth / 3;
-    const touchX = event.changedTouches[0].screenX;
-
-    this.diff = this._initialX - touchX;
-    this.isAtThreshold = this.diff >= threshold;
-
-    // ensures we will go back to the initial position when swiping very fast
-    if (this.diff > 25) {
-      if (this.isAtThreshold) {
-        this.diff = threshold + (this.diff - threshold) * 0.1;
-      }
-
-      this.rowStyle = htmlSafe(`margin-right: ${this.diff}px;`);
-    } else {
-      this.rowStyle = htmlSafe("margin-right: 0px;");
-    }
-  }
-
-  @bind
-  onSwipeEnd() {
-    if (this.isAtThreshold) {
-      this.rowStyle = htmlSafe("margin-right: 0px;");
-      this.shouldRemoveChannel = true;
-    } else {
-      this.shouldReset = true;
-    }
+  willDestroy() {
+    super.willDestroy(...arguments);
+    cancel(this._longPressActivationHandler);
+    cancel(this._removeClickSuppressorHandler);
   }
 
   get shouldHandleSwipe() {
-    return this.capabilities.touch && this.args.channel.isDirectMessageChannel;
+    // layout mode, not viewport width: the swipe styles and animations only
+    // exist in the mobile stylesheet bundle
+    if (!this.capabilities.touch || !this.site.mobileView) {
+      return false;
+    }
+
+    return this.args.channel.isDirectMessageChannel || this.channelHasUnread;
+  }
+
+  get isSwipeToClearNotifications() {
+    return !this.args.channel.isDirectMessageChannel;
   }
 
   get leaveDirectMessageLabel() {
@@ -155,7 +134,101 @@ export default class ChatChannelRow extends Component {
   }
 
   get #firstDirectMessageUser() {
-    return this.args.channel?.chatable?.users?.firstObject;
+    return this.args.channel?.chatable?.users?.[0];
+  }
+
+  @bind
+  onSwipeStart(event) {
+    this._initialX = event.changedTouches[0].screenX;
+  }
+
+  @bind
+  onSwipe(event) {
+    this.showRemoveButton = true;
+    this.shouldReset = false;
+    this.isAtThreshold = false;
+
+    const threshold = window.innerWidth / 3;
+    const touchX = event.changedTouches[0].screenX;
+
+    this.diff = this._initialX - touchX;
+    this.isAtThreshold = this.diff >= threshold;
+
+    // ensures we will go back to the initial position when swiping very fast
+    if (this.diff > 25) {
+      if (this.isAtThreshold) {
+        this.diff = threshold + (this.diff - threshold) * 0.1;
+      }
+
+      this.rowStyle = trustHTML(`margin-right: ${this.diff}px;`);
+    } else {
+      this.rowStyle = trustHTML("margin-right: 0px;");
+    }
+  }
+
+  @bind
+  onSwipeEnd() {
+    if (this.isAtThreshold) {
+      if (this.isSwipeToClearNotifications) {
+        this.#clearNotifications();
+        this.shouldReset = true;
+      } else {
+        this.rowStyle = trustHTML("margin-right: 0px;");
+        this.shouldRemoveChannel = true;
+      }
+    } else {
+      this.shouldReset = true;
+    }
+  }
+
+  @bind
+  suppressEvent(event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  @action
+  onLongPressStart(element) {
+    // suppress the native context menu during the press
+    element.addEventListener("contextmenu", this.suppressEvent);
+
+    this._longPressActivationHandler = discourseLater(() => {
+      this.isLongPressing = true;
+    }, 125);
+  }
+
+  @action
+  onLongPressCancel(element) {
+    cancel(this._longPressActivationHandler);
+    this.isLongPressing = false;
+
+    element.removeEventListener("contextmenu", this.suppressEvent);
+
+    this._removeClickSuppressorHandler = discourseLater(() => {
+      element.removeEventListener("click", this.suppressEvent, {
+        capture: true,
+      });
+    }, 200);
+  }
+
+  @action
+  onLongPressEnd(element) {
+    cancel(this._longPressActivationHandler);
+    this.isLongPressing = false;
+
+    // stop the release from clicking through to the channel link
+    element.addEventListener("click", this.suppressEvent, { capture: true });
+
+    document.activeElement?.blur();
+
+    this.menu.show(element, {
+      identifier: this.args.channel.isDirectMessageChannel
+        ? "chat-direct-message-channel-menu"
+        : "chat-channel-menu",
+      component: ChatChannelSidebarContextMenu,
+      modalForMobile: true,
+      data: { channel: this.args.channel },
+    });
   }
 
   @action
@@ -168,42 +241,67 @@ export default class ChatChannelRow extends Component {
     this.#firstDirectMessageUser?.statusManager.stopTrackingStatus();
   }
 
+  #clearNotifications() {
+    const channel = this.args.channel;
+    if (!channel.currentUserMembership) {
+      return;
+    }
+
+    const lastMessageId = channel.lastMessage?.id;
+    channel.tracking.reset();
+    channel.updateLastViewedAt();
+
+    if (lastMessageId) {
+      this.chatApi
+        .markChannelAsRead(channel.id, lastMessageId)
+        .catch(popupAjaxError);
+    }
+  }
+
   <template>
     <LinkTo
-      @route="chat.channel"
-      @models={{@channel.routeModels}}
-      class={{concatClass
+      class={{dConcatClass
         "chat-channel-row"
         (if @channel.focused "focused")
         (if @channel.currentUserMembership.muted "muted")
         (if @options.leaveButton "can-leave")
         (if (eq this.chat.activeChannel.id @channel.id) "active")
         (if this.channelHasUnread "has-unread")
+        (if this.isLongPressing "is-long-pressed")
       }}
-      tabindex="0"
       data-chat-channel-id={{@channel.id}}
+      tabindex="0"
+      @models={{@channel.routeModels}}
+      @route="chat.channel"
       {{didInsert this.startTrackingStatus}}
       {{willDestroy this.stopTrackingStatus}}
       {{(if this.shouldRemoveChannel (modifier this.onRemoveChannel))}}
+      {{ChatOnLongPress
+        this.onLongPressStart
+        this.onLongPressEnd
+        this.onLongPressCancel
+      }}
     >
       <div
-        class={{concatClass
+        class={{dConcatClass
           "chat-channel-row__content"
           (if @channel.isCategoryChannel "is-category" "is-dm")
           (if this.shouldReset "-animate-reset")
         }}
+        style={{this.rowStyle}}
         {{(if this.shouldHandleSwipe (modifier this.registerSwipableRow))}}
         {{(if this.shouldHandleSwipe (modifier this.handleSwipe))}}
         {{(if this.shouldReset (modifier this.onReset))}}
-        style={{this.rowStyle}}
       >
         <ChannelIcon @channel={{@channel}} />
         <div class="chat-channel-row__info">
-          <ChannelName @channel={{@channel}} @unreadIndicator={{true}} />
+          <div class="chat-channel-row__name-container">
+            <ChannelName @channel={{@channel}} @unreadIndicator={{true}} />
+          </div>
           <ChatChannelMetadata @channel={{@channel}} />
           {{#if this.shouldRenderLastMessage}}
             <div class="chat-channel__last-message">
-              {{replaceEmoji (htmlSafe @channel.lastMessage.excerpt)}}
+              {{dReplaceEmoji (trustHTML @channel.lastMessage.excerpt)}}
             </div>
           {{/if}}
         </div>
@@ -229,12 +327,15 @@ export default class ChatChannelRow extends Component {
 
       {{#if this.showRemoveButton}}
         <div
-          class={{concatClass
+          class={{dConcatClass
             "chat-channel-row__action-btn"
+            (if this.isSwipeToClearNotifications "--clear" "--remove")
             (if this.isAtThreshold "-at-threshold" "-not-at-threshold")
           }}
         >
-          {{icon "circle-xmark"}}
+          {{dIcon
+            (if this.isSwipeToClearNotifications "circle-check" "circle-xmark")
+          }}
         </div>
       {{/if}}
     </LinkTo>

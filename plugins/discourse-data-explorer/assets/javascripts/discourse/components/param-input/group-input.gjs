@@ -1,6 +1,6 @@
 import Component from "@glimmer/component";
 import { service } from "@ember/service";
-import GroupChooser from "select-kit/components/group-chooser";
+import GroupChooser from "discourse/select-kit/components/group-chooser";
 
 export default class GroupInput extends Component {
   @service site;
@@ -18,16 +18,16 @@ export default class GroupInput extends Component {
   }
 
   <template>
-    <@field.Custom id={{@field.id}}>
+    <@Control id={{@field.id}}>
       <GroupChooser
+        name={{@info.identifier}}
         @content={{this.allGroups}}
-        @value={{@field.value}}
         @labelProperty="name"
-        @valueProperty="name"
         @onChange={{@field.set}}
         @options={{this.groupChooserOption}}
-        name={{@info.identifier}}
+        @value={{@field.value}}
+        @valueProperty="name"
       />
-    </@field.Custom>
+    </@Control>
   </template>
 }

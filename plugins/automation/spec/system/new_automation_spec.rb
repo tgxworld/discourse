@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "DiscourseAutomation | New automation", type: :system do
+describe "DiscourseAutomation | New automation" do
   fab!(:admin)
 
   before do
@@ -14,9 +14,14 @@ describe "DiscourseAutomation | New automation", type: :system do
     it "navigates to automation edit route" do
       new_automation_page.visit
 
-      find(".admin-section-landing-item__content", match: :first).click
+      find(
+        ".admin-section-landing-item__content",
+        text: I18n.t("discourse_automation.scriptables.post.title"),
+      ).click
+      new_automation_page.select_trigger("recurring")
 
       expect(page).to have_css(".scriptables")
+      expect(page).to have_css(".d-editor")
     end
   end
 end

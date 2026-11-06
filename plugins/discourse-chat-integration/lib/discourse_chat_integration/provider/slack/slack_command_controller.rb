@@ -2,7 +2,7 @@
 
 module DiscourseChatIntegration::Provider::SlackProvider
   class SlackCommandController < DiscourseChatIntegration::Provider::HookController
-    requires_provider ::DiscourseChatIntegration::Provider::SlackProvider::PROVIDER_NAME
+    requires_provider DiscourseChatIntegration::Provider::SlackProvider::PROVIDER_NAME
 
     before_action :slack_token_valid?, only: :command
     before_action :slack_payload_token_valid?, only: :interactive
@@ -20,8 +20,7 @@ module DiscourseChatIntegration::Provider::SlackProvider
     end
 
     def interactive
-      json = JSON.parse(params[:payload], symbolize_names: true)
-      process_interactive(json)
+      process_interactive(@parsed_payload)
       head :ok
     end
 
@@ -66,7 +65,7 @@ module DiscourseChatIntegration::Provider::SlackProvider
           params[:response_url],
         )
       else
-        { text: ::DiscourseChatIntegration::Helper.process_command(channel, tokens) }
+        { text: DiscourseChatIntegration::Helper.process_command(channel, tokens) }
       end
     end
 
@@ -255,10 +254,10 @@ module DiscourseChatIntegration::Provider::SlackProvider
     def slack_payload_token_valid?
       params.require(:payload)
 
-      json = JSON.parse(params[:payload], symbolize_names: true)
+      @parsed_payload = JSON.parse(params[:payload], symbolize_names: true)
 
       if SiteSetting.chat_integration_slack_incoming_webhook_token.blank? ||
-           SiteSetting.chat_integration_slack_incoming_webhook_token != json[:token]
+           SiteSetting.chat_integration_slack_incoming_webhook_token != @parsed_payload[:token]
         raise Discourse::InvalidAccess.new
       end
     end

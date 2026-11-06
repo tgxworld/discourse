@@ -20,8 +20,10 @@ OmniAuth.config.before_request_phase do |env|
   # If the user is trying to reconnect to an existing account, store in session
   request.session[:auth_reconnect] = !!request.params["reconnect"]
 
-  # If the client provided an origin, store in session to redirect back
-  request.session[:destination_url] = request.params["origin"] if request.params["origin"].present?
+  # If the client provided an origin, store in the server session to redirect back
+  request.server_session[:destination_url] = request.params["origin"] if request.params[
+    "origin"
+  ].present?
 end
 
 OmniAuth.config.on_failure do |env|
@@ -33,11 +35,13 @@ OmniAuth.config.on_failure do |env|
 
   next OmniAuth::FailureEndpoint.call(env) if !is_rescued_error # let the default behavior handle it
 
+  require "oauth" if !defined?(OAuth)
+
   case exception
   when OAuth::Unauthorized
     # OAuth1 (i.e. Twitter) makes a web request during the setup phase
     # If it fails, Omniauth does not handle the error. Handle it here
-    env["omniauth.error.type"] = "request_error"
+    env["omniauth.error.type"] = "unauthorized"
   when JWT::InvalidIatError
     # Happens for openid-connect (including google) providers, when the server clock is wrong
     env["omniauth.error.type"] = "invalid_iat"

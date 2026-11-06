@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
 module DiscourseChatIntegration::Provider::WebexProvider
-  PROVIDER_NAME = "webex".freeze
+  PROVIDER_NAME = "webex"
+  POPULARITY_SCORE = 50
   PROVIDER_ENABLED_SETTING = :chat_integration_webex_enabled
-  CHANNEL_IDENTIFIER_KEY = "name".freeze
+  CHANNEL_IDENTIFIER_KEY = "name"
   CHANNEL_PARAMETERS = [
     { key: "name", regex: '^\S+$', unique: true },
     {
@@ -31,17 +32,17 @@ module DiscourseChatIntegration::Provider::WebexProvider
       else
         error_key = nil
       end
-      raise ::DiscourseChatIntegration::ProviderError.new info: {
-                                                            error_key: error_key,
-                                                            request: req.body,
-                                                            response_code: response.code,
-                                                            response_body: response.body,
-                                                          }
+      raise DiscourseChatIntegration::ProviderError.new info: {
+                                                          error_key: error_key,
+                                                          request: req.body,
+                                                          response_code: response.code,
+                                                          response_body: response.body,
+                                                        }
     end
   end
 
   def self.get_message(post)
-    display_name = ::DiscourseChatIntegration::Helper.formatted_display_name(post.user)
+    display_name = DiscourseChatIntegration::Helper.formatted_display_name(post.user)
 
     topic = post.topic
 
@@ -51,7 +52,7 @@ module DiscourseChatIntegration::Provider::WebexProvider
     elsif topic.category
       category =
         (
-          if (topic.category.parent_category)
+          if topic.category.parent_category
             "[#{topic.category.parent_category.name}/#{topic.category.name}]"
           else
             "[#{topic.category.name}]"
@@ -60,7 +61,8 @@ module DiscourseChatIntegration::Provider::WebexProvider
     end
 
     markdown = "**#{topic.title}**: #{category}"
-    markdown += " #{topic.tags.map(&:name).join(", ")} " if topic.tags.present?
+    markdown +=
+      " #{DiscourseChatIntegration::Provider.display_tag_names(topic)} " if topic.tags.present?
     markdown += "(#{post.full_url}) from #{display_name}:\n"
     markdown +=
       post.excerpt(

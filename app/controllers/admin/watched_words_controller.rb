@@ -17,6 +17,10 @@ class Admin::WatchedWordsController < Admin::StaffController
     action = WatchedWord.actions[opts[:action_key].to_sym]
     words = opts.delete(:words)
 
+    if action == WatchedWord.actions[:tag] && watched_words_params[:replacement_tags].present?
+      opts = opts.merge(replacement: resolve_replacement_tags)
+    end
+
     watched_word_group = WatchedWordGroup.new(action: action)
     watched_word_group.create_or_update_members(words, opts)
 
@@ -54,12 +58,27 @@ class Admin::WatchedWordsController < Admin::StaffController
     action_key = params[:action_key].to_sym
     has_replacement = WatchedWord.has_replacement?(action_key)
 
+    content = File.read(file.tempfile, encoding: "bom|utf-8")
+    max_words = WatchedWord::MAX_WORDS_PER_ACTION
+
+    rows =
+      begin
+        CSV.new(content).lazy.select { |row| row[0].present? }.first(max_words + 1)
+      rescue CSV::MalformedCSVError => e
+        return render_json_error(e.message, status: :unprocessable_entity)
+      end
+
+    if rows.size > max_words
+      error = I18n.t("watched_words.upload_too_many_csv_entries", count: max_words)
+      return render_json_error(error, status: :unprocessable_entity)
+    end
+
     Scheduler::Defer.later("Upload watched words") do
       begin
-        content = Encodings.to_utf8(File.read(file.tempfile, mode: "rb"))
+        words_updated = 0
 
-        CSV.parse(content) do |row|
-          if row[0].present? && (!has_replacement || row[1].present?)
+        rows.each do |row|
+          if !has_replacement || row[1].present?
             watched_word =
               WatchedWord.create_or_update_word(
                 word: row[0],
@@ -68,16 +87,17 @@ class Admin::WatchedWordsController < Admin::StaffController
                 case_sensitive: "true" == row[2]&.strip&.downcase,
               )
             if watched_word.valid?
+              words_updated += 1
               StaffActionLogger.new(current_user).log_watched_words_creation(watched_word)
             end
           end
         end
 
-        data = { url: "/ok" }
+        data = { result: "ok", words_updated: words_updated }
       rescue => e
-        data = failed_json.merge(errors: [e.message])
+        data = failed_json.merge(errors: [e.message], words_updated: words_updated)
       end
-      MessageBus.publish("/uploads/txt", data.as_json, client_ids: [params[:client_id]])
+      MessageBus.publish("/watched_words/upload", data.as_json, client_ids: [params[:client_id]])
     end
 
     render json: success_json
@@ -89,14 +109,16 @@ class Admin::WatchedWordsController < Admin::StaffController
     action = WatchedWord.actions[name]
     raise Discourse::NotFound if !action
 
-    content = WatchedWord.where(action: action)
-    if WatchedWord.has_replacement?(name)
-      content = content.pluck(:word, :replacement).map(&:to_csv).join
-    else
-      content = content.pluck(:word).join("\n")
-    end
+    content =
+      CSV.generate(+Encodings::BOM) do |csv|
+        WatchedWord
+          .where(action:)
+          .pluck(:word, :replacement, :case_sensitive)
+          .each { |row| csv << row }
+      end
 
     headers["Content-Length"] = content.bytesize.to_s
+
     send_data content,
               filename: "#{Discourse.current_hostname}-watched-words-#{name}.csv",
               content_type: "text/csv"
@@ -122,6 +144,32 @@ class Admin::WatchedWordsController < Admin::StaffController
 
   def watched_words_params
     @watched_words_params ||=
-      params.permit(:id, :replacement, :action_key, :case_sensitive, :html, words: [])
+      params.permit(
+        :id,
+        :replacement,
+        :action_key,
+        :case_sensitive,
+        :html,
+        words: [],
+        replacement_tags: %i[id name],
+      )
+  end
+
+  def resolve_replacement_tags
+    tags_param = watched_words_params[:replacement_tags]
+    tags_param = tags_param.values if tags_param.is_a?(ActionController::Parameters)
+    return if tags_param.blank?
+
+    tag_ids = tags_param.filter_map { |t| t[:id]&.to_i }
+    new_tag_names = tags_param.select { |t| t[:id].blank? }.filter_map { |t| t[:name] }
+
+    tag_names = Tag.where(id: tag_ids).pluck(:name)
+
+    if new_tag_names.present?
+      new_tags = DiscourseTagging.find_or_create_tags!(new_tag_names, guardian)
+      tag_names.concat(new_tags.map(&:name))
+    end
+
+    tag_names.join(",")
   end
 end

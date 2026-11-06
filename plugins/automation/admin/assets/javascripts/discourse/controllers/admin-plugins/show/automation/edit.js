@@ -1,10 +1,10 @@
+import { tracked } from "@glimmer/tracking";
 import Controller from "@ember/controller";
 import { action, computed, set } from "@ember/object";
-import { filterBy, reads } from "@ember/object/computed";
 import { schedule } from "@ember/runloop";
 import { service } from "@ember/service";
 import { ajax } from "discourse/lib/ajax";
-import { extractError } from "discourse/lib/ajax-error";
+import { extractError, popupAjaxError } from "discourse/lib/ajax-error";
 import { i18n } from "discourse-i18n";
 
 export default class AutomationEdit extends Controller {
@@ -15,15 +15,59 @@ export default class AutomationEdit extends Controller {
   isUpdatingAutomation = false;
   isTriggeringAutomation = false;
 
-  @reads("model.automation") automation;
-  @filterBy("automationForm.fields", "targetType", "script") scriptFields;
-  @filterBy("automationForm.fields", "targetType", "trigger") triggerFields;
+  @tracked _automationOverride;
+
+  @computed("model.automation")
+  get automation() {
+    if (this._automationOverride !== undefined) {
+      return this._automationOverride;
+    }
+    return this.model?.automation;
+  }
+
+  set automation(value) {
+    this._automationOverride = value;
+  }
+
+  @computed("automationForm.fields.@each.targetType")
+  get scriptFields() {
+    return (
+      this.automationForm?.fields?.filter?.(
+        (item) => item.targetType === "script"
+      ) ?? []
+    );
+  }
+
+  @computed("automationForm.fields.@each.targetType")
+  get triggerFields() {
+    return (
+      this.automationForm?.fields?.filter?.(
+        (item) => item.targetType === "trigger"
+      ) ?? []
+    );
+  }
 
   @computed("model.automation.next_pending_automation_at")
   get nextPendingAutomationAtFormatted() {
     const date = this.model?.automation?.next_pending_automation_at;
     if (date) {
       return moment(date).format("LLLL");
+    }
+  }
+
+  get disableEnabledToggle() {
+    return !(this.automation.canBeEnabled || this.automation.enabled);
+  }
+
+  @action
+  async toggleEnabled() {
+    const automation = this.model.automation;
+    automation.enabled = !automation.enabled;
+    try {
+      await automation.save({ enabled: automation.enabled });
+    } catch (e) {
+      popupAjaxError(e);
+      automation.enabled = !automation.enabled;
     }
   }
 

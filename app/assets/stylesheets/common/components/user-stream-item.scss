@@ -1,4 +1,5 @@
-// Common styles for "user-stream-item" component
+@use "lib/viewport";
+
 .user-stream {
   // DEPRECATED:
   // The ".item" class should be removed because it's too generic.
@@ -35,9 +36,11 @@
     .user-stream-item__details {
       flex-grow: 1;
       min-width: 0;
+      margin-right: var(--space-2);
 
       .badge-category__wrapper {
         width: auto;
+        max-width: 100%;
       }
     }
 
@@ -46,13 +49,16 @@
       display: flex;
       align-items: center;
       justify-content: flex-start;
-      gap: 0.5em;
+      flex-wrap: wrap;
+      gap: 0 0.5em;
+
+      .category {
+        overflow: hidden;
+      }
 
       span + span {
         &::before {
           content: "•";
-          margin-right: 0.25em;
-          vertical-align: middle;
           color: var(--primary-medium);
         }
       }
@@ -64,6 +70,10 @@
     font-size: var(--font-up-4);
     margin-right: 0.5rem;
     text-align: center;
+
+    @include viewport.from(sm) {
+      width: 3rem;
+    }
   }
 
   .stream-topic-title {
@@ -159,6 +169,10 @@
     max-width: 400px;
 
     @include ellipsis;
+
+    @include viewport.until(sm) {
+      vertical-align: middle;
+    }
   }
 
   .edit-reason {
@@ -169,7 +183,7 @@
   .excerpt {
     margin: 1em 0 0 0;
     font-size: var(--font-0);
-    word-wrap: break-word;
+    overflow-wrap: break-word;
     color: var(--primary);
 
     &:empty {
@@ -189,8 +203,21 @@
     }
   }
 
+  @include viewport.from(sm) {
+    .user-stream-item .excerpt,
+    .user-stream-item-actions {
+      margin: 0.75em 0 0 3.5em;
+    }
+  }
+
   .group-member-info {
     display: flex;
+
+    @include viewport.until(sm) {
+      .name {
+        vertical-align: inherit;
+      }
+    }
   }
 
   .user-stream-item .user-stream-item-draft-actions {

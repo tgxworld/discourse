@@ -92,7 +92,7 @@ class Auth::ManagedAuthenticator < Auth::Authenticator
     association.save!
 
     # Update avatar/profile
-    retrieve_avatar(association.user, association.info["image"])
+    UserAvatar.retrieve_for_associated_account(association)
     retrieve_profile(association.user, association.info)
 
     # Build the Auth::Result object
@@ -101,7 +101,7 @@ class Auth::ManagedAuthenticator < Auth::Authenticator
     result.email = info[:email]
     result.name = "#{info[:first_name]} #{info[:last_name]}".presence || info[:name]
     # Some IDPs send the email address in the name parameter (e.g. Auth0 with default configuration)
-    # We add some generic protection here, so that users don't accidently make their email addresses public
+    # We add some generic protection here, so that users don't accidentally make their email addresses public
     result.name = nil if result.name.present? && result.name == result.email
     result.username = info[:nickname]
     result.email_valid = primary_email_verified?(auth_token) if result.email.present?
@@ -122,7 +122,7 @@ class Auth::ManagedAuthenticator < Auth::Authenticator
     association.user = user
     association.save!
 
-    retrieve_avatar(user, association.info["image"])
+    UserAvatar.retrieve_for_associated_account(association, selection: :initial)
     retrieve_profile(user, association.info)
 
     auth_result.apply_associated_attributes!
@@ -136,12 +136,6 @@ class Auth::ManagedAuthenticator < Auth::Authenticator
   def find_user_by_username(auth_token)
     username = auth_token.dig(:info, :nickname)
     User.find_by_username(username) if username
-  end
-
-  def retrieve_avatar(user, url)
-    return unless user && url.present?
-    return if user.user_avatar.try(:custom_upload_id).present?
-    Jobs.enqueue(:download_avatar_from_url, url: url, user_id: user.id, override_gravatar: false)
   end
 
   def retrieve_profile(user, info)

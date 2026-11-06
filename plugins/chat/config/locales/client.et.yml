@@ -22,6 +22,12 @@ et:
             chat_channel_status_change: "Vestluskanali staatus muutus"
             chat_channel_delete: "Vestlus on kustutatud"
     chat:
+      edit_category:
+        tab_title: "Vestlus"
+        channel: "Kanal"
+        description: "Kirjeldus"
+        actions: "Tegevused"
+        settings: "Seaded"
       back_to_forum: "Foorum"
       deleted_chat_username: kustutatud
       dates:
@@ -31,6 +37,9 @@ et:
       cancel: "Tühista"
       cancel_reply: "Tühista vastus"
       chat_channels: "Kanalid"
+      pinned_bar:
+        title: "Esiletõstetud"
+      pinned: "Esiletõstetud"
       browse_all_channels: "Sirvi kõiki kanaleid"
       channel_settings:
         edit: "Muuda"
@@ -38,6 +47,7 @@ et:
         close_channel: "Sulge kanal"
         open_channel: "Ava kanal"
         archive_channel: "Arhiveeri kanal"
+        notification_settings_context: "Teavitus"
         join: "Liitu"
         leave: "Lahku"
       close: "Sulge"
@@ -62,7 +72,6 @@ et:
         none: "Pole"
       title: "vestlus"
       title_capitalized: "Vestlus"
-      exit: "tagasi"
       channel_status:
         closed: "Suletud"
         open: "Ava"
@@ -72,9 +81,13 @@ et:
         filter_all: Kõik
         filter_open: Ava
         filter_closed: Suletud
+        filter_joined_all: "Kõik"
+        filter_joined_joined: "Liitus"
       chat_message_separator:
         today: Täna
         yesterday: Eile
+      search_view:
+        filter_placeholder: Otsi sõnumeid
       about_view:
         title: Pealkiri
         name: Nimi
@@ -84,6 +97,7 @@ et:
         tabs:
           members: Liikmed
           settings: Sätted
+          search: Otsi
         remove_member: "Eemalda"
       new_message_modal:
         filter: "Filter"
@@ -92,10 +106,13 @@ et:
         title: Uus sõnum
         prefix: "Kellele:"
       create_channel:
+        description: "Kirjeldus"
         type: "Tüüp"
         types:
           category: "Foorum"
           topic: "Teema"
+      reviewable:
+        message_in_channel: "Kanal"
       composer:
         italic_text: "esiletõstetud tekst"
         bold_text: "rasvane tekst"
@@ -120,8 +137,20 @@ et:
         members_label: "Liikmed"
       admin:
         title: "Vestlus"
+      search:
+        short_title: Otsi
+        no_results: "Ei leidnud midagi"
+        sort:
+          relevance: "Asjakohasus"
+          latest: "Värskeimad"
+      direct_messages:
+        close: "Sulge kanal"
       channel_list:
         title: "Kanalid"
+        options:
+          filter: "Filter"
+        filter:
+          mentions: "Mainimised"
       incoming_webhooks:
         back: "Tagasi"
         description: "Kirjeldus"
@@ -188,3 +217,18 @@ et:
       panels:
         chat:
           label: "Vestlus"
+    discourse_workflows:
+      chat_message_created:
+        channel_id: "Kanal"
+      send_chat_message:
+        targets:
+          channel: "Kanal"
+        channel_id: "Kanal"
+        message: "Sõnum"
+      chat_approval:
+        message: "Sõnum"
+        value: "Väärtus"
+        style_default: "Vaikimisi"
+        style_success: "Korras"
+        icon: "Ikoon"
+        channel_id: "Kanal"

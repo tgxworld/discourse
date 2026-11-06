@@ -13,11 +13,11 @@ class CurrentUserOptionSerializer < ApplicationSerializer
              :hide_profile,
              :hide_presence,
              :title_count_mode,
-             :enable_defer,
              :timezone,
              :skip_new_user_tips,
              :default_calendar,
              :bookmark_auto_delete_preference,
+             :notify_on_linked_posts,
              :seen_popups,
              :should_be_redirected_to_top,
              :redirected_to_top,
@@ -25,10 +25,19 @@ class CurrentUserOptionSerializer < ApplicationSerializer
              :sidebar_link_to_filtered_list,
              :sidebar_show_count_of_new_items,
              :composition_mode,
-             :interface_color_mode
+             :interface_color_mode,
+             :show_original_content,
+             :send_shortcut,
+             :automatically_translate,
+             :understood_languages,
+             :hidden_composer_toolbar_buttons
 
   def likes_notifications_disabled
     object.likes_notifications_disabled?
+  end
+
+  def show_original_content
+    !object.automatically_translate
   end
 
   def include_redirected_to_top?

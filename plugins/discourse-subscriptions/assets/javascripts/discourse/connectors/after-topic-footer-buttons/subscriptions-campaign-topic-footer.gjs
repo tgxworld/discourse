@@ -1,13 +1,6 @@
-/* eslint-disable ember/no-classic-components */
-import Component from "@ember/component";
-import { classNames, tagName } from "@ember-decorators/component";
-import CampaignBanner from "../../components/campaign-banner";
+import Component from "@glimmer/component";
+import CampaignBanner from "../../components/campaign-banner.gjs";
 
-@tagName("span")
-@classNames(
-  "after-topic-footer-buttons-outlet",
-  "subscriptions-campaign-topic-footer"
-)
 export default class SubscriptionsCampaignTopicFooter extends Component {
   static shouldRender(args, context) {
     const { siteSettings } = context;
@@ -17,6 +10,11 @@ export default class SubscriptionsCampaignTopicFooter extends Component {
   }
 
   <template>
-    <CampaignBanner @connectorName="after-topic-footer-buttons" />
+    <span
+      class="after-topic-footer-buttons-outlet subscriptions-campaign-topic-footer"
+      ...attributes
+    >
+      <CampaignBanner @connectorName="after-topic-footer-buttons" />
+    </span>
   </template>
 }

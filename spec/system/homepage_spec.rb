@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "Homepage", type: :system do
+describe "Homepage" do
   fab!(:admin)
   fab!(:user)
   fab!(:topics) { Fabricate.times(5, :post).map(&:topic) }
@@ -12,7 +12,7 @@ describe "Homepage", type: :system do
     # A workaround to avoid the global notice from interfering with the tests
     # It is coming from the ensure_login_hint.rb initializer and it gets
     # evaluated before the tests run (and it wrongly counts 0 admins defined)
-    SiteSetting.global_notice = nil
+    SiteSetting.global_notice = ""
   end
 
   it "shows a list of topics by default" do
@@ -39,8 +39,37 @@ describe "Homepage", type: :system do
     expect(page).to have_css(".navigation-container .hot.active", text: "Hot")
   end
 
-  it "defaults to first top_menu item as anonymous homepage" do
-    SiteSetting.top_menu = "categories|latest|new|unread"
+  it "allows users to reset their homepage preference to the site default" do
+    user.user_option.update!(homepage_id: UserOption::HOMEPAGES.key("hot"))
+    SiteSetting.default_homepage = "categories"
+
+    sign_in user
+    visit "/"
+
+    expect(page).to have_css(".navigation-container .hot.active", text: "Hot")
+
+    user_preferences_interface_page.visit(user)
+
+    homepage_picker = PageObjects::Components::SelectKit.new("#home-selector")
+    homepage_picker.expand
+    homepage_picker.select_row_by_name("Default")
+
+    user_preferences_interface_page.save_changes
+
+    visit "/"
+
+    expect(page).to have_css(".navigation-container .categories.active", text: "Categories")
+  end
+
+  it "defaults to first top_menu item as anonymous homepage when default_homepage is not set" do
+    SiteSetting.top_menu = "categories|latest|new"
+    visit "/"
+
+    expect(page).to have_css(".navigation-container .categories.active", text: "Categories")
+  end
+
+  it "uses default_homepage for both anonymous and logged-in users" do
+    SiteSetting.default_homepage = "categories"
     visit "/"
 
     expect(page).to have_css(".navigation-container .categories.active", text: "Categories")
@@ -49,6 +78,43 @@ describe "Homepage", type: :system do
     visit "/"
 
     expect(page).to have_css(".navigation-container .categories.active", text: "Categories")
+  end
+
+  it "diverges for a user-scoped homepage: logged-in users get it, anon falls back" do
+    SiteSetting.top_menu = "latest|new|bookmarks|categories"
+    SiteSetting.default_homepage = "bookmarks"
+
+    visit "/"
+    expect(page).to have_current_path("/")
+    expect(page).to have_css(".navigation-container .latest.active", text: "Latest")
+
+    sign_in user
+    visit "/"
+    expect(page).to have_current_path("/")
+    expect(page).to have_css(".navigation-container .bookmarks.active", text: "Bookmarks")
+  end
+
+  it "renders an empty state when a user-scoped homepage has no content" do
+    SiteSetting.top_menu = "latest|new|bookmarks|categories"
+    SiteSetting.default_homepage = "bookmarks"
+
+    sign_in user
+    visit "/"
+
+    expect(page).to have_current_path("/")
+    expect(page).to have_css(".navigation-container .bookmarks.active", text: "Bookmarks")
+    expect(discovery.topic_list).to have_no_topics
+  end
+
+  it "renders the homepage but highlights no nav tab when the homepage is not a top_menu item" do
+    SiteSetting.top_menu = "latest|new|categories"
+    SiteSetting.default_homepage = "top"
+
+    visit "/"
+
+    expect(page).to have_css(".list-container")
+    expect(page).to have_no_css(".nav-item_top")
+    expect(page).to have_no_css(".navigation-container .active")
   end
 
   shared_examples "a custom homepage" do
@@ -98,7 +164,7 @@ describe "Homepage", type: :system do
       homepage_picker = PageObjects::Components::SelectKit.new("#home-selector")
       homepage_picker.expand
       # user selects theme custom homepage again
-      homepage_picker.select_row_by_name("(default)")
+      homepage_picker.select_row_by_name("Default")
       user_preferences_interface_page.save_changes
 
       click_logo
@@ -136,14 +202,21 @@ describe "Homepage", type: :system do
         Fabricate(
           :theme_field,
           theme: theme,
-          type_id: ThemeField.types[:html],
-          target_id: Theme.targets[:common],
-          name: "head_tag",
-          value: <<~HTML,
-            <script type="text/x-handlebars" data-template-name="/connectors/custom-homepage/new-home">
-              <div class="new-home">Hi friends!</div>
-            </script>
-          HTML
+          type_id: ThemeField.types[:js],
+          target_id: Theme.targets[:extra_js],
+          name: "discourse/api-initializers/theme-initializer.gjs",
+          value: <<~GJS,
+            import { apiInitializer } from "discourse/lib/api";
+
+            export default apiInitializer((api) => {
+              api.renderInOutlet(
+                "custom-homepage",
+                <template>
+                  <div class="new-home">Hi friends!</div>
+                </template>
+              );
+            });
+          GJS
         )
       end
 
@@ -156,14 +229,21 @@ describe "Homepage", type: :system do
         Fabricate(
           :theme_field,
           theme: component,
-          type_id: ThemeField.types[:html],
-          target_id: Theme.targets[:common],
-          name: "head_tag",
-          value: <<~HTML,
-            <script type="text/x-handlebars" data-template-name="/connectors/custom-homepage/new-home">
-              <div class="new-home">Hi friends!</div>
-            </script>
-          HTML
+          type_id: ThemeField.types[:js],
+          target_id: Theme.targets[:extra_js],
+          name: "discourse/api-initializers/theme-initializer.gjs",
+          value: <<~GJS,
+            import { apiInitializer } from "discourse/lib/api";
+
+            export default apiInitializer((api) => {
+              api.renderInOutlet(
+                "custom-homepage",
+                <template>
+                  <div class="new-home">Hi friends!</div>
+                </template>
+              );
+            });
+          GJS
         )
       end
 
@@ -179,14 +259,21 @@ describe "Homepage", type: :system do
       Fabricate(
         :theme_field,
         theme: component,
-        type_id: ThemeField.types[:html],
-        target_id: Theme.targets[:common],
-        name: "head_tag",
-        value: <<~HTML,
-            <script type="text/x-handlebars" data-template-name="/connectors/custom-homepage/new-home">
-              <div class="new-home">Hi friends!</div>
-            </script>
-          HTML
+        type_id: ThemeField.types[:js],
+        target_id: Theme.targets[:extra_js],
+        name: "discourse/api-initializers/theme-initializer.gjs",
+        value: <<~GJS,
+          import { apiInitializer } from "discourse/lib/api";
+
+          export default apiInitializer((api) => {
+            api.renderInOutlet(
+              "custom-homepage",
+              <template>
+                <div class="new-home">Hi friends!</div>
+              </template>
+            );
+          });
+        GJS
       )
     end
 

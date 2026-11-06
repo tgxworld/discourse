@@ -73,8 +73,14 @@ module BadgeQueries
       SELECT pa.user_id, min(pa.id) id
       FROM post_actions pa
       JOIN badge_posts p on p.id = pa.post_id
-      WHERE post_action_type_id IN (#{PostActionType.flag_types_without_additional_message.values.join(",")}) AND
-        (:backfill OR pa.post_id IN (:post_ids) )
+      WHERE post_action_type_id IN (
+        SELECT f.id
+        FROM flags f
+        WHERE name != 'like'
+        AND score_type IS FALSE
+        AND require_message IS FALSE
+      )
+      AND (:backfill OR pa.post_id IN (:post_ids))
       GROUP BY pa.user_id
     ) x
     JOIN post_actions pa1 on pa1.id = x.id
@@ -193,18 +199,15 @@ module BadgeQueries
   end
 
   def self.sharing_badge(count)
+    # Not that DISTINCT(i.ip_address, i.current_user_id) works because there is an underlying assumption that
+    # `IncomingLink#ip_address` is not set when `IncomingLink#current_user_id` is set.
     <<~SQL
-      SELECT views.user_id, i2.post_id, current_timestamp granted_at
-      FROM
-      (
-        SELECT i.user_id, MIN(i.id) i_id
-        FROM incoming_links i
-        JOIN badge_posts p on p.id = i.post_id
-        JOIN users u on u.id = i.user_id
-        GROUP BY i.user_id,i.post_id
-        HAVING COUNT(*) >= #{count}
-      ) as views
-      JOIN incoming_links i2 ON i2.id = views.i_id
+      SELECT i.user_id, i.post_id, CURRENT_TIMESTAMP granted_at
+      FROM incoming_links i
+      JOIN badge_posts p on p.id = i.post_id
+      JOIN users u on u.id = i.user_id
+      GROUP BY i.user_id,i.post_id
+      HAVING COUNT(DISTINCT(i.ip_address, i.current_user_id)) >= #{count}
     SQL
   end
 
@@ -277,12 +280,33 @@ module BadgeQueries
   end
 
   def self.anniversaries(start_date, end_date)
+    end_year = end_date.year
     start_date = start_date.iso8601(6)
     end_date = end_date.iso8601(6)
 
     <<~SQL
-      SELECT u.id
-        FROM users AS u
+      WITH anniversary_candidates AS (
+        SELECT u.*,
+               #{end_year} - EXTRACT(YEAR FROM u.created_at)::integer AS anniversary_year
+          FROM users AS u
+      ),
+      anniversary_years AS (
+        SELECT u.*,
+               CASE
+                 WHEN u.created_at + make_interval(years => u.anniversary_year) <= '#{end_date}'
+                   THEN u.anniversary_year
+                 ELSE u.anniversary_year - 1
+               END AS current_anniversary_year
+          FROM anniversary_candidates AS u
+      ),
+      users_with_anniversaries AS (
+        SELECT u.*,
+               u.created_at + make_interval(years => u.current_anniversary_year) AS anniversary_at,
+               u.created_at + make_interval(years => u.current_anniversary_year + 1) AS next_anniversary_at
+          FROM anniversary_years AS u
+      )
+      SELECT u.id AS user_id, u.anniversary_at AS granted_at
+        FROM users_with_anniversaries AS u
         JOIN posts AS p ON p.user_id = u.id
         JOIN topics AS t ON p.topic_id = t.id
        WHERE u.id > 0
@@ -297,9 +321,9 @@ module BadgeQueries
          AND t.visible
          AND t.archetype <> 'private_message'
          AND t.deleted_at IS NULL
-         AND NOT EXISTS (SELECT 1 FROM user_badges AS ub WHERE ub.user_id = u.id AND ub.badge_id = #{Badge::Anniversary} AND ub.granted_at BETWEEN '#{start_date}' AND '#{end_date}')
+         AND NOT EXISTS (SELECT 1 FROM user_badges AS ub WHERE ub.user_id = u.id AND ub.badge_id = #{Badge::Anniversary} AND ub.granted_at >= u.anniversary_at AND ub.granted_at < u.next_anniversary_at)
          AND NOT EXISTS (SELECT 1 FROM anonymous_users AS au WHERE au.user_id = u.id)
-       GROUP BY u.id
+       GROUP BY u.id, u.anniversary_at
       HAVING COUNT(p.id) > 0
     SQL
   end

@@ -15,6 +15,19 @@ module PageObjects
         has_css?(".welcome-banner", visible: false)
       end
 
+      def open_search_menu
+        find(".welcome-banner #welcome-banner-search-input").click
+        self
+      end
+
+      def has_search_menu?
+        has_css?(".welcome-banner .search-menu-panel", visible: false)
+      end
+
+      def has_no_search_menu?
+        has_no_css?(".welcome-banner .search-menu-panel", visible: false)
+      end
+
       def has_anonymous_title?
         has_css?(
           ".welcome-banner .welcome-banner__title",
@@ -27,6 +40,13 @@ module PageObjects
           ".welcome-banner .welcome-banner__title",
           text:
             I18n.t("js.welcome_banner.header.logged_in_members", preferred_display_name: username),
+        )
+      end
+
+      def has_new_user_title?(username)
+        has_css?(
+          ".welcome-banner .welcome-banner__title",
+          text: I18n.t("js.welcome_banner.header.new_members", preferred_display_name: username),
         )
       end
 
@@ -48,12 +68,32 @@ module PageObjects
         )
       end
 
+      def has_no_bg_img?
+        has_no_css?(".welcome-banner.--with-bg-img")
+      end
+
+      def has_bg_img?(url)
+        has_css?(
+          ".welcome-banner.--with-bg-img .custom-search-banner-wrap.welcome-banner__wrap",
+          style: "background-image:url(#{url});",
+          visible: true,
+        )
+      end
+
+      def has_custom_text_color?(color)
+        has_css?(".welcome-banner .welcome-banner__title", style: "color:#{color};", visible: true)
+      end
+
+      def has_no_custom_text_color?(color)
+        has_no_css?(".welcome-banner .welcome-banner__title", style: "color:#{color};")
+      end
+
       def above_topic_content?
-        has_css?("#main-outlet > .--location-above-topic-content", visible: :visible)
+        has_css?("#main-outlet > .--location-above-topic-content", visible: true)
       end
 
       def below_site_header?
-        has_css?(".discourse-root > .--location-below-site-header", visible: :visible)
+        has_css?(".discourse-root > .--location-below-site-header", visible: true)
       end
     end
   end

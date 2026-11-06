@@ -3,8 +3,6 @@
 RSpec.describe FormTemplatesController do
   fab!(:user)
 
-  before { SiteSetting.experimental_form_templates = true }
-
   describe "#index" do
     fab!(:form_template)
     fab!(:form_template_2, :form_template)
@@ -13,7 +11,7 @@ RSpec.describe FormTemplatesController do
     context "when logged in as a user" do
       before { sign_in(user) }
 
-      it "should return all form templates ordered by its ids" do
+      it "returns all form templates ordered by ID" do
         get "/form-templates.json"
         expect(response.status).to eq(200)
         json = response.parsed_body
@@ -25,10 +23,41 @@ RSpec.describe FormTemplatesController do
 
         expect(templates).to eq(form_templates)
       end
+
+      context "with private and public category templates" do
+        fab!(:group)
+        fab!(:private_category) { Fabricate(:private_category, group: group) }
+        fab!(:private_template) do
+          Fabricate(
+            :form_template,
+            name: "Private Template",
+            template: "---\n- type: input\n  id: secret\n",
+          )
+        end
+        fab!(:public_category, :category)
+        fab!(:public_template) { Fabricate(:form_template, name: "Public Template") }
+
+        before do
+          private_category.form_templates << private_template
+          public_category.form_templates << public_template
+        end
+
+        it "does not return templates only associated with private categories" do
+          get "/form-templates.json"
+          expect(response.status).to eq(200)
+          returned_templates = response.parsed_body["form_templates"]
+          returned_ids = returned_templates.map { |t| t["id"] }
+          expect(returned_ids).to include(public_template.id)
+          expect(returned_ids).not_to include(private_template.id)
+          expect(returned_templates.map { |t| t["template"] }).not_to include(
+            private_template.template,
+          )
+        end
+      end
     end
 
     context "when you are not logged in" do
-      it "should deny access" do
+      it "denies access" do
         get "/form-templates.json"
         expect(response.status).to eq(403)
       end
@@ -37,10 +66,10 @@ RSpec.describe FormTemplatesController do
     context "when experimental form templates is disabled" do
       before do
         sign_in(user)
-        SiteSetting.experimental_form_templates = false
+        SiteSetting.enable_form_templates = false
       end
 
-      it "should not work if you are a logged in user" do
+      it "rejects a logged-in user" do
         get "/form-templates.json"
         expect(response.status).to eq(403)
       end
@@ -53,7 +82,7 @@ RSpec.describe FormTemplatesController do
     context "when logged in as a user" do
       before { sign_in(user) }
 
-      it "should return a single template" do
+      it "returns one template" do
         get "/form-templates/#{form_template.id}.json"
         expect(response.status).to eq(200)
         json = response.parsed_body
@@ -61,6 +90,19 @@ RSpec.describe FormTemplatesController do
         expect(current_template["id"]).to eq(form_template.id)
         expect(current_template["name"]).to eq(form_template.name)
         expect(current_template["template"]).to eq(form_template.template)
+      end
+
+      context "with a template only in an inaccessible private category" do
+        fab!(:group)
+        fab!(:private_category) { Fabricate(:private_category, group: group) }
+        fab!(:private_template) { Fabricate(:form_template, name: "Secret Template") }
+
+        before { private_category.form_templates << private_template }
+
+        it "returns 404" do
+          get "/form-templates/#{private_template.id}.json"
+          expect(response.status).to eq(404)
+        end
       end
 
       context "when using tag groups in a form template" do
@@ -109,7 +151,7 @@ RSpec.describe FormTemplatesController do
           sign_in(user)
         end
 
-        it "should return a single template with the correct data" do
+        it "returns one template with the expected data" do
           get "/form-templates/#{tag_groups_form_template.id}.json"
           expect(response.status).to eq(200)
           json = response.parsed_body
@@ -134,11 +176,17 @@ RSpec.describe FormTemplatesController do
           # It excludes synonyms
           expect(parsed_template[0]["choices"].count).to eq(2)
 
-          expect(parsed_template[0]["choices"]).to eq([tag1.name, tag3.name])
-          expect(parsed_template[1]["choices"]).to eq([tag2.name, tag4.name])
+          expect(parsed_template[0]["choices"]).to contain_exactly(
+            { "id" => tag1.id, "name" => tag1.name },
+            { "id" => tag3.id, "name" => tag3.name },
+          )
+          expect(parsed_template[1]["choices"]).to contain_exactly(
+            { "id" => tag2.id, "name" => tag2.name },
+            { "id" => tag4.id, "name" => tag4.name },
+          )
         end
 
-        it "should return a single template with the correct data in order" do
+        it "returns one template with ordered data" do
           new_tag = Fabricate(:tag, description: "Custom Tag")
           tag_group1.tags = [tag3, tag1, new_tag]
           tag_group1.save
@@ -149,13 +197,19 @@ RSpec.describe FormTemplatesController do
 
           current_template = json["form_template"]
           parsed_template = YAML.safe_load(current_template["template"])
-          expect(parsed_template[0]["choices"]).to eq([tag1.name, new_tag.name, tag3.name])
+          expect(parsed_template[0]["choices"]).to eq(
+            [
+              { "id" => tag1.id, "name" => tag1.name },
+              { "id" => new_tag.id, "name" => new_tag.name },
+              { "id" => tag3.id, "name" => tag3.name },
+            ],
+          )
         end
       end
     end
 
     context "when you are not logged in" do
-      it "should deny access" do
+      it "denies access" do
         get "/form-templates/#{form_template.id}.json"
         expect(response.status).to eq(403)
       end
@@ -164,10 +218,10 @@ RSpec.describe FormTemplatesController do
     context "when experimental form templates is disabled" do
       before do
         sign_in(user)
-        SiteSetting.experimental_form_templates = false
+        SiteSetting.enable_form_templates = false
       end
 
-      it "should not work if you are a logged in user" do
+      it "rejects a logged-in user" do
         get "/form-templates/#{form_template.id}.json"
         expect(response.status).to eq(403)
       end

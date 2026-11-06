@@ -61,8 +61,8 @@ module DiscourseAi
       Congratulations, you've now seen a small sample of what Discourse's Markdown can do! For more intricate formatting, consider exploring the advanced styling options. Remember that the key to great formatting is not just the available tools, but also the **clarity** and **readability** it brings to your readers.
     TEXT
 
-        def self.can_contact?(model_provider)
-          model_provider == "fake"
+        def self.can_contact?(llm_model)
+          llm_model.provider == "fake"
         end
 
         def self.with_fake_content(content)
@@ -76,8 +76,34 @@ module DiscourseAi
           @fake_content = content
         end
 
-        def self.fake_content
-          @fake_content || STOCK_CONTENT
+        def self.fake_content(response_format = nil)
+          return @fake_content if @fake_content
+
+          properties = schema_properties(response_format)
+          return STOCK_CONTENT if properties.blank?
+
+          properties.to_h { |key, property| [key, stock_value(key, property)] }.to_json
+        end
+
+        def self.json_object?(content)
+          content.is_a?(String) && JSON.parse(content).is_a?(Hash)
+        rescue JSON::ParserError
+          false
+        end
+
+        def self.stock_value(key, property)
+          case property[:type].to_s
+          when "integer"
+            42
+          when "number"
+            4.2
+          when "boolean"
+            true
+          when "array"
+            [stock_value(key, property[:items] || {})]
+          else
+            "fake #{key}"
+          end
         end
 
         def self.delays
@@ -123,7 +149,8 @@ module DiscourseAi
           feature_context: nil,
           partial_tool_calls: false,
           output_thinking: false,
-          cancel_manager: nil
+          cancel_manager: nil,
+          execution_context: nil
         )
           last_call = { dialect: dialect, user: user, model_params: model_params }
           self.class.last_call = last_call
@@ -131,13 +158,24 @@ module DiscourseAi
           # guard memory in test
           self.class.previous_calls.shift if self.class.previous_calls.length > 10
 
-          content = self.class.fake_content
+          content = self.class.fake_content(model_params[:response_format])
 
           content = content.shift if content.is_a?(Array)
+          structured_output = build_structured_output(model_params) if self.class.json_object?(
+            content,
+          )
 
           if block_given?
             if content.is_a?(DiscourseAi::Completions::ToolCall)
               yield(content, -> {})
+            elsif content.is_a?(Array) &&
+                  content.all? { |item| item.is_a?(DiscourseAi::Completions::ToolCall) }
+              cancel = false
+              cancel_proc = -> { cancel = true }
+              content.each do |tool_call|
+                break if cancel
+                yield(tool_call, cancel_proc)
+              end
             else
               split_indices = (1...content.length).to_a.sample(self.class.chunk_count - 1).sort
               indexes = [0, *split_indices, content.length]
@@ -162,12 +200,21 @@ module DiscourseAi
                   break if cancel
 
                   content << chunk
-                  yield(chunk, cancel_proc)
+                  next yield(chunk, cancel_proc) if structured_output.nil?
+
+                  structured_output << chunk
+                  yield(structured_output, cancel_proc)
                 end
             end
+          elsif structured_output
+            structured_output << content
           end
 
-          content
+          return content if structured_output.nil?
+
+          structured_output.finish
+          yield(structured_output, -> {}) if block_given?
+          structured_output
         end
       end
     end

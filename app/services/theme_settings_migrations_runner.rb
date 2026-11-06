@@ -16,6 +16,13 @@ class ThemeSettingsMigrationsRunner
       Category.where("name_lower = LOWER(?)", category_name).pick(:id)
     end
 
+    # @param [String] Slug of the category to retrieve the id of.
+    # @return [Integer|nil] The id of the category with the given slug or nil if a category does not exist for the given
+    #   slug.
+    def get_category_id_by_slug(category_slug)
+      Category.where(slug: category_slug).pick(:id)
+    end
+
     # @param [String] URL string to check if it is a valid absolute URL, path or anchor.
     # @return [Boolean] True if the URL is a valid URL or path, false otherwise.
     def is_valid_url(url)
@@ -56,13 +63,7 @@ class ThemeSettingsMigrationsRunner
   private_constant :MIGRATION_ENTRY_POINT_JS
 
   def self.loader_js_lib_content
-    @loader_js_lib_content ||=
-      File.read(
-        File.join(
-          Rails.root,
-          "app/assets/javascripts/discourse/node_modules/loader.js/dist/loader/loader.js",
-        ),
-      )
+    @loader_js_lib_content ||= File.read(Rails.root.join("frontend/discourse/app/loader.js").to_s)
   end
 
   def initialize(theme, limit: 100, timeout: 100, memory: 2.megabytes)
@@ -112,7 +113,7 @@ class ThemeSettingsMigrationsRunner
       current_settings = migrated_settings
       current_migration_version = migration.version
       results
-    rescue DiscourseJsProcessor::TranspileError => error
+    rescue AssetProcessor::TranspileError => error
       raise_error(
         "themes.import_error.migrations.syntax_error",
         name: migration.original_name,
@@ -201,7 +202,7 @@ class ThemeSettingsMigrationsRunner
     context.eval(self.class.loader_js_lib_content, filename: "loader.js")
 
     context.eval(
-      DiscourseJsProcessor.transpile(migration.code, "", "discourse/theme/migration"),
+      AssetProcessor.transpile(migration.code, "", "discourse/theme/migration"),
       filename: "theme-#{@theme.id}-migration.js",
     )
 
@@ -210,11 +211,7 @@ class ThemeSettingsMigrationsRunner
     end
 
     context.eval(
-      DiscourseJsProcessor.transpile(
-        "export default __helpers",
-        "",
-        "discourse/theme/migration-helpers",
-      ),
+      AssetProcessor.transpile("export default __helpers", "", "discourse/theme/migration-helpers"),
       filename: "theme-#{@theme.id}-migration-helpers.js",
     )
 

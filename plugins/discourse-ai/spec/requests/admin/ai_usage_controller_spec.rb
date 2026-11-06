@@ -13,7 +13,7 @@ RSpec.describe DiscourseAi::Admin::AiUsageController do
 
     describe "#show" do
       fab!(:log1) do
-        AiApiAuditLog.create!(
+        AiApiRequestStat.create!(
           provider_id: 1,
           feature_name: "summarize",
           language_model: "gpt-4",
@@ -24,7 +24,7 @@ RSpec.describe DiscourseAi::Admin::AiUsageController do
       end
 
       fab!(:log2) do
-        AiApiAuditLog.create!(
+        AiApiRequestStat.create!(
           provider_id: 1,
           feature_name: "translate",
           language_model: "gpt-3.5",
@@ -35,13 +35,14 @@ RSpec.describe DiscourseAi::Admin::AiUsageController do
       end
 
       fab!(:log3) do
-        AiApiAuditLog.create!(
+        AiApiRequestStat.create!(
           provider_id: 1,
           feature_name: "ai_helper",
           language_model: llm_model.name,
+          llm_id: llm_model.id,
           request_tokens: 300,
           response_tokens: 150,
-          cached_tokens: 50,
+          cache_read_tokens: 50,
           created_at: 3.days.ago,
         )
       end
@@ -58,6 +59,28 @@ RSpec.describe DiscourseAi::Admin::AiUsageController do
         expect(json).to have_key("summary")
       end
 
+      it "reports rolled-up token totals exceeding the 32-bit integer range" do
+        AiApiRequestStat.delete_all
+        AiApiRequestStat.create!(
+          provider_id: 1,
+          feature_name: "ai_bot",
+          language_model: llm_model.name,
+          llm_id: llm_model.id,
+          user_id: user.id,
+          request_tokens: 1_500_000_000,
+          response_tokens: 100,
+          cache_read_tokens: 800_000_000,
+          cache_write_tokens: 50,
+          rolled_up: true,
+          created_at: 1.day.ago,
+        )
+
+        get usage_report_path
+
+        expect(response.status).to eq(200)
+        expect(response.parsed_body["summary"]["total_tokens"]).to eq(2_300_000_150)
+      end
+
       it "respects date filters" do
         get usage_report_path,
             params: {
@@ -66,7 +89,42 @@ RSpec.describe DiscourseAi::Admin::AiUsageController do
             }
 
         json = response.parsed_body
-        expect(json["summary"]["total_tokens"]).to eq(900) # sum of all tokens
+        expect(json["summary"]["total_tokens"]).to eq(950) # sum of all tokens
+      end
+
+      it "respects exact datetime filters" do
+        AiApiRequestStat.delete_all
+
+        freeze_time Time.zone.parse("2026-06-15 14:30:00 UTC") do
+          AiApiRequestStat.create!(
+            provider_id: 1,
+            feature_name: "summarize",
+            language_model: "gpt-4",
+            request_tokens: 1_000_000,
+            response_tokens: 500_000,
+            created_at: 25.hours.ago,
+          )
+
+          AiApiRequestStat.create!(
+            provider_id: 1,
+            feature_name: "summarize",
+            language_model: "gpt-4",
+            request_tokens: 100,
+            response_tokens: 50,
+            created_at: 23.hours.ago,
+          )
+
+          get usage_report_path,
+              params: {
+                start_date: 24.hours.ago.iso8601,
+                end_date: Time.current.iso8601,
+                timezone: "UTC",
+              }
+        end
+
+        json = response.parsed_body
+        expect(json["summary"]["total_requests"]).to eq(1)
+        expect(json["summary"]["total_tokens"]).to eq(150)
       end
 
       it "filters by feature" do
@@ -99,15 +157,57 @@ RSpec.describe DiscourseAi::Admin::AiUsageController do
 
         expected_input_spending = llm_model.input_cost * log3.request_tokens / 1_000_000.0
         expected_cached_input_spending =
-          llm_model.cached_input_cost * log3.cached_tokens / 1_000_000.0
+          llm_model.cached_input_cost * log3.cache_read_tokens / 1_000_000.0
         expected_output_spending = llm_model.output_cost * log3.response_tokens / 1_000_000.0
         expected_total_spending =
           expected_input_spending + expected_cached_input_spending + expected_output_spending
 
         expect(feature["input_spending"].to_s).to eq(expected_input_spending.to_s)
         expect(feature["output_spending"].to_s).to eq(expected_output_spending.to_s)
-        expect(feature["cached_input_spending"].to_s).to eq(expected_cached_input_spending.to_s)
+        expect(feature["cache_read_spending"].to_s).to eq(expected_cached_input_spending.to_s)
         expect(summary["total_spending"].to_s).to eq(expected_total_spending.round(2).to_s)
+      end
+
+      it "includes cache_read_tokens and cache_write_tokens in response" do
+        log_with_cache =
+          AiApiRequestStat.create!(
+            provider_id: 1,
+            feature_name: "ai_bot",
+            language_model: llm_model.name,
+            llm_id: llm_model.id,
+            request_tokens: 500,
+            response_tokens: 250,
+            cache_read_tokens: 100,
+            cache_write_tokens: 200,
+            created_at: 1.day.ago,
+          )
+
+        get usage_report_path
+
+        json = response.parsed_body
+
+        expect(json["summary"]["total_cache_read_tokens"]).to eq(150)
+        expect(json["summary"]["total_cache_write_tokens"]).to eq(200)
+
+        ai_bot_feature = json["features"].find { |f| f["feature_name"] == "ai_bot" }
+        expect(ai_bot_feature["total_cache_read_tokens"]).to eq(100)
+        expect(ai_bot_feature["total_cache_write_tokens"]).to eq(200)
+
+        model_data = json["models"].find { |m| m["llm"] == llm_model.display_name }
+        expect(model_data["total_cache_read_tokens"]).to eq(150)
+        expect(model_data["total_cache_write_tokens"]).to eq(200)
+
+        period_with_cache_data = json["data"].find { |d| d["total_cache_read_tokens"] > 0 }
+        expect(period_with_cache_data["total_cache_read_tokens"]).to be > 0
+
+        expected_cache_read_spending =
+          llm_model.cached_input_cost *
+            (log3.cache_read_tokens + log_with_cache.cache_read_tokens) / 1_000_000.0
+        expected_cache_write_spending =
+          llm_model.cache_write_cost * log_with_cache.cache_write_tokens / 1_000_000.0
+
+        expect(model_data["cache_read_spending"].to_s).to eq(expected_cache_read_spending.to_s)
+        expect(model_data["cache_write_spending"].to_s).to eq(expected_cache_write_spending.to_s)
       end
 
       it "handles different period groupings" do
@@ -125,7 +225,7 @@ RSpec.describe DiscourseAi::Admin::AiUsageController do
         freeze_time Time.parse("2021-02-01 00:00:00")
         # Create data points across different hours
         [23.hours.ago, 22.hours.ago, 21.hours.ago, 20.hours.ago].each do |time|
-          AiApiAuditLog.create!(
+          AiApiRequestStat.create!(
             provider_id: 1,
             feature_name: "summarize",
             language_model: "gpt-4",
@@ -162,7 +262,7 @@ RSpec.describe DiscourseAi::Admin::AiUsageController do
       let(:singapore_tz) { "Asia/Singapore" }
 
       let!(:log_sg1) do
-        AiApiAuditLog.create!(
+        AiApiRequestStat.create!(
           provider_id: 1,
           feature_name: "summarize",
           language_model: "gpt-4",
@@ -173,7 +273,7 @@ RSpec.describe DiscourseAi::Admin::AiUsageController do
       end
 
       let!(:log_sg2) do
-        AiApiAuditLog.create!(
+        AiApiRequestStat.create!(
           provider_id: 1,
           feature_name: "summarize",
           language_model: "gpt-4",

@@ -2,11 +2,18 @@
 
 class TagGroup < ActiveRecord::Base
   validates :name, length: { maximum: 100 }
-  validates_uniqueness_of :name, case_sensitive: false
+  validates :name, uniqueness: { case_sensitive: false }
+  validate :ensure_permissions_not_empty, on: :update
+
+  scope :where_name,
+        ->(name) do
+          name = Array(name).map(&:downcase)
+          where("lower(tag_groups.name) IN (?)", name)
+        end
 
   has_many :tag_group_memberships, dependent: :destroy
   has_many :tags, through: :tag_group_memberships
-  has_many :none_synonym_tags,
+  has_many :base_tags,
            -> { where(target_tag_id: nil) },
            through: :tag_group_memberships,
            source: "tag"
@@ -17,16 +24,27 @@ class TagGroup < ActiveRecord::Base
 
   belongs_to :parent_tag, class_name: "Tag"
 
-  before_create :init_permissions
   before_save :apply_permissions
   before_save :remove_parent_from_group
+  before_create :init_permissions
 
   after_commit { DiscourseTagging.clear_cache! }
 
   attr_reader :permissions
 
-  def tag_names=(tag_names_arg)
-    DiscourseTagging.add_or_create_tags_by_name(self, tag_names_arg, unlimited: true)
+  def tag_names=(tags_arg)
+    DiscourseTagging.add_or_create_tags_by_name(self, tags_arg, unlimited: true)
+  end
+
+  def tag_ids=(ids)
+    selected_tags = Tag.where(id: ids)
+    synonyms =
+      Tag.where(target_tag_id: selected_tags.select(:id)).where.not(id: selected_tags.select(:id))
+    self.tags = selected_tags + synonyms
+  end
+
+  def parent_tag_id=(id)
+    self.parent_tag = id.present? ? Tag.find_by(id: id) : nil
   end
 
   def parent_tag_name=(tag_names_arg)
@@ -49,8 +67,13 @@ class TagGroup < ActiveRecord::Base
 
   # TODO: long term we can cache this if TONs of tag groups exist
   def self.find_id_by_slug(slug)
-    self.pluck(:id, :name).each { |id, name| return id if Slug.for(name) == slug }
+    pluck(:id, :name).each { |id, name| return id if Slug.for(name) == slug }
     nil
+  end
+
+  # Same as Tag#find_by_name
+  def self.find_by_name_insensitive(name)
+    find_by("lower(name) = ?", name.downcase)
   end
 
   def self.resolve_permissions(permissions)
@@ -85,12 +108,16 @@ class TagGroup < ActiveRecord::Base
     end
   end
 
+  def ensure_permissions_not_empty
+    errors.add(:base, I18n.t("tags.groups.errors.empty_permissions")) if @permissions&.empty?
+  end
+
   def remove_parent_from_group
     tags.delete(parent_tag) if tags.include?(parent_tag)
   end
 
   def self.visible(guardian)
-    if guardian.is_staff?
+    if guardian.is_admin?
       TagGroup
     else
       # (
@@ -123,8 +150,12 @@ end
 #
 #  id            :integer          not null, primary key
 #  name          :string(100)      not null
+#  one_per_topic :boolean          default(FALSE)
 #  created_at    :datetime         not null
 #  updated_at    :datetime         not null
 #  parent_tag_id :integer
-#  one_per_topic :boolean          default(FALSE)
+#
+# Indexes
+#
+#  index_tag_groups_on_lower_name  (lower((name)::text)) UNIQUE
 #

@@ -1,4 +1,6 @@
-export function getColors(count, palette) {
+import { getCSSColors } from "discourse/lib/css-color";
+
+function generateGradientColors(count, palette) {
   palette = palette || "cool";
   let gradient;
 
@@ -66,4 +68,20 @@ export function getColors(count, palette) {
     previousGradientIndex = baseGradientKeyIndex;
   }
   return colors;
+}
+
+export function getColors(count, palette) {
+  const names = Array.from(
+    { length: count },
+    (_, i) => `--poll-pie-color-${i + 1}`
+  );
+  const cssColors = Object.values(getCSSColors(names)).filter(Boolean);
+
+  if (cssColors.length >= count) {
+    return cssColors.slice(0, count);
+  }
+
+  const remainingCount = count - cssColors.length;
+  const gradientColors = generateGradientColors(remainingCount, palette);
+  return [...cssColors, ...gradientColors];
 }

@@ -6,12 +6,10 @@ import Avatar from "discourse/plugins/chat/discourse/components/chat/message/ava
 import ChatFabricators from "discourse/plugins/chat/discourse/lib/fabricators";
 import ChatMessage from "discourse/plugins/chat/discourse/models/chat-message";
 
-module("Discourse Chat | Component | chat-message-avatar", function (hooks) {
+module("Component | ChatMessageAvatar", function (hooks) {
   setupRenderingTest(hooks);
 
   test("chat_webhook_event", async function (assert) {
-    const self = this;
-
     this.message = ChatMessage.create(
       new ChatFabricators(getOwner(this)).channel(),
       {
@@ -19,14 +17,12 @@ module("Discourse Chat | Component | chat-message-avatar", function (hooks) {
       }
     );
 
-    await render(<template><Avatar @message={{self.message}} /></template>);
+    await render(<template><Avatar @message={{this.message}} /></template>);
 
     assert.dom(".chat-emoji-avatar .emoji").hasAttribute("title", "heart");
   });
 
   test("user", async function (assert) {
-    const self = this;
-
     this.message = ChatMessage.create(
       new ChatFabricators(getOwner(this)).channel(),
       {
@@ -34,7 +30,7 @@ module("Discourse Chat | Component | chat-message-avatar", function (hooks) {
       }
     );
 
-    await render(<template><Avatar @message={{self.message}} /></template>);
+    await render(<template><Avatar @message={{this.message}} /></template>);
 
     assert.dom('.chat-user-avatar [data-user-card="discobot"]').exists();
   });

@@ -6,7 +6,15 @@ module DiscourseAi
       class Gemini < Dialect
         class << self
           def can_translate?(llm_model)
-            llm_model.provider == "google"
+            llm_model.provider == "google" || llm_model.provider == "google_vertex_ai"
+          end
+        end
+
+        def strip_upload_markdown_mode
+          if llm_model.name.include?("image")
+            :all
+          else
+            :model_only
           end
         end
 
@@ -17,7 +25,7 @@ module DiscourseAi
         def translate
           # Gemini complains if we don't alternate model/user roles.
           noop_model_response = { role: "model", parts: { text: "Ok." } }
-          messages = super
+          messages = merge_tool_batches(super)
 
           interleving_messages = []
           previous_message = nil
@@ -39,20 +47,38 @@ module DiscourseAi
             previous_message = message
           end
 
+          if tool_choice == :none && interleving_messages.length > 0
+            interleving_messages << { role: "user", parts: { text: no_more_tool_calls_text_user } }
+          end
+
           { messages: interleving_messages, system_instruction: system_instruction }
         end
 
         def tools
-          return if prompt.tools.blank?
+          return if prompt.tools.blank? && prompt.native_tools.blank?
 
-          translated_tools =
-            prompt.tools.map do |t|
-              tool = { name: t.name, description: t.description }
-              tool[:parameters] = t.parameters_json_schema if t.parameters
-              tool
-            end
+          result = []
 
-          [{ function_declarations: translated_tools }]
+          if prompt.tools.present?
+            translated_tools =
+              prompt.tools.map do |t|
+                tool = { name: t.name, description: t.description }
+                tool[:parameters] = t.parameters_json_schema if t.parameters
+                tool
+              end
+
+            result << { function_declarations: translated_tools }
+          end
+
+          if prompt.native_tool?(DiscourseAi::Completions::NativeTools::WEB_SEARCH)
+            result << { google_search: {} }
+          end
+
+          if prompt.native_tool?(DiscourseAi::Completions::NativeTools::WEB_FETCH)
+            result << { url_context: {} }
+          end
+
+          result.presence
         end
 
         def max_prompt_tokens
@@ -84,16 +110,18 @@ module DiscourseAi
         end
 
         def model_msg(msg)
-          if beta_api?
-            { role: "model", parts: [{ text: msg[:content] }] }
-          else
-            { role: "model", parts: { text: msg[:content] } }
-          end
+          message_for_role("model", msg)
         end
 
         def user_msg(msg)
+          message_for_role("user", msg)
+        end
+
+        def message_for_role(role, msg)
           content_array = []
-          content_array << "#{msg[:id]}: " if msg[:id]
+          if (prefix = user_id_prefix(msg))
+            content_array << prefix
+          end
 
           content_array << msg[:content]
           content_array.flatten!
@@ -101,37 +129,108 @@ module DiscourseAi
           content_array =
             to_encoded_content_array(
               content: content_array,
-              image_encoder: ->(details) { image_node(details) },
+              upload_encoder: ->(details) { upload_node(details) },
               text_encoder: ->(text) { { text: text } },
-              allow_vision: vision_support? && beta_api?,
+              allow_images: vision_support? && beta_api?,
+              allow_documents: true,
+              allowed_attachment_types: llm_model.allowed_attachment_types,
+              upload_filter: ->(encoded) { document_allowed?(encoded) },
             )
 
+          apply_thought_signature_parts!(content_array, msg) if role == "model"
+
           if beta_api?
-            { role: "user", parts: content_array }
+            { role:, parts: content_array }
           else
-            { role: "user", parts: content_array.first }
+            { role:, parts: content_array.first }
           end
+        end
+
+        def apply_thought_signature_parts!(content_array, message)
+          thought_signature_parts(message).each do |signature_part|
+            signature = signature_part[:thoughtSignature]
+            next if signature.blank?
+
+            signed_text = signature_part[:text].to_s
+            signed_part = { text: signed_text, thoughtSignature: signature }
+            signed_part[:thought] = signature_part[:thought] if signature_part.key?(:thought)
+
+            if signed_text.present?
+              attach_thought_signature_to_text_suffix!(content_array, signed_part)
+            else
+              insert_thought_signature_part!(content_array, signed_part)
+            end
+          end
+        end
+
+        def attach_thought_signature_to_text_suffix!(content_array, signed_part)
+          signed_text = signed_part[:text]
+          index = content_array.rindex { |part| part[:text].to_s.end_with?(signed_text) }
+
+          if index
+            text_part = content_array[index]
+            prefix = text_part[:text].delete_suffix(signed_text)
+            replacement = []
+            replacement << text_part.merge(text: prefix) if prefix.present?
+            replacement << signed_part
+            content_array[index, 1] = replacement
+          else
+            insert_thought_signature_part!(content_array, signed_part)
+          end
+        end
+
+        def insert_thought_signature_part!(content_array, signed_part)
+          if signed_part[:thought]
+            index = content_array.index { |part| !part[:thought] } || content_array.length
+            content_array.insert(index, signed_part)
+          else
+            content_array << signed_part
+          end
+        end
+
+        def thought_signature_parts(message)
+          Array(gemini_provider_info(message)&.dig(:thought_signature_parts))
+        end
+
+        def gemini_provider_info(message)
+          info = message[:thinking_provider_info]
+          return if info.blank?
+
+          info.deep_symbolize_keys[:gemini]
         end
 
         def image_node(details)
           { inlineData: { mimeType: details[:mime_type], data: details[:base64] } }
         end
 
+        def upload_node(details)
+          return { text: details[:text] } if details[:text].present?
+
+          image_node(details)
+        end
+
         def tool_call_msg(msg)
           if native_tool_support?
             call_details = JSON.parse(msg[:content], symbolize_names: true)
-            part = {
-              functionCall: {
-                name: msg[:name] || call_details[:name],
-                args: call_details[:arguments],
-              },
+            function_call = {
+              name: msg[:name] || call_details[:name],
+              args: call_details[:arguments],
             }
 
-            if beta_api?
-              { role: "model", parts: [part] }
-            else
-              { role: "model", parts: part }
+            part = { functionCall: function_call }
+            if (thought_sig = msg.dig(:provider_data, :thought_signature))
+              part[:thoughtSignature] = thought_sig
             end
+
+            message =
+              if beta_api?
+                { role: "model", parts: [part] }
+              else
+                { role: "model", parts: part }
+              end
+            batch_id = msg.dig(:provider_data, :batch_id)
+            message[:batch_id] = batch_id if batch_id
+            message
           else
             super
           end
@@ -148,14 +247,60 @@ module DiscourseAi
               },
             }
 
-            if beta_api?
-              { role: "function", parts: [part] }
-            else
-              { role: "function", parts: part }
-            end
+            message =
+              if beta_api?
+                { role: "function", parts: [part] }
+              else
+                { role: "function", parts: part }
+              end
+            batch_id = msg.dig(:provider_data, :batch_id)
+            message[:batch_id] = batch_id if batch_id
+            message
           else
             super
           end
+        end
+
+        def merge_tool_batches(messages)
+          merged = []
+          existing_batches = {}
+
+          messages.each do |message|
+            batch_id = message.delete(:batch_id)
+            parts = message[:parts]
+
+            if batch_id && parts
+              key = [batch_id, message[:role]]
+              normalized_parts = parts_array(parts)
+
+              if existing_batches[key]
+                existing_batches[key][:parts].concat(normalized_parts)
+                next
+              else
+                message[:parts] = normalized_parts
+                message[:_batch_id] = batch_id
+                existing_batches[key] = message
+              end
+            end
+
+            merged << message
+          end
+
+          merged.each do |message|
+            message.delete(:_batch_id)
+            next if beta_api?
+            if message[:parts].is_a?(Array) && message[:parts].length == 1
+              message[:parts] = message[:parts].first
+            end
+          end
+
+          merged
+        end
+
+        def parts_array(parts)
+          return parts if parts.is_a?(Array)
+
+          [parts]
         end
       end
     end

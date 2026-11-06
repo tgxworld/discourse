@@ -1,6 +1,5 @@
 import Component from "@glimmer/component";
-import { gte } from "truth-helpers";
-import concatClass from "discourse/helpers/concat-class";
+import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
 import { i18n } from "discourse-i18n";
 
 export default class MembersCount extends Component {
@@ -13,7 +12,7 @@ export default class MembersCount extends Component {
 
   <template>
     <div
-      class={{concatClass
+      class={{dConcatClass
         "chat-message-creator__members-count"
         (if (gte @count @max) "-reached-limit")
       }}

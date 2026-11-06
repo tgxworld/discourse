@@ -1,7 +1,7 @@
 import Component from "@glimmer/component";
 import { action } from "@ember/object";
+import ComboBox from "discourse/select-kit/components/combo-box";
 import { i18n } from "discourse-i18n";
-import ComboBox from "select-kit/components/combo-box";
 
 export default class AssignableInteractionFields extends Component {
   assignableLevelOptions = [
@@ -35,12 +35,12 @@ export default class AssignableInteractionFields extends Component {
       </label>
 
       <ComboBox
-        @name="alias"
-        @valueProperty="value"
-        @value={{this.assignableLevel}}
-        @content={{this.assignableLevelOptions}}
-        @onChange={{this.onChangeAssignableLevel}}
         class="groups-form-assignable-level"
+        @content={{this.assignableLevelOptions}}
+        @name="alias"
+        @onChange={{this.onChangeAssignableLevel}}
+        @value={{this.assignableLevel}}
+        @valueProperty="value"
       />
     </div>
   </template>

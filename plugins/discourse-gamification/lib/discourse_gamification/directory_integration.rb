@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
-module ::DiscourseGamification
+module DiscourseGamification
   class DirectoryIntegration
     def self.query
       <<~SQL
         WITH default_leaderboard AS (
           SELECT
+            id,
             from_date,
             to_date
           FROM
@@ -15,26 +16,26 @@ module ::DiscourseGamification
           LIMIT 1
         ), total_score AS (
           SELECT
-            user_id,
-            SUM(score) AS score
+            gls.user_id,
+            SUM(gls.score) AS score
           FROM
-            gamification_scores
-          LEFT JOIN
-            default_leaderboard ON true
+            gamification_leaderboard_scores gls
+          INNER JOIN
+            default_leaderboard lb ON gls.leaderboard_id = lb.id
           WHERE
-            date >= :since
+            gls.date >= :since
             AND
             (
               (
-                default_leaderboard.from_date IS NULL
+                lb.from_date IS NULL
                 OR
-                date >= default_leaderboard.from_date
+                gls.date >= lb.from_date
               )
               AND
               (
-                default_leaderboard.to_date IS NULL
+                lb.to_date IS NULL
                 OR
-                date <= default_leaderboard.to_date
+                gls.date <= lb.to_date
               )
             )
           GROUP BY

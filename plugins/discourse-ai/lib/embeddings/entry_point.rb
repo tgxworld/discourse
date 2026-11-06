@@ -20,7 +20,7 @@ module DiscourseAi
           end
 
           @related_topics ||=
-            ::DiscourseAi::Embeddings::SemanticTopicQuery.new(@user).list_semantic_related_topics(
+            DiscourseAi::Embeddings::SemanticTopicQuery.new(@user).list_semantic_related_topics(
               topic,
             )
         end
@@ -47,13 +47,15 @@ module DiscourseAi
         end
 
         plugin.register_html_builder("server:topic-show-after-posts-crawler") do |controller|
-          ::DiscourseAi::Embeddings::SemanticRelated.related_topics_for_crawler(controller)
+          DiscourseAi::Embeddings::SemanticRelated.related_topics_for_crawler(controller)
         end
 
         # embeddings generation.
         callback =
           Proc.new do |target|
+            definition = EmbeddingDefinition.find_by(id: SiteSetting.ai_embeddings_selected_model)
             if DiscourseAi::Embeddings.enabled? &&
+                 !DiscourseAi::Embeddings::ProviderHealth.paused?(definition) &&
                  (target.is_a?(Topic) || SiteSetting.ai_embeddings_per_post_enabled)
               Jobs.enqueue(
                 :generate_embeddings,
@@ -69,9 +71,25 @@ module DiscourseAi
         plugin.on(:post_edited, &callback)
 
         plugin.add_api_key_scope(
-          :discourse_ai,
+          :ai,
           { search: { actions: %w[discourse_ai/embeddings/embeddings#search] } },
         )
+
+        plugin.register_modifier(:similar_topic_candidate_ids) do |plugin_candidate_ids, args|
+          if DiscourseAi::Embeddings.enabled?
+            query = [args[:title], args[:raw]].join("\n\n")
+
+            begin
+              DiscourseAi::Embeddings::SemanticSearch
+                .new(args[:guardian])
+                .similar_topic_ids_to(query, candidates: args[:candidates])
+                .each { |similar_topic_id| plugin_candidate_ids << similar_topic_id }
+            rescue DiscourseAi::Inference::EmbeddingInferenceError,
+                   DiscourseAi::Embeddings::ProviderPausedError
+              # Ordinary similar-topic candidates remain available.
+            end
+          end
+        end
       end
     end
   end

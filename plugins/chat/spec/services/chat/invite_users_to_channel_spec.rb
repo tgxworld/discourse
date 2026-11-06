@@ -39,7 +39,7 @@ RSpec.describe Chat::InviteUsersToChannel do
         expect(notification).to be_nil
       end
 
-      it "doesnt create notifications for suspended users" do
+      it "doesn't create notifications for suspended users" do
         user_1.update!(suspended_till: 2.days.from_now, suspended_at: Time.now)
 
         result
@@ -48,13 +48,22 @@ RSpec.describe Chat::InviteUsersToChannel do
         expect(notification).to be_nil
       end
 
-      it "doesnt create notifications for users with disabled chat" do
+      it "doesn't create notifications for users with disabled chat" do
         user_1.user_option.update!(chat_enabled: false)
 
         result
 
         notification = user_1.reload.notifications.last
         expect(notification).to be_nil
+      end
+
+      it "notifies users who mute a staff inviter" do
+        Fabricate(:muted_user, user: user_1, muted_user: current_user)
+
+        result
+
+        notification = user_1.reload.notifications.last
+        expect(notification.notification_type).to eq(::Notification.types[:chat_invitation])
       end
 
       context "when message id is provided" do
@@ -71,6 +80,43 @@ RSpec.describe Chat::InviteUsersToChannel do
       end
     end
 
+    context "when invited users mute or ignore the inviter" do
+      fab!(:current_user, :user)
+      fab!(:muting_user, :user)
+      fab!(:ignoring_user, :user)
+
+      let(:user_ids) { [user_1.id, muting_user.id, ignoring_user.id] }
+      let(:invited_user_ids) do
+        ::Notification.where(notification_type: ::Notification.types[:chat_invitation]).pluck(
+          :user_id,
+        )
+      end
+
+      before do
+        SiteSetting.chat_allowed_groups = Group::AUTO_GROUPS[:everyone]
+        Fabricate(:muted_user, user: muting_user, muted_user: current_user)
+        Fabricate(:ignored_user, user: ignoring_user, ignored_user: current_user)
+      end
+
+      it "skips them but still notifies users who only disallow private messages" do
+        user_1.user_option.update!(allow_private_messages: false)
+
+        result
+
+        expect(invited_user_ids).to contain_exactly(user_1.id)
+      end
+
+      it "skips them when more users are invited than are fetched" do
+        params[:user_ids] = Fabricate.times(51, :muted_user, muted_user: current_user).map(
+          &:user_id
+        )
+
+        result
+
+        expect(invited_user_ids).to be_empty
+      end
+    end
+
     context "when contract is invalid" do
       let(:user_ids) { nil }
 
@@ -83,11 +129,24 @@ RSpec.describe Chat::InviteUsersToChannel do
       it { is_expected.to fail_to_find_a_model(:channel) }
     end
 
-    context "when current user can't view channel" do
+    context "when current user can't join channel" do
       fab!(:current_user, :user)
       fab!(:channel_1, :private_category_channel)
 
-      it { is_expected.to fail_a_policy(:can_view_channel) }
+      it { is_expected.to fail_a_policy(:can_join_channel) }
+    end
+
+    context "when current user can view but not join channel" do
+      fab!(:current_user, :user)
+      fab!(:channel_1, :category_channel)
+
+      before do
+        channel_1.chatable.set_permissions(group_1 => :readonly)
+        channel_1.chatable.save!
+        group_1.add(current_user)
+      end
+
+      it { is_expected.to fail_a_policy(:can_join_channel) }
     end
   end
 end

@@ -1,17 +1,26 @@
 # frozen_string_literal: true
 
 class AiTool < ActiveRecord::Base
+  SECRET_ALIAS_PATTERN = /\A[a-zA-Z0-9_]+\z/
+
   validates :name, presence: true, length: { maximum: 100 }, uniqueness: true
   validates :tool_name, presence: true, length: { maximum: 100 }
   validates :description, presence: true, length: { maximum: 1000 }
   validates :summary, presence: true, length: { maximum: 255 }
   validates :script, presence: true, length: { maximum: 100_000 }
   validates :created_by_id, presence: true
+  validates :rag_chunk_tokens, numericality: { greater_than: 0 }
+  validates :rag_chunk_overlap_tokens, numericality: { greater_than_or_equal_to: 0 }
   belongs_to :created_by, class_name: "User"
   belongs_to :rag_llm_model, class_name: "LlmModel"
   has_many :rag_document_fragments, dependent: :destroy, as: :target
   has_many :upload_references, as: :target, dependent: :destroy
   has_many :uploads, through: :upload_references
+  has_many :secret_bindings,
+           class_name: "AiToolSecretBinding",
+           dependent: :destroy,
+           inverse_of: :ai_tool
+  before_save :set_image_generation_tool_flag
   before_update :regenerate_rag_fragments
 
   ALPHANUMERIC_PATTERN = /\A[a-zA-Z0-9_]+\z/
@@ -23,6 +32,7 @@ class AiTool < ActiveRecord::Base
             }
 
   validate :validate_parameters_enum
+  validate :validate_secret_contracts
 
   def signature
     {
@@ -37,26 +47,154 @@ class AiTool < ActiveRecord::Base
     tool_name.presence || name
   end
 
-  def runner(parameters, llm:, bot_user:, context: nil)
-    DiscourseAi::Personas::ToolRunner.new(
+  def runner(parameters, llm:, bot_user:, context: nil, secret_bindings: nil)
+    DiscourseAi::Agents::ToolRunner.new(
       parameters: parameters,
       llm: llm,
       bot_user: bot_user,
       context: context,
       tool: self,
+      secret_bindings: secret_bindings,
     )
   end
 
-  after_commit :bump_persona_cache
+  after_commit :bump_agent_cache
 
-  def bump_persona_cache
-    AiPersona.persona_cache.flush!
+  def bump_agent_cache
+    AiAgent.agent_cache.flush!
   end
 
   def regenerate_rag_fragments
     if rag_chunk_tokens_changed? || rag_chunk_overlap_tokens_changed?
       RagDocumentFragment.where(target: self).delete_all
     end
+  end
+
+  def image_generation_tool?
+    is_image_generation_tool
+  end
+
+  def secret_contract_for(alias_name)
+    return nil if alias_name.blank?
+
+    normalized_alias = alias_name.to_s
+    Array(secret_contracts).find do |contract|
+      contract.is_a?(Hash) && contract.fetch("alias", contract[:alias]) == normalized_alias
+    end
+  end
+
+  def secret_aliases
+    Array(secret_contracts).filter_map do |contract|
+      next if !contract.is_a?(Hash)
+
+      contract.fetch("alias", contract[:alias]).to_s
+    end
+  end
+
+  def missing_secret_aliases(bindings: nil)
+    source_bindings = bindings || secret_bindings
+    bound_aliases =
+      source_bindings.each_with_object(Set.new) do |binding, aliases|
+        alias_name =
+          if binding.respond_to?(:[])
+            binding[:alias] || binding["alias"]
+          else
+            binding.alias
+          end
+        secret_id =
+          if binding.respond_to?(:[])
+            binding[:ai_secret_id] || binding["ai_secret_id"]
+          else
+            binding.ai_secret_id
+          end
+        next if alias_name.blank? || secret_id.blank?
+
+        aliases << alias_name.to_s
+      end
+
+    secret_aliases.reject { |alias_name| bound_aliases.include?(alias_name) }
+  end
+
+  def resolve_secret(alias_name, bindings: nil, secrets_cache: nil)
+    normalized_alias = alias_name.to_s
+    contract = secret_contract_for(normalized_alias)
+    return nil, :alias_not_declared if contract.nil?
+
+    source_bindings = bindings || secret_bindings
+    binding =
+      source_bindings.find do |item|
+        if item.respond_to?(:[])
+          (item[:alias] || item["alias"]).to_s == normalized_alias
+        else
+          item.alias.to_s == normalized_alias
+        end
+      end
+
+    return nil, :missing_binding if binding.nil?
+
+    secret_id =
+      if binding.respond_to?(:[])
+        (binding[:ai_secret_id] || binding["ai_secret_id"]).to_i
+      else
+        binding.ai_secret_id.to_i
+      end
+    secret = secrets_cache ? secrets_cache[secret_id] : AiSecret.find_by(id: secret_id)
+    return nil, :secret_not_found if secret.nil?
+
+    [secret.secret, nil]
+  end
+
+  def prune_orphan_bindings!
+    valid = secret_aliases
+    secret_bindings.where.not(alias: valid).destroy_all
+  end
+
+  def replace_secret_bindings!(bindings, created_by: nil)
+    return if bindings.nil?
+
+    normalized_bindings = normalize_secret_bindings(bindings)
+
+    transaction do
+      secret_bindings.destroy_all
+
+      normalized_bindings.each do |binding|
+        next if binding[:ai_secret_id].blank?
+
+        secret_bindings.create!(
+          alias: binding[:alias],
+          ai_secret_id: binding[:ai_secret_id],
+          created_by: created_by,
+        )
+      end
+    end
+  end
+
+  private
+
+  def normalize_secret_bindings(bindings)
+    unless bindings.is_a?(Array)
+      raise ArgumentError, I18n.t("discourse_ai.tools.secret_bindings.invalid_payload")
+    end
+
+    bindings.map do |binding|
+      unless binding.respond_to?(:[])
+        raise ArgumentError, I18n.t("discourse_ai.tools.secret_bindings.invalid_payload")
+      end
+
+      alias_name = (binding[:alias] || binding["alias"]).to_s
+      secret_id = (binding[:ai_secret_id] || binding["ai_secret_id"]).presence
+
+      { alias: alias_name, ai_secret_id: secret_id&.to_i }
+    end
+  end
+
+  def set_image_generation_tool_flag
+    has_prompt_parameter = parameters.is_a?(Array) && parameters.any? { |p| p["name"] == "prompt" }
+    has_upload_create = script.include?("upload.create")
+    has_chain_set_custom_raw = script.include?("chain.setCustomRaw")
+
+    self.is_image_generation_tool =
+      has_prompt_parameter && has_upload_create && has_chain_set_custom_raw
   end
 
   def validate_parameters_enum
@@ -83,309 +221,226 @@ class AiTool < ActiveRecord::Base
     end
   end
 
+  def validate_secret_contracts
+    return if secret_contracts.blank?
+
+    unless secret_contracts.is_a?(Array)
+      errors.add(:secret_contracts, I18n.t("discourse_ai.tools.secret_contracts.invalid_payload"))
+      return
+    end
+
+    aliases = []
+
+    Array(secret_contracts).each_with_index do |contract, index|
+      unless contract.is_a?(Hash)
+        errors.add(
+          :secret_contracts,
+          I18n.t("discourse_ai.tools.secret_contracts.invalid_contract", index: index),
+        )
+        next
+      end
+
+      alias_name = contract.fetch("alias", contract[:alias]).to_s
+
+      if alias_name.blank?
+        errors.add(
+          :secret_contracts,
+          I18n.t("discourse_ai.tools.secret_contracts.alias_required", index: index),
+        )
+        next
+      end
+
+      if alias_name.length > 100
+        errors.add(
+          :secret_contracts,
+          I18n.t("discourse_ai.tools.secret_contracts.alias_too_long", alias: alias_name),
+        )
+      end
+
+      unless alias_name.match?(SECRET_ALIAS_PATTERN)
+        errors.add(
+          :secret_contracts,
+          I18n.t("discourse_ai.tools.secret_contracts.alias_invalid", alias: alias_name),
+        )
+      end
+
+      if aliases.include?(alias_name)
+        errors.add(
+          :secret_contracts,
+          I18n.t("discourse_ai.tools.secret_contracts.alias_not_unique", alias: alias_name),
+        )
+      else
+        aliases << alias_name
+      end
+    end
+  end
+
+  # Load a JavaScript file from the ai_tool_scripts directory
+  def self.load_script(filename)
+    path = File.join(__dir__, "../../lib/ai_tool_scripts", filename)
+    File.read(path)
+  end
+
   def self.preamble
-    <<~JS
-     /**
-     * Tool API Quick Reference
-     *
-     * Entry Functions
-     *
-     * invoke(parameters): Main function. Receives parameters defined in the tool's signature (Object).
-     *                    Must return a JSON-serializable value (e.g., string, number, object, array).
-     * Example:
-     *   function invoke(parameters) { return { result: "Data processed", input: parameters.query }; }
-     *
-     * details(): Optional function. Returns a string (can include basic HTML) describing
-     *            the tool's action after invocation, often using data from the invocation.
-     *            This is displayed in the chat interface.
-     * Example:
-     *   let lastUrl;
-     *   function invoke(parameters) {
-     *     lastUrl = parameters.url;
-     *     // ... perform action ...
-     *     return { success: true, content: "..." };
-     *   }
-     *   function details() {
-     *     return `Browsed: <a href="${lastUrl}">${lastUrl}</a>`;
-     *   }
-     *
-     * Provided Objects & Functions
-     *
-     * 1. http
-     *    Performs HTTP requests. Max 20 requests per execution.
-     *
-     *    http.get(url, options?): Performs GET request.
-     *    Parameters:
-     *      url (string): The request URL.
-     *      options (Object, optional):
-     *        headers (Object): Request headers (e.g., { "Authorization": "Bearer key" }).
-     *    Returns: { status: number, body: string }
-     *
-     *    http.post(url, options?): Performs POST request.
-     *    Parameters:
-     *      url (string): The request URL.
-     *      options (Object, optional):
-     *        headers (Object): Request headers.
-     *        body (string | Object): Request body. If an object, it's stringified as JSON.
-     *    Returns: { status: number, body: string }
-     *
-     *    http.put(url, options?): Performs PUT request (similar to POST).
-     *    http.patch(url, options?): Performs PATCH request (similar to POST).
-     *    http.delete(url, options?): Performs DELETE request (similar to GET/POST).
-     *
-     * 2. llm
-     *    Interacts with the Language Model.
-     *
-     *    llm.truncate(text, length): Truncates text to a specified token length based on the configured LLM's tokenizer.
-     *    Parameters:
-     *      text (string): Text to truncate.
-     *      length (number): Maximum number of tokens.
-     *    Returns: string (truncated text)
-     *
-     *    llm.generate(prompt): Generates text using the configured LLM associated with the tool runner.
-     *    Parameters:
-     *      prompt (string | Object): The prompt. Can be a simple string or an object
-     *                                like { messages: [{ type: "system", content: "..." }, { type: "user", content: "..." }] }.
-     *    Returns: string (generated text)
-     *
-     * 3. index
-     *    Searches attached RAG (Retrieval-Augmented Generation) documents linked to this tool.
-     *
-     *    index.search(query, options?): Searches indexed document fragments.
-     *    Parameters:
-     *      query (string): The search query used for semantic search.
-     *      options (Object, optional):
-     *        filenames (Array<string>): Filter search to fragments from specific uploaded filenames.
-     *        limit (number): Maximum number of fragments to return (default: 10, max: 200).
-     *    Returns: Array<{ fragment: string, metadata: string | null }> - Ordered by relevance.
-     *
-     * 4. upload
-     *    Handles file uploads within Discourse.
-     *
-     *    upload.create(filename, base_64_content): Uploads a file created by the tool, making it available in Discourse.
-     *    Parameters:
-     *      filename (string): The desired name for the file (basename is used for security).
-     *      base_64_content (string): Base64 encoded content of the file.
-     *    Returns: { id: number, url: string, short_url: string } - Details of the created upload record.
-     *
-     *    upload.getUrl(shortUrl): Given a short URL, eg upload://12345, returns the full CDN friendly URL of the upload.
-     * 5. chain
-     *    Controls the execution flow.
-     *
-     *    chain.setCustomRaw(raw): Sets the final raw content of the bot's post and immediately
-     *                             stops the tool execution chain. Useful for tools that directly
-     *                             generate the full response content (e.g., image generation tools attaching the image markdown).
-     *    Parameters:
-     *      raw (string): The raw Markdown content for the post.
-     *    Returns: void
-     *
-     * 6. discourse
-     *    Interacts with Discourse specific features. Access is generally performed as the SystemUser.
-     *
-     *    discourse.search(params): Performs a Discourse search.
-     *    Parameters:
-     *      params (Object): Search parameters (e.g., { search_query: "keyword", with_private: true, max_results: 10 }).
-     *                       `with_private: true` searches across all posts visible to the SystemUser. `result_style: 'detailed'` is used by default.
-     *    Returns: Object (Discourse search results structure, includes posts, topics, users etc.)
-     *
-     *    discourse.getPost(post_id): Retrieves details for a specific post.
-     *    Parameters:
-     *      post_id (number): The ID of the post.
-     *    Returns: Object (Post details including `raw`, nested `topic` object with ListableTopicSerializer structure) or null if not found/accessible.
-     *
-     *    discourse.getTopic(topic_id): Retrieves details for a specific topic.
-     *    Parameters:
-     *      topic_id (number): The ID of the topic.
-     *    Returns: Object (Topic details using ListableTopicSerializer structure) or null if not found/accessible.
-     *
-     *    discourse.getUser(user_id_or_username): Retrieves details for a specific user.
-     *    Parameters:
-     *      user_id_or_username (number | string): The ID or username of the user.
-     *    Returns: Object (User details using UserSerializer structure) or null if not found.
-     *
-     *    discourse.getPersona(name): Gets an object representing another AI Persona configured on the site.
-     *    Parameters:
-     *      name (string): The name of the target persona.
-     *    Returns: Object { respondTo: function(params) } or null if persona not found.
-     *      respondTo(params): Instructs the target persona to generate a response within the current context (e.g., replying to the same post or chat message).
-     *      Parameters:
-     *        params (Object, optional): { instructions: string, whisper: boolean }
-     *      Returns: { success: boolean, post_id?: number, post_number?: number, message_id?: number } or { error: string }
-     *
-     *    discourse.createChatMessage(params): Creates a new message in a Discourse Chat channel.
-     *    Parameters:
-     *      params (Object): { channel_name: string, username: string, message: string }
-     *                       `channel_name` can be the channel name or slug.
-     *                       `username` specifies the user who should appear as the sender. The user must exist.
-     *                       The sending user must have permission to post in the channel.
-     *    Returns: { success: boolean, message_id?: number, message?: string, created_at?: string } or { error: string }
-     *
-     * 7. context
-     *    An object containing information about the environment where the tool is being run.
-     *    Available properties depend on the invocation context, but may include:
-     *      post_id (number): ID of the post triggering the tool (if in a Post context).
-     *      topic_id (number): ID of the topic (if in a Post context).
-     *      private_message (boolean): Whether the context is a private message (in Post context).
-     *      message_id (number): ID of the chat message triggering the tool (if in Chat context).
-     *      channel_id (number): ID of the chat channel (if in Chat context).
-     *      user (Object): Details of the user invoking the tool/persona (structure may vary, often null or SystemUser details unless explicitly passed).
-     *      participants (string): Comma-separated list of usernames in a PM (if applicable).
-     *      // ... other potential context-specific properties added by the calling environment.
-     *
-     * Constraints
-     *
-     * Execution Time: ≤ 2000ms (default timeout in milliseconds) - This timer *pauses* during external HTTP requests or LLM calls initiated via `http.*` or `llm.generate`, but applies to the script's own processing time.
-     * Memory: ≤ 10MB (V8 heap limit)
-     * Stack Depth: ≤ 20 (Marshal stack depth limit for Ruby interop)
-     * HTTP Requests: ≤ 20 per execution
-     * Exceeding limits will result in errors or termination (e.g., timeout error, out-of-memory error, TooManyRequestsError).
-     *
-     * Security
-     *
-     * Sandboxed Environment: The script runs in a restricted V8 JavaScript environment (via MiniRacer).
-     * No direct access to browser or environment, browser globals (like `window` or `document`), or the host system's file system.
-     * Network requests are proxied through the Discourse backend, not made directly from the sandbox.
-     */
-    JS
+    load_script("preamble.js")
   end
 
   def self.presets
+    (
+      [
+        {
+          preset_id: "browse_web_jina",
+          name: "Browse Web",
+          tool_name: "browse_web",
+          description: "Browse the web as a markdown document",
+          parameters: [
+            { name: "url", type: "string", required: true, description: "The URL to browse" },
+          ],
+          script: "#{preamble}\n#{load_script("presets/browse_web_jina.js")}",
+        },
+        {
+          preset_id: "exchange_rate",
+          name: "Exchange Rate",
+          tool_name: "exchange_rate",
+          description: "Get current exchange rates for various currencies",
+          parameters: [
+            {
+              name: "base_currency",
+              type: "string",
+              required: true,
+              description: "The base currency code (e.g., USD, EUR)",
+            },
+            {
+              name: "target_currency",
+              type: "string",
+              required: true,
+              description: "The target currency code (e.g., EUR, JPY)",
+            },
+            { name: "amount", type: "number", description: "Amount to convert eg: 123.45" },
+          ],
+          script: "#{preamble}\n#{load_script("presets/exchange_rate.js")}",
+          summary: "Get current exchange rates between two currencies",
+        },
+        {
+          preset_id: "stock_quote",
+          name: "Stock Quote (AlphaVantage)",
+          tool_name: "stock_quote",
+          description: "Get real-time stock quote information using AlphaVantage API",
+          parameters: [
+            {
+              name: "symbol",
+              type: "string",
+              required: true,
+              description: "The stock symbol (e.g., AAPL, GOOGL)",
+            },
+          ],
+          secret_contracts: [{ alias: "alphavantage_api_key" }],
+          script: "#{preamble}\n#{load_script("presets/stock_quote.js")}",
+          summary: "Get real-time stock quotes using AlphaVantage API",
+        },
+      ] + image_generation_presets +
+        [
+          {
+            preset_id: "empty_tool",
+            script: "#{preamble}\n#{load_script("presets/empty_tool.js")}",
+          },
+        ]
+    ).map do |preset|
+      preset[:preset_name] = I18n.t("discourse_ai.tools.presets.#{preset[:preset_id]}.name")
+      preset
+    end
+  end
+
+  def self.image_generation_presets
     [
+      { preset_id: "image_generation_category", is_category: true, category: "image_generation" },
       {
-        preset_id: "browse_web_jina",
-        name: "Browse Web",
-        tool_name: "browse_web",
-        description: "Browse the web as a markdown document",
-        parameters: [
-          { name: "url", type: "string", required: true, description: "The URL to browse" },
-        ],
-        script: <<~SCRIPT,
-          #{preamble}
-          let url;
-          function invoke(p) {
-              url = p.url;
-              result = http.get(`https://r.jina.ai/${url}`);
-              // truncates to 15000 tokens
-              return llm.truncate(result.body, 15000);
-          }
-          function details() {
-            return "Read: " + url
-          }
-        SCRIPT
-      },
-      {
-        preset_id: "exchange_rate",
-        name: "Exchange Rate",
-        tool_name: "exchange_rate",
-        description: "Get current exchange rates for various currencies",
+        preset_id: "image_generation_custom",
+        name: "Custom",
+        tool_name: "image_generation_custom",
+        description: "Configure a custom image generation API",
         parameters: [
           {
-            name: "base_currency",
+            name: "prompt",
             type: "string",
             required: true,
-            description: "The base currency code (e.g., USD, EUR)",
+            description: "The text prompt for image generation",
           },
-          {
-            name: "target_currency",
-            type: "string",
-            required: true,
-            description: "The target currency code (e.g., EUR, JPY)",
-          },
-          { name: "amount", type: "number", description: "Amount to convert eg: 123.45" },
         ],
-        script: <<~SCRIPT,
-        #{preamble}
-        // note: this script uses the open.er-api.com service, it is only updated
-        // once every 24 hours, for more up to date rates see: https://www.exchangerate-api.com
-        function invoke(params) {
-          const url = `https://open.er-api.com/v6/latest/${params.base_currency}`;
-          const result = http.get(url);
-          if (result.status !== 200) {
-            return { error: "Failed to fetch exchange rates" };
-          }
-          const data = JSON.parse(result.body);
-          const rate = data.rates[params.target_currency];
-          if (!rate) {
-            return { error: "Target currency not found" };
-          }
-
-          const rval = {
-            base_currency: params.base_currency,
-            target_currency: params.target_currency,
-            exchange_rate: rate,
-            last_updated: data.time_last_update_utc
-          };
-
-          if (params.amount) {
-            rval.original_amount = params.amount;
-            rval.converted_amount = params.amount * rate;
-          }
-
-          return rval;
-        }
-
-        function details() {
-          return "<a href='https://www.exchangerate-api.com'>Rates By Exchange Rate API</a>";
-        }
-      SCRIPT
-        summary: "Get current exchange rates between two currencies",
+        script: "#{preamble}\n#{load_script("presets/image_generation/custom.js")}",
+        summary: "Custom image generation",
+        category: "image_generation",
       },
       {
-        preset_id: "stock_quote",
-        name: "Stock Quote (AlphaVantage)",
-        tool_name: "stock_quote",
-        description: "Get real-time stock quote information using AlphaVantage API",
+        preset_id: "image_generation_openai",
+        name: "GPT Image",
+        provider: "OpenAI",
+        model_name: "GPT Image 1",
+        tool_name: "image_generation_openai",
+        description: "Generate images using OpenAI's GPT Image 1 model",
         parameters: [
           {
-            name: "symbol",
+            name: "prompt",
             type: "string",
             required: true,
-            description: "The stock symbol (e.g., AAPL, GOOGL)",
+            description: "The text prompt for image generation",
+          },
+          {
+            name: "size",
+            type: "string",
+            required: false,
+            description: "Image size (1024x1024, 1792x1024, or 1024x1792)",
+          },
+          {
+            name: "image_urls",
+            type: "array",
+            item_type: "string",
+            required: false,
+            description:
+              "Optional array of image upload short URLs for image editing mode (e.g. upload://abc123def456.jpeg)",
           },
         ],
-        script: <<~SCRIPT,
-        #{preamble}
-        function invoke(params) {
-          const apiKey = 'YOUR_ALPHAVANTAGE_API_KEY'; // Replace with your actual API key
-          const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${params.symbol}&apikey=${apiKey}`;
-
-          const result = http.get(url);
-          if (result.status !== 200) {
-            return { error: "Failed to fetch stock quote" };
-          }
-
-          const data = JSON.parse(result.body);
-          if (data['Error Message']) {
-            return { error: data['Error Message'] };
-          }
-
-          const quote = data['Global Quote'];
-          if (!quote || Object.keys(quote).length === 0) {
-            return { error: "No data found for the given symbol" };
-          }
-
-          return {
-            symbol: quote['01. symbol'],
-            price: parseFloat(quote['05. price']),
-            change: parseFloat(quote['09. change']),
-            change_percent: quote['10. change percent'],
-            volume: parseInt(quote['06. volume']),
-            latest_trading_day: quote['07. latest trading day']
-          };
-        }
-
-        function details() {
-          return "<a href='https://www.alphavantage.co'>Stock data provided by AlphaVantage</a>";
-        }
-      SCRIPT
-        summary: "Get real-time stock quotes using AlphaVantage API",
+        secret_contracts: [{ alias: "openai_api_key" }],
+        script: "#{preamble}\n#{load_script("presets/image_generation/openai.js")}",
+        summary: "Generate images with OpenAI GPT Image 1 model",
+        category: "image_generation",
       },
       {
-        preset_id: "image_generation",
-        name: "Image Generation (Flux)",
+        preset_id: "image_generation_gemini",
+        name: "Nano Banana",
+        provider: "Google Nano Banana",
+        model_name: "Gemini 2.5 Flash Image",
+        tool_name: "image_generation_gemini",
+        description: "Generate images using Gemini 2.5 Flash Image (Nano Banana)",
+        parameters: [
+          {
+            name: "prompt",
+            type: "string",
+            required: true,
+            description: "The text prompt for image generation",
+          },
+          {
+            name: "image_urls",
+            type: "array",
+            item_type: "string",
+            required: false,
+            description:
+              "Optional array of image upload short URLs for image editing mode (e.g. upload://abc123def456.jpeg)",
+          },
+        ],
+        secret_contracts: [{ alias: "google_api_key" }],
+        script: "#{preamble}\n#{load_script("presets/image_generation/gemini.js")}",
+        summary: "Generate images with Gemini 2.5 Flash Image",
+        category: "image_generation",
+      },
+      {
+        preset_id: "image_generation_flux",
+        name: "FLUX 1.1 Pro",
+        provider: "Together.ai",
+        model_name: "FLUX 1.1 Pro",
         tool_name: "image_generation",
         description:
-          "Generate images using the FLUX model from Black Forest Labs using together.ai",
+          "Generate images using the FLUX 1.1 Pro model from Black Forest Labs via Together.ai",
         parameters: [
           {
             name: "prompt",
@@ -399,66 +454,56 @@ class AiTool < ActiveRecord::Base
             required: false,
             description: "Optional seed for random number generation",
           },
+          {
+            name: "image_urls",
+            type: "array",
+            item_type: "string",
+            required: false,
+            description:
+              "Optional array of image upload short URLs for image editing mode (e.g. upload://abc123def456.jpeg)",
+          },
         ],
-        script: <<~SCRIPT,
-          #{preamble}
-          const apiKey = "YOUR_KEY";
-          const model = "black-forest-labs/FLUX.1.1-pro";
-
-          function invoke(params) {
-            let seed = parseInt(params.seed);
-            if (!(seed > 0)) {
-              seed = Math.floor(Math.random() * 1000000) + 1;
-            }
-
-            const prompt = params.prompt;
-            const body = {
-              model: model,
-              prompt: prompt,
-              width: 1024,
-              height: 768,
-              steps: 10,
-              n: 1,
-              seed: seed,
-              response_format: "b64_json",
-            };
-
-            const result = http.post("https://api.together.xyz/v1/images/generations", {
-              headers: {
-                "Authorization": `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(body),
-            });
-
-            const base64Image = JSON.parse(result.body).data[0].b64_json;
-            const image = upload.create("generated_image.png", base64Image);
-            const raw = `\n![${prompt}](${image.short_url})\n`;
-            chain.setCustomRaw(raw);
-
-            return { result: "Image generated successfully", seed: seed };
-          }
-
-          function details() {
-            return "Generates images based on a text prompt using the FLUX model.";
-          }
-  SCRIPT
-        summary: "Generate image",
+        secret_contracts: [{ alias: "together_api_key" }],
+        script: "#{preamble}\n#{load_script("presets/image_generation/flux_together.js")}",
+        summary: "Generate images with FLUX 1.1 Pro",
+        category: "image_generation",
       },
-      { preset_id: "empty_tool", script: <<~SCRIPT },
-          #{preamble}
-          function invoke(params) {
-            // logic here
-            return params;
-          }
-          function details() {
-            return "Details about this tool";
-          }
-        SCRIPT
-    ].map do |preset|
-      preset[:preset_name] = I18n.t("discourse_ai.tools.presets.#{preset[:preset_id]}.name")
-      preset
-    end
+      {
+        preset_id: "image_generation_flux2",
+        name: "FLUX 2 Pro",
+        provider: "Black Forest Labs",
+        model_name: "FLUX 2 Pro",
+        tool_name: "image_generation_flux2",
+        description:
+          "Generate and edit images using FLUX 2 Pro directly via Black Forest Labs API. Supports multi-image editing.",
+        parameters: [
+          {
+            name: "prompt",
+            type: "string",
+            required: true,
+            description: "The text prompt for image generation or editing",
+          },
+          {
+            name: "seed",
+            type: "number",
+            required: false,
+            description: "Optional seed for reproducible results",
+          },
+          {
+            name: "image_urls",
+            type: "array",
+            item_type: "string",
+            required: false,
+            description:
+              "Optional array of image upload short URLs for image editing mode (e.g. upload://abc123def456.jpeg)",
+          },
+        ],
+        secret_contracts: [{ alias: "bfl_api_key" }],
+        script: "#{preamble}\n#{load_script("presets/image_generation/flux_2_bfl.js")}",
+        summary: "Generate and edit images with FLUX 2 Pro",
+        category: "image_generation",
+      },
+    ]
   end
 end
 
@@ -469,11 +514,13 @@ end
 #  id                       :bigint           not null, primary key
 #  description              :string           not null
 #  enabled                  :boolean          default(TRUE), not null
+#  is_image_generation_tool :boolean          default(FALSE), not null
 #  name                     :string           not null
 #  parameters               :jsonb            not null
 #  rag_chunk_overlap_tokens :integer          default(10), not null
 #  rag_chunk_tokens         :integer          default(374), not null
 #  script                   :text             not null
+#  secret_contracts         :jsonb            not null
 #  summary                  :string           not null
 #  tool_name                :string(100)      default(""), not null
 #  created_at               :datetime         not null

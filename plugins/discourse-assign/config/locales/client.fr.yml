@@ -9,11 +9,11 @@ fr:
     admin:
       site_settings:
         categories:
-          discourse_assign: "Affectation de Discourse"
+          discourse_assign: "Attribution Discourse"
   js:
     filters:
       unassigned:
-        title: "Désattribué"
+        title: "Non attribué"
         help: "Sujets qui ne sont pas attribués"
     action_codes:
       assigned: "Attribué à %{who} le %{when}"
@@ -31,17 +31,20 @@ fr:
       status_change: "A modifié le statut de l'attribution à %{who} le %{when}"
     discourse_assign:
       add_unassigned_filter: "Ajouter le filtre « Non attribués » à la catégorie"
+      additional_assign_allowed_groups: "Groupes supplémentaires autorisés à attribuer"
+      additional_assign_allowed_groups_description: "Les membres de ces groupes peuvent attribuer des sujets dans cette catégorie. Les groupes déjà autorisés globalement sont affichés et ne peuvent pas être supprimés ici. Les paramètres de la catégorie parente ne s'appliquent pas aux sous-catégories."
       cant_act: "Vous ne pouvez pas agir sur des signalements qui ont été attribués à d'autres utilisateurs"
       cant_act_unclaimed: "Il faut réserver ce sujet avant d'agir sur les signalements."
       topic_search_placeholder: "Rechercher des sujets par titre ou contenu"
       sidebar_name_filter_placeholder: "Nom ou nom d'utilisateur"
-      assigned: "Attribué(s)"
+      assigned: "Attribué"
+      group_no_assignments_title: "Aucune attribution"
+      group_no_assignments_body: "Ce groupe ne comporte actuellement aucune attribution active."
       group_everyone: "Tout le monde"
       assigned_to: "Attribué à"
       assigned_topic_to: "A attribué le message à <a href='%{path}'>%{username}</a>"
       assign_post_to: "A attribué %{post_number} à %{username}"
       assign_post_to_multiple: "#%{post_number} à %{username}"
-      assigned_to_w_ellipsis: "Attribué à…"
       unassign:
         title: "Annuler l'attribution"
         title_w_ellipsis: "Annuler l'attribution…"
@@ -93,10 +96,10 @@ fr:
       reminders_frequency:
         description: "Fréquence à laquelle recevoir des rappels de sujets attribués"
         never: "Jamais"
-        daily: "Quotidien"
-        weekly: "Hebdomadaire"
-        monthly: "Mensuel"
-        quarterly: "Trimestriel"
+        daily: "Chaque jour"
+        weekly: "Chaque semaine"
+        monthly: "Chaque mois"
+        quarterly: "Chaque trimestre"
       admin:
         groups:
           manage:
@@ -130,8 +133,8 @@ fr:
       web_hooks:
         assign_event:
           group_name: "Événements d'attribution"
-          assigned: "Lorsqu'un utilisateur attribue un sujet"
-          unassigned: "Lorsqu'un utilisateur annule l'attribution d'un sujet"
+          assigned: "Quand un utilisateur attribue un sujet"
+          unassigned: "Quand un utilisateur désattribue un sujet"
     search:
       advanced:
         in:
@@ -142,7 +145,15 @@ fr:
     topics:
       bulk:
         unassign: "Annuler l'attribution des sujets"
-        assign: "Attribuer les sujets"
+        assign: "Attribuer des sujets"
+        assign_description: "Attribuer les sujets sélectionnés à l'utilisateur suivant :"
+        unassign_description: "Souhaitez-vous annuler l'attribution des sujets sélectionnés ?"
+        confirm_assign_topics:
+          one: "Attribuer %{count} sujet"
+          other: "Attribuer %{count} sujets"
+        confirm_unassign_topics:
+          one: "Annuler l'attribution de %{count} sujet"
+          other: "Annuler l'attribution de %{count} sujets"
     discourse_automation:
       scriptables:
         random_assign:
@@ -191,3 +202,37 @@ fr:
       title: "Modifier les attributions"
       topic: "Sujet"
       post: "Publication"
+    discourse_workflows:
+      node_unavailable:
+        requires_assign: "Nécessite l'activation de l'extension Assign"
+      nodes:
+        "trigger:assigned": "Attribué(e)"
+        "trigger:unassigned": "Non attribué"
+      node_descriptions:
+        "trigger:assigned": "Se déclenche lors de l'attribution d'un sujet ou d'une publication"
+      assign_topic:
+        resource: "Ressource"
+        resources:
+          topic: "Sujet"
+          post: "Publication"
+        operation: "Opération"
+        operations:
+          assign: "Attribuer"
+          unassign: "Annuler l'attribution"
+        topic_id: "ID du sujet"
+        post_id: "ID du message"
+        assignee: "Attributaire"
+        replace_existing: "Remplacer l'attribution existante"
+      check_assignment:
+        target_types:
+          topic: "Sujet"
+          post: "Publication"
+        topic_id: "ID du sujet"
+        post_id: "ID du message"
+        assignee: "Attributaire"
+      assigned:
+        topic_assignments_only: "Déclencher uniquement lorsque l'attribution porte sur le sujet, et non sur une publication précise"
+        topic_assignments_only_description: "Attributions de sujets uniquement"
+      unassigned:
+        topic_assignments_only: "Déclencher uniquement lorsque l'attribution porte sur le sujet, et non sur une publication précise"
+        topic_assignments_only_description: "Attributions de sujets uniquement"

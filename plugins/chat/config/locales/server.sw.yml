@@ -7,6 +7,10 @@
 sw:
   chat:
     deleted_chat_username: imefutwa
+    crawler:
+      thread_replies:
+        one: "%{count} jibu"
+        other: "%{count} majibu"
     errors:
       not_accepting_dms: "Samahani, %{username}haikubali jumbe kwa sasa"
     reviewables:
@@ -17,13 +21,20 @@ sw:
         agree_and_silence:
           title: "Nyamazisha Mtumiaji"
           description: "Kubaliana na bendera na nyamazisha mtumiaji."
-        disagree:
-          title: "Kataa"
+        ignore:
+          title: "Puuzia bendera"
     channel:
       dm_title:
         single_user: "%{username}"
     mention_warning:
       dismiss: "ondosha..."
+  discourse_push_notifications:
+    actions:
+      chat_reply:
+        title: Jibu
+  discourse_workflows:
+    chat_approval:
+      default_approve_label: "Imethibitishwa"
   reviewable_score_types:
     notify_user:
       chat_pm_body: "%{link}\n\n%{message}"

@@ -5,7 +5,26 @@
 # https://translate.discourse.org/
 
 id:
+  admin_js:
+    admin:
+      dashboard:
+        highlights:
+          kpi:
+            accepted_solutions:
+              label: "Solusi yang diterima"
+        sections:
+          support:
+            answerers:
+              staff: "Staf"
+              member: "Anggota"
+            response_time:
+              buckets:
+                gt_24h: "> 24 jam"
   js:
+    discourse_workflows:
+      solution_changed:
+        changes: "Perubahan"
+        tag_names: "Label"
     notifications:
       alt:
         solved:
@@ -20,9 +39,18 @@ id:
         other: "Solusi"
       topic_status_filter:
         all: "Semua"
+      move_post_cancel: "Batal"
+      confirm_solved_removal_confirm: "Konfirmasi"
+      confirm_solved_removal_cancel: "Batal"
     topic_statuses:
       solved:
         help: "Topik ini memiliki solusi"
+    admin:
+      reports:
+        related_items:
+          labels:
+            topic: "Topik"
+            category: "Kategori"
     discourse_automation:
       triggerables:
         first_accepted_solution:

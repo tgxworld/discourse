@@ -1,15 +1,15 @@
 import { hash } from "@ember/helper";
-import EmailGroupUserChooser from "select-kit/components/email-group-user-chooser";
+import EmailGroupUserChooser from "discourse/select-kit/components/email-group-user-chooser";
 
 const UserIdInput = <template>
-  <@field.Custom id={{@field.id}}>
+  <@Control id={{@field.id}}>
     <EmailGroupUserChooser
-      @value={{@field.value}}
-      @options={{hash maximum=1}}
-      @onChange={{@field.set}}
       name={{@info.identifier}}
+      @onChange={{@field.set}}
+      @options={{hash maximum=1}}
+      @value={{@field.value}}
     />
-  </@field.Custom>
+  </@Control>
 </template>;
 
 export default UserIdInput;

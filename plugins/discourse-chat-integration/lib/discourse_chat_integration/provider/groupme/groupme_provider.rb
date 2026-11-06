@@ -1,12 +1,13 @@
 # frozen_string_literal: true
 module DiscourseChatIntegration::Provider::GroupmeProvider
-  PROVIDER_NAME = "groupme".freeze
+  PROVIDER_NAME = "groupme"
+  POPULARITY_SCORE = 50
   PROVIDER_ENABLED_SETTING = :chat_integration_groupme_enabled
-  CHANNEL_IDENTIFIER_KEY = "groupme_instance_name".freeze
+  CHANNEL_IDENTIFIER_KEY = "groupme_instance_name"
   CHANNEL_PARAMETERS = [{ key: "groupme_instance_name", regex: '[\s\S]*', unique: true }]
 
   def self.generate_groupme_message(post)
-    display_name = ::DiscourseChatIntegration::Helper.formatted_display_name(post.user)
+    display_name = DiscourseChatIntegration::Helper.formatted_display_name(post.user)
 
     topic = post.topic
 
@@ -16,7 +17,7 @@ module DiscourseChatIntegration::Provider::GroupmeProvider
     elsif topic.category
       category =
         (
-          if (topic.category.parent_category)
+          if topic.category.parent_category
             "#{topic.category.parent_category.name}/#{topic.category.name}"
           else
             "#{topic.category.name}"
@@ -77,13 +78,13 @@ module DiscourseChatIntegration::Provider::GroupmeProvider
     if last_error_raised
       successfully_sent = instance_names.length() - num_errors
       last_error_raised[:success_rate] = "#{successfully_sent}/#{instance_names.length()}"
-      raise ::DiscourseChatIntegration::ProviderError.new info: last_error_raised
+      raise DiscourseChatIntegration::ProviderError.new info: last_error_raised
     end
   end
 
   def self.trigger_notification(post, channel, rule)
     data_package = generate_groupme_message(post)
-    self.send_via_webhook(data_package, channel)
+    send_via_webhook(data_package, channel)
   end
 
   def self.get_channel_by_name(name)

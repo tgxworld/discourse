@@ -56,6 +56,10 @@ module PageObjects
         header.find(".c-navbar__close-thread-button").click
       end
 
+      def open_original_message
+        find(".chat-message-info__original-message__text").click
+      end
+
       def has_back_link_to_thread_list?(channel)
         header.has_css?(".c-navbar__back-button[href='#{channel.relative_url + "/t"}']")
       end
@@ -66,6 +70,14 @@ module PageObjects
 
       def back
         header.find(".c-navbar__back-button").click
+      end
+
+      def back_to_thread_list(channel)
+        header.find(".c-navbar__back-button[href='#{channel.relative_url}/t']").click
+      end
+
+      def back_to_channel(channel)
+        header.find(".c-navbar__back-button[href='#{channel.relative_url}']").click
       end
 
       def has_no_unread_list_indicator?
@@ -102,7 +114,7 @@ module PageObjects
       def send_message(text = nil)
         text ||= fake_chat_message
         text = text.chomp if text.present? # having \n on the end of the string counts as an Enter keypress
-        composer.fill_in(with: text)
+        fill_composer(text)
         click_send_message
         expect(page).to have_no_css(".chat-message.-not-processed")
         click_composer

@@ -42,7 +42,7 @@ RSpec.describe Jobs::ChangeDisplayName do
       it "rewrites the cooked quote display name" do
         expect { described_class.new.execute(args) }.to change { post.reload.cooked }.to(
           match_html(<<~HTML.strip),
-          <aside class="quote no-group" data-username="#{username}" data-post="1" data-topic="#{quoted_post.topic.id}">
+          <aside class="quote no-group" data-username="#{username}" data-display-name="#{new_display_name}" data-post="1" data-topic="#{quoted_post.topic.id}">
           <div class="title">
           <div class="quote-controls"></div>
           <img alt="" width="24" height="24" src="#{avatar_url}" class="avatar"> #{new_display_name}:</div>
@@ -66,6 +66,29 @@ RSpec.describe Jobs::ChangeDisplayName do
           quoted post
           [/quote]
           RAW
+      end
+    end
+
+    context "when names are disabled and a user changes their name from their username to a real name" do
+      let(:old_display_name) { username }
+      let(:new_display_name) { "Jeff Atwood" }
+
+      let(:post_attributes) { { raw: <<~RAW } }
+        [quote="#{username}, post:1, topic:#{quoted_post.topic.id}"]
+        quoted post
+        [/quote]
+      RAW
+
+      before do
+        SiteSetting.enable_names = false
+        with_search_indexer_enabled { SearchIndexer.index(post, force: true) }
+        user.update!(name: new_display_name)
+      end
+
+      it "does not add the new real name to the post search index" do
+        with_search_indexer_enabled { described_class.new.execute(args) }
+
+        expect(post.reload.post_search_data.raw_data).not_to include(new_display_name)
       end
     end
   end

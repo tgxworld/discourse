@@ -5,10 +5,28 @@
 # https://translate.discourse.org/
 
 nl:
+  admin_js:
+    admin:
+      site_settings:
+        categories:
+          discourse_rss_polling: "Discourse RSS-polling"
   js:
+    rss_polling:
+      title: RSS-polling
     admin:
       rss_polling:
         author: Auteur
         feed_url: URL
         discourse_category: Categorie
         discourse_tags: Tags
+        feeds:
+          edit: Bewerken
+          delete: Verwijderen
+          save: Opslaan
+          confirm_delete: "Weet je zeker dat je deze feed wilt verwijderen?"
+        test:
+          title: Voorbeeld
+          dismiss: Sluiten
+        status:
+          enabled: Ingeschakeld
+          disabled: Uitgeschakeld

@@ -3,7 +3,8 @@
 module DiscourseAutomation
   module EventHandlers
     def self.handle_post_created_edited(post, action)
-      return if post.post_type != Post.types[:regular] || post.user_id < 0
+      return if post.post_type != Post.types[:regular]
+
       topic = post.topic
       return if topic.blank?
 
@@ -12,6 +13,8 @@ module DiscourseAutomation
       DiscourseAutomation::Automation
         .where(trigger: name, enabled: true)
         .find_each do |automation|
+          # allow scripts to opt-in to system posts via allow_system_posts setting
+          next if post.user_id < 0 && !automation.script_field("allow_system_posts")&.dig("value")
           action_type = automation.trigger_field("action_type")
           selected_action = action_type["value"]&.to_sym
 
@@ -306,6 +309,24 @@ module DiscourseAutomation
         end
     end
 
+    def self.handle_topic_closed(topic, status)
+      name = DiscourseAutomation::Triggers::TOPIC_CLOSED
+
+      DiscourseAutomation::Automation
+        .where(trigger: name, enabled: true)
+        .find_each do |automation|
+          automation.trigger!(
+            "kind" => name,
+            "topic" => topic,
+            "status" => status,
+            "placeholders" => {
+              "topic_url" => topic.relative_url,
+              "topic_title" => topic.title,
+            },
+          )
+        end
+    end
+
     def self.handle_after_post_cook(post, cooked)
       return cooked if post.post_type != Post.types[:regular] || post.post_number > 1
 
@@ -408,6 +429,27 @@ module DiscourseAutomation
             .where(identifier: automation.id)
             .where(user_id: post.user_id)
             .destroy_all
+        end
+    end
+
+    def self.handle_post_flag_created(post_action)
+      name = DiscourseAutomation::Triggers::POST_FLAG_CREATED
+
+      post = post_action.post
+      topic = post.topic
+
+      DiscourseAutomation::Automation
+        .where(trigger: name, enabled: true)
+        .find_each do |automation|
+          categories = automation.trigger_field("categories")["value"]
+          next if categories.present? && !categories.include?(topic.category_id)
+
+          if SiteSetting.tagging_enabled?
+            tags = automation.trigger_field("tags")["value"]
+            next if tags.present? && (topic.tags.map(&:name) & tags).empty?
+          end
+
+          automation.trigger!("kind" => name, "post_action_id" => post_action.id)
         end
     end
   end

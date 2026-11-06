@@ -1,21 +1,86 @@
 import { next, schedule } from "@ember/runloop";
-import { stackingContextFix } from "discourse/plugins/chat/discourse/lib/chat-ios-hacks";
+
+/**
+ * Tracks pending scroll adjustments to handle re-entrant calls.
+ * Maps scroller elements to their captured state.
+ *
+ * @type {WeakMap<HTMLElement, { scrollTop: number; scrollHeight: number }>}
+ */
+const pendingAdjustments = new WeakMap();
+
+/**
+ * Prevent viewport drift when the list grows while scrolled away from bottom.
+ *
+ * Our chat scroller uses flex-direction: column-reverse for bottom-origin scroll.
+ * Appending content can shift the viewport unless we compensate for height changes.
+ * The correction runs before paint, unlike scrolling to a message afterwards,
+ * which shows the end of the appended content for a frame.
+ *
+ * @param {HTMLElement | null} scroller - The scrollable container
+ * @param {Function} callback - Function that modifies the list content
+ */
+export function maintainScrollPosition(scroller, callback) {
+  if (!scroller) {
+    callback?.();
+    return;
+  }
+
+  const existing = pendingAdjustments.get(scroller);
+  if (existing) {
+    existing.scrollTop = scroller.scrollTop;
+    callback?.();
+    return;
+  }
+
+  const state = {
+    scrollTop: scroller.scrollTop,
+    scrollHeight: scroller.scrollHeight,
+  };
+
+  pendingAdjustments.set(scroller, state);
+  callback?.();
+
+  schedule("afterRender", () => {
+    const captured = pendingAdjustments.get(scroller);
+    pendingAdjustments.delete(scroller);
+
+    if (!captured || !scroller.isConnected) {
+      return;
+    }
+
+    // Outside a run loop the list can render after this queue; the frame
+    // callback still runs before paint.
+    if (!compensateHeightChange(scroller, captured)) {
+      requestAnimationFrame(() => {
+        if (scroller.isConnected) {
+          compensateHeightChange(scroller, captured);
+        }
+      });
+    }
+  });
+}
+
+function compensateHeightChange(scroller, captured) {
+  const heightDiff = scroller.scrollHeight - captured.scrollHeight;
+  if (!heightDiff || heightDiff < 1) {
+    return false;
+  }
+
+  scroller.scrollTop = captured.scrollTop - heightDiff;
+  return true;
+}
 
 export async function scrollListToBottom(list) {
   await new Promise((resolve) => {
-    stackingContextFix(list, () => {
-      list.scrollTo({ top: 0, behavior: "auto" });
-      next(resolve);
-    });
+    list.scrollTo({ top: 0, behavior: "auto" });
+    next(resolve);
   });
 }
 
 export async function scrollListToTop(list) {
   await new Promise((resolve) => {
-    stackingContextFix(list, () => {
-      list.scrollTo({ top: -list.scrollHeight, behavior: "auto" });
-      next(resolve);
-    });
+    list.scrollTo({ top: -list.scrollHeight, behavior: "auto" });
+    next(resolve);
   });
 }
 
@@ -32,24 +97,21 @@ export function scrollListToMessage(
     message.expanded = true;
   }
 
-  schedule("afterRender", () => {
-    const messageEl = list.querySelector(
+  if (opts.highlight) {
+    message.highlight();
+  }
+
+  const scroll = () => {
+    const element = list.querySelector(
       `.chat-message-container[data-id='${message.id}']`
     );
-
-    if (!messageEl) {
-      return;
-    }
-
-    if (opts.highlight) {
-      message.highlight();
-    }
-
-    stackingContextFix(list, () => {
-      messageEl.scrollIntoView({
-        behavior: "auto",
-        block: opts.position || "center",
-      });
+    element?.scrollIntoView({
+      behavior: "auto",
+      block: opts.position || "center",
     });
-  });
+    return !!element;
+  };
+
+  // The message element may not be present yet - retry once.
+  next(() => scroll() || next(scroll));
 }

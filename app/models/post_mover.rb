@@ -9,10 +9,18 @@ class PostMover
 
   # options:
   # freeze_original: :boolean  - if true, the original topic will be frozen but not deleted and posts will be "copied" to topic
-  def initialize(original_topic, user, post_ids, move_to_pm: false, options: {})
+  def initialize(
+    original_topic,
+    user,
+    post_ids,
+    guardian: user.guardian,
+    move_to_pm: false,
+    options: {}
+  )
     @original_topic = original_topic
     @original_topic_title = original_topic.title
     @user = user
+    @guardian = guardian
     @post_ids = post_ids
     # For now we store a copy of post_ids. If `freeze_original` is present, we will have new post_ids.
     # When we create the new posts, we will pluck out post_ids out of this and replace with updated ids.
@@ -22,11 +30,14 @@ class PostMover
   end
 
   def to_topic(id, participants: nil, chronological_order: false)
+    @guardian.ensure_can_move_posts!(original_topic)
+    topic = Topic.find_by_id(id)
+    @guardian.ensure_can_create_post_on_topic!(topic)
+
     @move_type = PostMover.move_types[:existing_topic]
     @creating_new_topic = false
     @chronological_order = chronological_order
 
-    topic = Topic.find_by_id(id)
     if topic.archetype != @original_topic.archetype &&
          [@original_topic.archetype, topic.archetype].include?(Archetype.private_message)
       raise Discourse::InvalidParameters
@@ -38,7 +49,10 @@ class PostMover
     topic
   end
 
-  def to_new_topic(title, category_id = nil, tags = nil)
+  def to_new_topic(title, category_id = nil, tag_ids: nil, tags: nil)
+    @guardian.ensure_can_move_posts!(original_topic)
+    @guardian.ensure_can_create_topic_on_category!(category_id) if category_id.present?
+
     @move_type = PostMover.move_types[:new_topic]
     @creating_new_topic = true
 
@@ -51,18 +65,24 @@ class PostMover
         new_topic =
           Topic.create!(
             user: post.user,
+            acting_user: user,
             title: title,
             category_id: category_id,
             created_at: post.created_at,
             archetype: archetype,
           )
-        DiscourseTagging.tag_topic_by_names(new_topic, Guardian.new(user), tags)
+        if tag_ids.present?
+          DiscourseTagging.tag_topic_by_ids(new_topic, Guardian.new(user), tag_ids)
+        elsif tags.present?
+          DiscourseTagging.tag_topic_by_names(new_topic, Guardian.new(user), tags)
+        end
         move_posts_to new_topic
         watch_new_topic
         update_topic_excerpt new_topic
         new_topic
       end
     enqueue_jobs(topic)
+    DiscourseEvent.trigger(:topic_created, topic, @options, user, continue_on_error: true)
     topic
   end
 
@@ -76,23 +96,17 @@ class PostMover
     Guardian.new(user).ensure_can_see! topic
     @destination_topic = topic
 
-    # when a topic contains some posts after moving posts to another topic we shouldn't close it
-    # two types of posts should prevent a topic from closing:
-    #   1. regular posts
-    #   2. almost all whispers
-    # we should only exclude whispers with action_code: 'split_topic'
-    # because we use such whispers as a small-action posts when moving posts to the secret message
-    # (in this case we don't want everyone to see that posts were moved, that's why we use whispers)
-    original_topic_posts_count =
-      @original_topic
-        .posts
-        .where(
-          "post_type = ? or (post_type = ? and action_code != 'split_topic')",
-          Post.types[:regular],
-          Post.types[:whisper],
-        )
-        .count
-    @full_move = original_topic_posts_count == posts.length
+    # Serialize concurrent moves/merges on the same source topic. Without this
+    # lock, two transactions can each read `ordered_posts.last.post_number` at
+    # the same value, both compute the same `@first_post_number_moved`, and
+    # then collide on the `(topic_id, post_number)` unique index when each
+    # tries to insert the "split_topic" moderator post. The lock is released
+    # on commit/rollback of the surrounding `Topic.transaction`.
+    @original_topic.lock!
+
+    ensure_acting_user_is_allowed_in_destination
+
+    @full_move = (posts_preventing_close.pluck(:id) - posts.map(&:id)).empty?
 
     @first_post_number_moved =
       posts.first.is_first_post? ? posts[1]&.post_number : posts.first.post_number
@@ -100,13 +114,28 @@ class PostMover
     if @options[:freeze_original]
       # in this case we need to add the moderator post after the last copied post
       if @full_move
-        @first_post_number_moved = @original_topic.ordered_posts.last.post_number + 1
+        # Use max_post_number (which includes soft-deleted posts) so the number
+        # we force via `add_moderator_post` matches what `Topic.next_post_number`
+        # will atomically assign via raw SQL. Otherwise a deleted post at the
+        # tail leaves a tombstone in `index_posts_on_topic_id_and_post_number`
+        # that collides with our `update!(post_number: ...)`.
+        @first_post_number_moved = @original_topic.max_post_number + 1
       else
-        from_posts = @original_topic.ordered_posts.where("post_number > ?", posts.last.post_number)
+        # Same reason: shift all posts above `posts.last.post_number`, including
+        # soft-deleted ones, so the slot at `posts.last.post_number + 1` is
+        # guaranteed free in the unique index.
+        from_posts =
+          @original_topic
+            .posts
+            .with_deleted
+            .where("post_number > ?", posts.last.post_number)
+            .order(:post_number)
         shift_post_numbers(from_posts)
         @first_post_number_moved = posts.last.post_number + 1
       end
     end
+
+    @moving_post_ids = posts.map(&:id)
 
     create_temp_table
     move_each_post
@@ -118,6 +147,7 @@ class PostMover
     update_last_post_stats
     update_upload_security_status
     update_bookmarks
+    update_reviewables
 
     close_topic_and_schedule_deletion if @full_move
 
@@ -128,6 +158,16 @@ class PostMover
       original_topic_id: original_topic.id,
     )
     destination_topic
+  end
+
+  def ensure_acting_user_is_allowed_in_destination
+    return if !@move_to_pm
+    return if destination_topic.archetype != Archetype.private_message
+    return if user.id.blank? || user.bot?
+    return if destination_topic.topic_allowed_users.exists?(user_id: user.id)
+
+    destination_topic.topic_allowed_users.create!(user_id: user.id)
+    destination_topic.notifier.watch!(user.id)
   end
 
   def create_temp_table
@@ -277,6 +317,7 @@ class PostMover
         created_at: post.created_at,
         guardian: Guardian.new(user),
         skip_jobs: true,
+        no_bump: true,
       )
     new_post = @post_creator.create!
 
@@ -301,12 +342,8 @@ class PostMover
     new_post.custom_fields = post.custom_fields
     new_post.save_custom_fields
 
-    # When freezing original, ensure the notification generated points
-    # to the newly created post, not the old OP
-    if @options[:freeze_original]
-      @post_ids_after_move =
-        @post_ids_after_move.map { |post_id| post_id == post.id ? new_post.id : post_id }
-    end
+    @post_ids_after_move =
+      @post_ids_after_move.map { |post_id| post_id == post.id ? new_post.id : post_id }
 
     DiscourseEvent.trigger(:first_post_moved, new_post, post)
     DiscourseEvent.trigger(:post_moved, new_post, original_topic.id, post)
@@ -520,7 +557,7 @@ class PostMover
       FROM post_timings pt
       JOIN temp_moved_posts mp ON (pt.topic_id = mp.old_topic_id AND pt.post_number = mp.old_post_number)
       WHERE mp.old_post_id <> mp.new_post_id
-        AND mp.old_post_id IN (:post_ids)
+        AND mp.new_post_id IN (:post_ids)
       ON CONFLICT (topic_id, post_number, user_id) DO UPDATE
         SET msecs = GREATEST(post_timings.msecs, excluded.msecs)
     SQL
@@ -629,8 +666,8 @@ class PostMover
   end
 
   def update_statistics
-    destination_topic.update_statistics
-    original_topic.update_statistics
+    destination_topic.update_statistics!
+    original_topic.update_statistics!
     TopicUser.update_post_action_cache(
       topic_id: [original_topic.id, destination_topic.id],
       post_id: @post_ids,
@@ -688,19 +725,25 @@ class PostMover
 
   def posts
     @posts ||=
-      begin
-        Post
-          .where(topic: @original_topic, id: post_ids)
-          .where.not(post_type: Post.types[:small_action])
-          .where.not(raw: "")
-          .order(:created_at)
-          .tap { |posts| raise Discourse::InvalidParameters.new(:post_ids) if posts.empty? }
-      end
+      Post
+        .where(topic: @original_topic, id: post_ids)
+        .where.not(post_type: Post.types[:small_action])
+        .where.not(raw: "")
+        .order(:created_at)
+        .tap { |posts| raise Discourse::InvalidParameters.new(:post_ids) if posts.empty? }
+  end
+
+  def posts_preventing_close
+    @original_topic
+      .posts
+      .where(post_type: [Post.types[:regular], Post.types[:whisper]])
+      .where.not(raw: "")
+      .where("action_code IS DISTINCT FROM 'split_topic'")
   end
 
   def update_last_post_stats
     post = destination_topic.ordered_posts.where.not(post_type: Post.types[:whisper]).last
-    if post && post_ids.include?(post.id)
+    if post && @post_ids_after_move.include?(post.id)
       attrs = {}
       attrs[:last_posted_at] = post.created_at
       attrs[:last_post_user_id] = post.user_id
@@ -719,6 +762,15 @@ class PostMover
       Jobs.enqueue(:sync_topic_user_bookmarked, topic_id: @original_topic.id)
       Jobs.enqueue(:sync_topic_user_bookmarked, topic_id: @destination_topic.id)
     end
+  end
+
+  def update_reviewables
+    Reviewable.where(
+      target_type: "Post",
+      target_id: @moving_post_ids,
+      topic_id: @original_topic.id,
+      category_id: @original_topic.category_id,
+    ).update_all(topic_id: @destination_topic.id, category_id: @destination_topic.category_id)
   end
 
   def watch_new_topic

@@ -21,20 +21,57 @@ RSpec.describe Admin::GroupsController do
     end
 
     context "when logged in as an admin" do
+      let(:group) { Group.last }
+
       before { sign_in(admin) }
 
-      it "should work" do
+      it "creates a group with the specified attributes" do
         post "/admin/groups.json", params: group_params
 
-        expect(response.status).to eq(200)
+        expect(response).to have_http_status(:ok)
 
-        group = Group.last
-
-        expect(group.name).to eq("testing")
+        expect(group).to have_attributes(
+          name: "testing",
+          allow_membership_requests: true,
+          membership_request_template: "Testing",
+          members_visibility_level: Group.visibility_levels[:staff],
+        )
+        expect(group.group_users.where(owner: true).map(&:user)).to contain_exactly(user)
         expect(group.users).to contain_exactly(admin, user)
-        expect(group.allow_membership_requests).to eq(true)
-        expect(group.membership_request_template).to eq("Testing")
-        expect(group.members_visibility_level).to eq(Group.visibility_levels[:staff])
+      end
+
+      it "returns the persisted user count for initial members and owners" do
+        member = Fabricate(:user)
+        owner = Fabricate(:user)
+
+        post "/admin/groups.json",
+             params: {
+               group: {
+                 name: "builders",
+                 usernames: [member.username, owner.username].join(","),
+                 owner_usernames: owner.username,
+               },
+             }
+
+        expect(response).to have_http_status(:ok)
+
+        created_group = Group.find(response.parsed_body.dig("basic_group", "id"))
+
+        expect(created_group.users).to contain_exactly(member, owner)
+        expect(created_group.user_count).to eq(2)
+        expect(response.parsed_body.dig("basic_group", "user_count")).to eq(2)
+      end
+
+      it "returns a zero user count for a group without initial members" do
+        post "/admin/groups.json", params: { group: { name: "empty-group" } }
+
+        expect(response).to have_http_status(:ok)
+
+        created_group = Group.find(response.parsed_body.dig("basic_group", "id"))
+
+        expect(created_group.users).to be_empty
+        expect(created_group.user_count).to eq(0)
+        expect(response.parsed_body.dig("basic_group", "user_count")).to eq(0)
       end
 
       context "with custom_fields" do
@@ -95,13 +132,57 @@ RSpec.describe Admin::GroupsController do
           expect(Group.last.allow_unknown_sender_topic_replies).to eq(true)
         end
       end
+
+      context "with automatic membership email domains" do
+        it "normalizes a domain that includes '@' and creates the group" do
+          post "/admin/groups.json",
+               params: {
+                 group: {
+                   name: "harness-staff",
+                   automatic_membership_email_domains: "@harness.io",
+                 },
+               }
+
+          expect(response.status).to eq(200)
+          expect(Group.last.automatic_membership_email_domains).to eq("harness.io")
+        end
+
+        it "surfaces a clear validation error for a genuinely invalid domain" do
+          post "/admin/groups.json",
+               params: {
+                 group: {
+                   name: "harness-staff",
+                   automatic_membership_email_domains: "not a domain",
+                 },
+               }
+
+          expect(response.status).to eq(422)
+          expect(response.parsed_body["errors"]).to include(
+            I18n.t("groups.errors.invalid_domain", domain: "not a domain"),
+          )
+          expect(response.parsed_body["failed"]).to be_nil
+        end
+
+        it "creates the group when the domains are valid" do
+          post "/admin/groups.json",
+               params: {
+                 group: {
+                   name: "harness-staff",
+                   automatic_membership_email_domains: "harness.io",
+                 },
+               }
+
+          expect(response.status).to eq(200)
+          expect(Group.last.automatic_membership_email_domains).to eq("harness.io")
+        end
+      end
     end
 
     context "when logged in as a moderator" do
       before { sign_in(moderator) }
 
-      context "with moderators_manage_categories_and_groups enabled" do
-        before { SiteSetting.moderators_manage_categories_and_groups = true }
+      context "with moderators_manage_groups enabled" do
+        before { SiteSetting.moderators_manage_groups = true }
 
         it "creates group" do
           expect do post "/admin/groups.json", params: group_params end.to change {
@@ -118,10 +199,30 @@ RSpec.describe Admin::GroupsController do
           expect(group.membership_request_template).to eq("Testing")
           expect(group.members_visibility_level).to eq(Group.visibility_levels[:staff])
         end
+
+        it "does not allow setting the flair to an upload the moderator does not own" do
+          secret_upload = Fabricate(:secure_upload, user: admin)
+
+          expect do
+            post "/admin/groups.json",
+                 params: {
+                   group: {
+                     name: "flair-group",
+                     flair_upload_id: secret_upload.id,
+                   },
+                 }
+          end.to_not change { Group.count }
+
+          expect(response.status).to eq(422)
+          expect(response.parsed_body["errors"]).to include(
+            I18n.t("groups.errors.flair_upload_not_owned"),
+          )
+          expect(UploadReference.exists?(upload: secret_upload)).to eq(false)
+        end
       end
 
-      context "with moderators_manage_categories_and_groups disabled" do
-        before { SiteSetting.moderators_manage_categories_and_groups = false }
+      context "with moderators_manage_groups disabled" do
+        before { SiteSetting.moderators_manage_groups = false }
 
         it "prevents creation with a 403 response" do
           expect do post "/admin/groups.json", params: group_params end.to_not change {
@@ -150,10 +251,40 @@ RSpec.describe Admin::GroupsController do
     let(:user2) { Fabricate(:user) }
     let(:user3) { Fabricate(:user) }
 
+    it "rejects an unknown username without changing ownership" do
+      sign_in(admin)
+      group.add_owner(user)
+
+      delete "/admin/groups/#{group.id}/owners.json",
+             params: {
+               group: {
+                 usernames: "unknown_owner",
+               },
+             }
+
+      expect(response.status).to eq(400)
+      expect(group.group_users.find_by(user:)).to be_owner
+    end
+
+    it "matches owner usernames regardless of case" do
+      sign_in(admin)
+      group.add_owner(user)
+
+      delete "/admin/groups/#{group.id}/owners.json",
+             params: {
+               group: {
+                 usernames: user.username.upcase,
+               },
+             }
+
+      expect(response.status).to eq(200)
+      expect(group.group_users.find_by(user:)).not_to be_owner
+    end
+
     context "when logged in as an admin" do
       before { sign_in(admin) }
 
-      it "should work" do
+      it "adds the user to the group" do
         group.add_owner(user)
 
         delete "/admin/groups/#{group.id}/owners.json", params: { user_id: user.id }
@@ -162,7 +293,7 @@ RSpec.describe Admin::GroupsController do
         expect(group.group_users.where(owner: true)).to eq([])
       end
 
-      it "should work with multiple users" do
+      it "adds multiple users to the group" do
         group.add_owner(user)
         group.add_owner(user3)
 
@@ -198,8 +329,8 @@ RSpec.describe Admin::GroupsController do
     context "when logged in as a moderator" do
       before { sign_in(moderator) }
 
-      context "with moderators_manage_categories_and_groups enabled" do
-        before { SiteSetting.moderators_manage_categories_and_groups = true }
+      context "with moderators_manage_groups enabled" do
+        before { SiteSetting.moderators_manage_groups = true }
 
         it "removes owner" do
           group.add_owner(user)
@@ -211,8 +342,8 @@ RSpec.describe Admin::GroupsController do
         end
       end
 
-      context "with moderators_manage_categories_and_groups disabled" do
-        before { SiteSetting.moderators_manage_categories_and_groups = false }
+      context "with moderators_manage_groups disabled" do
+        before { SiteSetting.moderators_manage_groups = false }
 
         it "prevents owner removal with a 403 response" do
           group.add_owner(user)
@@ -278,13 +409,29 @@ RSpec.describe Admin::GroupsController do
         expect(response.status).to eq(200)
         expect(User.where(primary_group_id: group.id).size).to eq(0)
       end
+
+      it "keeps primary groups that belong to other groups" do
+        other_group = Fabricate(:group)
+        user.update!(primary_group_id: other_group.id)
+
+        put "/admin/groups/#{group.id}/primary.json",
+            params: {
+              group: {
+                usernames: user.username,
+              },
+              primary: "false",
+            }
+
+        expect(response.status).to eq(200)
+        expect(user.reload.primary_group_id).to eq(other_group.id)
+      end
     end
 
     context "when logged in as a moderator" do
       before { sign_in(moderator) }
 
-      context "with moderators_manage_categories_and_groups enabled" do
-        before { SiteSetting.moderators_manage_categories_and_groups = true }
+      context "with moderators_manage_groups enabled" do
+        before { SiteSetting.moderators_manage_groups = true }
 
         it "sets multiple primary users" do
           user2.update!(primary_group_id: group.id)
@@ -302,8 +449,8 @@ RSpec.describe Admin::GroupsController do
         end
       end
 
-      context "with moderators_manage_categories_and_groups disabled" do
-        before { SiteSetting.moderators_manage_categories_and_groups = false }
+      context "with moderators_manage_groups disabled" do
+        before { SiteSetting.moderators_manage_groups = false }
 
         it "prevents setting of primary group with a 403 response" do
           user2.update!(primary_group_id: group.id)
@@ -348,7 +495,7 @@ RSpec.describe Admin::GroupsController do
     context "when logged in as an admin" do
       before { sign_in(admin) }
 
-      it "should return the right response for an invalid group_id" do
+      it "returns an error for an invalid group ID" do
         max_id = Group.maximum(:id).to_i
         delete "/admin/groups/#{max_id + 1}.json"
         expect(response.status).to eq(404)
@@ -409,14 +556,14 @@ RSpec.describe Admin::GroupsController do
     context "when logged in as a moderator" do
       before { sign_in(moderator) }
 
-      context "with moderators_manage_categories_and_groups enabled" do
-        before { SiteSetting.moderators_manage_categories_and_groups = true }
+      context "with moderators_manage_groups enabled" do
+        before { SiteSetting.moderators_manage_groups = true }
 
         include_examples "group deletion not allowed"
       end
 
-      context "with moderators_manage_categories_and_groups disabled" do
-        before { SiteSetting.moderators_manage_categories_and_groups = false }
+      context "with moderators_manage_groups disabled" do
+        before { SiteSetting.moderators_manage_groups = false }
 
         include_examples "group deletion not allowed"
       end
@@ -430,6 +577,14 @@ RSpec.describe Admin::GroupsController do
   end
 
   describe "#automatic_membership_count" do
+    def count_domains(domains)
+      put "/admin/groups/automatic_membership_count.json",
+          params: {
+            automatic_membership_email_domains: domains,
+            id: group.id,
+          }
+    end
+
     context "when logged in as admin" do
       before { sign_in(admin) }
 
@@ -437,49 +592,42 @@ RSpec.describe Admin::GroupsController do
         Fabricate(:user, email: "user1@somedomain.org")
         Fabricate(:user, email: "user1@somedomain.com")
         Fabricate(:user, email: "user1@notsomedomain.com")
-        group = Fabricate(:group)
 
-        put "/admin/groups/automatic_membership_count.json",
-            params: {
-              automatic_membership_email_domains: "somedomain.org|somedomain.com",
-              id: group.id,
-            }
+        count_domains("somedomain.org|somedomain.com")
+
         expect(response.status).to eq(200)
         expect(response.parsed_body["user_count"]).to eq(2)
       end
 
-      it "responds with a 400 for a long list of domains" do
-        put "/admin/groups/automatic_membership_count.json",
-            params: {
-              automatic_membership_email_domains: 1.upto(11).map { |n| "domain#{n}.com" }.join("|"),
-              id: group.id,
-            }
-        expect(response.status).to eq(400)
-        expect(response.parsed_body["errors"]).to contain_exactly(
-          "You supplied invalid parameters to the request: Maximum 10 email domains can be counted at once",
-        )
+      it "returns a null count for a long list of domains" do
+        count_domains(1.upto(11).map { |n| "domain#{n}.com" }.join("|"))
+
+        expect(response.status).to eq(200)
+        expect(response.parsed_body["user_count"]).to be_nil
       end
 
-      it "doesn't respond with 500 if domain is invalid" do
-        group = Fabricate(:group)
+      it "ignores invalid domains when counting the matches" do
+        Fabricate(:user, email: "user1@somedomain.org")
 
-        put "/admin/groups/automatic_membership_count.json",
-            params: {
-              automatic_membership_email_domains: "@somedomain.org|@somedomain.com",
-              id: group.id,
-            }
+        count_domains("somedomain.org|not a domain")
+
         expect(response.status).to eq(200)
-        expect(response.parsed_body["user_count"]).to eq(0)
+        expect(response.parsed_body["user_count"]).to eq(1)
+      end
+
+      it "normalizes domains that include '@' before counting" do
+        Fabricate(:user, email: "user1@somedomain.org")
+
+        count_domains("@somedomain.org")
+
+        expect(response.status).to eq(200)
+        expect(response.parsed_body["user_count"]).to eq(1)
       end
     end
 
     shared_examples "automatic membership count inaccessible" do
       it "denies access with a 404 response" do
-        put "/admin/groups/automatic_membership_count.json",
-            params: {
-              automatic_membership_email_domains: "somedomain.org|somedomain.com",
-              id: group.id,
-            }
+        count_domains("somedomain.org|somedomain.com")
 
         expect(response.status).to eq(404)
         expect(response.parsed_body["errors"]).to include(I18n.t("not_found"))
@@ -489,16 +637,27 @@ RSpec.describe Admin::GroupsController do
     context "when logged in as a moderator" do
       before { sign_in(moderator) }
 
-      context "with moderators_manage_categories_and_groups enabled" do
-        before { SiteSetting.moderators_manage_categories_and_groups = true }
+      context "with moderators_manage_groups enabled" do
+        before { SiteSetting.moderators_manage_groups = true }
 
-        include_examples "automatic membership count inaccessible"
+        it "returns count of users whose emails match the domain" do
+          Fabricate(:user, email: "user1@somedomain.org")
+
+          count_domains("somedomain.org")
+
+          expect(response.status).to eq(200)
+          expect(response.parsed_body["user_count"]).to eq(1)
+        end
       end
 
-      context "with moderators_manage_categories_and_groups disabled" do
-        before { SiteSetting.moderators_manage_categories_and_groups = false }
+      context "with moderators_manage_groups disabled" do
+        before { SiteSetting.moderators_manage_groups = false }
 
-        include_examples "automatic membership count inaccessible"
+        it "denies access with a 403 response" do
+          count_domains("somedomain.org")
+
+          expect(response.status).to eq(403)
+        end
       end
     end
 

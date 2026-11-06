@@ -1,55 +1,71 @@
 import Component from "@glimmer/component";
-import { tracked } from "@glimmer/tracking";
-import { withSilencedDeprecations } from "discourse/lib/deprecated";
+import { helperContext } from "discourse/lib/helpers";
 import { withPluginApi } from "discourse/lib/plugin-api";
-import RenderGlimmer from "discourse/widgets/render-glimmer";
+import Category from "discourse/models/category";
 import { i18n } from "discourse-i18n";
-import SolvedAcceptAnswerButton from "../components/solved-accept-answer-button";
-import SolvedAcceptedAnswer from "../components/solved-accepted-answer";
-import SolvedUnacceptAnswerButton from "../components/solved-unaccept-answer-button";
+import SolvedAcceptAnswerButton from "../components/solved-accept-answer-button.gjs";
+import SolvedAcceptedAnswers from "../components/solved-accepted-answers.gjs";
+import SolvedSharedIssueButton from "../components/solved-shared-issue-button.gjs";
+import SolvedUnacceptAnswerButton from "../components/solved-unaccept-answer-button.gjs";
+import setAcceptedSolutions from "../lib/set-accepted-solutions.js";
+
+function topicHasSolvedEnabled(topic) {
+  if (!topic) {
+    return false;
+  }
+
+  const siteSettings = helperContext().siteSettings;
+
+  if (siteSettings.allow_solved_on_all_topics) {
+    return true;
+  }
+
+  const category = Category.findById(topic.category_id);
+  if (category?.custom_fields?.enable_accepted_answers === "true") {
+    return true;
+  }
+
+  const solvedTags = siteSettings.enable_solved_tags.split("|").filter(Boolean);
+  return (topic.tags || []).some((t) => solvedTags.includes(t));
+}
 
 function initializeWithApi(api) {
   customizePost(api);
   customizePostMenu(api);
   handleMessages(api);
+  customizeNotificationDescriptions(api);
 
   if (api.addDiscoveryQueryParam) {
     api.addDiscoveryQueryParam("solved", { replace: true, refreshModel: true });
   }
 
-  api.modifyClass(
-    "model:topic",
-    (Superclass) =>
-      class extends Superclass {
-        @tracked accepted_answer;
-        @tracked has_accepted_answer;
+  api.addTrackedTopicProperties(
+    "accepted_answers",
+    "has_accepted_answer",
+    "shared_issue_count",
+    "user_created_shared_issue",
+    "shared_issue_visible"
+  );
+}
 
-        setAcceptedSolution(acceptedAnswer) {
-          this.postStream?.posts?.forEach((post) => {
-            if (!acceptedAnswer) {
-              post.setProperties({
-                accepted_answer: false,
-                topic_accepted_answer: false,
-              });
-            } else if (post.post_number > 1) {
-              post.setProperties(
-                acceptedAnswer.post_number === post.post_number
-                  ? {
-                      accepted_answer: true,
-                      topic_accepted_answer: true,
-                    }
-                  : {
-                      accepted_answer: false,
-                      topic_accepted_answer: true,
-                    }
-              );
-            }
-          });
-
-          this.accepted_answer = acceptedAnswer;
-          this.has_accepted_answer = !!acceptedAnswer;
-        }
+function customizeNotificationDescriptions(api) {
+  api.registerValueTransformer(
+    "notifications-tracking-description",
+    ({ value, context: { topic, level, prefix } }) => {
+      if (prefix !== "topic.notifications" || !topicHasSolvedEnabled(topic)) {
+        return value;
       }
+
+      if (level.key === "tracking") {
+        return i18n("solved.topic_notifications.tracking.description");
+      }
+
+      if (level.key === "watching") {
+        return i18n("solved.topic_notifications.watching.description");
+      }
+
+      return value;
+    }
   );
 }
 
@@ -62,43 +78,13 @@ function customizePost(api) {
 
   api.renderAfterWrapperOutlet(
     "post-content-cooked-html",
-    class extends Component {
-      static shouldRender(args) {
-        return (
-          args.post?.post_number === 1 && args.post?.topic?.accepted_answer
-        );
-      }
-
-      <template>
-        <SolvedAcceptedAnswer
-          @post={{@post}}
-          @decoratorState={{@decoratorState}}
-        />
-      </template>
-    }
+    SolvedAcceptedAnswers
   );
-
-  withSilencedDeprecations("discourse.post-stream-widget-overrides", () =>
-    customizeWidgetPost(api)
-  );
-}
-
-function customizeWidgetPost(api) {
-  api.decorateWidget("post-contents:after-cooked", (helper) => {
-    let post = helper.getModel();
-
-    if (helper.attrs.post_number === 1 && post?.topic?.accepted_answer) {
-      return new RenderGlimmer(
-        helper.widget,
-        "div",
-        <template><SolvedAcceptedAnswer @post={{@data.post}} /></template>,
-        { post }
-      );
-    }
-  });
 }
 
 function customizePostMenu(api) {
+  const siteSettings = helperContext().siteSettings;
+
   api.registerValueTransformer(
     "post-menu-buttons",
     ({
@@ -118,22 +104,41 @@ function customizePostMenu(api) {
         solvedButton = SolvedAcceptAnswerButton;
       }
 
-      solvedButton &&
-        dag.add(
-          "solved",
-          solvedButton,
-          post.topic_accepted_answer && !post.accepted_answer
-            ? {
-                before: lastHiddenButtonKey,
-                after: secondLastHiddenButtonKey,
-              }
-            : {
-                before: [
-                  "assign", // button added by the assign plugin
-                  firstButtonKey,
-                ],
-              }
-        );
+      if (!solvedButton) {
+        return;
+      }
+
+      const collapse =
+        !siteSettings.solved_allow_multiple_solutions &&
+        post.topic_accepted_answer &&
+        !post.accepted_answer;
+
+      dag.add(
+        "solved",
+        solvedButton,
+        collapse
+          ? {
+              before: lastHiddenButtonKey,
+              after: secondLastHiddenButtonKey,
+            }
+          : {
+              before: [
+                "assign", // button added by the assign plugin
+                firstButtonKey,
+              ],
+            }
+      );
+    }
+  );
+
+  api.renderAfterWrapperOutlet(
+    "post-content-cooked-html",
+    class extends Component {
+      static shouldRender(args) {
+        return args.post?.post_number === 1;
+      }
+
+      <template><SolvedSharedIssueButton @post={{@post}} /></template>
     }
   );
 }
@@ -143,12 +148,23 @@ function handleMessages(api) {
     const topic = controller.model;
 
     if (topic) {
-      topic.setAcceptedSolution(message.accepted_answer);
+      setAcceptedSolutions(topic, message.accepted_answers);
     }
   };
 
   api.registerCustomPostMessageCallback("accepted_solution", callback);
   api.registerCustomPostMessageCallback("unaccepted_solution", callback);
+
+  api.registerCustomPostMessageCallback(
+    "shared_issue",
+    (controller, message) => {
+      const topic = controller.model;
+      if (!topic) {
+        return;
+      }
+      topic.set("shared_issue_count", message.count);
+    }
+  );
 }
 
 export default {
@@ -157,8 +173,20 @@ export default {
     withPluginApi(initializeWithApi);
 
     withPluginApi((api) => {
+      api.addUserNavSidebarLink("activity", {
+        name: "activity-solved",
+        route: "userActivity.solved",
+        label: "solved.title",
+        icon: "square-check",
+        displayed: ({ siteSettings }) => siteSettings.solved_enabled,
+      });
+
       api.replaceIcon(
         "notification.solved.accepted_notification",
+        "square-check"
+      );
+      api.replaceIcon(
+        "notification.solved.topic_solved_notification",
         "square-check"
       );
     });

@@ -73,11 +73,13 @@ module ChatSDK
       new.update(...)
     end
 
-    def messages(thread_id:, guardian:, direction: "future", **params)
+    def messages(thread_id:, guardian:, channel_id: nil, direction: "future", **params)
+      channel_id ||= ::Chat::Thread.where(id: thread_id).pick(:channel_id)
       Chat::ListChannelThreadMessages.call(
         guardian:,
         params: {
           thread_id:,
+          channel_id:,
           direction:,
           **params,
         },
@@ -85,6 +87,9 @@ module ChatSDK
         on_success { |messages:| messages }
         on_failed_contract { |contract| raise contract.errors.full_messages.join(", ") }
         on_failed_policy(:can_view_thread) { raise "Guardian can't view thread" }
+        on_failed_policy(:threading_enabled_for_channel) do
+          raise "Threading is not enabled for this channel"
+        end
         on_failed_policy(:target_message_exists) { raise "Target message doesn't exist" }
         on_failure { raise "Unexpected error" }
       end
@@ -92,14 +97,12 @@ module ChatSDK
 
     def update(guardian:, **params)
       Chat::UpdateThread.call(guardian:, params:) do
-        on_model_not_found(:channel) do
-          raise "Couldn’t find channel with id: `#{params[:channel_id]}`"
-        end
         on_model_not_found(:thread) do
           raise "Couldn’t find thread with id: `#{params[:thread_id]}`"
         end
         on_failed_policy(:can_view_channel) { raise "Guardian can't view channel" }
         on_failed_policy(:can_edit_thread) { raise "Guardian can't edit thread" }
+        on_failed_policy(:no_silenced_user) { raise "Guardian is silenced" }
         on_failed_policy(:threading_enabled_for_channel) do
           raise "Threading is not enabled for this channel"
         end

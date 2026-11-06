@@ -12,7 +12,7 @@ ur:
           discourse_details: "ڈِسکورس کی تفصیلات"
   js:
     details:
-      title: Hide Details
+      title: تفصیلات چھپائیں
     composer:
       details_title: Summary
       details_text: "This text will be hidden"

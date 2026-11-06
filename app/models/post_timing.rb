@@ -4,8 +4,8 @@ class PostTiming < ActiveRecord::Base
   belongs_to :topic
   belongs_to :user
 
-  validates_presence_of :post_number
-  validates_presence_of :msecs
+  validates :post_number, presence: true
+  validates :msecs, presence: true
 
   def self.pretend_read(topic_id, actual_read_post_number, pretend_read_post_number, user_ids = nil)
     # This is done in SQL cause the logic is quite tricky and we want to do this in one db hit
@@ -78,19 +78,22 @@ class PostTiming < ActiveRecord::Base
     last_read = post_number - 1
 
     PostTiming.transaction do
-      PostTiming.where(
-        "topic_id = ? AND user_id = ? AND post_number > ?",
-        topic.id,
-        user.id,
-        last_read,
-      ).delete_all
+      destroyed_count =
+        PostTiming.where(
+          "topic_id = ? AND user_id = ? AND post_number > ?",
+          topic.id,
+          user.id,
+          last_read,
+        ).delete_all
       last_read = nil if last_read < 1
 
+      # the TopicUser reset below must still run without timing rows;
+      # only the read count must not go negative
       TopicUser.where(user_id: user.id, topic_id: topic.id).update_all(
         last_read_post_number: last_read,
       )
 
-      topic.posts.find_by(post_number: post_number).decrement!(:reads)
+      topic.posts.find_by(post_number: post_number)&.decrement!(:reads) if destroyed_count > 0
 
       if topic.private_message?
         set_minimum_first_unread_pm!(topic: topic, user_id: user.id, date: topic.updated_at)
@@ -108,9 +111,15 @@ class PostTiming < ActiveRecord::Base
 
       Post.where(topic_id: topic_ids).update_all("reads = reads - 1")
 
-      date = Topic.listable_topics.where(id: topic_ids).minimum(:updated_at)
+      topics = Topic.where(id: topic_ids)
 
-      set_minimum_first_unread!(user_id: user_id, date: date) if date
+      if (date = topics.listable_topics.minimum(:updated_at))
+        set_minimum_first_unread!(user_id:, date:)
+      end
+
+      topics.private_messages.find_each do |topic|
+        set_minimum_first_unread_pm!(topic:, user_id:, date: topic.updated_at)
+      end
     end
   end
 
@@ -246,10 +255,10 @@ end
 #
 # Table name: post_timings
 #
-#  topic_id    :integer          not null
-#  post_number :integer          not null
-#  user_id     :integer          not null
 #  msecs       :integer          not null
+#  post_number :integer          not null
+#  topic_id    :integer          not null
+#  user_id     :integer          not null
 #
 # Indexes
 #

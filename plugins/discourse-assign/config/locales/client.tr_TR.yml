@@ -36,12 +36,13 @@ tr_TR:
       topic_search_placeholder: "Konuları başlığa veya gönderi içeriğine göre arayın"
       sidebar_name_filter_placeholder: "Ad/Kullanıcı Adı"
       assigned: "Atandı"
+      group_no_assignments_title: "Atama yok"
+      group_no_assignments_body: "Şu anda bu grup için aktif bir görev bulunmamaktadır."
       group_everyone: "Herkes"
       assigned_to: "Şuraya atandı:"
       assigned_topic_to: "Konu <a href='%{path}'>%{username}</a> adlı kullanıcıya atandı"
       assign_post_to: "#%{post_number}, %{username} adlı kullanıcıya atandı"
       assign_post_to_multiple: "%{username} adlı kullanıcıya #%{post_number}"
-      assigned_to_w_ellipsis: "Şuraya atandı..."
       unassign:
         title: "Atamayı kaldır"
         title_w_ellipsis: "Atamayı kaldır..."
@@ -115,7 +116,7 @@ tr_TR:
         assigned: "Atandı"
       no_assignments_title: "Henüz atamanız yok"
       no_assignments_body: >
-        Atanan konularınız ve mesajlarınız burada listelenir. Ayrıca, atamalarınızla ilgili periyodik bir anımsatma bildirimi alırsınız; bunu <a href='%{preferencesUrl}'>kullanıcı tercihlerinizden</a> ayarlayabilirsiniz. <br><br>Kendinize veya bir başkasına bir konu veya mesaj atamak için alttaki %{icon} ata düğmesini kullanın.
+        Atanan konularınız ve mesajlarınız burada listelenir. Ayrıca atamalarınızla ilgili periyodik bir anımsatıcı bildirimi alırsınız ve bunu <a href='%{preferencesUrl}'>kullanıcı tercihlerinizden</a> ayarlayabilirsiniz. <br><br>Kendinize veya bir başkasına bir konu veya mesaj atamak için alttaki %{icon} ata düğmesini kullanın.
       dismiss_assigned_tooltip: "Okunmamış tüm atama bildirimlerini okundu olarak işaretle"
       assigned_to_group:
         post: "gönderi %{group_name} adlı gruba atandı"
@@ -131,7 +132,7 @@ tr_TR:
         assign_event:
           group_name: "Etkinlik Ata"
           assigned: "Bir kullanıcı bir konu atadığında"
-          unassigned: "Bir kullanıcı bir konunun atamasını kaldırdığında"
+          unassigned: "Bir kullanıcı bir konuyu atamayı kaldırdığında"
     search:
       advanced:
         in:
@@ -141,8 +142,16 @@ tr_TR:
           label: "Şuraya atandı:"
     topics:
       bulk:
-        unassign: "Konuların atamalarını kaldır"
-        assign: "Konuları ata"
+        unassign: "Konuların atamasını kaldır"
+        assign: "Konuları atayın"
+        assign_description: "Seçilen konuları aşağıdaki kullanıcıya atayın:"
+        unassign_description: "Seçili konuların atamasını kaldırmak istiyor musunuz?"
+        confirm_assign_topics:
+          one: "%{count} konuyu atayın"
+          other: "%{count} konuyu atayın"
+        confirm_unassign_topics:
+          one: "%{count} konunun atamasını kaldır"
+          other: "%{count} konunun atamasını kaldır"
     discourse_automation:
       scriptables:
         random_assign:
@@ -191,3 +200,25 @@ tr_TR:
       title: "Atamaları düzenle"
       topic: "Konu"
       post: "Gönderi"
+    discourse_workflows:
+      nodes:
+        "trigger:assigned": "Atandı"
+        "trigger:unassigned": "Atanmamış"
+      assign_topic:
+        resource: "Kaynak"
+        resources:
+          topic: "Konu"
+          post: "Gönderi"
+        operations:
+          assign: "Ata"
+          unassign: "Atamayı kaldır"
+        topic_id: "Konu kimliği"
+        post_id: "Gönderi kimliği"
+        assignee: "Atanan kişi"
+      check_assignment:
+        target_types:
+          topic: "Konu"
+          post: "Gönderi"
+        topic_id: "Konu kimliği"
+        post_id: "Gönderi kimliği"
+        assignee: "Atanan kişi"

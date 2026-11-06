@@ -5,5 +5,3 @@
 # https://translate.discourse.org/
 
 cs:
-  site_settings:
-    rss_polling_frequency: "[RSS Polling] Frekvece feed pollingu (v minutách)"

@@ -10,30 +10,45 @@ RSpec.describe PublishedPagesController do
     before { SiteSetting.enable_page_publishing = true }
 
     context "when checking slug availability" do
-      it "returns true for a new slug" do
+      it "returns 403 for anonymous users" do
         get "/pub/check-slug.json?slug=cool-slug-man"
-        expect(response).to be_successful
-        expect(response.parsed_body["valid_slug"]).to eq(true)
+        expect(response.status).to eq(403)
       end
 
-      it "returns true for a new slug with whitespace" do
-        get "/pub/check-slug.json?slug=cool-slug-man%20"
-        expect(response).to be_successful
-        expect(response.parsed_body["valid_slug"]).to eq(true)
+      it "returns 403 for regular users" do
+        sign_in(user)
+        get "/pub/check-slug.json?slug=cool-slug-man"
+        expect(response.status).to eq(403)
       end
 
-      it "returns false for an empty value" do
-        get "/pub/check-slug.json?slug="
-        expect(response).to be_successful
-        expect(response.parsed_body["valid_slug"]).to eq(false)
-        expect(response.parsed_body["reason"]).to be_present
-      end
+      context "as a staff member" do
+        before { sign_in(admin) }
 
-      it "returns false for a reserved value" do
-        get "/pub/check-slug.json", params: { slug: "check-slug" }
-        expect(response).to be_successful
-        expect(response.parsed_body["valid_slug"]).to eq(false)
-        expect(response.parsed_body["reason"]).to be_present
+        it "returns true for a new slug" do
+          get "/pub/check-slug.json?slug=cool-slug-man"
+          expect(response).to be_successful
+          expect(response.parsed_body["valid_slug"]).to eq(true)
+        end
+
+        it "returns true for a new slug with whitespace" do
+          get "/pub/check-slug.json?slug=cool-slug-man%20"
+          expect(response).to be_successful
+          expect(response.parsed_body["valid_slug"]).to eq(true)
+        end
+
+        it "returns false for an empty value" do
+          get "/pub/check-slug.json?slug="
+          expect(response).to be_successful
+          expect(response.parsed_body["valid_slug"]).to eq(false)
+          expect(response.parsed_body["reason"]).to be_present
+        end
+
+        it "returns false for a reserved value" do
+          get "/pub/check-slug.json", params: { slug: "check-slug" }
+          expect(response).to be_successful
+          expect(response.parsed_body["valid_slug"]).to eq(false)
+          expect(response.parsed_body["reason"]).to be_present
+        end
       end
     end
 
@@ -104,13 +119,13 @@ RSpec.describe PublishedPagesController do
         end
 
         it "works even if image logos are not available" do
-          SiteSetting.logo_small = nil
+          SiteSetting.logo_small = ""
           get published_page.path
           expect(response.body).to include(
             "<img class=\"published-page-logo\" src=\"#{SiteSetting.logo.url}\"/>",
           )
 
-          SiteSetting.logo = nil
+          SiteSetting.logo = ""
           get published_page.path
           expect(response.body).not_to include("published-page-logo")
         end
@@ -120,6 +135,23 @@ RSpec.describe PublishedPagesController do
           expect(response.body).to include(
             "<body class=\"published-page #{published_page.slug} topic-#{published_page.topic_id} recipes uncategorized\">",
           )
+        end
+
+        it "omits hidden tags from body classes" do
+          hidden_tag = Fabricate(:tag, name: "admins-only")
+          hidden_tag_group =
+            Fabricate(:tag_group, name: "Admins only", tag_names: [hidden_tag.name])
+          hidden_tag_group.permissions = [
+            [Group::AUTO_GROUPS[:admins], TagGroupPermission.permission_types[:full]],
+          ]
+          hidden_tag_group.save!
+          published_page.topic.tags << hidden_tag
+
+          get published_page.path
+
+          expect(response.status).to eq(200)
+          expect(response.body).to include("recipes")
+          expect(response.body).not_to include(hidden_tag.name)
         end
 
         context "when login is required" do

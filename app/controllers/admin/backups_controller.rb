@@ -7,6 +7,7 @@ class Admin::BackupsController < Admin::AdminController
   include ExternalUploadHelpers
 
   before_action :ensure_backups_enabled
+  before_action :ensure_valid_backup_id, only: %i[show email destroy restore]
   skip_before_action :check_xhr, only: %i[index show logs check_backup_chunk upload_backup_chunk]
   skip_before_action :ensure_backups_enabled, only: %i[show status index email]
 
@@ -22,6 +23,21 @@ class Admin::BackupsController < Admin::AdminController
                          :complete_multipart,
                          :abort_multipart,
                          :batch_presign_multipart_parts
+
+  # Backups are ops, not content — an archived site should still be
+  # backup-able, restorable, and downloadable.
+  allow_when_archived :create,
+                      :cancel,
+                      :email,
+                      :destroy,
+                      :restore,
+                      :rollback,
+                      :readonly,
+                      :upload_backup_chunk,
+                      :create_multipart,
+                      :complete_multipart,
+                      :abort_multipart,
+                      :batch_presign_multipart_parts
 
   def index
     respond_to do |format|
@@ -89,14 +105,14 @@ class Admin::BackupsController < Admin::AdminController
 
       render body: nil
     else
-      render body: nil, status: 404
+      render body: nil, status: :not_found
     end
   end
 
   def show
     if !EmailBackupToken.compare(current_user.id, params.fetch(:token))
       @error = I18n.t("download_backup_mailer.no_token")
-      return render layout: "no_ember", status: 422, formats: [:html]
+      return render layout: "no_ember", status: :unprocessable_entity, formats: [:html]
     end
 
     store = BackupRestore::BackupStore.create
@@ -112,7 +128,7 @@ class Admin::BackupsController < Admin::AdminController
         send_file backup.source
       end
     else
-      render body: nil, status: 404
+      render body: nil, status: :not_found
     end
   end
 
@@ -124,7 +140,7 @@ class Admin::BackupsController < Admin::AdminController
       store.delete_file(backup.filename)
       render body: nil
     else
-      render body: nil, status: 404
+      render body: nil, status: :not_found
     end
   end
 
@@ -177,6 +193,7 @@ class Admin::BackupsController < Admin::AdminController
     current_chunk_size = params.fetch(:resumableCurrentChunkSize).to_i
 
     raise Discourse::InvalidParameters.new(:resumableIdentifier) unless valid_filename?(identifier)
+    raise Discourse::InvalidParameters.new(:resumableFilename) unless valid_filename?(filename)
 
     # path to chunk file
     chunk = BackupRestore::LocalBackupStore.chunk_path(identifier, filename, chunk_number)
@@ -193,13 +210,17 @@ class Admin::BackupsController < Admin::AdminController
 
     raise Discourse::InvalidParameters.new(:resumableIdentifier) unless valid_filename?(identifier)
     unless valid_extension?(filename)
-      return render status: 415, plain: I18n.t("backup.backup_file_should_be_tar_gz")
+      return(
+        render status: :unsupported_media_type, plain: I18n.t("backup.backup_file_should_be_tar_gz")
+      )
     end
     unless has_enough_space_on_disk?(total_size)
-      return render status: 415, plain: I18n.t("backup.not_enough_space_on_disk")
+      return(
+        render status: :unsupported_media_type, plain: I18n.t("backup.not_enough_space_on_disk")
+      )
     end
     unless valid_filename?(filename)
-      return render status: 415, plain: I18n.t("backup.invalid_filename")
+      return render status: :unsupported_media_type, plain: I18n.t("backup.invalid_filename")
     end
 
     file = params.fetch(:file)
@@ -227,32 +248,10 @@ class Admin::BackupsController < Admin::AdminController
     render body: nil
   end
 
-  def create_upload_url
-    params.require(:filename)
-    filename = params.fetch(:filename)
-
-    unless valid_extension?(filename)
-      return render_json_error(I18n.t("backup.backup_file_should_be_tar_gz"))
-    end
-    return render_json_error(I18n.t("backup.invalid_filename")) unless valid_filename?(filename)
-
-    store = BackupRestore::BackupStore.create
-
-    begin
-      upload_url = store.generate_upload_url(filename)
-    rescue BackupRestore::BackupStore::BackupFileExists
-      return render_json_error(I18n.t("backup.file_exists"))
-    rescue BackupRestore::BackupStore::StorageError => e
-      return render_json_error(e)
-    end
-
-    render json: success_json.merge(url: upload_url)
-  end
-
   private
 
   def has_enough_space_on_disk?(size)
-    DiskSpace.free("#{Rails.root}/public/backups") > size
+    DiskSpace.free("#{Rails.public_path.join("backups")}") > size
   end
 
   def ensure_backups_enabled
@@ -265,6 +264,11 @@ class Admin::BackupsController < Admin::AdminController
 
   def valid_filename?(filename)
     !!(/\A[a-zA-Z0-9\._\-]+\z/ =~ filename)
+  end
+
+  def ensure_valid_backup_id
+    backup_id = params.fetch(:id)
+    raise Discourse::NotFound unless valid_filename?(backup_id) && valid_extension?(backup_id)
   end
 
   def render_error(message_key)
@@ -289,17 +293,15 @@ class Admin::BackupsController < Admin::AdminController
   end
 
   def create_direct_multipart_upload
-    begin
-      yield
-    rescue BackupRestore::BackupStore::StorageError => err
-      message =
-        debug_upload_error(
-          err,
-          I18n.t("upload.create_multipart_failure", additional_detail: err.message),
-        )
-      raise ExternalUploadHelpers::ExternalUploadValidationError.new(message)
-    rescue BackupRestore::BackupStore::BackupFileExists
-      raise ExternalUploadHelpers::ExternalUploadValidationError.new(I18n.t("backup.file_exists"))
-    end
+    yield
+  rescue BackupRestore::BackupStore::StorageError => err
+    message =
+      debug_upload_error(
+        err,
+        I18n.t("upload.create_multipart_failure", additional_detail: err.message),
+      )
+    raise ExternalUploadHelpers::ExternalUploadValidationError.new(message)
+  rescue BackupRestore::BackupStore::BackupFileExists
+    raise ExternalUploadHelpers::ExternalUploadValidationError.new(I18n.t("backup.file_exists"))
   end
 end

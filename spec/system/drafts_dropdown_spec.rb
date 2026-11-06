@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
-describe "Drafts dropdown", type: :system do
+describe "Drafts dropdown" do
   fab!(:user) { Fabricate(:user, refresh_auto_groups: true) }
+  fab!(:category)
   let(:composer) { PageObjects::Components::Composer.new }
   let(:drafts_dropdown) { PageObjects::Components::DraftsMenu.new }
   let(:discard_draft_modal) { PageObjects::Modals::DiscardDraft.new }
@@ -35,7 +36,7 @@ describe "Drafts dropdown", type: :system do
       )
 
       5.times do |i|
-        topic = Fabricate(:topic, user: user)
+        topic = Fabricate(:topic_with_op, user: user)
         Draft.set(user, topic.draft_key, 0, { reply: "test reply #{i}" }.to_json)
       end
     end
@@ -110,10 +111,10 @@ describe "Drafts dropdown", type: :system do
       )
     end
 
-    it "disables the drafts dropdown menu when new topic button is disabled" do
+    it "is still enabled" do
       category_page.visit(category)
 
-      expect(category_page).to have_button("New Topic", disabled: true)
+      expect(category_page).to have_button("New Topic", disabled: false)
       expect(drafts_dropdown).to be_enabled
     end
   end

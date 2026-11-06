@@ -2,10 +2,10 @@
 
 describe ::TopicsController do
   fab!(:topic)
-  fab!(:topic1) { Fabricate(:topic) }
-  fab!(:topic2) { Fabricate(:topic) }
-  fab!(:topic3) { Fabricate(:topic) }
-  fab!(:user) { Fabricate(:admin) }
+  fab!(:topic1, :topic)
+  fab!(:topic2, :topic)
+  fab!(:topic3, :topic)
+  fab!(:user, :admin)
 
   before do
     enable_current_plugin
@@ -20,7 +20,7 @@ describe ::TopicsController do
   end
 
   context "when a user is logged on" do
-    it "includes related topics in payload when configured" do
+    it "includes related topics for anonymous and logged-in requests" do
       get("#{topic.relative_url}.json")
       expect(response.status).to eq(200)
       json = response.parsed_body
@@ -37,8 +37,8 @@ describe ::TopicsController do
       expect(json["related_topics"].length).to eq(2)
     end
 
-    it "includes related topics in payload when configured" do
-      SiteSetting.lazy_load_categories_groups = "#{Group::AUTO_GROUPS[:everyone]}"
+    it "includes related topics alongside lazy-loaded categories" do
+      SiteSetting.lazy_load_categories_groups = "#{Group::AUTO_GROUPS[:anonymous_users]}"
       category = Fabricate(:category)
       topic.update!(category: category)
 

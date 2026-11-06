@@ -1,33 +1,71 @@
 # frozen_string_literal: true
 
 describe UserCardSerializer do
-  let(:user) { Fabricate(:user) }
+  fab!(:user)
   let(:serializer) { described_class.new(user, scope: Guardian.new, root: false) }
-  let(:json) { serializer.as_json }
 
-  it "accepted_answers serializes number of accepted answers" do
-    expect(serializer.as_json[:accepted_answers]).to eq(0)
+  describe "accepted_answers" do
+    before { SiteSetting.allow_solved_on_all_topics = true }
 
-    post1 = Fabricate(:post, user: user)
-    DiscourseSolved.accept_answer!(post1, Discourse.system_user)
-    post1.topic.reload
-    expect(serializer.as_json[:accepted_answers]).to eq(1)
+    it "uses DiscourseSolved::Queries.solved_count" do
+      allow(DiscourseSolved::Queries).to receive(:solved_count).with(user.id).and_return(42)
+      expect(serializer.as_json[:accepted_answers]).to eq(42)
+      expect(DiscourseSolved::Queries).to have_received(:solved_count).with(user.id)
+    end
 
-    post2 = Fabricate(:post, user: user)
-    DiscourseSolved.accept_answer!(post2, Discourse.system_user)
-    expect(serializer.as_json[:accepted_answers]).to eq(2)
+    it "returns the correct count" do
+      expect(serializer.as_json[:accepted_answers]).to eq(0)
 
-    post3 = Fabricate(:post, user: user)
-    DiscourseSolved.accept_answer!(post3, Discourse.system_user)
-    expect(serializer.as_json[:accepted_answers]).to eq(3)
+      topic = Fabricate(:topic_with_op)
+      post = Fabricate(:post, topic:, user:)
+      DiscourseSolved::AcceptAnswer.call!(
+        params: {
+          post_id: post.id,
+        },
+        guardian: Discourse.system_user.guardian,
+      )
 
-    DiscourseSolved.unaccept_answer!(post1)
-    expect(serializer.as_json[:accepted_answers]).to eq(2)
+      expect(serializer.as_json[:accepted_answers]).to eq(1)
+    end
 
-    post2.topic.trash!(Discourse.system_user)
-    expect(serializer.as_json[:accepted_answers]).to eq(1)
+    describe "with multiple solutions enabled" do
+      before { SiteSetting.solved_allow_multiple_solutions = true }
 
-    post3.topic.convert_to_private_message(Discourse.system_user)
-    expect(serializer.as_json[:accepted_answers]).to eq(0)
+      it "returns the correct count" do
+        expect(serializer.as_json[:accepted_answers]).to eq(0)
+
+        topic = Fabricate(:topic_with_op)
+        post = Fabricate(:post, topic:, user:)
+        DiscourseSolved::AcceptAnswer.call!(
+          params: {
+            post_id: post.id,
+          },
+          guardian: Discourse.system_user.guardian,
+        )
+
+        expect(serializer.as_json[:accepted_answers]).to eq(1)
+
+        post2 = Fabricate(:post, topic:, user:)
+        DiscourseSolved::AcceptAnswer.call!(
+          params: {
+            post_id: post2.id,
+          },
+          guardian: Discourse.system_user.guardian,
+        )
+
+        expect(serializer.as_json[:accepted_answers]).to eq(2)
+
+        topic2 = Fabricate(:topic_with_op)
+        post3 = Fabricate(:post, topic: topic2, user:)
+        DiscourseSolved::AcceptAnswer.call!(
+          params: {
+            post_id: post3.id,
+          },
+          guardian: Discourse.system_user.guardian,
+        )
+
+        expect(serializer.as_json[:accepted_answers]).to eq(3)
+      end
+    end
   end
 end

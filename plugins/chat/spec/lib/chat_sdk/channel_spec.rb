@@ -23,17 +23,25 @@ describe ChatSDK::Channel do
     context "when guardian can't see the channel" do
       fab!(:channel_1, :private_category_channel)
 
-      it "fails" do
+      it "rejects a guardian without access to the channel" do
         params[:guardian] = Fabricate(:user).guardian
 
         expect { described_class.messages(**params) }.to raise_error("Guardian can't view channel")
       end
     end
 
-    context "when target_message doesn’t exist" do
-      it "fails" do
+    context "when target_message doesn't exist" do
+      it "rejects a nonexistent target message" do
         expect { described_class.messages(**params, target_message_id: -999) }.to raise_error(
           "Target message doesn't exist",
+        )
+      end
+    end
+
+    context "when direction is invalid" do
+      it "rejects an invalid direction" do
+        expect { described_class.messages(**params, direction: "invalid") }.to raise_error(
+          "Direction is not included in the list",
         )
       end
     end
@@ -57,7 +65,7 @@ describe ChatSDK::Channel do
     end
 
     context "when the channel doesn't exist" do
-      it "fails" do
+      it "rejects a nonexistent channel" do
         params[:channel_id] = -999
 
         expect { described_class.start_reply(**params) }.to raise_error(
@@ -67,7 +75,7 @@ describe ChatSDK::Channel do
     end
 
     context "when the thread doesn't exist" do
-      it "fails" do
+      it "rejects a nonexistent thread" do
         params[:thread_id] = -999
 
         expect { described_class.start_reply(**params) }.to raise_error(
@@ -105,7 +113,7 @@ describe ChatSDK::Channel do
     end
 
     context "when the channel doesn't exist" do
-      it "fails" do
+      it "rejects a nonexistent channel" do
         params[:channel_id] = -999
 
         expect { described_class.stop_reply(**params) }.to raise_error(
@@ -115,7 +123,7 @@ describe ChatSDK::Channel do
     end
 
     context "when the thread doesn't exist" do
-      it "fails" do
+      it "rejects a nonexistent thread" do
         params[:thread_id] = -999
 
         expect { described_class.stop_reply(**params) }.to raise_error(

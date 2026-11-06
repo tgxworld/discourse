@@ -4,13 +4,19 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    commit-message:
+      prefix: "DEPS"
   - package-ecosystem: bundler
     directory: "/"
     schedule:
       interval: daily
       time: "08:00"
       timezone: Australia/Sydney
-    open-pull-requests-limit: 20
+    commit-message:
+      prefix: "DEPS"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 40
     versioning-strategy: lockfile-only
     allow:
       - dependency-type: direct
@@ -50,11 +56,11 @@ updates:
           - "actionmailer"
           - "actionpack"
           - "actionview"
-          - "actionmodel"
+          - "activemodel"
           - "activerecord"
+          - "activejob"
           - "activesupport"
           - "railties"
-          - "sprockets-rails"
       sass:
         patterns:
           - "sass*"
@@ -64,23 +70,31 @@ updates:
       interval: daily
       time: "08:00"
       timezone: Australia/Sydney
-    open-pull-requests-limit: 20
+    commit-message:
+      prefix: "DEPS"
+    cooldown:
+      default-days: 7
+      exclude:
+        - "@discourse/*"
+        - "discourse" # npm alias for @discourse/types in plugins
+    open-pull-requests-limit: 40
     versioning-strategy: increase
-    ignore: # These are all vendored so need to be updated manually. See lib/tasks/javascript.rake
-      - dependency-name: "chart.js"
-      - dependency-name: "chartjs-plugin-datalabels"
-      - dependency-name: "magnific-popup"
-      - dependency-name: "pikaday"
-      - dependency-name: "moment"
-      - dependency-name: "moment-timezone"
-      - dependency-name: "@discourse/moment-timezone-names-translations"
-      - dependency-name: "squoosh"
-      - dependency-name: "@glint/*" # Using unstable version - don't auto-upgrade to stable
-      - dependency-name: "typescript" # Very sensitive to glint/volar version
+    ignore:
+      - dependency-name: "webpack" # Recent versions have bugs with `/static` loading. We're working to move away from webpack anyway.
+      # Pinned as exact peers by @discourse/lint-configs; bump them there, and the lint-configs update carries them here.
+      - dependency-name: "eslint"
+      - dependency-name: "prettier"
+      - dependency-name: "stylelint"
     groups:
       babel:
         patterns:
           - "@babel*"
+      codemirror:
+        patterns:
+          - "@codemirror/*"
+      ember-decorators:
+        patterns:
+          - "@ember-decorators/*"
       embroider:
         patterns:
           - "@embroider*"
@@ -94,13 +108,14 @@ updates:
       types:
         patterns:
           - "@types/*"
+          - "@glint/*"
+          - "typescript"
       uppy:
         patterns:
           - "@uppy*"
-      lint:
+      warp-drive:
         patterns:
-          - "@discourse/lint-configs"
-          - "eslint"
-          - "prettier"
-          - "ember-template-lint"
-          - "stylelint"
+          - "@warp-drive/*"
+      fullcalendar:
+        patterns:
+          - "@fullcalendar/*"

@@ -1,18 +1,35 @@
-import { hbs } from "ember-cli-htmlbars";
-import { withSilencedDeprecations } from "discourse/lib/deprecated";
 import { withPluginApi } from "discourse/lib/plugin-api";
-import { registerWidgetShim } from "discourse/widgets/render-glimmer";
-import AiBotHeaderIcon from "../components/ai-bot-header-icon";
-import AiPersonaFlair from "../components/post/ai-persona-flair";
-import AiCancelStreamingButton from "../components/post-menu/ai-cancel-streaming-button";
-import AiDebugButton from "../components/post-menu/ai-debug-button";
-import AiShareButton from "../components/post-menu/ai-share-button";
+import AiBotDockedComposer from "../components/ai-bot-docked-composer.gjs";
+import AiBotHeaderIcon from "../components/ai-bot-header-icon.gjs";
+import AiChatModelLabel from "../components/ai-chat-model-label.gjs";
+import AiAgentFlair from "../components/post/ai-agent-flair.gjs";
+import AiCancelStreaming from "../components/post/meta-data/ai-cancel-streaming.gjs";
+import AiCancelStreamingButton from "../components/post-menu/ai-cancel-streaming-button.gjs";
+import AiDebugButton from "../components/post-menu/ai-debug-button.gjs";
+import AiRetryStreamingButton from "../components/post-menu/ai-retry-streaming-button.gjs";
+import AiShareButton from "../components/post-menu/ai-share-button.gjs";
+import { isGPTBot, isPostFromAiBot } from "../lib/ai-bot-helper.js";
 import {
-  getBotType,
-  isGPTBot,
-  showShareConversationModal,
-} from "../lib/ai-bot-helper";
-import { streamPostText } from "../lib/ai-streamer/progress-handlers";
+  cleanupStreamingData,
+  streamPostText,
+} from "../lib/ai-streamer/progress-handlers.js";
+
+function focusDockedComposer() {
+  requestAnimationFrame(() => {
+    document.querySelector(".ai-bot-docked-composer .d-editor-input")?.focus();
+  });
+}
+
+function lookupStreamingState(api) {
+  // Guarded because the container may be destroyed by the time the
+  // topic controller's unsubscribe hook runs (particularly during
+  // test tear-down of acceptance suites).
+  try {
+    return api.container.lookup("service:ai-bot-streaming-state");
+  } catch {
+    return null;
+  }
+}
 
 let allowDebug = false;
 
@@ -21,12 +38,90 @@ function attachHeaderIcon(api) {
 }
 
 function initializeAIBotReplies(api) {
+  const siteSettings = api.container.lookup("service:site-settings");
+  const appEvents = api.container.lookup("service:app-events");
+
+  function scrollUserPostToTopWhenReady(userPostNumber) {
+    let cancelled = false;
+    const cancel = () => {
+      cancelled = true;
+      appEvents.off("page:changed", cancel);
+    };
+    appEvents.on("page:changed", cancel);
+
+    let attempts = 0;
+    function tryScroll() {
+      if (cancelled) {
+        return;
+      }
+      const el = document.querySelector(`#post_${userPostNumber}`);
+      if (el) {
+        appEvents.off("page:changed", cancel);
+        const top = el.getBoundingClientRect().top + window.scrollY - 10;
+        window.scrollTo({ top: Math.max(0, top) });
+      } else if (++attempts < 60) {
+        requestAnimationFrame(tryScroll);
+      } else {
+        appEvents.off("page:changed", cancel);
+      }
+    }
+    requestAnimationFrame(tryScroll);
+  }
+
   initializePauseButton(api);
+
+  api.renderInOutlet("topic-area-bottom", AiBotDockedComposer);
+
+  // Suppress MoreTopics tabs (Related Messages / Suggested) entirely on
+  // bot PMs. Relying on CSS `display: none` on `.more-topics__container`
+  // was racey during back-to-forum navigation: the body class could lag
+  // the DOM teardown and leave the tabs briefly visible on the next
+  // route. Returning an empty tabs array instead keeps the component
+  // rendering nothing regardless of transition timing.
+  api.registerValueTransformer("more-topics-tabs", ({ value, context }) => {
+    if (
+      siteSettings.ai_bot_enable_docked_composer &&
+      context?.topic?.is_bot_pm
+    ) {
+      return [];
+    }
+    return value;
+  });
 
   api.modifyClass("controller:topic", {
     pluginId: "discourse-ai",
 
     onAIBotStreamedReply: function (data) {
+      if (!this.model?.postStream) {
+        return;
+      }
+
+      const streamingState = lookupStreamingState(api);
+      const topicId = this.model.id;
+
+      if (data?.noop) {
+        return;
+      }
+
+      if (data?.done) {
+        streamingState?.markFinishedAfterRender(topicId, data?.post_id);
+        if (siteSettings.ai_bot_enable_docked_composer) {
+          appEvents.trigger("discourse-ai:bot-reply-finished", {
+            topicId,
+            postId: data?.post_id,
+          });
+        }
+      } else {
+        const isNewStream = !streamingState?.isStreamingForTopic(topicId);
+        streamingState?.markStarted(topicId, data?.post_id);
+        if (isNewStream && siteSettings.ai_bot_enable_docked_composer) {
+          appEvents.trigger("discourse-ai:bot-reply-started", {
+            topicId,
+            postId: data?.post_id,
+          });
+        }
+      }
+
       streamPostText(this.model.postStream, data);
     },
     subscribe: function () {
@@ -37,8 +132,13 @@ function initializeAIBotReplies(api) {
         this.model.details.allowed_users &&
         this.model.details.allowed_users.filter(isGPTBot).length >= 1
       ) {
-        // we attempt to recover the last message in the bus
-        // so we subscribe at -2
+        // -2 replays only the last message before listening for new ones.
+        // A completed stream always ends with done:true as its final message,
+        // so replaying just the last event is enough to resume an in-progress
+        // stream AND avoids the stale-state bug where replaying an earlier
+        // chunk calls markStarted right before the done message, leaving the
+        // MutationObserver waiting for a .streaming class that never gets
+        // removed (because streamPostText has nothing left to stream).
         this.messageBus.subscribe(
           `discourse-ai/ai-bot/topic/${this.model.id}`,
           this.onAIBotStreamedReply.bind(this),
@@ -47,52 +147,81 @@ function initializeAIBotReplies(api) {
       }
     },
     unsubscribe: function () {
+      // we may have infected post stream so lets clean it up
+      if (this.model?.postStream) {
+        cleanupStreamingData(this.model.postStream);
+      }
+
+      if (this.model?.id) {
+        // Guarded lookup: the container can be destroyed before
+        // `unsubscribe` runs (teardown during test owner destruction),
+        // in which case there's nothing to mark finished anyway.
+        const streamingState = lookupStreamingState(api);
+        streamingState?.markFinished(this.model.id);
+      }
+
       this.messageBus.unsubscribe("discourse-ai/ai-bot/topic/*");
       this._super();
     },
   });
-}
 
-function initializePersonaDecorator(api) {
-  api.renderAfterWrapperOutlet("post-meta-data-poster-name", AiPersonaFlair);
-
-  withSilencedDeprecations("discourse.post-stream-widget-overrides", () =>
-    initializeWidgetPersonaDecorator(api)
-  );
-}
-
-function initializeWidgetPersonaDecorator(api) {
-  api.decorateWidget(`poster-name:after`, (dec) => {
-    const botType = getBotType(dec.attrs.user);
-    // we have 2 ways of decorating
-    // 1. if a bot is a LLM we decorate with persona name
-    // 2. if bot is a persona we decorate with LLM name
-    if (botType === "llm") {
-      return dec.widget.attach("persona-flair", {
-        personaName: dec.model?.topic?.ai_persona_name,
-      });
-    } else if (botType === "persona") {
-      return dec.widget.attach("persona-flair", {
-        personaName: dec.model?.llm_name,
-      });
+  api.onAppEvent("discourse-ai:post-submitted", ({ userPostNumber }) => {
+    if (siteSettings.ai_bot_enable_docked_composer) {
+      scrollUserPostToTopWhenReady(userPostNumber);
     }
   });
 
-  registerWidgetShim(
-    "persona-flair",
-    "span.persona-flair",
-    hbs`{{@data.personaName}}`
-  );
+  // When a user triggers a reply on a bot PM (via the `r` shortcut, the
+  // reply button, or a quote), focus the docked composer. The floating
+  // composer still opens internally but is hidden by CSS; quote text it
+  // receives is relayed to the docked composer via `composer:insert-block`
+  // which our DEditor subscribes to.
+  api.onAppEvent("page:compose-reply", (topic) => {
+    if (siteSettings.ai_bot_enable_docked_composer && topic?.is_bot_pm) {
+      focusDockedComposer();
+    }
+  });
+}
+
+function initializeAgentDecorator(api) {
+  api.renderInOutlet("post-meta-data-poster-name", AiAgentFlair);
 }
 
 function initializePauseButton(api) {
+  // Add cancel streaming button to post-menu (bottom of post) - hidden by CSS, kept for compatibility
+  api.registerValueTransformer(
+    "post-menu-buttons",
+    ({ value: dag, context: { post, firstButtonKey } }) => {
+      if (isPostFromAiBot(post, api.getCurrentUser())) {
+        dag.add("ai-cancel-gpt", AiCancelStreamingButton, {
+          before: firstButtonKey,
+          after: ["ai-share", "ai-debug"],
+        });
+      }
+    }
+  );
+
+  // Add cancel streaming to post-infos (top of post, where date is shown)
+  api.registerValueTransformer(
+    "post-meta-data-infos",
+    ({ value: dag, context: { post, metaDataInfoKeys } }) => {
+      if (isGPTBot(post.user)) {
+        dag.add("ai-cancel-streaming", AiCancelStreaming, {
+          before: metaDataInfoKeys.DATE,
+        });
+      }
+    }
+  );
+}
+
+function initializeRetryButton(api) {
   api.registerValueTransformer(
     "post-menu-buttons",
     ({ value: dag, context: { post, firstButtonKey } }) => {
       if (isGPTBot(post.user)) {
-        dag.add("ai-cancel-gpt", AiCancelStreamingButton, {
+        dag.add("ai-retry", AiRetryStreamingButton, {
           before: firstButtonKey,
-          after: ["ai-share", "ai-debug"],
+          after: ["ai-cancel-gpt", "ai-share", "ai-debug"],
         });
       }
     }
@@ -101,7 +230,7 @@ function initializePauseButton(api) {
 
 function initializeDebugButton(api) {
   const currentUser = api.getCurrentUser();
-  if (!currentUser || !currentUser.ai_enabled_chat_bots || !allowDebug) {
+  if (!currentUser || !currentUser.ai_enabled_agents || !allowDebug) {
     return;
   }
 
@@ -120,7 +249,7 @@ function initializeDebugButton(api) {
 
 function initializeShareButton(api) {
   const currentUser = api.getCurrentUser();
-  if (!currentUser || !currentUser.ai_enabled_chat_bots) {
+  if (!currentUser || !currentUser.ai_enabled_agents) {
     return;
   }
 
@@ -136,27 +265,20 @@ function initializeShareButton(api) {
   );
 }
 
-function initializeShareTopicButton(api) {
-  const modal = api.container.lookup("service:modal");
-  const currentUser = api.container.lookup("service:current-user");
+function initializeFooterButtonsVisibility(api) {
+  const siteSettings = api.container.lookup("service:site-settings");
 
-  api.registerTopicFooterButton({
-    id: "share-ai-conversation",
-    icon: "share-nodes",
-    label: "discourse_ai.ai_bot.share_ai_conversation.name",
-    title: "discourse_ai.ai_bot.share_ai_conversation.title",
-    action() {
-      showShareConversationModal(modal, this.topic.id);
-    },
-    classNames: ["share-ai-conversation-button"],
-    dependentKeys: ["topic.ai_persona_name"],
-    displayed() {
-      return (
-        currentUser?.can_share_ai_bot_conversations &&
-        this.topic.ai_persona_name
-      );
-    },
-  });
+  api.registerValueTransformer(
+    "topic-show-footer-buttons",
+    ({ value, context: { topic } }) => {
+      // On AI bot PMs the docked composer replaces the topic footer, so its
+      // buttons (reply, admin wrench, etc.) are redundant — skip rendering it.
+      if (siteSettings.ai_bot_enable_docked_composer && topic?.is_bot_pm) {
+        return false;
+      }
+      return value;
+    }
+  );
 }
 
 export default {
@@ -165,17 +287,23 @@ export default {
   initialize(container) {
     const user = container.lookup("service:current-user");
 
-    if (user?.ai_enabled_chat_bots) {
-      allowDebug = user.can_debug_ai_bot_conversations;
+    withPluginApi((api) => {
+      initializeAgentDecorator(api);
 
-      withPluginApi((api) => {
-        attachHeaderIcon(api);
-        initializeAIBotReplies(api);
-        initializePersonaDecorator(api);
-        initializeDebugButton(api, container);
-        initializeShareButton(api, container);
-        initializeShareTopicButton(api, container);
-      });
-    }
+      if (!user?.ai_enabled_agents) {
+        return;
+      }
+
+      allowDebug = user.can_debug_ai_bot_conversations;
+      api.serializeOnCreate("ai_agent_id", "aiAgentId");
+      api.serializeOnCreate("ai_llm_model_id", "aiLlmModelId");
+      attachHeaderIcon(api);
+      initializeAIBotReplies(api);
+      api.renderInOutlet("chat-message-after", AiChatModelLabel);
+      initializeDebugButton(api, container);
+      initializeShareButton(api, container);
+      initializeFooterButtonsVisibility(api);
+      initializeRetryButton(api);
+    });
   },
 };

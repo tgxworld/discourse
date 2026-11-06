@@ -1,9 +1,9 @@
+import { computed } from "@ember/object";
 import { scheduleOnce } from "@ember/runloop";
 import RSVP from "rsvp";
-import discourseComputed from "discourse/lib/decorators";
 import { isTesting } from "discourse/lib/environment";
 import loadScript from "discourse/lib/load-script";
-import AdComponent from "./ad-component";
+import AdComponent from "./ad-component.js";
 
 let _loaded = false,
   _promise = null,
@@ -73,6 +73,55 @@ export default class AdbutlerAd extends AdComponent {
     super.init();
   }
 
+  @computed
+  get showAdbutlerAds() {
+    if (!this.currentUser) {
+      return true;
+    }
+
+    return this.currentUser.show_adbutler_ads;
+  }
+
+  @computed(
+    "publisherId",
+    "showAdbutlerAds",
+    "showToGroups",
+    "showAfterPost",
+    "showOnCurrentPage"
+  )
+  get showAd() {
+    return (
+      this.publisherId &&
+      this.showAdbutlerAds &&
+      this.showToGroups &&
+      this.showAfterPost &&
+      this.showOnCurrentPage
+    );
+  }
+
+  @computed("postNumber")
+  get showAfterPost() {
+    if (!this.postNumber) {
+      return true;
+    }
+    return this.isNthPost(parseInt(this.siteSettings.adbutler_nth_post, 10));
+  }
+
+  didInsertElement() {
+    super.didInsertElement();
+    scheduleOnce("afterRender", this, this._triggerAds);
+  }
+
+  buildImpressionPayload() {
+    return {
+      ad_plugin_impression: {
+        ad_type: this.site.ad_types.adbutler,
+        ad_plugin_house_ad_id: null,
+        placement: this.placement,
+      },
+    };
+  }
+
   _triggerAds() {
     if (isTesting()) {
       return; // Don't load external JS during tests
@@ -106,54 +155,9 @@ export default class AdbutlerAd extends AdComponent {
     );
   }
 
-  didInsertElement() {
-    super.didInsertElement();
-    scheduleOnce("afterRender", this, this._triggerAds);
-  }
-
-  @discourseComputed
-  showAdbutlerAds() {
-    if (!this.currentUser) {
-      return true;
-    }
-
-    return this.currentUser.show_adbutler_ads;
-  }
-
-  @discourseComputed(
-    "publisherId",
-    "showAdbutlerAds",
-    "showToGroups",
-    "showAfterPost",
-    "showOnCurrentPage"
-  )
-  showAd(
-    publisherId,
-    showAdbutlerAds,
-    showToGroups,
-    showAfterPost,
-    showOnCurrentPage
-  ) {
-    return (
-      publisherId &&
-      showAdbutlerAds &&
-      showToGroups &&
-      showAfterPost &&
-      showOnCurrentPage
-    );
-  }
-
-  @discourseComputed("postNumber")
-  showAfterPost(postNumber) {
-    if (!postNumber) {
-      return true;
-    }
-    return this.isNthPost(parseInt(this.siteSettings.adbutler_nth_post, 10));
-  }
-
   <template>
     {{#if this.showAd}}
-      <div id={{this.divId}} class={{this.className}}></div>
+      <div class={{this.className}} id={{this.divId}}></div>
     {{/if}}
   </template>
 }

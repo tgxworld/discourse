@@ -11,6 +11,10 @@ module PageObjects
         @sidebar ||= PageObjects::Components::Chat::Sidebar.new
       end
 
+      def footer
+        @footer ||= PageObjects::Components::Chat::Footer.new
+      end
+
       def prefers_full_page
         page.execute_script(
           "window.localStorage.setItem('discourse_chat_preferred_mode', '\"FULL_PAGE_CHAT\"');",
@@ -31,6 +35,11 @@ module PageObjects
       def close_from_header
         find(".chat-header-icon").click
         has_no_css?("html.has-chat")
+      end
+
+      def back_to_channels_list
+        find(".d-icon.d-icon-chevron-left").click
+        has_css?("html.has-chat")
       end
 
       def has_header_href?(href)
@@ -58,6 +67,15 @@ module PageObjects
       def visit_channel(channel, message_id: nil, with_preloaded_channels: true, check: true)
         visit(channel.url + (message_id ? "/#{message_id}" : ""))
         has_finished_loading?(with_preloaded_channels: with_preloaded_channels) if check
+      end
+
+      def visit_channels
+        visit("/chat/channels")
+      end
+
+      def open_public_channel(channel)
+        find(public_channel_selector(channel)).click
+        has_finished_loading?
       end
 
       def visit_user_threads
@@ -140,6 +158,18 @@ module PageObjects
         has_css?(".direct-message-channels-section")
       end
 
+      def has_public_channel?(channel)
+        has_css?(public_channel_selector(channel))
+      end
+
+      def has_no_public_channel?(channel)
+        has_no_css?(public_channel_selector(channel))
+      end
+
+      def has_no_channel_list_options_button?
+        has_no_css?(".chat-channel-list-options-button")
+      end
+
       def has_add_member_button?
         has_css?(".c-channel-members__list-item.-add-member")
       end
@@ -149,6 +179,10 @@ module PageObjects
       end
 
       private
+
+      def public_channel_selector(channel)
+        ".public-channels .chat-channel-row[data-chat-channel-id='#{channel.id}']"
+      end
 
       def drawer?(expectation:, channel_id: nil, expanded: true)
         selector = ".chat-drawer"

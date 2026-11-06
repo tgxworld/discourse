@@ -18,8 +18,16 @@ class AppleAuthenticator < ::Auth::ManagedAuthenticator
     "apple"
   end
 
-  def enabled?
-    SiteSetting.sign_in_with_apple_enabled?
+  def enable_setting
+    :sign_in_with_apple_enabled
+  end
+
+  def required_settings
+    %i[apple_client_id apple_team_id apple_key_id apple_pem]
+  end
+
+  def provider_url
+    "https://account.apple.com"
   end
 
   def fetch_jwks(options)

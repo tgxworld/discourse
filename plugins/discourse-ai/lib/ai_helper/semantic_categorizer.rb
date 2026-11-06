@@ -8,6 +8,8 @@ module DiscourseAi
         @vector = DiscourseAi::Embeddings::Vector.instance
         @schema = DiscourseAi::Embeddings::Schema.for(Topic)
         @topic_id = opts[:topic_id]
+        @category = opts[:category]
+        @selected_tag_ids = opts[:selected_tag_ids]
       end
 
       def categories
@@ -44,7 +46,7 @@ module DiscourseAi
           end
           .map do |c|
             # Note: <#> returns the negative inner product since Postgres only supports ASC order index scans on operators
-            c[:score] = (c[:score] + 1).abs if @vector.vdef.pg_function = "<#>"
+            c[:score] = (c[:score] + 1).abs if @vector.vdef.pg_function == "<#>"
 
             c[:score] = 1 / (c[:score] + 1) # inverse of the distance
             c
@@ -79,7 +81,7 @@ module DiscourseAi
           .flat_map { |c| c[:tags].map { |t| { name: t, score: c[:score] } } }
           .map do |c|
             # Note: <#> returns the negative inner product since Postgres only supports ASC order index scans on operators
-            c[:score] = (c[:score] + 1).abs if @vector.vdef.pg_function = "<#>"
+            c[:score] = (c[:score] + 1).abs if @vector.vdef.pg_function == "<#>"
 
             c[:score] = 1 / (c[:score] + 1) # inverse of the distance
             c
@@ -87,18 +89,40 @@ module DiscourseAi
           .group_by { |c| c[:name] }
           .map { |name, scores| { name: name, score: scores.sum { |s| s[:score] } } }
           .sort_by { |c| -c[:score] }
+          .then { reject_tags_disallowed_in_category(it) }
           .take(7)
           .then do |tags|
-            models = Tag.where(name: tags.map { _1[:name] }).index_by(&:name)
+            models = Tag.where(name: tags.map { it[:name] }).index_by(&:name)
             tags.map do |tag|
-              tag[:id] = models.dig(tag[:name])&.id
-              tag[:count] = models.dig(tag[:name])&.public_send(count_column) || 0
+              model = models.dig(tag[:name])
+              tag[:id] = model&.id
+              tag[:slug] = model&.slug
+              tag[:count] = model&.public_send(count_column) || 0
               tag
             end
           end
       end
 
       private
+
+      def reject_tags_disallowed_in_category(candidates)
+        return candidates if candidates.empty?
+
+        allowed_names =
+          DiscourseTagging
+            .filter_allowed_tags(
+              @user.guardian,
+              category: @category,
+              selected_tag_ids: @selected_tag_ids,
+              for_topic: true,
+              only_tag_names: candidates.map { |c| c[:name] },
+              limit: nil,
+            )
+            .map(&:name)
+            .to_set
+
+        candidates.select { |c| allowed_names.include?(c[:name]) }
+      end
 
       def nearest_neighbors(limit: 50)
         if @topic_id

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class ::DiscourseLti::LtiAuthenticator < Auth::ManagedAuthenticator
+class DiscourseLti::LtiAuthenticator < Auth::ManagedAuthenticator
   def name
     "lti"
   end
@@ -15,8 +15,12 @@ class ::DiscourseLti::LtiAuthenticator < Auth::ManagedAuthenticator
     true
   end
 
-  def enabled?
-    SiteSetting.lti_enabled
+  def enable_setting
+    :lti_enabled
+  end
+
+  def required_settings
+    %i[lti_client_ids lti_authorization_endpoint lti_platform_issuer_id lti_platform_public_key]
   end
 
   def primary_email_verified?(auth)
@@ -24,7 +28,7 @@ class ::DiscourseLti::LtiAuthenticator < Auth::ManagedAuthenticator
   end
 
   def register_middleware(omniauth)
-    omniauth.provider ::DiscourseLti::LtiOmniauthStrategy,
+    omniauth.provider DiscourseLti::LtiOmniauthStrategy,
                       name: :lti,
                       setup:
                         lambda { |env|

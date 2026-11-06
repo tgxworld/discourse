@@ -1,36 +1,31 @@
-/* eslint-disable ember/no-classic-components */
-import Component from "@ember/component";
+import Component from "@glimmer/component";
+import { action } from "@ember/object";
+import didInsert from "@ember/render-modifiers/modifiers/did-insert";
 
 export default class SubscribeCard extends Component {
-  didInsertElement() {
-    super.didInsertElement(...arguments);
-    this.cardElement.mount("#card-element");
-    this.setCardElementStyles();
-  }
-
+  @action
   setCardElementStyles() {
-    const root = document.querySelector(":root");
-    const computedStyle = getComputedStyle(root);
-    const primaryColor = computedStyle.getPropertyValue("--primary");
-    const placeholderColor =
-      computedStyle.getPropertyValue("--secondary-medium");
-    this.cardElement.update({
+    this.args.cardElement.mount("#card-element");
+
+    const computedStyle = getComputedStyle(document.documentElement);
+
+    this.args.cardElement.update({
       style: {
         base: {
-          color: primaryColor,
+          color: computedStyle.getPropertyValue("--primary"),
           "::placeholder": {
-            color: placeholderColor,
+            color: computedStyle.getPropertyValue("--secondary-medium"),
           },
         },
       },
     });
   }
 
-  didDestroyElement() {
-    super.didDestroyElement(...arguments);
-  }
-
   <template>
-    <div id="card-element"></div>
+    <div
+      id="card-element"
+      ...attributes
+      {{didInsert this.setCardElementStyles}}
+    ></div>
   </template>
 }

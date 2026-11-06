@@ -7,16 +7,22 @@
 # authors: Robin Ward, Sam Saffron
 # url: https://github.com/discourse/discourse/tree/main/plugins/discourse-github
 
-require "sawyer"
-require "octokit"
-
 # Site setting validators must be loaded before initialize
-require_relative "app/lib/github_badges_repo_setting_validator.rb"
-require_relative "app/lib/github_linkback_access_token_setting_validator.rb"
+require_relative "app/lib/github_badges_repo_setting_validator"
 
 enabled_site_setting :enable_discourse_github_plugin
 
+register_svg_icon "fab-github"
+register_asset "stylesheets/common/github-pr-status.scss"
+
 after_initialize do
+  require_relative "app/controllers/discourse_github/webhooks_controller"
+  require_relative "app/jobs/regular/rebake_github_pr_posts"
+
+  Discourse::Application.routes.append do
+    post "/discourse-github/webhooks/github" => "discourse_github/webhooks#github"
+  end
+
   %w[
     ../app/models/github_commit.rb
     ../app/models/github_repo.rb
@@ -27,7 +33,12 @@ after_initialize do
     ../app/jobs/regular/create_github_linkback.rb
     ../app/jobs/scheduled/grant_github_badges.rb
     ../app/jobs/regular/replace_github_non_permalinks.rb
+    ../app/services/problem_check/github_linkback_access_token_invalid.rb
+    ../app/services/problem_check/github_badges_repo.rb
   ].each { |path| require File.expand_path(path, __FILE__) }
+
+  register_problem_check ProblemCheck::GithubLinkbackAccessTokenInvalid
+  register_problem_check ProblemCheck::GithubBadgesRepo
 
   on(:post_created) do |post|
     if SiteSetting.github_linkback_enabled? && SiteSetting.enable_discourse_github_plugin?

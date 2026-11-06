@@ -20,7 +20,15 @@ module PageObjects
       end
 
       def banner_image_uploader
-        PageObjects::Components::UppyImageUploader.new(card.find(".image-uploader"))
+        PageObjects::Components::UppyImageUploader.new(card.find(".file-uploader"))
+      end
+
+      def has_no_banner_image_field?
+        form.has_no_field_with_name?("aboutBannerImage")
+      end
+
+      def has_no_community_title_field?
+        form.has_no_field_with_name?("communityTitle")
       end
 
       def submit

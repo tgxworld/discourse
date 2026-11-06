@@ -9,26 +9,25 @@ class SystemThemesManager
     theme_id = Theme::CORE_THEMES[theme_name]
     raise Discourse::InvalidParameters unless theme_id
 
-    theme_dir = "#{Rails.root}/themes/#{theme_name}"
+    theme_dir = "#{Rails.root.join("themes/#{theme_name}")}"
 
-    remote_theme = RemoteTheme.import_theme_from_directory(theme_dir, theme_id: theme_id)
-    if remote_theme.color_scheme
-      remote_theme.color_scheme.update!(user_selectable: true)
-      alternative_theme_name =
-        if remote_theme.color_scheme.name =~ / Dark$/
-          remote_theme.color_scheme.name.sub(" Dark", "")
-        else
-          "#{remote_theme.color_scheme.name} Dark"
-        end
+    is_initial_install = !Theme.exists?(id: theme_id)
 
-      alternative_color_scheme =
-        remote_theme.color_schemes.where(name: alternative_theme_name).first
-      alternative_color_scheme&.update!(user_selectable: true)
-      if remote_theme.dark_color_scheme.blank? && alternative_color_scheme
-        remote_theme.update!(dark_color_scheme: alternative_color_scheme)
+    before_save =
+      if is_initial_install && theme_id == Theme::CORE_THEMES["horizon"]
+        ->(t) { t.dark_color_scheme = t.color_schemes.find { |s| s.name == "Horizon Dark" } }
       end
-    end
-    remote_theme.update_column(:enabled, true)
+
+    theme =
+      RemoteTheme.import_theme_from_directory(
+        theme_dir,
+        theme_id: theme_id,
+        allow_out_of_sequence_migration: !is_initial_install,
+        before_save: before_save,
+      )
+
+    theme.update_column(:enabled, true) unless theme.enabled?
+
     Stylesheet::Manager.clear_theme_cache!
   end
 

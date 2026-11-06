@@ -1,6 +1,6 @@
 import { hash } from "@ember/helper";
+import ComboBox from "discourse/select-kit/components/combo-box";
 import { i18n } from "discourse-i18n";
-import ComboBox from "select-kit/components/combo-box";
 
 const VALID_REMINDERS = [
   {
@@ -15,10 +15,10 @@ const VALID_REMINDERS = [
 
 const PolicyReminderInput = <template>
   <ComboBox
-    @value={{@reminder}}
     @content={{VALID_REMINDERS}}
-    @options={{hash none="discourse_policy.builder.reminder.no_reminder"}}
     @onChange={{@onChangeReminder}}
+    @options={{hash none="discourse_policy.builder.reminder.no_reminder"}}
+    @value={{@reminder}}
   />
 </template>;
 

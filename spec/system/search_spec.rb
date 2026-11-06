@@ -1,13 +1,16 @@
 # frozen_string_literal: true
 
-describe "Search", type: :system do
+describe "Search" do
   let(:search_page) { PageObjects::Pages::Search.new }
   fab!(:topic)
+  fab!(:op) { Fabricate(:post, topic: topic) }
   fab!(:post) { Fabricate(:post, topic: topic, raw: "This is a test post in a test topic") }
   fab!(:topic2) { Fabricate(:topic, title: "Another test topic") }
   fab!(:post2) { Fabricate(:post, topic: topic2, raw: "This is another test post in a test topic") }
 
   let(:topic_bulk_actions_modal) { PageObjects::Modals::TopicBulkActions.new }
+  let(:topic_list_header) { PageObjects::Components::TopicListHeader.new }
+  let(:dialog) { PageObjects::Components::Dialog.new }
 
   describe "when using full page search on mobile" do
     before do
@@ -44,7 +47,7 @@ describe "Search", type: :system do
       search_page.click_search_button
 
       expect(search_page).to have_search_result
-      expect(search_page).to have_no_heading_text("Search")
+      expect(search_page).to have_result_count
 
       click_logo
       expect(page).to have_current_path("/")
@@ -60,7 +63,7 @@ describe "Search", type: :system do
       search_page.click_search_icon
 
       expect(search_page).to have_no_search_result
-      expect(search_page).to have_heading_text("Search")
+      expect(search_page).to have_no_result_count
     end
 
     it "navigates search results using J/K keys" do
@@ -88,25 +91,24 @@ describe "Search", type: :system do
     before do
       SearchIndexer.enable
       SearchIndexer.index(topic, force: true)
-      SiteSetting.rate_limit_search_anon_user_per_minute = 4
+      SiteSetting.rate_limit_search_anon_user_per_minute = 1
       RateLimiter.enable
       Fabricate(:theme_site_setting_with_service, name: "enable_welcome_banner", value: false)
     end
 
     after { SearchIndexer.disable }
 
-    xit "rate limits searches for anonymous users" do
-      queries = %w[one two three four]
-
+    it "rate limits searches for anonymous users" do
       visit("/search?expanded=true")
 
-      queries.each do |query|
-        search_page.clear_search_input
-        search_page.type_in_search(query)
-        search_page.click_search_button
-      end
+      search_page.type_in_search("first")
+      search_page.click_search_button
+      expect(search_page).to have_no_css(".search-container .spinner")
 
-      # Rate limit error should kick in after 4 queries
+      search_page.clear_search_input
+      search_page.type_in_search("second")
+      search_page.click_search_button
+
       expect(search_page).to have_warning_message
     end
   end
@@ -125,6 +127,7 @@ describe "Search", type: :system do
       visit("/")
       search_page.click_search_icon
       search_page.type_in_search_menu("test")
+
       search_page.click_search_menu_link
       expect(search_page).to have_topic_title_for_first_search_result(topic.title)
       search_page.click_first_topic
@@ -143,8 +146,8 @@ describe "Search", type: :system do
       expect(search_page).to have_topic_title_for_first_search_result(topic.title)
       find(".search-menu-container .search-result-topic", text: topic.title).click
 
-      try_until_success { expect(SearchLog.count).to eq(1) }
-      try_until_success { expect(SearchLog.last.search_result_id).not_to eq(nil) }
+      expect(SearchLog.count).to eq(1)
+      expect(SearchLog.last.search_result_id).not_to eq(nil)
 
       log = SearchLog.last
       expect(log.term).to eq("test")
@@ -192,8 +195,12 @@ describe "Search", type: :system do
         expect(search_page).to have_no_search_icon
       end
 
-      it "does not display on login, signup or activate account pages" do
+      it "does not display on login, search, signup or activate account pages" do
         visit("/login")
+        expect(search_page).to have_no_search_icon
+        expect(search_page).to have_no_search_field
+
+        visit("/search")
         expect(search_page).to have_no_search_icon
         expect(search_page).to have_no_search_field
 
@@ -216,6 +223,17 @@ describe "Search", type: :system do
           expect(search_page).to have_no_search_field
         end
       end
+
+      describe "when on admin pages" do
+        fab!(:admin)
+
+        it "displays search icon regardless of Search experience setting" do
+          sign_in(admin)
+          visit("/admin")
+          expect(search_page).to have_no_search_field
+          expect(search_page).to have_search_icon
+        end
+      end
     end
   end
 
@@ -226,6 +244,7 @@ describe "Search", type: :system do
     before do
       SearchIndexer.enable
       SearchIndexer.index(topic, force: true)
+      SearchIndexer.index(post, force: true)
       SearchIndexer.index(topic2, force: true)
       Fabricate(:theme_site_setting_with_service, name: "enable_welcome_banner", value: false)
       sign_in(admin)
@@ -236,25 +255,45 @@ describe "Search", type: :system do
     it "allows the user to perform bulk actions on the topic search results" do
       visit("/search?q=test")
       expect(page).to have_content(topic.title)
-      find(".search-info .bulk-select").click
-      find(".fps-result .fps-topic[data-topic-id=\"#{topic.id}\"] .bulk-select input").click
-      find(".search-info .bulk-select-topics-dropdown-trigger").click
-      find(".bulk-select-topics-dropdown-content .append-tags").click
-      expect(topic_bulk_actions_modal).to be_open
-      tag_selector = PageObjects::Components::SelectKit.new(".tag-chooser")
-      tag_selector.search(tag1.name)
-      tag_selector.select_row_by_value(tag1.name)
-      tag_selector.collapse
-      topic_bulk_actions_modal.click_bulk_topics_confirm
+
+      search_page.bulk_select_result_and_open_dropdown(topic)
+      topic_list_header.click_bulk_button("manage-tags")
+      manage_tags_modal = PageObjects::Modals::ManageTags.new
+      manage_tags_modal.add_tags(tag1.name)
+      manage_tags_modal.click_confirm
       expect(
         find(".fps-result .fps-topic[data-topic-id=\"#{topic.id}\"] .discourse-tags"),
       ).to have_content(tag1.name)
+    end
+
+    it "allows the user to delete posts in bulk" do
+      visit("/search?q=This%20is%20a%20test%20post")
+      expect(page).to have_content(post.raw)
+
+      search_page.bulk_select_result_and_open_dropdown(topic)
+      topic_list_header.click_bulk_button("delete-posts")
+      dialog.click_ok
+
+      expect(page).to have_no_content(post.raw)
+      expect(Post.with_deleted.find_by(id: post.id).deleted_at).to be_present
+    end
+
+    it "lets the user bulk delete the whole topic from a reply search result" do
+      visit("/search?q=This%20is%20a%20test%20post")
+      expect(page).to have_content(post.raw)
+
+      search_page.bulk_select_result_and_open_dropdown(topic)
+      topic_list_header.click_bulk_button("delete-topics")
+      topic_bulk_actions_modal.click_bulk_topics_confirm
+
+      expect(page).to have_no_content(post.raw)
+      expect(topic.reload).to be_trashed
     end
   end
 
   describe "Private Message Icon in Search Results" do
     fab!(:user)
-    fab!(:other_user) { Fabricate(:user) }
+    fab!(:other_user, :user)
     fab!(:pm_topic) do
       Fabricate(
         :private_message_topic,

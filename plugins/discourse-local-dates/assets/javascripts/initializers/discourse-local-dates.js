@@ -1,27 +1,27 @@
 import { setOwner } from "@ember/owner";
 import { service } from "@ember/service";
-import { htmlSafe } from "@ember/template";
+import { dasherize } from "@ember/string";
+import { trustHTML } from "@ember/template";
+import { bbcodeAttributeDecode } from "discourse/lib/bbcode-attributes";
 import { bind } from "discourse/lib/decorators";
 import { downloadCalendar } from "discourse/lib/download-calendar";
 import { iconHTML, renderIcon } from "discourse/lib/icon-library";
 import { withPluginApi } from "discourse/lib/plugin-api";
-import {
-  addTagDecorateCallback,
-  addTextDecorateCallback,
-} from "discourse/lib/to-markdown";
+import { slugify } from "discourse/lib/utilities";
 import { i18n } from "discourse-i18n";
-import generateDateMarkup from "discourse/plugins/discourse-local-dates/lib/local-date-markup-generator";
-import LocalDatesCreateModal from "../discourse/components/modal/local-dates-create";
-import LocalDateBuilder from "../lib/local-date-builder";
-import richEditorExtension from "../lib/rich-editor-extension";
+import LocalDatesCreateModal from "../discourse/components/modal/local-dates-create.gjs";
+import generateCurrentDateMarkup from "../lib/generate-current-date-markup.js";
+import LocalDateBuilder from "../lib/local-date-builder.js";
+import richEditorExtension from "../lib/rich-editor-extension.js";
 
-// Import applyLocalDates from discourse/lib/local-dates instead
-export function applyLocalDates(dates, siteSettings) {
+// Wired into core via the "apply-local-dates" behavior transformer.
+// Call applyLocalDates from discourse/lib/local-dates instead of importing this directly.
+export function applyLocalDates(dates, siteSettings, timezone) {
   if (!siteSettings.discourse_local_dates_enabled) {
     return;
   }
 
-  const currentUserTZ = moment.tz.guess();
+  const currentUserTZ = timezone || moment.tz.guess();
 
   dates.forEach((element, index, arr) => {
     const opts = buildOptionsFromElement(element, siteSettings);
@@ -43,8 +43,12 @@ export function applyLocalDates(dates, siteSettings) {
     element.insertAdjacentHTML(
       "beforeend",
       `${iconHTML("earth-americas")}
-        <span class="relative-time">${localDateBuilder.formatted}</span>`
+        `
     );
+    const relativeTime = document.createElement("span");
+    relativeTime.classList.add("relative-time");
+    relativeTime.textContent = localDateBuilder.formatted;
+    element.appendChild(relativeTime);
     element.setAttribute("aria-label", localDateBuilder.textPreview);
 
     const classes = ["cooked-date"];
@@ -91,29 +95,12 @@ function buildOptionsFromElement(element, siteSettings) {
     .split("|")
     .filter(Boolean);
   opts.timezone = dataset.timezone;
-  opts.calendar = (dataset.calendar || "on") === "on";
   opts.displayedTimezone = dataset.displayedTimezone;
   opts.format = dataset.format || (opts.time ? "LLL" : "LL");
   opts.countdown = dataset.countdown;
-  return opts;
-}
-
-function buildOptionsFromMarkdownTag(element) {
-  const opts = {};
-
-  // siteSettings defaults as used by buildOptionsFromElement are purposefully
-  // ommitted to reproduce exactly what was on the original element
-  opts.time = element.attributes["data-time"];
-  opts.date = element.attributes["data-date"];
-  opts.recurring = element.attributes["data-recurring"];
-  opts.timezones = element.attributes["data-timezones"];
-  opts.timezone = element.attributes["data-timezone"];
-  opts.calendar = (element.attributes["data-calendar"] || "on") === "on";
-  opts.displayedTimezone = element.attributes["data-displayed-timezone"];
-  opts.format = element.attributes["data-format"];
-  opts.countdown = element.attributes["data-countdown"];
-  opts.range = element.attributes["data-range"];
-
+  opts.calendar = dataset.calendar
+    ? dataset.calendar === "on"
+    : !dataset.format;
   return opts;
 }
 
@@ -145,6 +132,10 @@ function _partitionedRanges(element) {
 function initializeDiscourseLocalDates(api) {
   api.registerRichEditorExtension(richEditorExtension);
 
+  api.registerBehaviorTransformer("apply-local-dates", ({ context }) => {
+    applyLocalDates(context.dates, context.siteSettings, context.timezone);
+  });
+
   const modal = api.container.lookup("service:modal");
   const siteSettings = api.container.lookup("service:site-settings");
   const defaultTitle = i18n("discourse_local_dates.default_title", {
@@ -174,65 +165,8 @@ function initializeDiscourseLocalDates(api) {
     alwaysShowShortcut: true,
     shortcutAction: (event) => {
       const timezone = api.getCurrentUser().user_option.timezone;
-      const time = moment().format("HH:mm:ss");
-      const date = moment().format("YYYY-MM-DD");
-
-      event.addText(`[date=${date} time=${time} timezone="${timezone}"]`);
+      event.addText(generateCurrentDateMarkup(timezone));
     },
-  });
-
-  addTextDecorateCallback(
-    function (text, nextElement, _previousElement, metadata) {
-      if (
-        metadata.discourseLocalDateStartRangeOpts &&
-        nextElement?.attributes.class?.includes("discourse-local-date") &&
-        text === "→"
-      ) {
-        return "";
-      }
-    }
-  );
-  addTagDecorateCallback(function () {
-    if (this.element.attributes.class?.includes("discourse-local-date")) {
-      if (this.metadata.discourseLocalDateStartRangeOpts) {
-        const startRangeOpts = this.metadata.discourseLocalDateStartRangeOpts;
-        const endRangeOpts = buildOptionsFromMarkdownTag(this.element);
-        const markup = generateDateMarkup(
-          {
-            date: startRangeOpts.date,
-            time: startRangeOpts.time,
-            format: startRangeOpts.format,
-          },
-          endRangeOpts,
-          true,
-          {
-            date: endRangeOpts.date,
-            time: endRangeOpts.time,
-            format: endRangeOpts.format,
-          }
-        );
-        this.prefix = markup;
-        this.metadata.discourseLocalDateStartRangeOpts = null;
-        return "";
-      }
-      if (
-        this.element.attributes["data-range"] === "true" ||
-        this.element.attributes["data-range"] === "from" ||
-        this.element.attributes["data-range"] === "to"
-      ) {
-        this.metadata.discourseLocalDateStartRangeOpts =
-          buildOptionsFromMarkdownTag(this.element);
-        return "";
-      }
-      const opts = buildOptionsFromMarkdownTag(this.element, siteSettings);
-      const markup = generateDateMarkup(
-        { date: opts.date, time: opts.time, format: opts.format },
-        opts,
-        false
-      );
-      this.prefix = markup;
-      return "";
-    }
   });
 }
 
@@ -245,6 +179,7 @@ function buildHtmlPreview(element, siteSettings) {
 
   const htmlPreviews = localDateBuilder.previews.map((preview) => {
     const previewNode = document.createElement("div");
+    previewNode.dataset.timezone = dasherize(preview.timezone);
     previewNode.classList.add("preview");
     if (preview.current) {
       previewNode.classList.add("current");
@@ -315,7 +250,18 @@ function _downloadCalendarNode(element) {
   if (!startDataset.time && !endDataset) {
     node.setAttribute("data-ends-at", startDate.add(24, "hours").toISOString());
   }
-  node.setAttribute("data-title", startDataset.title);
+  if (startDataset.title) {
+    node.setAttribute("data-title", startDataset.title);
+  }
+  if (startDataset.timezone) {
+    node.setAttribute("data-timezone", startDataset.timezone);
+  }
+
+  // If ics data is available, pass it to the download button
+  if (startDataset.ics) {
+    node.setAttribute("data-ics", startDataset.ics);
+  }
+
   return node;
 }
 
@@ -353,12 +299,37 @@ class LocalDatesInit {
   showDatePopover(event) {
     if (event?.target?.classList?.contains("download-calendar")) {
       const dataset = event.target.dataset;
-      downloadCalendar(dataset.title, [
-        {
-          startsAt: dataset.startsAt,
-          endsAt: dataset.endsAt,
-        },
-      ]);
+
+      if (dataset.ics) {
+        const icsData = bbcodeAttributeDecode(dataset.ics);
+
+        let title;
+        if (dataset.title) {
+          title = dataset.title;
+        } else {
+          // Extract event title from ICS SUMMARY field for filename if title missing
+          const summaryMatch = icsData.match(/SUMMARY:(.+?)[\r\n]/);
+          if (summaryMatch && summaryMatch[1]) {
+            title = summaryMatch[1].trim();
+          }
+        }
+
+        this.downloadIcs(title || "event", icsData);
+      } else {
+        const dates = [
+          {
+            startsAt: dataset.startsAt,
+            endsAt: dataset.endsAt,
+          },
+        ];
+
+        // Add timezone if available
+        if (dataset.timezone) {
+          dates[0].timezone = dataset.timezone;
+        }
+
+        downloadCalendar(dataset.title, dates);
+      }
 
       return this.tooltip.close("local-date");
     }
@@ -369,8 +340,24 @@ class LocalDatesInit {
 
     return this.tooltip.show(event.target, {
       identifier: "local-date",
-      content: htmlSafe(buildHtmlPreview(event.target, this.siteSettings)),
+      content: trustHTML(buildHtmlPreview(event.target, this.siteSettings)),
     });
+  }
+
+  downloadIcs(title, icsData) {
+    const blob = new Blob([icsData], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    try {
+      const a = document.createElement("a");
+      a.href = url;
+      const fileName = slugify(title);
+      a.download = `${fileName}.ics`;
+      // Most browsers allow clicking without attaching to DOM.
+      a.click();
+    } finally {
+      // Revoke on next tick so the download can start.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
   }
 
   teardown() {

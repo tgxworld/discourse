@@ -6,7 +6,7 @@ module CrawlerDetection
   def self.to_matcher(string, type: nil)
     escaped = string.split("|").map { |agent| Regexp.escape(agent) }.join("|")
 
-    if type == :real && Rails.env == "test"
+    if type == :real && Rails.env.test?
       # we need this bypass so we properly render views
       escaped << "|Rails Testing"
     end
@@ -51,6 +51,13 @@ module CrawlerDetection
     end
   end
 
+  def self.crawler_ip?(ip)
+    return false if ip.blank?
+    asn = DiscourseIpInfo.get(ip)[:asn]
+    return false if asn.blank?
+    SiteSetting.crawler_asns_map.include?(asn.to_s)
+  end
+
   def self.show_browser_update?(user_agent)
     return false if SiteSetting.browser_update_user_agents.blank?
 
@@ -60,6 +67,17 @@ module CrawlerDetection
         SiteSetting.browser_update_user_agents,
       )
     user_agent.match?(matcher)
+  end
+
+  def self.crawler_layout_request?(request)
+    return false if request.blank?
+    return false if request.user_agent.blank?
+    return false if request.media_type.present? && !request.media_type.include?("html")
+    return false if %w[json rss].include?(request.params[:format].to_s)
+
+    (SiteSetting.enable_escaped_fragments? && request.params.key?("_escaped_fragment_")) ||
+      request.params.key?("print") || show_browser_update?(request.user_agent) ||
+      crawler?(request.user_agent, request.headers["HTTP_VIA"])
   end
 
   # Given a user_agent that returns true from crawler?, should its request be allowed?

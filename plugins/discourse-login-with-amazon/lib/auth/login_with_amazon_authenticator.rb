@@ -5,8 +5,12 @@ class Auth::LoginWithAmazonAuthenticator < ::Auth::ManagedAuthenticator
     "amazon"
   end
 
-  def enabled?
-    SiteSetting.enable_login_with_amazon
+  def enable_setting
+    :enable_login_with_amazon
+  end
+
+  def required_settings
+    %i[login_with_amazon_client_id login_with_amazon_client_secret]
   end
 
   def register_middleware(omniauth)
@@ -28,5 +32,13 @@ class Auth::LoginWithAmazonAuthenticator < ::Auth::ManagedAuthenticator
 
   def primary_email_verified?(auth)
     SiteSetting.login_with_amazon_email_verified
+  end
+
+  def can_connect_existing_user?
+    SiteSetting.login_with_amazon_user_can_connect
+  end
+
+  def can_revoke?
+    SiteSetting.login_with_amazon_user_can_revoke
   end
 end

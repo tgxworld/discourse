@@ -9,6 +9,7 @@ class Admin::UserFieldsController < Admin::AdminController
       description
       requirement
       show_on_profile
+      show_on_signup
       show_on_user_card
       position
       searchable
@@ -59,7 +60,8 @@ class Admin::UserFieldsController < Admin::AdminController
 
   def destroy
     field = UserField.where(id: params.require(:id)).first
-    field.destroy if field.present?
+    field.presence&.destroy
+
     render json: success_json
   end
 

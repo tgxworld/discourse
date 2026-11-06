@@ -34,6 +34,82 @@ RSpec.describe PostSerializer do
       expect(visible_actions_for(admin).sort).to eq(%i[like notify_user spam])
     end
 
+    it "subtracts likes from ignored users from the like count" do
+      ignored_liker = Fabricate(:user, refresh_auto_groups: true)
+      regular_liker = Fabricate(:user, refresh_auto_groups: true)
+      PostActionCreator.like(ignored_liker, post)
+      PostActionCreator.like(regular_liker, post)
+      Fabricate(:ignored_user, user: actor, ignored_user: ignored_liker)
+      post.reload
+
+      serializer = PostSerializer.new(post, scope: Guardian.new(actor), root: false)
+      like_summary = serializer.actions_summary.find { |a| a[:id] == PostActionType.types[:like] }
+
+      expect(post.like_count).to eq(3)
+      expect(like_summary[:count]).to eq(2)
+    end
+
+    it "does not adjust the like count for anonymous viewers" do
+      ignorer = Fabricate(:user, refresh_auto_groups: true)
+      ignored_liker = Fabricate(:user, refresh_auto_groups: true)
+      PostActionCreator.like(ignored_liker, post)
+      Fabricate(:ignored_user, user: ignorer, ignored_user: ignored_liker)
+      post.reload
+
+      serializer = PostSerializer.new(post, scope: Guardian.new, root: false)
+      like_summary = serializer.actions_summary.find { |a| a[:id] == PostActionType.types[:like] }
+
+      expect(like_summary[:count]).to eq(post.like_count)
+    end
+
+    it "batches ignored-like counts across posts in a topic view" do
+      other_post = Fabricate(:post, topic: post.topic)
+      ignored_liker = Fabricate(:user, refresh_auto_groups: true)
+      PostActionCreator.like(ignored_liker, post)
+      PostActionCreator.like(ignored_liker, other_post)
+      Fabricate(:ignored_user, user: actor, ignored_user: ignored_liker)
+
+      topic_view = TopicView.new(post.topic, actor)
+      queries =
+        track_sql_queries do
+          topic_view.posts.each do |p|
+            serializer = PostSerializer.new(p, scope: Guardian.new(actor), root: false)
+            serializer.topic_view = topic_view
+            serializer.actions_summary
+          end
+        end
+
+      per_post_count_queries =
+        queries.count { |sql| sql =~ /COUNT.*FROM "post_actions".*post_id" = \d/m }
+      expect(per_post_count_queries).to eq(0)
+    end
+
+    it "uses preloaded ignored-like counts outside a topic view" do
+      other_post = Fabricate(:post, topic: post.topic)
+      ignored_liker = Fabricate(:user, refresh_auto_groups: true)
+      PostActionCreator.like(ignored_liker, post)
+      PostActionCreator.like(ignored_liker, other_post)
+      Fabricate(:ignored_user, user: actor, ignored_user: ignored_liker)
+
+      ignored_user_like_counts = PostAction.ignored_user_like_counts_for([post, other_post], actor)
+
+      queries =
+        track_sql_queries do
+          [post, other_post].each do |p|
+            PostSerializer.new(
+              p,
+              scope: Guardian.new(actor),
+              root: false,
+              ignored_user_like_counts: ignored_user_like_counts,
+            ).actions_summary
+          end
+        end
+
+      per_post_count_queries =
+        queries.count { |sql| sql =~ /COUNT.*FROM "post_actions".*post_id" = \d/m }
+      expect(per_post_count_queries).to eq(0)
+    end
+
     it "can't flag your own post to notify yourself" do
       serializer = PostSerializer.new(post, scope: Guardian.new(post.user), root: false)
       notify_user_action =
@@ -41,7 +117,7 @@ RSpec.describe PostSerializer do
       expect(notify_user_action).to be_blank
     end
 
-    it "should not allow user to flag post and notify non human user" do
+    it "prevents flagging a post to notify a non-human user" do
       post.update!(user: Discourse.system_user)
 
       serializer = PostSerializer.new(post, scope: Guardian.new(actor), root: false)
@@ -65,6 +141,21 @@ RSpec.describe PostSerializer do
       expect(json[:reviewable_score_count]).to eq(1)
       expect(json[:reviewable_score_pending_count]).to eq(1)
     end
+
+    it "omits the reviewable data when the reviewable type is no longer defined" do
+      reviewable.update_columns(type: "ReviewableDoesntExist", type_source: "some-plugin")
+      moderator = Fabricate(:moderator)
+
+      json = PostSerializer.new(post, scope: Guardian.new(moderator), root: false).as_json
+      expect(json[:reviewable_id]).to eq(nil)
+      expect(json[:reviewable_score_count]).to eq(0)
+
+      serializer = PostSerializer.new(post, scope: Guardian.new(moderator), root: false)
+      serializer.topic_view = TopicView.new(post.topic, moderator)
+      json = serializer.as_json
+      expect(json[:reviewable_id]).to eq(0)
+      expect(json[:reviewable_score_count]).to eq(0)
+    end
   end
 
   context "with a post by a nuked user" do
@@ -83,20 +174,56 @@ RSpec.describe PostSerializer do
   end
 
   context "with a post by a suspended user" do
-    def serializer
-      PostSerializer.new(post, scope: Guardian.new(Fabricate(:admin)), root: false).as_json
-    end
+    fab!(:admin)
 
     it "serializes correctly" do
-      expect(serializer[:user_suspended]).to be_nil
+      serialized_post = described_class.new(post, scope: Guardian.new(admin), root: false).as_json
+      expect(serialized_post[:user_suspended]).to be_nil
 
       post.user.update!(suspended_till: 1.month.from_now)
 
-      expect(serializer[:user_suspended]).to eq(true)
+      serialized_post = described_class.new(post, scope: Guardian.new(admin), root: false).as_json
+      expect(serialized_post[:user_suspended]).to eq(true)
 
       freeze_time(2.months.from_now)
 
-      expect(serializer[:user_suspended]).to be_nil
+      serialized_post = described_class.new(post, scope: Guardian.new(admin), root: false).as_json
+      expect(serialized_post[:user_suspended]).to be_nil
+    end
+  end
+
+  describe "#user_locale" do
+    fab!(:admin)
+    fab!(:moderator)
+
+    before { post.user.update!(locale: "ja") }
+
+    it "includes the author's locale for admins only when user locale is enabled" do
+      SiteSetting.allow_user_locale = true
+
+      expect(described_class.new(post, scope: Guardian.new(admin), root: false).as_json).to include(
+        user_locale: "ja",
+      )
+
+      expect(
+        described_class.new(post, scope: Guardian.new(moderator), root: false).as_json,
+      ).not_to have_key(:user_locale)
+
+      expect(described_class.new(post, scope: Guardian.new(post.user), root: false).as_json).not_to(
+        have_key(:user_locale),
+      )
+
+      expect(described_class.new(post, scope: Guardian.new, root: false).as_json).not_to have_key(
+        :user_locale,
+      )
+    end
+
+    it "omits the author's locale when user locale is disabled" do
+      SiteSetting.allow_user_locale = false
+
+      expect(described_class.new(post, scope: Guardian.new(admin), root: false).as_json).not_to(
+        have_key(:user_locale),
+      )
     end
   end
 
@@ -177,12 +304,12 @@ RSpec.describe PostSerializer do
         revisor.revise!(post.user, raw: "Hello, everyone!")
       end
 
-      it "will not leak version to users" do
+      it "hides the real version from regular users" do
         json = PostSerializer.new(post, scope: Guardian.new(user), root: false).as_json
         expect(json[:version]).to eq(1)
       end
 
-      it "will show real version to staff" do
+      it "shows the real version to staff" do
         json = PostSerializer.new(post, scope: Guardian.new(Fabricate(:admin)), root: false).as_json
         expect(json[:version]).to eq(2)
       end
@@ -350,6 +477,20 @@ RSpec.describe PostSerializer do
     end
   end
 
+  context "without a bookmark or reviewable" do
+    fab!(:moderator)
+
+    it "queries bookmarks and reviewables only once" do
+      queries =
+        track_sql_queries do
+          PostSerializer.new(post, scope: moderator.guardian, root: false).as_json
+        end
+
+      expect(queries.count { |q| q.include?('FROM "bookmarks"') }).to eq(1)
+      expect(queries.count { |q| q.include?('FROM "reviewables"') }).to eq(1)
+    end
+  end
+
   context "with posts when group moderation is enabled" do
     fab!(:topic)
     fab!(:group_user)
@@ -424,11 +565,51 @@ RSpec.describe PostSerializer do
       before { post_action.created_at = 20.minutes.ago }
 
       it "disallows anonymous users from unliking posts" do
-        # There are no other post actions available to anonymous users so the action_summary will be an empty array
-        expect(serializer.actions_summary.find { |a| a[:id] == PostActionType.types[:like] }).to eq(
-          nil,
-        )
+        like_actions_summary =
+          serializer.actions_summary.find { |a| a[:id] == PostActionType.types[:like] }
+
+        expect(like_actions_summary[:acted]).to eq(true)
+        expect(like_actions_summary[:can_act]).to be_nil
       end
+    end
+  end
+
+  context "when user has liked a post but like count is 0 and undo window passed" do
+    fab!(:user)
+    fab!(:poster, :user)
+    fab!(:topic) { Fabricate(:topic, user: poster) }
+    fab!(:post) { Fabricate(:post, topic:, user: poster, like_count: 0) }
+    fab!(:like_action) do
+      Fabricate(
+        :post_action,
+        user:,
+        post:,
+        post_action_type_id: PostActionType.types[:like],
+        created_at: 1.day.ago,
+      )
+    end
+
+    before { SiteSetting.post_undo_action_window_mins = 10 }
+
+    let(:serializer) do
+      PostSerializer.new(
+        post,
+        scope: Guardian.new(user),
+        root: false,
+        post_actions: {
+          PostActionType.types[:like] => like_action,
+        },
+      )
+    end
+
+    it "includes the like action in actions_summary with acted flag" do
+      like_actions_summary =
+        serializer.actions_summary.find { |a| a[:id] == PostActionType.types[:like] }
+
+      expect(like_actions_summary).to be_present
+      expect(like_actions_summary[:acted]).to eq(true)
+      expect(like_actions_summary[:can_act]).to be_nil
+      expect(like_actions_summary[:can_undo]).to be_nil
     end
   end
 
@@ -437,7 +618,7 @@ RSpec.describe PostSerializer do
     fab!(:user)
 
     let(:username) { "joffrey" }
-    let(:user1) { Fabricate(:user, user_status: user_status, username: username) }
+    let(:user1) { Fabricate(:user, user_status:, username:) }
     let(:post) { Fabricate(:post, user: user, raw: "Hey @#{user1.username}") }
     let(:serializer) { described_class.new(post, scope: Guardian.new(user), root: false) }
 
@@ -475,36 +656,50 @@ RSpec.describe PostSerializer do
   end
 
   describe "#user_status" do
+    subject(:serialized_user_status) do
+      described_class.new(post, scope: Guardian.new(user), root: false).as_json[:user_status]
+    end
+
     fab!(:user_status)
-    fab!(:user) { Fabricate(:user, user_status: user_status) }
-    fab!(:post) { Fabricate(:post, user: user) }
-    let(:serializer) { described_class.new(post, scope: Guardian.new(user), root: false) }
+    fab!(:user) { Fabricate(:user, user_status:) }
+    fab!(:post) { Fabricate(:post, user:) }
 
-    it "adds user status when enabled" do
-      SiteSetting.enable_user_status = true
+    context "when user status is disabled" do
+      before { SiteSetting.enable_user_status = false }
 
-      json = serializer.as_json
-
-      expect(json[:user_status]).to_not be_nil do |status|
-        expect(status.description).to eq(user_status.description)
-        expect(status.emoji).to eq(user_status.emoji)
+      it "doesn't include status" do
+        expect(serialized_user_status).to be_nil
       end
     end
 
-    it "doesn't add user status when disabled" do
-      SiteSetting.enable_user_status = false
-      json = serializer.as_json
-      expect(json.keys).not_to include :user_status
-    end
+    context "when user status is enabled" do
+      before { SiteSetting.enable_user_status = true }
 
-    it "doesn't add status if user doesn't have it" do
-      SiteSetting.enable_user_status = true
+      it "includes status" do
+        expect(serialized_user_status).to be_present
+      end
 
-      user.clear_status!
-      user.reload
-      json = serializer.as_json
+      it "doesn't include status if user doesn't have it set" do
+        user.clear_status!
+        user.reload
+        expect(serialized_user_status).to be_nil
+      end
 
-      expect(json.keys).not_to include :user_status
+      it "doesn't include status for a public topic author with a hidden profile" do
+        SiteSetting.allow_users_to_hide_profile = true
+        user.user_option.update!(hide_profile: true)
+
+        json = described_class.new(post, scope: Guardian.new, root: false).as_json
+
+        expect(json).not_to have_key(:user_status)
+        expect(json.to_json).not_to include(user_status.description)
+      end
+
+      it "respects guardian's can_see_user_status?" do
+        user.update!(silenced_till: 1.year.from_now)
+        scope = Guardian.new(Fabricate(:user))
+        expect(described_class.new(post, scope:, root: false).as_json[:user_status]).to be_nil
+      end
     end
   end
 
@@ -834,5 +1029,145 @@ RSpec.describe PostSerializer do
   def serialized_post_for_user(u)
     s = serialized_post(u)
     s.as_json
+  end
+
+  describe "#can_localize_post" do
+    fab!(:author, :user)
+    fab!(:author_post) { Fabricate(:post, user: author) }
+    fab!(:admin)
+    fab!(:group)
+
+    before do
+      SiteSetting.content_localization_enabled = true
+      SiteSetting.content_localization_allowed_groups = group.id.to_s
+    end
+
+    it "is included when user can localize content" do
+      group.add(admin)
+      json = PostSerializer.new(author_post, scope: Guardian.new(admin), root: false).as_json
+      expect(json[:can_localize_post]).to eq(true)
+    end
+
+    it "is included when author localization is enabled and user is post author" do
+      SiteSetting.content_localization_allow_author_localization = true
+      json = PostSerializer.new(author_post, scope: Guardian.new(author), root: false).as_json
+      expect(json[:can_localize_post]).to eq(true)
+
+      SiteSetting.content_localization_allow_author_localization = false
+      json = PostSerializer.new(author_post, scope: Guardian.new(author), root: false).as_json
+      expect(json[:can_localize_post]).to eq(nil)
+    end
+
+    it "is not included when user cannot localize post" do
+      other_user = Fabricate(:user)
+      json = PostSerializer.new(author_post, scope: Guardian.new(other_user), root: false).as_json
+      expect(json.key?(:can_localize_post)).to eq(false)
+    end
+  end
+
+  describe "post_localizations_count" do
+    fab!(:author, :user)
+    fab!(:author_post) { Fabricate(:post, user: author) }
+    fab!(:group)
+    fab!(:post_localization) { Fabricate(:post_localization, post: author_post, locale: "ja") }
+
+    before do
+      SiteSetting.content_localization_enabled = true
+      SiteSetting.content_localization_allowed_groups = group.id.to_s
+    end
+
+    it "is included for users in allowed groups" do
+      user = Fabricate(:user)
+      group.add(user)
+      json = PostSerializer.new(author_post, scope: Guardian.new(user), root: false).as_json
+      expect(json[:post_localizations_count]).to eq(1)
+    end
+
+    it "is included for post authors when author localization is enabled" do
+      SiteSetting.content_localization_allow_author_localization = true
+      json = PostSerializer.new(author_post, scope: Guardian.new(author), root: false).as_json
+      expect(json[:post_localizations_count]).to eq(1)
+    end
+
+    it "is not included for users who cannot localize" do
+      other_user = Fabricate(:user)
+      json = PostSerializer.new(author_post, scope: Guardian.new(other_user), root: false).as_json
+      expect(json.key?(:post_localizations_count)).to eq(false)
+    end
+  end
+
+  describe "#localized_oneboxes" do
+    fab!(:reader) { Fabricate(:user, locale: "ja") }
+    fab!(:source_topic, :topic)
+    fab!(:source_post) do
+      Fabricate(:post, topic: source_topic, post_number: 1, locale: "ja", raw: "見てください")
+    end
+    fab!(:linked_topic) { Fabricate(:topic, title: "Sun Tzu's strategies", locale: "en") }
+    fab!(:linked_post) do
+      Fabricate(:post, topic: linked_topic, post_number: 1, locale: "en", raw: "Subdue the enemy.")
+    end
+    fab!(:topic_localization) do
+      Fabricate(:topic_localization, topic: linked_topic, locale: "ja", title: "孫子の兵法")
+    end
+    fab!(:post_localization) do
+      Fabricate(:post_localization, post: linked_post, locale: "ja", cooked: "<p>戦わずして勝つ</p>")
+    end
+
+    before do
+      SiteSetting.content_localization_enabled = true
+      TopicLink.create!(
+        topic: source_topic,
+        post: source_post,
+        user: source_post.user,
+        url: linked_post.url,
+        domain: Discourse.current_hostname,
+        internal: true,
+        quote: true,
+        reflection: false,
+        link_topic_id: linked_topic.id,
+        link_post_id: linked_post.id,
+      )
+    end
+
+    def json_for(viewer, scope: nil)
+      I18n.with_locale(:ja) do
+        serializer =
+          PostSerializer.new(source_post, scope: scope || Guardian.new(viewer), root: false)
+        serializer.topic_view = TopicView.new(source_topic.id, viewer)
+        serializer.as_json
+      end
+    end
+
+    it "includes the localized title and preview for the reader" do
+      entry = json_for(reader)[:localized_oneboxes].first
+      expect(entry[:title]).to eq("孫子の兵法")
+      expect(entry[:excerpt]).to include("戦わずして勝つ")
+    end
+
+    it "is omitted when the reader disables automatic translation" do
+      reader.user_option.update!(automatically_translate: false)
+      expect(json_for(reader).key?(:localized_oneboxes)).to eq(false)
+    end
+
+    it "is omitted for an anonymous reader with automatic translation disabled by cookie" do
+      env =
+        create_request_env.merge(
+          "HTTP_COOKIE" => "#{ContentLocalization::AUTOMATICALLY_TRANSLATE_COOKIE}=false",
+        )
+      anon_scope = Guardian.new(nil, ActionDispatch::Request.new(env))
+
+      expect(json_for(nil, scope: anon_scope).key?(:localized_oneboxes)).to eq(false)
+    end
+
+    it "is included for an anonymous reader without an automatic translation cookie" do
+      anon_scope = Guardian.new(nil, ActionDispatch::Request.new(create_request_env))
+
+      expect(json_for(nil, scope: anon_scope)[:localized_oneboxes].first[:title]).to eq("孫子の兵法")
+    end
+
+    it "is omitted when content localization is disabled" do
+      SiteSetting.content_localization_enabled = false
+      expect(json_for(reader).key?(:localized_oneboxes)).to eq(false)
+    end
   end
 end

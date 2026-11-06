@@ -15,26 +15,26 @@ class DiscourseConnect < DiscourseConnectBase
     SiteSetting.discourse_connect_secret
   end
 
-  def self.generate_sso(return_path = "/", secure_session:)
-    sso = new(secure_session: secure_session)
+  def self.generate_sso(return_path = "/", server_session:)
+    sso = new(server_session:)
     sso.nonce = SecureRandom.hex
     sso.register_nonce(return_path)
     sso.return_sso_url = Discourse.base_url + "/session/sso_login"
     sso
   end
 
-  def self.generate_url(return_path = "/", secure_session:)
-    generate_sso(return_path, secure_session: secure_session).to_url
+  def self.generate_url(return_path = "/", server_session:)
+    generate_sso(return_path, server_session:).to_url
   end
 
-  def initialize(secure_session:)
-    @secure_session = secure_session
+  def initialize(server_session:)
+    @server_session = server_session
   end
 
   def register_nonce(return_path)
     if nonce
       if SiteSetting.discourse_connect_csrf_protection
-        @secure_session.set(nonce_key, return_path, expires: DiscourseConnectBase.nonce_expiry_time)
+        @server_session.set(nonce_key, return_path, expires: DiscourseConnectBase.nonce_expiry_time)
       else
         Discourse.cache.write(
           nonce_key,
@@ -47,7 +47,7 @@ class DiscourseConnect < DiscourseConnectBase
 
   def nonce_valid?
     if SiteSetting.discourse_connect_csrf_protection
-      nonce && @secure_session[nonce_key].present?
+      nonce && @server_session[nonce_key].present?
     else
       nonce && Discourse.cache.read(nonce_key).present?
     end
@@ -65,7 +65,7 @@ class DiscourseConnect < DiscourseConnectBase
 
   def return_path
     if SiteSetting.discourse_connect_csrf_protection
-      @secure_session[nonce_key] || "/"
+      @server_session[nonce_key] || "/"
     else
       Discourse.cache.read(nonce_key) || "/"
     end
@@ -74,9 +74,9 @@ class DiscourseConnect < DiscourseConnectBase
   def expire_nonce!
     if nonce
       if SiteSetting.discourse_connect_csrf_protection
-        @secure_session[nonce_key] = nil
+        @server_session.delete(nonce_key)
       else
-        Discourse.cache.delete nonce_key
+        Discourse.cache.delete(nonce_key)
       end
 
       Discourse.cache.write(
@@ -126,6 +126,8 @@ class DiscourseConnect < DiscourseConnectBase
       user = match_email_or_create_user(ip_address)
       sso_record = user.single_sign_on_record
     end
+
+    user.skip_username_watched_words_validation = true
 
     # ensure it's not staged anymore
     user.unstage!
@@ -190,14 +192,10 @@ class DiscourseConnect < DiscourseConnectBase
     desired_groups = Group.where("LOWER(NAME) in (?) AND NOT automatic", names)
 
     to_be_added = desired_groups
-    if current_groups.present?
-      to_be_added = to_be_added.where("groups.id NOT IN (?)", current_groups.map(&:id))
-    end
+    to_be_added = to_be_added.where.not(id: current_groups.map(&:id)) if current_groups.present?
 
     to_be_removed = current_groups
-    if desired_groups.present?
-      to_be_removed = to_be_removed.where("groups.id NOT IN (?)", desired_groups.map(&:id))
-    end
+    to_be_removed = to_be_removed.where.not(id: desired_groups.map(&:id)) if desired_groups.present?
 
     if to_be_added.present? || to_be_removed.present?
       GroupUser.transaction do
@@ -219,7 +217,7 @@ class DiscourseConnect < DiscourseConnectBase
       if split.length > 0
         to_be_added = Group.where("LOWER(name) in (?) AND NOT automatic", split)
         if already_member = GroupUser.where(user_id: user.id).pluck(:group_id).presence
-          to_be_added = to_be_added.where("id NOT IN (?)", already_member)
+          to_be_added = to_be_added.where.not(id: already_member)
         end
       end
     end
@@ -251,6 +249,8 @@ class DiscourseConnect < DiscourseConnectBase
       user = User.find_by_email(email) if !require_activation
 
       if !user
+        raise Discourse::SiteArchived if SiteSetting.site_archived
+
         user_params = {
           primary_email:
             UserEmail.new(email: email, primary: true) do |user_email|
@@ -267,6 +267,7 @@ class DiscourseConnect < DiscourseConnectBase
         end
 
         user = User.new(user_params)
+        user.skip_username_watched_words_validation = true
 
         if SiteSetting.must_approve_users && EmailValidator.can_auto_approve_user?(email)
           ReviewableUser.set_approved_fields!(user, Discourse.system_user)
@@ -353,7 +354,7 @@ class DiscourseConnect < DiscourseConnectBase
     end
 
     if SiteSetting.auth_overrides_name && user.name != name && name.present?
-      user.name = name || User.suggest_name(username.blank? ? email : username)
+      user.name = name || User.suggest_name(username.presence || email)
     end
 
     if locale_force_update && SiteSetting.allow_user_locale && locale.present? &&
@@ -426,7 +427,7 @@ class DiscourseConnect < DiscourseConnectBase
     suggester_input = [username]
     suggester_input << name if SiteSetting.use_name_for_username_suggestions
     suggester_input << email if SiteSetting.use_email_for_username_and_name_suggestions
-    UserNameSuggester.suggest(*suggester_input)
+    UserNameSuggester.suggest(*suggester_input, skip_watched_words: true)
   end
 
   def resolve_name

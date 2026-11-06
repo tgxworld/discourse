@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "Single thread in side panel", type: :system do
+describe "Single thread in side panel" do
   fab!(:current_user, :user)
 
   let(:chat_page) { PageObjects::Pages::Chat.new }
@@ -8,7 +8,7 @@ describe "Single thread in side panel", type: :system do
   let(:side_panel) { PageObjects::Pages::ChatSidePanel.new }
   let(:thread_page) { PageObjects::Pages::ChatThread.new }
   let(:chat_drawer_page) { PageObjects::Pages::ChatDrawer.new }
-  let(:sidebar_page) { PageObjects::Pages::Sidebar.new }
+  let(:sidebar_page) { PageObjects::Pages::ChatSidebar.new }
 
   before do
     chat_system_bootstrap(current_user, [channel])
@@ -107,12 +107,12 @@ describe "Single thread in side panel", type: :system do
     end
 
     context "when in drawer" do
-      it "opens the channel and highlights the message when clicking original message link" do
+      it "takes the user to the highlighted message after they click the original message link" do
         visit("/latest")
         chat_page.open_from_header
         chat_drawer_page.open_channel(channel)
         channel_page.message_thread_indicator(thread.original_message).click
-        find(".chat-message-info__original-message").click
+        thread_page.open_original_message
 
         expect(chat_drawer_page).to have_open_channel(channel)
         expect(channel_page.messages).to have_message(
@@ -122,10 +122,10 @@ describe "Single thread in side panel", type: :system do
       end
     end
 
-    it "highlights the message in the channel when clicking original message link" do
+    it "takes the user to the highlighted message after they click the original message link" do
       chat_page.visit_thread(thread)
 
-      find(".chat-message-info__original-message").click
+      thread_page.open_original_message
 
       expect(channel_page.messages).to have_message(
         id: thread.original_message.id,
@@ -233,7 +233,7 @@ describe "Single thread in side panel", type: :system do
         sign_in(current_user)
         chat_page.visit_channel(channel)
         expect(page).not_to have_css(
-          ".sidebar-section-link.channel-#{channel.id} .sidebar-section-link-suffix.unread",
+          ".sidebar-section-link.channel-#{channel.id} .sidebar-section-link-content-badge.unread",
         )
       end
     end
@@ -246,10 +246,11 @@ describe "Single thread in side panel", type: :system do
         expect(side_panel).to have_open_thread(thread)
       end
 
-      it "navigates back to channel when clicking original message link", mobile: true do
+      it "takes the user back to the channel after they click the original message link",
+         mobile: true do
         chat_page.visit_thread(thread)
 
-        find(".chat-message-info__original-message").click
+        thread_page.open_original_message
 
         expect(page).to have_current_path("/chat/c/#{channel.slug}/#{channel.id}")
       end

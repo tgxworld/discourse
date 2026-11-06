@@ -1,18 +1,16 @@
-import { htmlSafe } from "@ember/template";
+import { trustHTML } from "@ember/template";
 import { click, render } from "@ember/test-helpers";
 import { module, test } from "qunit";
 import { setupRenderingTest } from "discourse/tests/helpers/component-test";
 import Collapser from "discourse/plugins/chat/discourse/components/collapser";
 
-module("Discourse Chat | Component | collapser", function (hooks) {
+module("Component | Collapser", function (hooks) {
   setupRenderingTest(hooks);
 
   test("renders header", async function (assert) {
-    const self = this;
+    this.set("header", trustHTML(`<div class="cat">tomtom</div>`));
 
-    this.set("header", htmlSafe(`<div class="cat">tomtom</div>`));
-
-    await render(<template><Collapser @header={{self.header}} /></template>);
+    await render(<template><Collapser @header={{this.header}} /></template>);
 
     assert.dom(".cat").exists();
   });

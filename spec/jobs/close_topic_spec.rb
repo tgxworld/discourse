@@ -5,7 +5,7 @@ RSpec.describe Jobs::CloseTopic do
 
   fab!(:topic) { Fabricate(:topic_timer, user: admin).topic }
 
-  it "should be able to close a topic" do
+  it "closes a topic" do
     freeze_time(61.minutes.from_now) do
       described_class.new.execute(topic_timer_id: topic.public_topic_timer.id, state: true)
 
@@ -17,33 +17,56 @@ RSpec.describe Jobs::CloseTopic do
 
   it "publishes to the topic message bus so the topic status reloads" do
     MessageBus.expects(:publish).at_least_once
-    MessageBus.expects(:publish).with("/topic/#{topic.id}", reload_topic: true).once
+    MessageBus
+      .expects(:publish)
+      .with("/topic/#{topic.id}", { reload_topic: true }, topic.secure_audience_publish_messages)
+      .once
     freeze_time(61.minutes.from_now) do
       described_class.new.execute(topic_timer_id: topic.public_topic_timer.id)
     end
   end
 
   describe "when trying to close a topic that has already been closed" do
-    it "should delete the topic timer" do
+    it "deletes the topic timer" do
       freeze_time(topic.public_topic_timer.execute_at + 1.minute)
 
       topic.update!(closed: true)
 
       expect do
         described_class.new.execute(topic_timer_id: topic.public_topic_timer.id, state: true)
-      end.to change { TopicTimer.exists?(topic_id: topic.id) }.from(true).to(false)
+      end.to change { TopicTimer.exists?(topic:) }.from(true).to(false)
     end
   end
 
   describe "when trying to close a topic that has been deleted" do
-    it "should delete the topic timer" do
+    it "deletes the topic timer" do
       freeze_time(topic.public_topic_timer.execute_at + 1.minute)
 
       topic.trash!
 
       expect do
         described_class.new.execute(topic_timer_id: topic.public_topic_timer.id, state: true)
-      end.to change { TopicTimer.exists?(topic_id: topic.id) }.from(true).to(false)
+      end.to change { TopicTimer.exists?(topic:) }.from(true).to(false)
+    end
+  end
+
+  describe "when user is allowed to set topic timers" do
+    fab!(:user)
+    fab!(:group)
+    fab!(:topic) { Fabricate(:topic_timer, user: user).topic }
+
+    before do
+      group.add(user)
+      user.reload
+      SiteSetting.topic_timers_allowed_groups = group.id.to_s
+    end
+
+    it "closes the topic" do
+      freeze_time(topic.public_topic_timer.execute_at + 1.minute)
+
+      described_class.new.execute(topic_timer_id: topic.public_topic_timer.id)
+
+      expect(topic.reload.closed).to eq(true)
     end
   end
 
@@ -52,17 +75,17 @@ RSpec.describe Jobs::CloseTopic do
 
     fab!(:topic) { Fabricate(:topic_timer, user: user).topic }
 
-    it "should destroy the topic timer" do
+    it "destroys the topic timer" do
       freeze_time(topic.public_topic_timer.execute_at + 1.minute)
 
       expect do
         described_class.new.execute(topic_timer_id: topic.public_topic_timer.id, state: true)
-      end.to change { TopicTimer.exists?(topic_id: topic.id) }.from(true).to(false)
+      end.to change { TopicTimer.exists?(topic:) }.from(true).to(false)
 
       expect(topic.reload.closed).to eq(false)
     end
 
-    it "should reconfigure topic timer if category's topics are set to autoclose" do
+    it "reconfigures the topic timer when the category's topics auto-close" do
       category = Fabricate(:category, auto_close_based_on_last_post: true, auto_close_hours: 5)
 
       topic = Fabricate(:topic, category: category)

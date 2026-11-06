@@ -1,34 +1,34 @@
 import { action } from "@ember/object";
-import { mapBy } from "@ember/object/computed";
-import { classNames } from "@ember-decorators/component";
-import DButton from "discourse/components/d-button";
 import { makeArray } from "discourse/lib/helpers";
-import HouseAdsChooser from "./house-ads-chooser";
-import HouseAdsSetting from "./house-ads-setting";
+import DButton from "discourse/ui-kit/d-button";
+import HouseAdsChooser from "./house-ads-chooser.js";
+import HouseAdsSetting from "./house-ads-setting.gjs";
 
-@classNames("house-ads-setting house-ads-list-setting")
 export default class HouseAdsListSetting extends HouseAdsSetting {
-  @mapBy("allAds", "name") adNames;
+  get adNames() {
+    return this.args.allAds?.map?.((item) => item.name) ?? [];
+  }
 
   @action
   changeAdValue(value) {
-    const settingValue = makeArray(value).join("|");
-    this.set("adValue", settingValue);
+    this.adValue = makeArray(value).join("|");
   }
 
   <template>
-    <label for={{this.name}}>{{this.title}}</label>
-    <HouseAdsChooser
-      @settingValue={{this.adValue}}
-      @choices={{this.adNames}}
-      @onChange={{this.changeAdValue}}
-    />
-    <div class="setting-controls">
-      {{#if this.changed}}
-        <DButton class="ok" @action={{this.save}} @icon="check" />
-        <DButton class="cancel" @action={{this.cancel}} @icon="xmark" />
-      {{/if}}
+    <div class="house-ads-setting house-ads-list-setting" ...attributes>
+      <label for={{@name}}>{{this.title}}</label>
+      <HouseAdsChooser
+        @choices={{this.adNames}}
+        @onChange={{this.changeAdValue}}
+        @settingValue={{this.adValue}}
+      />
+      <div class="setting-controls">
+        {{#if this.changed}}
+          <DButton class="ok" @action={{this.save}} @icon="check" />
+          <DButton class="cancel" @action={{this.cancel}} @icon="xmark" />
+        {{/if}}
+      </div>
+      <p class="help">{{this.help}}</p>
     </div>
-    <p class="help">{{this.help}}</p>
   </template>
 }

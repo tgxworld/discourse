@@ -1,0 +1,42 @@
+name: Test selection artifact proof
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  produce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0.9'
+          bundler: '4.0.23'
+      - name: Prepare dependencies from repository lock
+        run: ruby script/ci/artifact_round_trip_lab.rb bundle
+      - name: Install locked fixture dependencies
+        env:
+          BUNDLE_GEMFILE: ${{ runner.temp }}/test-selection-artifact-bundle/Gemfile
+        run: bundle install
+      - name: Collect actual three spec fixture
+        env:
+          BUNDLE_GEMFILE: ${{ runner.temp }}/test-selection-artifact-bundle/Gemfile
+        run: bundle exec ruby script/ci/artifact_round_trip_lab.rb produce
+      - uses: actions/upload-artifact@v7
+        with:
+          name: test-mapping-main-tests
+          path: ${{ runner.temp }}/test-selection-artifact-fixture/tmp/test-mappings/*.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: test-mapping-main-migration-tests
+          path: ${{ runner.temp }}/test-selection-artifact-fixture/tmp/incompatible-mapping/*.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: fixture-producer-proof
+          path: ${{ runner.temp }}/test-selection-artifact-fixture/tmp/
+          if-no-files-found: warn

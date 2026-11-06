@@ -4,14 +4,14 @@ class PostReply < ActiveRecord::Base
   belongs_to :post
   belongs_to :reply, foreign_key: :reply_post_id, class_name: "Post"
 
-  validates_uniqueness_of :reply_post_id, scope: :post_id
+  validates :reply_post_id, uniqueness: { scope: :post_id }
   validate :ensure_same_topic
 
   private
 
   def ensure_same_topic
     if post.topic_id != reply.topic_id
-      self.errors.add(:base, I18n.t("activerecord.errors.models.post_reply.base.different_topic"))
+      errors.add(:base, I18n.t("activerecord.errors.models.post_reply.base.different_topic"))
     end
   end
 end
@@ -20,9 +20,9 @@ end
 #
 # Table name: post_replies
 #
-#  post_id       :integer
 #  created_at    :datetime         not null
 #  updated_at    :datetime         not null
+#  post_id       :integer
 #  reply_post_id :integer
 #
 # Indexes

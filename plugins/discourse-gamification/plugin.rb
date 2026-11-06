@@ -15,11 +15,12 @@ register_asset "stylesheets/desktop/leaderboard.scss", :desktop
 register_asset "stylesheets/mobile/leaderboard.scss", :mobile
 register_asset "stylesheets/common/leaderboard-info-modal.scss"
 register_asset "stylesheets/common/leaderboard-minimal.scss"
-register_asset "stylesheets/common/leaderboard-admin.scss"
+register_asset "stylesheets/admin/leaderboard.scss", :admin
 register_asset "stylesheets/common/gamification-score.scss"
 
 register_svg_icon "crown"
 register_svg_icon "award"
+register_svg_icon "trophy"
 
 module ::DiscourseGamification
   PLUGIN_NAME = "discourse-gamification"
@@ -35,9 +36,25 @@ after_initialize do
     { use_new_show_route: true },
   )
 
+  add_api_key_scope(
+    :gamification,
+    {
+      read_score_events: {
+        actions: %w[discourse_gamification/admin_gamification_score_event#show],
+      },
+      create_score_events: {
+        actions: %w[discourse_gamification/admin_gamification_score_event#create],
+      },
+      update_score_events: {
+        actions: %w[discourse_gamification/admin_gamification_score_event#update],
+      },
+    },
+  )
+
   require_relative "jobs/scheduled/update_scores_for_ten_days"
   require_relative "jobs/scheduled/update_scores_for_today"
   require_relative "jobs/regular/recalculate_scores"
+  require_relative "jobs/regular/recalculate_leaderboard_scores"
   require_relative "jobs/regular/generate_leaderboard_positions"
   require_relative "jobs/regular/refresh_leaderboard_positions"
   require_relative "jobs/regular/delete_leaderboard_positions"
@@ -70,17 +87,19 @@ after_initialize do
     Guardian.include(DiscourseGamification::GuardianExtension)
   end
 
-  if respond_to?(:add_directory_column)
-    add_directory_column(
-      "gamification_score",
-      query: DiscourseGamification::DirectoryIntegration.query,
-    )
+  if respond_to?(:register_discourse_workflows_node)
+    register_discourse_workflows_node { DiscourseWorkflows::Nodes::GamificationScore::V1 }
   end
+
+  add_directory_column(
+    "gamification_score",
+    query: DiscourseGamification::DirectoryIntegration.query,
+  )
 
   add_to_serializer(
     :admin_plugin,
     :extras,
-    include_condition: -> { self.name == "discourse-gamification" },
+    include_condition: -> { name == "discourse-gamification" },
   ) do
     {
       gamification_recalculate_scores_remaining:
@@ -89,11 +108,12 @@ after_initialize do
         Group
           .includes(:flair_upload)
           .all
-          .map { |group| BasicGroupSerializer.new(group, root: false, scope: self.scope).as_json },
+          .map { |group| BasicGroupSerializer.new(group, root: false, scope: scope).as_json },
       gamification_leaderboards:
-        DiscourseGamification::GamificationLeaderboard.all.map do |leaderboard|
-          LeaderboardSerializer.new(leaderboard, root: false).as_json
-        end,
+        DiscourseGamification::GamificationLeaderboard
+          .includes(:created_by)
+          .order(updated_at: :desc)
+          .map { |leaderboard| AdminLeaderboardSerializer.new(leaderboard, root: false).as_json },
     }
   end
 
@@ -102,10 +122,7 @@ after_initialize do
     DiscourseGamification::GamificationLeaderboard.first&.id
   end
 
-  SeedFu.fixture_paths << Rails
-    .root
-    .join("plugins", "discourse-gamification", "db", "fixtures")
-    .to_s
+  SeedFu.fixture_paths << Rails.root.join("plugins/discourse-gamification/db/fixtures").to_s
 
   on(:site_setting_changed) do |name|
     next if name != :score_ranking_strategy
@@ -114,6 +131,6 @@ after_initialize do
   end
 
   on(:merging_users) do |source_user, target_user|
-    DiscourseGamification::GamificationScore.merge_scores(source_user, target_user)
+    DiscourseGamification::GamificationLeaderboardScore.merge_scores(source_user, target_user)
   end
 end

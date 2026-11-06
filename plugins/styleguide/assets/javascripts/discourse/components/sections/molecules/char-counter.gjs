@@ -1,18 +1,9 @@
-import { fn } from "@ember/helper";
-import { on } from "@ember/modifier";
-import CharCounter from "discourse/components/char-counter";
-import withEventValue from "discourse/helpers/with-event-value";
 import StyleguideExample from "discourse/plugins/styleguide/discourse/components/styleguide-example";
+import CharCounterExample from "../../examples/molecules/char-counter.gjs";
+import charCounterSource from "../../examples/molecules/char-counter?source=file";
 
-const CharCounterMolecule = <template>
-  <StyleguideExample @title="<CharCounter>">
-    <CharCounter @max="50" @value={{@dummy.charCounterContent}}>
-      <textarea
-        {{on "input" (withEventValue (fn (mut @dummy.charCounterContent)))}}
-        class="styleguide--char-counter"
-      ></textarea>
-    </CharCounter>
+export default <template>
+  <StyleguideExample @code={{charCounterSource}} @title="<DCharCounter>">
+    <CharCounterExample />
   </StyleguideExample>
-</template>;
-
-export default CharCounterMolecule;
+</template>

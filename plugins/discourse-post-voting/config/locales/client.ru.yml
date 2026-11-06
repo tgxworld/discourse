@@ -5,14 +5,12 @@
 # https://translate.discourse.org/
 
 ru:
-  admin_js:
-    site_settings:
-      categories:
-        post_voting: Голосование по публикациям
   post_voting:
     reviewables:
       comment_already_handled: "Спасибо, но мы уже просмотрели этот комментарий и решили, что на него не нужно снова отправлять жалобу."
   js:
+    discourse_post_voting:
+      title: "Голосование по публикациям"
     notifications:
       question_answer_user_commented: "<span>%{username}</span> %{description}"
       titles:
@@ -28,21 +26,29 @@ ru:
         label: "Cоздать тему с голосованием по сообщению"
       composer_actions:
         create_as_post_voting:
-          label: "Включить голосование по сообщениям"
+          label: "Вкл/выкл голосование за пост"
           desc: "Тема будет создана в формате голосования по сообщениям"
         remove_as_post_voting:
-          label: "Отключить голосование по сообщениям"
+          label: "Удалить голосование за пост"
           desc: "Тема будет создана в обычном формате"
     vote:
       already_voted: "Проголосовать можно только один раз за вопрос."
       user_over_limit: "Нельзя превышать количество голосов, установленное для вашего уровня доверия."
       one_vote_per_post: "Проголосовать можно только один раз на каждую запись."
+      button:
+        upvote: "Голосование за"
+        remove_upvote: "Удалить голос"
+        downvote: "Проголосовать против"
+        remove_downvote: "Удалить голос"
+      toggle_voters: "Показывать проголосовавших (не отмечайте, если голосование анонимное)"
+      upvotes: "Голосование за"
+      downvotes: "Проголосовать против"
     last_answer_lowercase: последний ответ
     answer_lowercase:
       one: ответ
-      few: ответа
-      many: ответов
-      other: ответов
+      few: ответы
+      many: ответы
+      other: ответы
     post_voting:
       post:
         post_voting_comment:
@@ -50,7 +56,7 @@ ru:
             too_short:
               one: "Введите не менее %{count} символа"
               few: "Введите не менее %{count} символов"
-              many: "Введите не менее %{count} символа"
+              many: "Введите не менее %{count} символов"
               other: "Введите не менее %{count} символа"
             length_ok:
               one: "Остался %{count} символ..."
@@ -66,11 +72,15 @@ ru:
           edit: "изменить"
           cancel: "Отмена"
           add: "Добавить комментарий"
+          actions:
+            edit: "Редактировать комментарий"
+            delete: "Удалить комментарий"
+            flag: "Сообщить о нарушении"
           show:
             one: Показать ещё %{count} комментарий
             few: Показать ещё %{count} комментария
             many: Показать ещё %{count} комментариев
-            other: Показать ещё %{count} комментариев
+            other: Показать ещё %{count} комментария
           delete:
             confirm: "Действительно удалить этот комментарий?"
           user:
@@ -117,12 +127,17 @@ ru:
           help: "начните писать ответ"
         sort_by: "Сортировка"
         votes: "Голоса"
-        activity: "Последняя активность"
+        activity: "Активность"
         answer_count:
           one: "%{count} ответ"
           few: "%{count} ответа"
           many: "%{count} ответов"
-          other: "%{count} ответов"
+          other: "%{count} ответа"
+        voters_count_diff:
+          one: "и еще %{count} пользователь..."
+          few: "и еще %{count} пользователя..."
+          many: "и еще %{count} пользователей..."
+          other: "и еще %{count} пользователя..."
     review:
       transcript:
         view: "Просмотр содержимого предыдущих сообщений"

@@ -21,6 +21,74 @@ describe DiscourseAutomation::Automation do
         expect(list).to eq(["Howdy!"])
       end
     end
+
+    context "when triggers are suppressed" do
+      it "doesn’t run the script" do
+        automation = Fabricate(:automation, enabled: true)
+
+        list =
+          capture_contexts do
+            DiscourseAutomation.suppress_triggers { automation.trigger!("Howdy!") }
+          end
+
+        expect(list).to eq([])
+      end
+    end
+
+    context "when recursively triggered" do
+      before do
+        DiscourseAutomation::Scriptable.add("recursive_test_scriptable") do
+          script do |context, _, automation|
+            depth = context[:depth]
+
+            DiscourseAutomation::CapturedContext.add(depth)
+
+            if depth < context[:target_depth]
+              automation.trigger!(depth: depth + 1, target_depth: context[:target_depth])
+            end
+          end
+        end
+      end
+
+      after { DiscourseAutomation::Scriptable.remove("recursive_test_scriptable") }
+
+      it "runs nested triggers up to the configured maximum depth" do
+        SiteSetting.discourse_automation_max_recursion_depth = 5
+        automation = Fabricate(:automation, enabled: true, script: "recursive_test_scriptable")
+
+        list = capture_contexts { automation.trigger!(depth: 1, target_depth: 5) }
+
+        expect(list).to eq([1, 2, 3, 4, 5])
+      end
+
+      it "does not allow recursive triggers by default" do
+        automation = Fabricate(:automation, enabled: true, script: "recursive_test_scriptable")
+
+        list = capture_contexts { automation.trigger!(depth: 1, target_depth: 2) }
+
+        expect(list).to eq([1])
+      end
+
+      it "silently stops when the configured maximum depth is exceeded" do
+        SiteSetting.discourse_automation_max_recursion_depth = 5
+        automation = Fabricate(:automation, enabled: true, script: "recursive_test_scriptable")
+
+        list = capture_contexts { automation.trigger!(depth: 1, target_depth: 6) }
+
+        expect(list).to eq([1, 2, 3, 4, 5])
+      end
+
+      it "clears recursion depth after the limit is reached" do
+        SiteSetting.discourse_automation_max_recursion_depth = 5
+        automation = Fabricate(:automation, enabled: true, script: "recursive_test_scriptable")
+
+        capture_contexts { automation.trigger!(depth: 1, target_depth: 6) }
+
+        list = capture_contexts { automation.trigger!(depth: 1, target_depth: 1) }
+
+        expect(list).to eq([1])
+      end
+    end
   end
 
   describe "when a script is meant to be triggered in the background" do
@@ -72,7 +140,7 @@ describe DiscourseAutomation::Automation do
     end
   end
 
-  context "when automation’s script has a field with validor" do
+  context "when automation’s script has a field with validator" do
     before do
       DiscourseAutomation::Scriptable.add("required_dogs") do
         field :dog, component: :text, validator: ->(input) { "must have dog" if input != "dog" }
@@ -164,6 +232,28 @@ describe DiscourseAutomation::Automation do
     end
   end
 
+  describe ".serialize_context" do
+    it "serializes date and time as iso8601" do
+      expect(
+        described_class.serialize_context(
+          {
+            "time" => Time.utc(2026, 4, 15, 12, 0, 0),
+            "time_with_zone" => Time.utc(2026, 4, 15, 12, 0, 0).in_time_zone("Europe/Warsaw"),
+            "date_time" => DateTime.new(2026, 4, 15, 12, 0, 0),
+            "date" => Date.new(2026, 4, 15),
+          },
+        ),
+      ).to eq(
+        {
+          "time" => "2026-04-15T12:00:00Z",
+          "time_with_zone" => "2026-04-15T14:00:00+02:00",
+          "date_time" => "2026-04-15T12:00:00+00:00",
+          "date" => "2026-04-15",
+        },
+      )
+    end
+  end
+
   describe "after_destroy" do
     fab!(:automation) { Fabricate(:automation, enabled: false) }
     fab!(:automation2) { Fabricate(:automation, enabled: false) }
@@ -189,6 +279,200 @@ describe DiscourseAutomation::Automation do
 
       automation = Fabricate.build(:automation, name: "c" * 50)
       expect(automation).to be_valid
+    end
+  end
+
+  describe "#required_fields_complete" do
+    fab!(:automation) do
+      Fabricate(
+        :automation,
+        enabled: false,
+        script: "required_cats",
+        trigger: "required_cats_trigger",
+      )
+    end
+
+    before do
+      DiscourseAutomation::Scriptable.add("required_cats") do
+        field :cat, component: :text, required: true
+        field :dog, component: :text, required: false
+      end
+
+      DiscourseAutomation::Triggerable.add("required_cats_trigger") do
+        field :litterbox, component: :text, required: true
+      end
+    end
+
+    context "when the perform_required_fields_validation flag is true" do
+      before { automation.perform_required_fields_validation = true }
+
+      context "when a script required field is missing" do
+        before do
+          automation.fields.create!(
+            name: "litterbox",
+            component: "text",
+            metadata: {
+              value: "kittytoilet",
+            },
+            target: "trigger",
+          )
+        end
+
+        it "blocks enabling the automation and indicates the missing fields" do
+          automation.enabled = true
+          expect(automation.save).to eq(false)
+          expect(automation.errors.full_messages).to contain_exactly(
+            I18n.t(
+              "discourse_automation.models.automations.validations.script_missing_required_fields",
+              fields: "cat",
+            ),
+          )
+
+          cat_field =
+            automation.fields.create!(
+              name: "cat",
+              component: "text",
+              metadata: {
+                value: "kitty",
+              },
+              target: "script",
+            )
+          automation.reload
+          automation.enabled = true
+          expect(automation.save).to eq(true)
+
+          automation.update!(enabled: false)
+
+          cat_field.update_attribute(:metadata, { value: "" })
+
+          automation.enabled = true
+          expect(automation.save).to eq(false)
+          expect(automation.errors.full_messages).to contain_exactly(
+            I18n.t(
+              "discourse_automation.models.automations.validations.script_missing_required_fields",
+              fields: "cat",
+            ),
+          )
+        end
+
+        it "doesn't block disabling the automation" do
+          automation.fields.destroy_all
+          automation.update_attribute(:enabled, true)
+          automation.reload
+          expect(automation.enabled).to eq(true)
+
+          automation.enabled = false
+          expect(automation.save).to eq(true)
+          expect(automation.errors.full_messages).to be_empty
+        end
+      end
+
+      context "when a trigger required field is missing" do
+        before do
+          automation.fields.create!(
+            name: "cat",
+            component: "text",
+            metadata: {
+              value: "hellokitty",
+            },
+            target: "script",
+          )
+        end
+
+        it "blocks enabling the automation and indicates the missing fields" do
+          automation.enabled = true
+          expect(automation.save).to eq(false)
+          expect(automation.errors.full_messages).to contain_exactly(
+            I18n.t(
+              "discourse_automation.models.automations.validations.trigger_missing_required_fields",
+              fields: "litterbox",
+            ),
+          )
+
+          litterbox_field =
+            automation.fields.create!(
+              name: "litterbox",
+              component: "text",
+              metadata: {
+                value: "kitty",
+              },
+              target: "trigger",
+            )
+          automation.reload
+          automation.enabled = true
+          expect(automation.save).to eq(true)
+
+          automation.update!(enabled: false)
+
+          litterbox_field.update_attribute(:metadata, { value: "" })
+
+          automation.enabled = true
+          expect(automation.save).to eq(false)
+          expect(automation.errors.full_messages).to contain_exactly(
+            I18n.t(
+              "discourse_automation.models.automations.validations.trigger_missing_required_fields",
+              fields: "litterbox",
+            ),
+          )
+        end
+
+        it "doesn't block disabling the automation" do
+          automation.fields.destroy_all
+          automation.update_attribute(:enabled, true)
+          automation.reload
+          expect(automation.enabled).to eq(true)
+
+          automation.enabled = false
+          expect(automation.save).to eq(true)
+          expect(automation.errors.full_messages).to be_empty
+        end
+      end
+
+      context "when all required fields are filled" do
+        it "allows enabling the automation" do
+          automation.fields.create!(
+            name: "cat",
+            component: "text",
+            metadata: {
+              value: "kitty",
+            },
+            target: "script",
+          )
+          automation.fields.create!(
+            name: "litterbox",
+            component: "text",
+            metadata: {
+              value: "kittytoilet",
+            },
+            target: "trigger",
+          )
+
+          automation.enabled = true
+          expect(automation.save).to eq(true)
+          expect(automation.errors.full_messages).to be_empty
+        end
+      end
+
+      context "when trigger is blank" do
+        before { automation.update!(trigger: nil) }
+
+        it "blocks enabling the automation and indicates the trigger is blank" do
+          automation.enabled = true
+          expect(automation.save).to eq(false)
+          expect(automation.errors.full_messages).to contain_exactly(
+            I18n.t("discourse_automation.models.automations.validations.trigger_blank"),
+          )
+        end
+      end
+    end
+
+    context "when the perform_required_fields_validation flag is false" do
+      before { automation.perform_required_fields_validation = false }
+
+      it "doesn't block enabling the automation even if there are missing required fields" do
+        automation.enabled = true
+        expect(automation.save).to eq(true)
+      end
     end
   end
 end

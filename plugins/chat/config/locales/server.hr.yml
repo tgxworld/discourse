@@ -7,23 +7,36 @@
 hr:
   system_messages:
     chat_channel_archive_failed:
-      title: "Arhiva Chat kanala nije uspjela"
+      title: "Arhiva kanala za chat nije uspjela"
       subject_template: "Arhiva kanala za chat nije uspjela"
     chat_channel_archive_failed_no_topic:
-      title: "Arhiva Chat kanala nije uspjela"
+      title: "Arhiva kanala za chat nije uspjela"
       subject_template: "Arhiva kanala za chat nije uspjela"
+      text_body_template: |
+        Arhiviranje chat kanala %{channel_hashtag_or_name} nije uspjelo. Poruke nisu arhivirane. Tema nije uspješno kreirana iz sljedećih razloga:
+
+          %{topic_validation_errors}
+
+        Posjetite kanal na %{channel_url} kako biste ponovno pokušali.
   chat:
+    design_wizard_homepage_name: "Čavrljanje"
     deleted_chat_username: izbrisao
+    crawler:
+      nav_title: "Čavrljanje"
+      thread_replies:
+        one: "%{count} odgovor"
+        few: "%{count} odgovora"
+        other: "%{count} odgovora"
     errors:
       not_accepting_dms: "Žao nam je, %{username} trenutno ne prihvaća poruke."
     reviewables:
       actions:
+        no_action_message:
+          title: "Nema akcije"
         agree_and_suspend:
           title: "Suspendiraj korisnika"
         agree_and_silence:
           title: "Ušuti korisnika"
-        disagree:
-          title: "Odbaci"
     channel:
       dm_title:
         single_user: "%{username}"
@@ -65,6 +78,13 @@ hr:
     popup:
       chat_mention:
         direct: '%{username} vas je spomenuo u "%{channel}"'
+    actions:
+      chat_reply:
+        title: Odgovor
+  discourse_workflows:
+    chat_approval:
+      default_approve_label: "Odobrite"
+      default_deny_label: "Odbiti"
   reviewable_score_types:
     notify_user:
       chat_pm_body: "%{link}\n\n%{message}"

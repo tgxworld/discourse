@@ -3,11 +3,50 @@
 RSpec.describe DiscourseAi::AiHelper::AssistantController do
   fab!(:newuser)
   fab!(:user) { Fabricate(:user, refresh_auto_groups: true) }
+  fab!(:restricted_group, :group)
 
   before do
     enable_current_plugin
     assign_fake_provider_to(:ai_default_llm_model)
     SiteSetting.ai_helper_enabled = true
+  end
+
+  shared_context "with an image-generating post illustrator" do
+    let(:upload) do
+      Fabricate(
+        :upload,
+        sha1: Upload.sha1_from_short_url("upload://test123"),
+        original_filename: "test.png",
+      )
+    end
+
+    let(:post_illustrator_agent) do
+      AiAgent.find_by(id: SiteSetting.ai_helper_post_illustrator_agent)
+    end
+
+    before do
+      image_tool =
+        Fabricate(
+          :ai_tool,
+          tool_name: "test_image_generator",
+          parameters: [{ name: "prompt", type: "string", required: true }],
+          script: <<~JS,
+            function invoke(params) {
+              const image = upload.create("test.png", "base64data");
+              chain.setCustomRaw(`![test](${image.short_url})`);
+              return { result: "success" };
+            }
+          JS
+          created_by_id: user.id,
+          is_image_generation_tool: true,
+        )
+      post_illustrator_agent.update_columns(system: false)
+      post_illustrator_agent.update!(tools: [["custom-#{image_tool.id}", nil, true]])
+
+      allow_any_instance_of(DiscourseAi::Agents::Bot).to receive(:reply) do |_bot, _context, &block|
+        block.call("", "![test](#{upload.short_url})", :partial_invoke)
+      end
+    end
   end
 
   describe "#stream_suggestion" do
@@ -16,10 +55,44 @@ RSpec.describe DiscourseAi::AiHelper::AssistantController do
       SiteSetting.composer_ai_helper_allowed_groups = Group::AUTO_GROUPS[:trust_level_0]
     end
 
+    it "returns 403 when user cannot see the post" do
+      sign_in(user)
+
+      AiAgent.find_by(id: SiteSetting.ai_helper_custom_prompt_agent).update!(
+        allowed_group_ids: [Group::AUTO_GROUPS[:trust_level_0]],
+      )
+
+      group = Fabricate(:group)
+      private_category = Fabricate(:private_category, group: group)
+      topic = Fabricate(:topic, category: private_category)
+      private_post = Fabricate(:post, topic: topic)
+
+      post "/discourse-ai/ai-helper/stream_suggestion.json",
+           params: {
+             text: "hello wrld",
+             location: "post",
+             client_id: "1234",
+             post_id: private_post.id,
+             custom_prompt: "Translate to Spanish",
+             mode: DiscourseAi::AiHelper::Assistant::CUSTOM_PROMPT,
+           }
+
+      expect(response.status).to eq(403)
+    end
+
     it "is able to stream suggestions to helper" do
       sign_in(user)
 
-      my_post = Fabricate(:post)
+      AiAgent.find_by(id: SiteSetting.ai_helper_custom_prompt_agent).update!(
+        allowed_group_ids: [Group::AUTO_GROUPS[:trust_level_0]],
+      )
+
+      category = Fabricate(:category)
+      category.set_permissions(everyone: :full)
+      category.save!
+
+      topic = Fabricate(:topic, category: category)
+      my_post = Fabricate(:post, topic: topic)
 
       channel = nil
       messages =
@@ -55,6 +128,94 @@ RSpec.describe DiscourseAi::AiHelper::AssistantController do
       expect(last_message.data[:done]).to eq(true)
     end
 
+    context "when the user is not in the helper mode agent's allowed_group_ids" do
+      before { Jobs.run_later! }
+
+      it "returns a 403 before enqueuing the streamed suggestion" do
+        sign_in(user)
+
+        AiAgent.find_by(id: SiteSetting.ai_helper_custom_prompt_agent).update!(
+          allowed_group_ids: [restricted_group.id],
+        )
+
+        post "/discourse-ai/ai-helper/stream_suggestion.json",
+             params: {
+               text: "hello wrld",
+               location: "composer",
+               client_id: "1234",
+               custom_prompt: "Translate to Spanish",
+               mode: DiscourseAi::AiHelper::Assistant::CUSTOM_PROMPT,
+             }
+
+        expect(response.status).to eq(403)
+        expect(response.parsed_body["errors"]).to be_present
+      end
+    end
+
+    context "when mode is illustrate_post" do
+      include_context "with an image-generating post illustrator"
+
+      it "suggests thumbnails" do
+        sign_in(user)
+
+        post "/discourse-ai/ai-helper/stream_suggestion.json",
+             params: {
+               text: "A beautiful sunset",
+               location: "composer",
+               mode: DiscourseAi::AiHelper::Assistant::ILLUSTRATE_POST,
+             }
+
+        expect(response.status).to eq(200)
+        expect(response.parsed_body["thumbnails"]).to be_present
+        expect(response.parsed_body["thumbnails"].length).to eq(1)
+        expect(response.parsed_body["thumbnails"].first["id"]).to eq(upload.id)
+      end
+
+      context "when a post-only user invokes a composer-only mode" do
+        fab!(:post_only_group, :group)
+        fab!(:post_only_user) { Fabricate(:user, refresh_auto_groups: true) }
+
+        before do
+          SiteSetting.composer_ai_helper_allowed_groups = restricted_group.id.to_s
+          SiteSetting.post_ai_helper_allowed_groups = post_only_group.id.to_s
+          post_only_group.add(post_only_user)
+          post_illustrator_agent.update!(allowed_group_ids: [post_only_group.id])
+        end
+
+        it "returns 403 without generating thumbnails for post location aliases" do
+          sign_in(post_only_user)
+
+          %w[post helper].each do |location|
+            post "/discourse-ai/ai-helper/stream_suggestion.json",
+                 params: {
+                   text: "A beautiful sunset",
+                   location:,
+                   mode: DiscourseAi::AiHelper::Assistant::ILLUSTRATE_POST,
+                 }
+
+            expect(response.status).to eq(403)
+            expect(response.parsed_body["errors"]).to be_present
+            expect(response.parsed_body["thumbnails"]).to be_nil
+          end
+        end
+      end
+
+      it "returns a 403 when the user cannot access the post illustrator agent" do
+        sign_in(user)
+        post_illustrator_agent.update!(allowed_group_ids: [restricted_group.id])
+
+        post "/discourse-ai/ai-helper/stream_suggestion.json",
+             params: {
+               text: "A beautiful sunset",
+               location: "composer",
+               mode: DiscourseAi::AiHelper::Assistant::ILLUSTRATE_POST,
+             }
+
+        expect(response.status).to eq(403)
+        expect(response.parsed_body["errors"]).to be_present
+      end
+    end
+
     it "is able to stream suggestions to composer" do
       sign_in(user)
       channel = nil
@@ -87,6 +248,123 @@ RSpec.describe DiscourseAi::AiHelper::AssistantController do
       expect(last_message.data[:result]).to eq("hello world")
       expect(last_message.data[:done]).to eq(true)
     end
+
+    context "when enforcing context-specific group permissions" do
+      fab!(:composer_group, :group)
+      fab!(:post_group, :group)
+      fab!(:composer_only_user) { Fabricate(:user, refresh_auto_groups: true) }
+      fab!(:post_only_user) { Fabricate(:user, refresh_auto_groups: true) }
+      fab!(:my_post, :post)
+
+      before do
+        SiteSetting.composer_ai_helper_allowed_groups = composer_group.id.to_s
+        SiteSetting.post_ai_helper_allowed_groups = post_group.id.to_s
+        composer_group.add(composer_only_user)
+        post_group.add(post_only_user)
+        AiAgent.find_by(id: SiteSetting.ai_helper_proofreader_agent).update!(
+          allowed_group_ids: [composer_group.id, post_group.id],
+        )
+      end
+
+      it "returns 403 when a composer-only user tries to use post helper" do
+        sign_in(composer_only_user)
+
+        post "/discourse-ai/ai-helper/stream_suggestion.json",
+             params: {
+               text: "hello",
+               location: "post",
+               post_id: my_post.id,
+               mode: DiscourseAi::AiHelper::Assistant::PROOFREAD,
+               client_id: "test123",
+             }
+
+        expect(response.status).to eq(403)
+      end
+
+      it "returns 400 with a location error when location is missing" do
+        sign_in(composer_only_user)
+
+        post "/discourse-ai/ai-helper/stream_suggestion.json",
+             params: {
+               text: "hello",
+               mode: DiscourseAi::AiHelper::Assistant::PROOFREAD,
+               client_id: "test123",
+             }
+
+        expect(response.status).to eq(400)
+        expect(response.parsed_body["errors"].join).to include("location")
+      end
+
+      it "returns 400 with a location error for an unrecognized location" do
+        sign_in(post_only_user)
+
+        DiscourseAi::Completions::Llm.with_prepared_responses([["hello ", "world"]]) do
+          post "/discourse-ai/ai-helper/stream_suggestion.json",
+               params: {
+                 text: "hello",
+                 location: "unknown",
+                 post_id: my_post.id,
+                 mode: DiscourseAi::AiHelper::Assistant::PROOFREAD,
+                 client_id: "test123",
+               }
+        end
+
+        expect(response.status).to eq(400)
+        expect(response.parsed_body["errors"].join).to include("location")
+      end
+
+      it "returns 403 when a post-only user tries to use composer helper" do
+        sign_in(post_only_user)
+
+        post "/discourse-ai/ai-helper/stream_suggestion.json",
+             params: {
+               text: "hello",
+               location: "composer",
+               mode: DiscourseAi::AiHelper::Assistant::PROOFREAD,
+               client_id: "test123",
+             }
+
+        expect(response.status).to eq(403)
+      end
+
+      it "allows a composer-only user to use the composer helper" do
+        sign_in(composer_only_user)
+
+        results = [["hello ", "world"]]
+        DiscourseAi::Completions::Llm.with_prepared_responses(results) do
+          post "/discourse-ai/ai-helper/stream_suggestion.json",
+               params: {
+                 text: "hello",
+                 location: "composer",
+                 mode: DiscourseAi::AiHelper::Assistant::PROOFREAD,
+                 client_id: "test123",
+               }
+
+          expect(response.status).to eq(200)
+        end
+      end
+
+      it "allows a post-only user to use post helper aliases" do
+        sign_in(post_only_user)
+
+        results = [["hello ", "world"], ["hello ", "world"]]
+        DiscourseAi::Completions::Llm.with_prepared_responses(results) do
+          %w[post helper].each do |location|
+            post "/discourse-ai/ai-helper/stream_suggestion.json",
+                 params: {
+                   text: "hello",
+                   location:,
+                   post_id: my_post.id,
+                   mode: DiscourseAi::AiHelper::Assistant::PROOFREAD,
+                   client_id: "test123",
+                 }
+
+            expect(response.status).to eq(200)
+            expect(response.parsed_body["success"]).to eq(true)
+          end
+        end
+      end
+    end
   end
 
   describe "#suggest" do
@@ -118,7 +396,6 @@ RSpec.describe DiscourseAi::AiHelper::AssistantController do
     context "when logged in as an allowed user" do
       before do
         sign_in(user)
-        user.group_ids = [Group::AUTO_GROUPS[:trust_level_1]]
         SiteSetting.composer_ai_helper_allowed_groups = Group::AUTO_GROUPS[:trust_level_1]
       end
 
@@ -165,6 +442,10 @@ RSpec.describe DiscourseAi::AiHelper::AssistantController do
       end
 
       it "uses custom instruction when using custom_prompt mode" do
+        AiAgent.find_by(id: SiteSetting.ai_helper_custom_prompt_agent).update!(
+          allowed_group_ids: [Group::AUTO_GROUPS[:trust_level_0]],
+        )
+
         translated_text = "Un usuario escribio esto"
         expected_diff =
           "<div class=\"inline-diff\"><p><ins>Un </ins><ins>usuario </ins><ins>escribio </ins><ins>esto</ins><del>A </del><del>user </del><del>wrote </del><del>this</del></p></div>"
@@ -183,17 +464,85 @@ RSpec.describe DiscourseAi::AiHelper::AssistantController do
         end
       end
 
-      it "prevents double render when mode is ILLUSTRATE_POST" do
-        DiscourseAi::Completions::Llm.with_prepared_responses([proofread_text]) do
-          expect {
+      context "when the user is not in the helper mode agent's allowed_group_ids" do
+        it "returns a 403 response" do
+          AiAgent.find_by(id: SiteSetting.ai_helper_custom_prompt_agent).update!(
+            allowed_group_ids: [restricted_group.id],
+          )
+
+          DiscourseAi::Completions::Llm.with_prepared_responses(["Un usuario escribio esto"]) do
             post "/discourse-ai/ai-helper/suggest",
                  params: {
-                   mode: DiscourseAi::AiHelper::Assistant::ILLUSTRATE_POST,
-                   text: text_to_proofread,
-                   force_default_locale: true,
+                   mode: DiscourseAi::AiHelper::Assistant::CUSTOM_PROMPT,
+                   text: "A user wrote this",
+                   custom_prompt: "Translate to Spanish",
                  }
-          }.not_to raise_error
+          end
+
+          expect(response.status).to eq(403)
+          expect(response.parsed_body["errors"]).to be_present
+        end
+      end
+
+      it "returns error when PostIllustrator agent has no image generation tool" do
+        post "/discourse-ai/ai-helper/suggest",
+             params: {
+               mode: DiscourseAi::AiHelper::Assistant::ILLUSTRATE_POST,
+               text: text_to_proofread,
+               force_default_locale: true,
+             }
+
+        expect(response.status).to eq(422)
+        expect(response.parsed_body["errors"].first).to include(
+          "Post Illustrator agent must have an image generation tool",
+        )
+      end
+
+      it "returns error when PostIllustrator agent is not found" do
+        SiteSetting.ai_helper_post_illustrator_agent = 99_999
+
+        post "/discourse-ai/ai-helper/suggest",
+             params: {
+               mode: DiscourseAi::AiHelper::Assistant::ILLUSTRATE_POST,
+               text: text_to_proofread,
+               force_default_locale: true,
+             }
+
+        expect(response.status).to eq(404)
+        expect(response.parsed_body["errors"].first).to include(
+          "Post Illustrator agent is not configured",
+        )
+      end
+
+      context "when PostIllustrator agent has image generation tool" do
+        include_context "with an image-generating post illustrator"
+
+        it "successfully generates thumbnails" do
+          post "/discourse-ai/ai-helper/suggest",
+               params: {
+                 mode: DiscourseAi::AiHelper::Assistant::ILLUSTRATE_POST,
+                 text: "A beautiful sunset",
+                 force_default_locale: true,
+               }
+
           expect(response.status).to eq(200)
+          expect(response.parsed_body["thumbnails"]).to be_present
+          expect(response.parsed_body["thumbnails"].length).to eq(1)
+          expect(response.parsed_body["thumbnails"].first["id"]).to eq(upload.id)
+        end
+
+        it "returns error when image generation fails" do
+          allow_any_instance_of(DiscourseAi::Agents::Bot).to receive(:reply).and_return(nil)
+
+          post "/discourse-ai/ai-helper/suggest",
+               params: {
+                 mode: DiscourseAi::AiHelper::Assistant::ILLUSTRATE_POST,
+                 text: "A beautiful sunset",
+                 force_default_locale: true,
+               }
+
+          expect(response.status).to eq(500)
+          expect(response.parsed_body["errors"].first).to include("Failed to generate image")
         end
       end
 
@@ -223,7 +572,8 @@ RSpec.describe DiscourseAi::AiHelper::AssistantController do
   end
 
   describe "#suggest_title" do
-    fab!(:topic)
+    fab!(:category)
+    fab!(:topic) { Fabricate(:topic, category: category) }
     fab!(:post_1) { Fabricate(:post, topic: topic, raw: "I love apples") }
     fab!(:post_3) { Fabricate(:post, topic: topic, raw: "I love mangos") }
     fab!(:post_2) { Fabricate(:post, topic: topic, raw: "I love bananas") }
@@ -231,7 +581,6 @@ RSpec.describe DiscourseAi::AiHelper::AssistantController do
     context "when logged in as an allowed user" do
       before do
         sign_in(user)
-        user.group_ids = [Group::AUTO_GROUPS[:trust_level_1]]
         SiteSetting.composer_ai_helper_allowed_groups = Group::AUTO_GROUPS[:trust_level_1]
       end
 
@@ -247,23 +596,22 @@ RSpec.describe DiscourseAi::AiHelper::AssistantController do
             ],
           }
         end
-        let(:title_suggestions_array) do
-          [
-            "What are your favourite fruits?",
-            "Love for fruits",
-            "Fruits are amazing",
-            "Favourite fruit list",
-            "Fruit share topic",
-          ]
-        end
 
         it "returns title suggestions based on all topic post context" do
           DiscourseAi::Completions::Llm.with_prepared_responses([title_suggestions]) do
             post "/discourse-ai/ai-helper/suggest_title", params: { topic_id: topic.id }
 
             expect(response.status).to eq(200)
-            expect(response.parsed_body["suggestions"]).to eq(title_suggestions_array)
+            expect(response.parsed_body["suggestions"]).to eq(title_suggestions[:output])
           end
+        end
+
+        it "returns a 403 when the user cannot see the topic" do
+          private_topic = Fabricate(:private_message_topic)
+
+          post "/discourse-ai/ai-helper/suggest_title", params: { topic_id: private_topic.id }
+
+          expect(response.status).to eq(403)
         end
       end
 
@@ -279,21 +627,13 @@ RSpec.describe DiscourseAi::AiHelper::AssistantController do
             ],
           }
         end
-        let(:title_suggestions_array) do
-          [
-            "Apples - the best fruit",
-            "Why apples are great",
-            "Apples are the best fruit",
-            "My love for apples",
-            "I love apples",
-          ]
-        end
+
         it "returns title suggestions based on the input text" do
           DiscourseAi::Completions::Llm.with_prepared_responses([title_suggestions]) do
             post "/discourse-ai/ai-helper/suggest_title", params: { text: post_1.raw }
 
             expect(response.status).to eq(200)
-            expect(response.parsed_body["suggestions"]).to eq(title_suggestions_array)
+            expect(response.parsed_body["suggestions"]).to eq(title_suggestions[:output])
           end
         end
       end
@@ -301,191 +641,79 @@ RSpec.describe DiscourseAi::AiHelper::AssistantController do
   end
 
   describe "#caption_image" do
-    let(:image) { plugin_file_from_fixtures("100x100.jpg") }
-    let(:upload) { UploadCreator.new(image, "image.jpg").create_for(Discourse.system_user.id) }
-    let(:image_url) { "#{Discourse.base_url}#{upload.url}" }
-    let(:caption) { "A picture of a cat sitting on a table" }
-    let(:caption_with_attrs) do
-      "A picture of a cat sitting on a table (#{I18n.t("discourse_ai.ai_helper.image_caption.attribution")})"
+    it "returns not found" do
+      post "/discourse-ai/ai-helper/caption_image"
+
+      expect(response.status).to eq(404)
     end
-    let(:bad_caption) { "A picture of a cat \nsitting on a |table|" }
+  end
 
-    def request_caption(params, caption = "A picture of a cat sitting on a table")
-      DiscourseAi::Completions::Llm.with_prepared_responses([caption]) do
-        post "/discourse-ai/ai-helper/caption_image", params: params
+  describe "semantic suggestions" do
+    fab!(:embedding_definition)
+    fab!(:private_message_topic)
 
-        yield(response)
-      end
+    before do
+      sign_in(user)
+      SiteSetting.composer_ai_helper_allowed_groups = Group::AUTO_GROUPS[:trust_level_1]
+      SiteSetting.ai_embeddings_selected_model = embedding_definition.id
+      SiteSetting.ai_embeddings_enabled = true
     end
 
-    context "when logged in as an allowed user" do
-      before do
-        sign_in(user)
-
-        SiteSetting.composer_ai_helper_allowed_groups = Group::AUTO_GROUPS[:trust_level_1]
-      end
-
-      it "returns the suggested caption for the image" do
-        request_caption({ image_url: image_url, image_url_type: "long_url" }) do |r|
-          expect(r.status).to eq(200)
-          expect(r.parsed_body["caption"]).to eq(caption_with_attrs)
-        end
-      end
-
-      it "returns a cleaned up caption from the LLM" do
-        request_caption({ image_url: image_url, image_url_type: "long_url" }, bad_caption) do |r|
-          expect(r.status).to eq(200)
-          expect(r.parsed_body["caption"]).to eq(caption_with_attrs)
-        end
-      end
-
-      it "truncates the caption from the LLM" do
-        request_caption({ image_url: image_url, image_url_type: "long_url" }, caption * 10) do |r|
-          expect(r.status).to eq(200)
-          expect(r.parsed_body["caption"].size).to be < caption.size * 10
-        end
-      end
-
-      context "when the image_url is a short_url" do
-        let(:image_url) { upload.short_url }
-
-        it "returns the suggested caption for the image" do
-          request_caption({ image_url: image_url, image_url_type: "short_url" }) do |r|
-            expect(r.status).to eq(200)
-            expect(r.parsed_body["caption"]).to eq(caption_with_attrs)
-          end
-        end
-      end
-
-      context "when the image_url is a short_path" do
-        let(:image_url) { "#{Discourse.base_url}#{upload.short_path}" }
-
-        it "returns the suggested caption for the image" do
-          request_caption({ image_url: image_url, image_url_type: "short_path" }) do |r|
-            expect(r.status).to eq(200)
-            expect(r.parsed_body["caption"]).to eq(caption_with_attrs)
-          end
-        end
-      end
-
-      it "returns a 502 error when the completion call fails" do
-        DiscourseAi::Completions::Llm.with_prepared_responses(
-          [DiscourseAi::Completions::Endpoints::Base::CompletionFailed.new],
-        ) do
-          post "/discourse-ai/ai-helper/caption_image",
+    describe "#semantic_tags" do
+      context "when passing a topic the user doesn't have access to" do
+        it "returns a 403" do
+          post "/discourse-ai/ai-helper/suggest_tags",
                params: {
-                 image_url: image_url,
-                 image_url_type: "long_url",
+                 topic_id: private_message_topic.id,
                }
 
-          expect(response.status).to eq(502)
-        end
-      end
-
-      it "returns a 400 error when the image_url is blank" do
-        post "/discourse-ai/ai-helper/caption_image"
-
-        expect(response.status).to eq(400)
-      end
-
-      it "returns a 404 error if no upload is found" do
-        post "/discourse-ai/ai-helper/caption_image",
-             params: {
-               image_url: "http://blah.com/img.jpeg",
-               image_url_type: "long_url",
-             }
-
-        expect(response.status).to eq(404)
-      end
-
-      context "for secure uploads" do
-        fab!(:group)
-        fab!(:private_category) { Fabricate(:private_category, group: group) }
-        let(:image) { plugin_file_from_fixtures("100x100.jpg") }
-        let(:upload) { UploadCreator.new(image, "image.jpg").create_for(Discourse.system_user.id) }
-        let(:image_url) { "#{Discourse.base_url}/secure-uploads/#{upload.url}" }
-
-        before do
-          Jobs.run_immediately!
-
-          # this is done so the after_save callbacks for site settings to make
-          # UploadReference records works
-          @original_provider = SiteSetting.provider
-          SiteSetting.provider = SiteSettings::DbProvider.new(SiteSetting)
-          enable_current_plugin
-          setup_s3
-          stub_s3_store
-          SiteSetting.secure_uploads = true
-          SiteSetting.composer_ai_helper_allowed_groups = Group::AUTO_GROUPS[:trust_level_1]
-
-          Group.find(SiteSetting.composer_ai_helper_allowed_groups_map.first).add(user)
-          user.reload
-
-          stub_request(
-            :get,
-            "http://s3-upload-bucket.s3.dualstack.us-west-1.amazonaws.com/original/1X/#{upload.sha1}.#{upload.extension}",
-          ).to_return(status: 200, body: "", headers: {})
-        end
-        after { SiteSetting.provider = @original_provider }
-
-        it "returns a 403 error if the user cannot access the secure upload" do
-          # hosted-site plugin edge case, it enables embeddings
-          SiteSetting.ai_embeddings_enabled = false
-
-          create_post(
-            title: "Secure upload post",
-            raw: "This is a new post <img src=\"#{upload.url}\" />",
-            category: private_category,
-            user: Discourse.system_user,
-          )
-
-          post "/discourse-ai/ai-helper/caption_image",
-               params: {
-                 image_url: image_url,
-                 image_url_type: "long_url",
-               }
           expect(response.status).to eq(403)
         end
-
-        it "returns a 200 message and caption if user can access the secure upload" do
-          group.add(user)
-
-          request_caption({ image_url: image_url, image_url_type: "long_url" }) do |r|
-            expect(r.status).to eq(200)
-            expect(r.parsed_body["caption"]).to eq(caption_with_attrs)
-          end
-        end
-
-        context "if the input URL is for a secure upload but not on the secure-uploads path" do
-          let(:image_url) { "#{Discourse.base_url}#{upload.url}" }
-
-          it "creates a signed URL properly and makes the caption" do
-            group.add(user)
-
-            request_caption({ image_url: image_url, image_url_type: "long_url" }) do |r|
-              expect(r.status).to eq(200)
-              expect(r.parsed_body["caption"]).to eq(caption_with_attrs)
-            end
-          end
-        end
       end
 
-      context "when performing numerous requests" do
-        it "rate limits" do
-          RateLimiter.enable
+      context "when the selected category restricts tags" do
+        fab!(:allowed_tag, :tag)
+        fab!(:restricted_tag, :tag)
+        fab!(:restricted_category) { Fabricate(:category, allowed_tags: [allowed_tag.name]) }
+        fab!(:topic)
 
-          rate_limit = described_class::RATE_LIMITS["caption_image"]
-          amount = rate_limit[:amount]
+        before do
+          Fabricate(:topic_tag, topic:, tag: allowed_tag)
+          Fabricate(:topic_tag, topic:, tag: restricted_tag)
 
-          amount.times do
-            request_caption({ image_url: image_url, image_url_type: "long_url" }) do |r|
-              expect(r.status).to eq(200)
-            end
-          end
+          WebMock.stub_request(:post, embedding_definition.url).to_return(
+            status: 200,
+            body: JSON.dump([[0.0038493] * embedding_definition.dimensions]),
+          )
 
-          request_caption({ image_url: image_url, image_url_type: "long_url" }) do |r|
-            expect(r.status).to eq(429)
-          end
+          DiscourseAi::Embeddings::Vector.instance.generate_representation_from(topic)
+        end
+
+        it "does not suggest tags the category disallows" do
+          post "/discourse-ai/ai-helper/suggest_tags",
+               params: {
+                 text: "hello",
+                 category_id: restricted_category.id,
+               }
+
+          expect(response.status).to eq(200)
+
+          suggested = response.parsed_body["assistant"].map { |t| t["name"] }
+          expect(suggested).to include(allowed_tag.name)
+          expect(suggested).not_to include(restricted_tag.name)
+        end
+      end
+    end
+
+    describe "#semantic_categories" do
+      context "when passing a topic the user doesn't have access to" do
+        it "returns a 403" do
+          post "/discourse-ai/ai-helper/suggest_category",
+               params: {
+                 topic_id: private_message_topic.id,
+               }
+
+          expect(response.status).to eq(403)
         end
       end
     end

@@ -2,16 +2,15 @@ import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
-import { htmlSafe } from "@ember/template";
+import { trustHTML } from "@ember/template";
 import { isBlank } from "@ember/utils";
-import DButton from "discourse/components/d-button";
-import DModal from "discourse/components/d-modal";
 import { popupAjaxError } from "discourse/lib/ajax-error";
+import DButton from "discourse/ui-kit/d-button";
+import DModal from "discourse/ui-kit/d-modal";
 import { i18n } from "discourse-i18n";
-import ChatChannelChooser from "../../chat-channel-chooser";
+import ChatChannelChooser from "../../chat-channel-chooser.js";
 
 export default class ChatModalMoveMessageToChannel extends Component {
-  @service chat;
   @service chatApi;
   @service router;
   @service chatChannelsManager;
@@ -38,11 +37,11 @@ export default class ChatModalMoveMessageToChannel extends Component {
     return (
       this.args.model.availableChannels ||
       this.chatChannelsManager.publicMessageChannels
-    ).rejectBy("id", this.sourceChannel.id);
+    ).filter((channel) => channel.id !== this.sourceChannel.id);
   }
 
   get instructionsText() {
-    return htmlSafe(
+    return trustHTML(
       i18n("chat.move_to_channel.instructions", {
         channelTitle: this.sourceChannel.escapedTitle,
         count: this.selectedMessageCount,
@@ -71,8 +70,8 @@ export default class ChatModalMoveMessageToChannel extends Component {
 
   <template>
     <DModal
-      @closeModal={{@closeModal}}
       class="chat-modal-move-message-to-channel"
+      @closeModal={{@closeModal}}
       @inline={{@inline}}
       @title={{i18n "chat.move_to_channel.title"}}
     >
@@ -82,21 +81,21 @@ export default class ChatModalMoveMessageToChannel extends Component {
         {{/if}}
 
         <ChatChannelChooser
-          @content={{this.availableChannels}}
-          @value={{this.destinationChannelId}}
-          @nameProperty="title"
           class="chat-modal-move-message-to-channel__channel-chooser"
+          @content={{this.availableChannels}}
+          @nameProperty="title"
+          @value={{this.destinationChannelId}}
         />
       </:body>
       <:footer>
         <DButton
-          @icon="right-from-bracket"
-          @disabled={{this.disableMoveButton}}
-          @action={{this.moveMessages}}
-          @label="chat.move_to_channel.confirm_move"
           class="btn-primary"
+          @action={{this.moveMessages}}
+          @disabled={{this.disableMoveButton}}
+          @icon="right-from-bracket"
+          @label="chat.move_to_channel.confirm_move"
         />
-        <DButton @label="cancel" @action={{@closeModal}} class="btn-flat" />
+        <DButton class="btn-flat" @action={{@closeModal}} @label="cancel" />
       </:footer>
     </DModal>
   </template>
