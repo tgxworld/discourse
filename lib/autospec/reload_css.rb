@@ -39,7 +39,7 @@ class Autospec::ReloadCss
     end
     paths.map! do |p|
       hash = nil
-      fullpath = "#{Rails.root.join("#{p}")}"
+      fullpath = "#{Rails.root}/#{p}"
       hash = Digest::MD5.hexdigest(File.read(fullpath)) if File.exist?(fullpath)
       p = p.sub(/\.sass\.erb/, "")
       p = p.sub(/\.sass/, "")

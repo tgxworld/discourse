@@ -16,21 +16,13 @@ sr:
           actions:
             chat_auto_remove_membership: "Članstva su automatski uklonjena s kanala"
     chat:
-      edit_category:
-        description: "Opis"
-        actions: "Akcije"
-        settings: "Podešavanje"
       dates:
         yesterday: "Juče"
       all_loaded: "Prikaz svih poruka"
       cancel: "Odustani"
-      pinned_bar:
-        title: "Zakvačeno"
-      pinned: "Zakvačeno"
       channel_settings:
         edit: "Izmeni"
         add: "Dodaj"
-        notification_settings_context: "Obaveštenja"
       close: "Zatvori"
       remove: "Ukloni"
       collapse: "Skupi okvir za chat"
@@ -52,14 +44,13 @@ sr:
       save: "Sačuvaj"
       sounds:
         none: "Ništa"
+      exit: "nazad"
       channel_status:
         open: "Otvori"
       browse:
         back: "Nazad"
         filter_all: sve
         filter_open: Otvori
-        filter_joined_all: "Sve"
-        filter_joined_joined: "Pridružen"
       chat_message_separator:
         today: Danas
         yesterday: Juče
@@ -72,14 +63,12 @@ sr:
         tabs:
           members: Članovi
           settings: Podešavanja
-          search: Pretraži
         remove_member: "Ukloni"
       new_message_modal:
         filter: "Filter"
       direct_message_creator:
         title: Nova privatna poruka
       create_channel:
-        description: "Opis"
         type: "Tip"
         types:
           category: "Kategorija"
@@ -99,18 +88,8 @@ sr:
         category_label: "Kategorija"
         history_label: "Istorija"
         members_label: "Članovi"
-      search:
-        short_title: Pretraži
-        no_results: "Nema pronađenih rezultata"
-        sort:
-          relevance: "Relevantnost"
-          latest: "Poslednje"
       channel_list:
         title: "Kanali"
-        options:
-          filter: "Filter"
-        filter:
-          mentions: "Spominjanja"
       incoming_webhooks:
         back: "Nazad"
         description: "Opis"
@@ -156,13 +135,3 @@ sr:
           fields:
             message:
               label: Privatna poruka
-    discourse_workflows:
-      send_chat_message:
-        message: "Privatna poruka"
-      chat_approval:
-        message: "Privatna poruka"
-        buttons: "Дугмад"
-        value: "Vriednost"
-        style_default: "Подразумевано"
-        style_primary: "Primarna"
-        icon: "Ikona"

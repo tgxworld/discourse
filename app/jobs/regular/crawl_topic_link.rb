@@ -2,6 +2,7 @@
 
 require "open-uri"
 require "nokogiri"
+require "excon"
 
 module Jobs
   class CrawlTopicLink < ::Jobs::Base

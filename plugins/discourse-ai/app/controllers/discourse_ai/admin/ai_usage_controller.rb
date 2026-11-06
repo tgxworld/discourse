@@ -16,18 +16,14 @@ module DiscourseAi
 
       def create_report
         user_timezone = params[:timezone] || Time.zone.name
-        start_date =
-          parse_date_in_timezone(params[:start_date], user_timezone, boundary: :beginning) ||
-            30.days.ago
-        end_date =
-          parse_date_in_timezone(params[:end_date], user_timezone, boundary: :end) || Time.current
+        start_date = parse_date_in_timezone(params[:start_date], user_timezone) || 30.days.ago
+        end_date = parse_date_in_timezone(params[:end_date], user_timezone) || Time.current
 
         report =
           DiscourseAi::Completions::Report.new(
             start_date: start_date,
             end_date: end_date,
             timezone: user_timezone,
-            exact_range: true,
           )
 
         report = report.filter_by_feature(params[:feature]) if params[:feature].present?
@@ -35,18 +31,12 @@ module DiscourseAi
         report
       end
 
-      def parse_date_in_timezone(date_string, timezone, boundary: nil)
+      def parse_date_in_timezone(date_string, timezone)
         return nil unless date_string
 
         # Parse date string in user's timezone
         Time.zone = timezone
-        parsed_date = Time.zone.parse(date_string)
-
-        if date_string.to_s.match?(/\A\d{4}-\d{2}-\d{2}\z/)
-          boundary == :end ? parsed_date.end_of_day : parsed_date.beginning_of_day
-        else
-          parsed_date
-        end
+        Time.zone.parse(date_string)
       rescue StandardError
         nil
       ensure

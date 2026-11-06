@@ -1,16 +1,19 @@
 import { getOwner } from "@ember/owner";
-import { click, findAll, render } from "@ember/test-helpers";
+import { click, render } from "@ember/test-helpers";
 import { module, test } from "qunit";
 import { setupRenderingTest } from "discourse/tests/helpers/component-test";
 import pretender from "discourse/tests/helpers/create-pretender";
+import { queryAll } from "discourse/tests/helpers/qunit-helpers";
 import { i18n } from "discourse-i18n";
 import ChatNotices from "discourse/plugins/chat/discourse/components/chat-notices";
 import ChatFabricators from "discourse/plugins/chat/discourse/lib/fabricators";
 
-module("Component | ChatNotice", function (hooks) {
+module("Discourse Chat | Component | chat-notice", function (hooks) {
   setupRenderingTest(hooks);
 
   test("displays all notices for a channel", async function (assert) {
+    const self = this;
+
     this.channel = new ChatFabricators(getOwner(this)).channel();
     this.manager = this.container.lookup(
       "service:chat-channel-notices-manager"
@@ -29,10 +32,10 @@ module("Component | ChatNotice", function (hooks) {
     });
 
     await render(
-      <template><ChatNotices @channel={{this.channel}} /></template>
+      <template><ChatNotices @channel={{self.channel}} /></template>
     );
 
-    const notices = findAll(".chat-notices .chat-notices__notice");
+    const notices = queryAll(".chat-notices .chat-notices__notice");
 
     assert.strictEqual(notices.length, 2, "Two notices are rendered");
 
@@ -41,6 +44,8 @@ module("Component | ChatNotice", function (hooks) {
   });
 
   test("Notices can be cleared", async function (assert) {
+    const self = this;
+
     this.channel = new ChatFabricators(getOwner(this)).channel();
     this.manager = this.container.lookup(
       "service:chat-channel-notices-manager"
@@ -51,20 +56,26 @@ module("Component | ChatNotice", function (hooks) {
     });
 
     await render(
-      <template><ChatNotices @channel={{this.channel}} /></template>
+      <template><ChatNotices @channel={{self.channel}} /></template>
     );
 
-    assert
-      .dom(".chat-notices .chat-notices__notice")
-      .exists({ count: 1 }, "Notice is present");
+    assert.strictEqual(
+      queryAll(".chat-notices .chat-notices__notice").length,
+      1,
+      "Notice is present"
+    );
 
     await click(".chat-notices__notice__clear");
 
-    assert
-      .dom(".chat-notices .chat-notices__notice")
-      .doesNotExist("Notice was cleared");
+    assert.strictEqual(
+      queryAll(".chat-notices .chat-notices__notice").length,
+      0,
+      "Notice was cleared"
+    );
   });
   test("MentionWithoutMembership notice renders", async function (assert) {
+    const self = this;
+
     this.channel = new ChatFabricators(getOwner(this)).channel();
     this.manager = this.container.lookup(
       "service:chat-channel-notices-manager"
@@ -77,14 +88,16 @@ module("Component | ChatNotice", function (hooks) {
     });
 
     await render(
-      <template><ChatNotices @channel={{this.channel}} /></template>
+      <template><ChatNotices @channel={{self.channel}} /></template>
     );
 
-    assert
-      .dom(
+    assert.strictEqual(
+      queryAll(
         ".chat-notices .chat-notices__notice .mention-without-membership-notice"
-      )
-      .exists({ count: 1 }, "Notice is present");
+      ).length,
+      1,
+      "Notice is present"
+    );
 
     assert.dom(".mention-without-membership-notice__body__text").hasText(text);
     assert
@@ -101,10 +114,12 @@ module("Component | ChatNotice", function (hooks) {
     // dismiss is called right away instead of waiting 3 seconds.. Not much we can
     // do about this - at least we are testing that nothing broke all the way through
     // clearing the notice
-    assert
-      .dom(
+    assert.strictEqual(
+      queryAll(
         ".chat-notices .chat-notices__notice .mention-without-membership-notice"
-      )
-      .doesNotExist("Notice has been cleared");
+      ).length,
+      0,
+      "Notice has been cleared"
+    );
   });
 });

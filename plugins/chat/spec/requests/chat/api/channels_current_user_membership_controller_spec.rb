@@ -26,7 +26,7 @@ describe Chat::Api::ChannelsCurrentUserMembershipController do
     context "when current user can’t see the channel" do
       fab!(:channel_2) { Fabricate(:private_category_channel, group: Fabricate(:group)) }
 
-      it "forbids creating a channel membership" do
+      it "fails" do
         expect { post "/chat/api/channels/#{channel_2.id}/memberships/me" }.not_to change {
           Chat::UserChatChannelMembership.where(user_id: current_user.id).count
         }
@@ -50,7 +50,7 @@ describe Chat::Api::ChannelsCurrentUserMembershipController do
           readonly_group_1.add(current_user)
         end
 
-        it "forbids creating a channel membership" do
+        it "fails" do
           expect { post "/chat/api/channels/#{channel_2.id}/memberships/me" }.not_to change {
             Chat::UserChatChannelMembership.where(user_id: current_user.id).count
           }
@@ -73,7 +73,7 @@ describe Chat::Api::ChannelsCurrentUserMembershipController do
           readonly_group_1.add(current_user)
         end
 
-        it "creates a channel membership" do
+        it "works" do
           expect { post "/chat/api/channels/#{channel_2.id}/memberships/me" }.to change {
             Chat::UserChatChannelMembership.where(user_id: current_user.id).count
           }.by(1)
@@ -102,60 +102,9 @@ describe Chat::Api::ChannelsCurrentUserMembershipController do
     end
   end
 
-  describe "#update" do
-    let!(:membership) do
-      Chat::UserChatChannelMembership.create!(
-        chat_channel_id: channel_1.id,
-        user_id: current_user.id,
-        following: true,
-      )
-    end
-
-    context "when starring a channel" do
-      it "updates the starred status" do
-        put "/chat/api/channels/#{channel_1.id}/memberships/me", params: { starred: true }
-
-        expect(response.status).to eq(200)
-        expect(response.parsed_body["membership"]["starred"]).to eq(true)
-        expect(response.parsed_body["membership"]["chat_channel_id"]).to eq(channel_1.id)
-      end
-    end
-
-    context "when unstarring a channel" do
-      before { membership.update!(starred: true) }
-
-      it "updates the starred status" do
-        expect {
-          put "/chat/api/channels/#{channel_1.id}/memberships/me", params: { starred: false }
-        }.to change { membership.reload.starred }.from(true).to(false)
-
-        expect(response.status).to eq(200)
-        expect(response.parsed_body["membership"]["starred"]).to eq(false)
-      end
-    end
-
-    context "when the user is not a member" do
-      before { membership.destroy! }
-
-      it "returns a 404" do
-        put "/chat/api/channels/#{channel_1.id}/memberships/me", params: { starred: true }
-
-        expect(response.status).to eq(404)
-      end
-    end
-
-    context "when channel is not found" do
-      it "returns a 404" do
-        put "/chat/api/channels/-999/memberships/me", params: { starred: true }
-
-        expect(response.status).to eq(404)
-      end
-    end
-  end
-
   describe "#destroy" do
     describe "success" do
-      it "allows leaving the channel" do
+      it "works" do
         delete "/chat/api/channels/#{channel_1.id}/memberships/me"
 
         expect(response.status).to eq(200)

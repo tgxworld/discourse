@@ -19,13 +19,46 @@ RSpec.describe "tags" do
 
       produces "application/json"
       response "200", "tags" do
-        expected_response_schema = load_spec_schema("tag_groups_list_response")
-        schema expected_response_schema
+        schema type: :object,
+               properties: {
+                 tag_groups: {
+                   type: :array,
+                   items: {
+                     type: :object,
+                     properties: {
+                       id: {
+                         type: :integer,
+                       },
+                       name: {
+                         type: :string,
+                       },
+                       tag_names: {
+                         type: :array,
+                         items: {
+                         },
+                       },
+                       parent_tag_name: {
+                         type: :array,
+                         items: {
+                         },
+                       },
+                       one_per_topic: {
+                         type: :boolean,
+                       },
+                       permissions: {
+                         type: :object,
+                         properties: {
+                           staff: {
+                             type: :integer,
+                           },
+                         },
+                       },
+                     },
+                   },
+                 },
+               }
 
-        it_behaves_like "a JSON endpoint", 200 do
-          let(:expected_response_schema) { expected_response_schema }
-          let(:expected_request_schema) { nil }
-        end
+        run_test!
       end
     end
   end
@@ -186,12 +219,9 @@ RSpec.describe "tags" do
                      type: :object,
                      properties: {
                        id: {
-                         type: :integer,
-                       },
-                       text: {
                          type: :string,
                        },
-                       name: {
+                       text: {
                          type: :string,
                        },
                        count: {

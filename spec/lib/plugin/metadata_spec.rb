@@ -50,8 +50,6 @@ TEXT
     official("discourse-akismet")
     official("discourse-cakeday")
     official("discourse-data-explorer")
-    official("blog")
-    official("boards")
     unofficial("babble")
   end
 

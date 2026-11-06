@@ -8,8 +8,6 @@ da:
   js:
     notifications:
       question_answer_user_commented: "<span>%{username}</span> %{description}"
-    vote:
-      toggle_voters: "Vis hvem der stemte"
     post_voting:
       post:
         post_voting_comment:
@@ -28,7 +26,7 @@ da:
               agree_and_suspend:
                 title: "Suspendér Bruger"
               agree_and_silence:
-                title: "Ignorer bruger"
+                title: "Ignorer Bruger"
               disagree:
                 title: "Uenig"
               ignore:

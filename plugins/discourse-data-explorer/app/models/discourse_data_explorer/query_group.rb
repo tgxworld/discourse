@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module DiscourseDataExplorer
+module ::DiscourseDataExplorer
   class QueryGroup < ActiveRecord::Base
     self.table_name = "data_explorer_query_groups"
 
@@ -16,8 +16,8 @@ end
 # Table name: data_explorer_query_groups
 #
 #  id       :bigint           not null, primary key
-#  group_id :integer
 #  query_id :bigint
+#  group_id :integer
 #
 # Indexes
 #

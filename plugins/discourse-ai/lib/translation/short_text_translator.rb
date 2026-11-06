@@ -5,8 +5,8 @@ module DiscourseAi
     class ShortTextTranslator < BaseTranslator
       private
 
-      def agent_setting
-        SiteSetting.ai_translation_short_text_translator_agent
+      def persona_setting
+        SiteSetting.ai_translation_short_text_translator_persona
       end
     end
   end

@@ -5,10 +5,3 @@
 # https://translate.discourse.org/
 
 nl:
-  js:
-    login:
-      apple:
-        name: "Apple"
-        title: "Aanmelden met Apple"
-        sr_title: "Aanmelden met Apple"
-        message: "Verifiëren met Apple"

@@ -9,8 +9,8 @@ module Jobs
       return unless json = args[:json].presence
       return unless subscribe_url = json["SubscribeURL"].presence
 
-      return if !Email::Sns.allowed_topic_arn?(json["TopicArn"])
-      return unless Email::Sns.authentic?(raw)
+      require "aws-sdk-sns"
+      return unless Aws::SNS::MessageVerifier.new.authentic?(raw)
 
       uri =
         begin

@@ -2,13 +2,15 @@
   &.two-columns {
     .table .admin-report-table-cell:first-child,
     .table .admin-report-table-header:first-child {
+      @include ellipsis;
       text-align: left;
       width: 80%;
-      overflow-wrap: break-word;
     }
 
     .table .admin-report-table-cell:last-child,
     .table .admin-report-table-header:last-child {
+      display: inline-block;
+      width: 80%;
       text-align: right;
     }
   }
@@ -24,45 +26,35 @@
   }
 
   .table .admin-report-table-header {
-    --header-caret-offset: calc(var(--space-4) * -1);
-    overflow-wrap: break-word;
-
-    &.date {
-      width: 6em;
-    }
-
     .sort-btn {
-      padding: 0;
-      flex-direction: row-reverse;
-      gap: var(--space-1);
-      position: relative;
+      outline: none;
+      background: none;
+      padding: 3px 8px;
 
-      .d-icon {
-        // avoiding the appearance of the icon affecting alignment
-        position: absolute;
-        margin: 0;
-        right: var(--header-caret-offset);
-      }
-    }
-
-    &:last-child {
-      .sort-btn {
-        .d-icon {
-          left: var(--header-caret-offset);
-        }
-      }
+      @include ellipsis;
     }
 
     &.is-current-sort {
       .d-icon {
         color: var(--tertiary);
       }
+
+      .sort-btn:hover {
+        color: var(--primary-medium);
+        background: var(--primary-low);
+      }
     }
 
     &:not(.is-current-sort) .sort-btn {
-      .d-icon {
-        // avoiding the appearance of the icon changing column size
-        visibility: hidden;
+      background: none;
+
+      &:hover {
+        color: var(--primary-medium);
+        background: var(--primary-low);
+
+        .d-icon {
+          color: var(--primary-medium);
+        }
       }
     }
   }
@@ -101,10 +93,6 @@
   .admin-report-table-header.topic_title {
     width: 80%;
   }
-
-  .admin-report-table-cell.number {
-    width: 6ch;
-  }
 }
 
 .admin-report.trending-search {
@@ -118,16 +106,6 @@
 
   .admin-report-table-cell.term {
     @include ellipsis;
-  }
-
-  .admin-report-table-cell.percent {
-    width: 5ch;
-    text-align: right;
-  }
-
-  .admin-report-table-cell.number.searches {
-    width: 6ch;
-    text-align: right;
   }
 }
 
@@ -175,6 +153,12 @@
         text-align: left;
       }
     }
+
+    .total-row {
+      td {
+        text-align: right;
+      }
+    }
   }
 
   .admin-report-table-cell {
@@ -220,6 +204,15 @@
       writing-mode: vertical-rl;
       text-orientation: mixed;
       text-align: right;
+      transform: rotate(180deg);
+
+      .emoji {
+        transform: rotate(-180deg);
+      }
+    }
+
+    .sort-btn {
+      display: none;
     }
   }
 

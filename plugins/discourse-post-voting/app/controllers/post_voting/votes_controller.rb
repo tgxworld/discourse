@@ -15,7 +15,7 @@ module PostVoting
       if PostVoting::VoteManager.vote(@post, current_user, direction: vote_params[:direction])
         render json: success_json
       else
-        render json: failed_json, status: :unprocessable_entity
+        render json: failed_json, status: 422
       end
     end
 
@@ -31,7 +31,7 @@ module PostVoting
          )
         render json: success_json
       else
-        render json: failed_json, status: :unprocessable_entity
+        render json: failed_json, status: 422
       end
     end
 
@@ -59,7 +59,7 @@ module PostVoting
       if PostVoting::VoteManager.remove_vote(@post, current_user)
         render json: success_json
       else
-        render json: failed_json, status: :unprocessable_entity
+        render json: failed_json, status: 422
       end
     end
 
@@ -78,7 +78,7 @@ module PostVoting
       if PostVoting::VoteManager.remove_vote(comment, current_user)
         render json: success_json
       else
-        render json: failed_json, status: :unprocessable_entity
+        render json: failed_json, status: 422
       end
     end
 
@@ -86,20 +86,15 @@ module PostVoting
 
     def voters
       # TODO: Probably a site setting to hide/show voters
-      vote_scope = PostVotingVote.where(votable_id: @post.id, votable_type: "Post")
-
       voters =
         User
           .joins(:post_voting_votes)
-          .merge(vote_scope)
+          .where(post_voting_votes: { votable_id: @post.id, votable_type: "Post" })
           .order("post_voting_votes.created_at DESC")
           .select("users.*", "post_voting_votes.direction")
           .limit(VOTERS_LIMIT)
 
-      render_json_dump(
-        voters: serialize_data(voters, BasicVoterSerializer),
-        total_voters_count: vote_scope.count,
-      )
+      render_json_dump(voters: serialize_data(voters, BasicVoterSerializer))
     end
 
     private

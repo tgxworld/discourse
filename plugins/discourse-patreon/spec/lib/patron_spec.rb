@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe Patreon::Patron do
+RSpec.describe ::Patreon::Patron do
   Fabricator(:patreon_user_info, class_name: :user_associated_account) do
     provider_name "patreon"
     user
@@ -32,7 +32,7 @@ RSpec.describe Patreon::Patron do
     Patreon.set("reward-users", reward_users)
   end
 
-  it "finds local users matching Patreon user information" do
+  it "should find local users matching Patreon user info" do
     Fabricate(:user, email: "foo@bar.com")
     Fabricate(:patreon_user_info, provider_uid: "111112")
 
@@ -47,7 +47,7 @@ RSpec.describe Patreon::Patron do
     end
   end
 
-  it "finds local users matching the email address case-insensitively" do
+  it "should find local users matching email address without case-sensitivity" do
     patrons["111111"] = "Foo@bar.com"
     Patreon.set("users", patrons)
     Fabricate(:user, email: "foo@bar.com")
@@ -66,14 +66,14 @@ RSpec.describe Patreon::Patron do
       Patreon.set("filters", filters)
     end
 
-    it "syncs all Patreon users" do
+    it "should sync all Patreon users" do
       user = Fabricate(:user, email: "foo@bar.com")
       described_class.sync_groups
       expect(group1.users.to_a - [patreon_user_info.user, user]).to eq([])
       expect(group2.users.to_a - [patreon_user_info.user]).to eq([])
     end
 
-    it "syncs by Patreon ID" do
+    it "should sync by Patreon id" do
       described_class.sync_groups_by(patreon_id: patreon_user_info.provider_uid)
       expect(group1.users.to_a).to eq([patreon_user_info.user])
       expect(group2.users.to_a).to eq([patreon_user_info.user])

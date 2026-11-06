@@ -1,29 +1,29 @@
 {
-  "frontend/discourse/components/*.js": {
+  "app/assets/javascripts/discourse/components/*.js": {
     "command": "dcomponent"
   },
-  "frontend/discourse/lib/*.js": {
+  "app/assets/javascripts/discourse/lib/*.js": {
     "command": "dlib"
   },
-  "frontend/discourse/routes/*.js": {
+  "app/assets/javascripts/discourse/routes/*.js": {
     "command": "droute"
   },
-  "frontend/discourse/controllers/*.js": {
+  "app/assets/javascripts/discourse/controllers/*.js": {
     "command": "dcontroller"
   },
-  "frontend/discourse/models/*.js": {
+  "app/assets/javascripts/discourse/models/*.js": {
     "command": "dmodel"
   },
-  "frontend/discourse/helpers/*.js": {
+  "app/assets/javascripts/discourse/helpers/*.js": {
     "command": "dhelper"
   },
-  "frontend/discourse/templates/*.hbs": {
+  "app/assets/javascripts/discourse/templates/*.hbs": {
     "command": "dtemplate"
   },
-  "frontend/discourse/templates/*.hbr": {
+  "app/assets/javascripts/discourse/templates/*.hbr": {
     "command": "dtemplate"
   },
-  "frontend/discourse/views/*.js": {
+  "app/assets/javascripts/discourse/views/*.js": {
     "command": "dview"
   },
   "app/serializers/*.rb": {

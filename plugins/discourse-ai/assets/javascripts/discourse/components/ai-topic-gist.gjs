@@ -1,22 +1,15 @@
 import Component from "@glimmer/component";
 import { service } from "@ember/service";
-import { trustHTML } from "@ember/template";
-import bodyClass from "discourse/helpers/body-class";
-import { TABLE_AI_LAYOUT } from "../services/gists.js";
+import { htmlSafe } from "@ember/template";
+import { TABLE_AI_LAYOUT } from "../services/gists";
 
 export default class AiTopicGist extends Component {
   @service gists;
 
   get shouldShow() {
-    if (!this.prefersTableAiLayout) {
-      return false;
-    }
-
-    return this.gists.showToggle || this.hasGist;
-  }
-
-  get prefersTableAiLayout() {
-    return this.gists.currentPreference === TABLE_AI_LAYOUT;
+    return (
+      this.gists.currentPreference === TABLE_AI_LAYOUT && this.gists.showToggle
+    );
   }
 
   get hasGist() {
@@ -33,16 +26,15 @@ export default class AiTopicGist extends Component {
 
   <template>
     {{#if this.shouldShow}}
-      {{bodyClass "topic-list-layout-table-ai"}}
       {{#if this.hasGist}}
-        <a class="excerpt" href={{@topic.lastUnreadUrl}}>
+        <a href={{@topic.lastUnreadUrl}} class="excerpt">
           <div class="excerpt__contents">{{this.gist}}</div>
         </a>
       {{else}}
         {{#if this.escapedExcerpt}}
-          <a class="excerpt" href={{@topic.lastUnreadUrl}}>
+          <a href={{@topic.lastUnreadUrl}} class="excerpt">
             <div class="excerpt__contents">
-              {{trustHTML this.escapedExcerpt}}
+              {{htmlSafe this.escapedExcerpt}}
             </div>
           </a>
         {{/if}}

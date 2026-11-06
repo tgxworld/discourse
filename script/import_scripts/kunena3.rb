@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "mysql2"
-require_relative "base"
+require File.expand_path(File.dirname(__FILE__) + "/base.rb")
 
 # If you change this script's functionality, please consider making a note here:
 # https://meta.discourse.org/t/importing-from-kunena-3/43776
@@ -94,7 +94,7 @@ class ImportScripts::Kunena < ImportScripts::Base
         cache_rows: false,
       )
     results.each do |u|
-      next if u["id"].to_i <= 0 || u["username"].blank? || u["email"].blank?
+      next if u["id"].to_i <= (0) || u["username"].blank? || u["email"].blank?
       username = u["username"].gsub(" ", "_").gsub(/[^A-Za-z0-9_]/, "")[0, User.username_length.end]
       if username.length < User.username_length.first
         username = username * User.username_length.first

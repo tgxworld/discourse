@@ -25,7 +25,7 @@ RSpec.describe TopicViewPostsSerializer do
     )
   end
 
-  it "returns the expected attributes" do
+  it "should return the right attributes" do
     topic_view = TopicView.new(topic, user, post_ids: [post.id])
 
     serializer =

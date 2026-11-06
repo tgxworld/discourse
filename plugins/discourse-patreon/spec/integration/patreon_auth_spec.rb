@@ -6,180 +6,80 @@ describe "Patreon Oauth2" do
   let(:client_secret) { "adddcccdddd99922" }
   let(:temp_code) { "patreon_temp_code_544254" }
 
-  fab!(:user1, :user)
-  fab!(:user2, :user)
+  fab!(:user1) { Fabricate(:user) }
+  fab!(:user2) { Fabricate(:user) }
+
+  def setup_patreon_emails_stub(email:, verified:)
+    stub_request(:get, "https://api.patreon.com/oauth2/api/current_user").with(
+      headers: {
+        "Authorization" => "Bearer #{access_token}",
+      },
+    ).to_return(
+      status: 200,
+      body:
+        JSON.dump(
+          data: {
+            id: "493290423324",
+            attributes: {
+              email: email,
+              full_name: "Patron",
+              is_email_verified: verified,
+            },
+          },
+        ),
+      headers: {
+        "Content-Type" => "application/json",
+      },
+    )
+  end
 
   before do
     SiteSetting.patreon_creator_discourse_username = user2.username
+    SiteSetting.patreon_login_enabled = true
     SiteSetting.patreon_client_id = client_id
     SiteSetting.patreon_client_secret = client_secret
-    SiteSetting.patreon_login_enabled = true
+
+    stub_request(:post, "https://api.patreon.com/oauth2/token").with(
+      body:
+        hash_including(
+          "client_id" => client_id,
+          "client_secret" => client_secret,
+          "code" => temp_code,
+          "grant_type" => "authorization_code",
+          "redirect_uri" => "http://test.localhost/auth/patreon/callback",
+        ),
+    ).to_return(
+      status: 200,
+      body: Rack::Utils.build_query(access_token: access_token),
+      headers: {
+        "Content-Type" => "application/x-www-form-urlencoded",
+      },
+    )
   end
 
-  shared_examples "patreon oauth" do
-    shared_examples "rejecting a patron without verified email" do |verified:|
-      it "does not sign in a synced patron when email verification is #{verified.inspect}" do
-        group = Fabricate(:group)
-        Patreon.set("filters", group.id.to_s => ["0"])
-        Patreon::Pledge.save!(
-          [
-            {
-              "data" => [
-                {
-                  "type" => "member",
-                  "attributes" => {
-                    "email" => user1.email,
-                    "patron_status" => "active_patron",
-                    "currently_entitled_amount_cents" => 100,
-                  },
-                  "relationships" => {
-                    "user" => {
-                      "data" => {
-                        "id" => "493290423324",
-                      },
-                    },
-                  },
-                },
-              ],
-            },
-          ],
-          adapter: Patreon::ApiVersion::V2,
-        )
-        Patreon::Patron.sync_groups
+  it "doesn't sign in the user if the email from patreon is not verified" do
+    post "/auth/patreon"
+    expect(response.status).to eq(302)
+    expect(response.location).to start_with("https://www.patreon.com/oauth2/authorize")
 
-        expect(group.users).to contain_exactly(user1)
-        expect(user1.reload.custom_fields["patreon_id"]).to eq("493290423324")
-        expect(UserAssociatedAccount.where(user_id: user1.id, provider_name: "patreon")).to be_empty
+    setup_patreon_emails_stub(email: user1.email, verified: false)
 
-        post "/auth/patreon"
-        expect(response.status).to eq(302)
-        expect(response.location).to start_with("https://www.patreon.com/oauth2/authorize")
-
-        stub_request(:get, identity_url).with(
-          headers: {
-            "Authorization" => "Bearer #{access_token}",
-          },
-        ).to_return(
-          status: 200,
-          body:
-            JSON.dump(
-              data: {
-                id: "493290423324",
-                attributes: {
-                  email: user1.email,
-                  full_name: "Patron",
-                  is_email_verified: verified,
-                }.compact,
-              },
-            ),
-          headers: {
-            "Content-Type" => "application/json",
-          },
-        )
-
-        post "/auth/patreon/callback", params: { state: session["omniauth.state"], code: temp_code }
-        expect(response.status).to eq(302)
-        expect(response.location).to eq("http://test.localhost/")
-        expect(session[:current_user_id]).to be_blank
-        expect(UserAssociatedAccount.where(user_id: user1.id, provider_name: "patreon")).to be_empty
-      end
-    end
-
-    context "when Patreon marks the email as unverified" do
-      include_examples "rejecting a patron without verified email", verified: false
-    end
-
-    context "when Patreon omits email verification" do
-      include_examples "rejecting a patron without verified email", verified: nil
-    end
-
-    it "signs in the user if the email from patreon is verified" do
-      post "/auth/patreon"
-      expect(response.status).to eq(302)
-      expect(response.location).to start_with("https://www.patreon.com/oauth2/authorize")
-
-      stub_request(:get, identity_url).with(
-        headers: {
-          "Authorization" => "Bearer #{access_token}",
-        },
-      ).to_return(
-        status: 200,
-        body:
-          JSON.dump(
-            data: {
-              id: "493290423324",
-              attributes: {
-                email: user1.email,
-                full_name: "Patron",
-                is_email_verified: true,
-              },
-            },
-          ),
-        headers: {
-          "Content-Type" => "application/json",
-        },
-      )
-
-      post "/auth/patreon/callback", params: { state: session["omniauth.state"], code: temp_code }
-      expect(response.status).to eq(302)
-      expect(response.location).to eq("http://test.localhost/")
-      expect(session[:current_user_id]).to eq(user1.id)
-    end
+    post "/auth/patreon/callback", params: { state: session["omniauth.state"], code: temp_code }
+    expect(response.status).to eq(302)
+    expect(response.location).to eq("http://test.localhost/")
+    expect(session[:current_user_id]).to be_blank
   end
 
-  context "with API v1" do
-    let(:identity_url) { "https://api.patreon.com/oauth2/api/current_user" }
+  it "signs in the user if the email from patreon is verified" do
+    post "/auth/patreon"
+    expect(response.status).to eq(302)
+    expect(response.location).to start_with("https://www.patreon.com/oauth2/authorize")
 
-    before do
-      SiteSetting.patreon_api_version = "1"
+    setup_patreon_emails_stub(email: user1.email, verified: true)
 
-      stub_request(:post, "https://api.patreon.com/oauth2/token").with(
-        body:
-          hash_including(
-            "client_id" => client_id,
-            "client_secret" => client_secret,
-            "code" => temp_code,
-            "grant_type" => "authorization_code",
-            "redirect_uri" => "http://test.localhost/auth/patreon/callback",
-          ),
-      ).to_return(
-        status: 200,
-        body: Rack::Utils.build_query(access_token: access_token),
-        headers: {
-          "Content-Type" => "application/x-www-form-urlencoded",
-        },
-      )
-    end
-
-    include_examples "patreon oauth"
-  end
-
-  context "with API v2" do
-    let(:identity_url) do
-      "https://www.patreon.com/api/oauth2/v2/identity?fields%5Buser%5D=email,full_name,is_email_verified"
-    end
-
-    before do
-      SiteSetting.patreon_api_version = "2"
-
-      stub_request(:post, "https://www.patreon.com/api/oauth2/token").with(
-        body:
-          hash_including(
-            "client_id" => client_id,
-            "client_secret" => client_secret,
-            "code" => temp_code,
-            "grant_type" => "authorization_code",
-            "redirect_uri" => "http://test.localhost/auth/patreon/callback",
-          ),
-      ).to_return(
-        status: 200,
-        body: Rack::Utils.build_query(access_token: access_token),
-        headers: {
-          "Content-Type" => "application/x-www-form-urlencoded",
-        },
-      )
-    end
-
-    include_examples "patreon oauth"
+    post "/auth/patreon/callback", params: { state: session["omniauth.state"], code: temp_code }
+    expect(response.status).to eq(302)
+    expect(response.location).to eq("http://test.localhost/")
+    expect(session[:current_user_id]).to eq(user1.id)
   end
 end

@@ -7,8 +7,6 @@ class OptimizedImage < ActiveRecord::Base
   # BUMP UP if optimized image algorithm changes
   VERSION = 2
   URL_REGEX = %r{(/optimized/\dX[/\.\w]*/([a-zA-Z0-9]+)[\.\w]*)}
-  MAX_PNGQUANT_SIZE = 500_000
-  MAX_CONVERT_SECONDS = 20
 
   def self.lock(upload_id, width, height)
     @hostname ||= Discourse.os_hostname
@@ -39,7 +37,7 @@ class OptimizedImage < ActiveRecord::Base
     return if upload.try(:sha1).blank?
 
     # no extension so try to guess it
-    upload.fix_image_extension if !upload.extension
+    upload.fix_image_extension if (!upload.extension)
 
     if !upload.extension.match?(IM_DECODERS)
       if opts[:raise_on_error]
@@ -69,7 +67,8 @@ class OptimizedImage < ActiveRecord::Base
 
     if original_path.blank?
       # download is protected with a DistributedMutex
-      original_path = store.download(upload)
+      external_copy = store.download_safe(upload)
+      original_path = external_copy&.path
     end
 
     if extension == ".svg" && upload.extension != "svg"
@@ -98,18 +97,9 @@ class OptimizedImage < ActiveRecord::Base
         temp_file = Tempfile.new(["discourse-thumbnail", extension])
         temp_path = temp_file.path
 
-        if GlobalSetting.enable_vips_image_processing
-          if %w[.jpg .jpeg].include?(extension.downcase)
-            opts = opts.merge(quality: SiteSetting.ImageQuality.image_preview_jpg_quality)
-          end
-        else
-          target_quality =
-            upload.target_jpeg_image_quality(
-              original_path,
-              SiteSetting.ImageQuality.image_preview_jpg_quality,
-            )
-          opts = opts.merge(quality: target_quality) if target_quality
-        end
+        target_quality =
+          upload.target_image_quality(original_path, SiteSetting.image_preview_jpg_quality)
+        opts = opts.merge(quality: target_quality) if target_quality
         opts = opts.merge(upload_id: upload.id)
 
         # special case, when "resizing" vectors we simply copy
@@ -154,13 +144,16 @@ class OptimizedImage < ActiveRecord::Base
         temp_file.close!
       end
 
+      # make sure we remove the cached copy from external stores
+      external_copy&.close if store.external?
+
       thumbnail
     end
   end
 
   def destroy
     OptimizedImage.transaction do
-      Discourse.store.remove_optimized_image(self) if upload
+      Discourse.store.remove_optimized_image(self) if self.upload
       super
     end
   end
@@ -174,7 +167,7 @@ class OptimizedImage < ActiveRecord::Base
       if local?
         Discourse.store.path_for(self)
       else
-        Discourse.store.download!(self)
+        Discourse.store.download!(self).path
       end
     File.size(path)
   end
@@ -185,7 +178,7 @@ class OptimizedImage < ActiveRecord::Base
     else
       size = calculate_filesize
 
-      self[:filesize] = size
+      write_attribute(:filesize, size)
       update_columns(filesize: size) if !new_record?
       size
     end
@@ -203,20 +196,18 @@ class OptimizedImage < ActiveRecord::Base
     paths.each { |path| raise Discourse::InvalidAccess unless safe_path?(path) }
   end
 
-  IM_DECODERS = /\A(jpe?g|png|gif|webp|avif|svg)\z/i
+  IM_DECODERS = /\A(jpe?g|png|ico|gif|webp|avif|svg)\z/i
 
   def self.prepend_decoder!(path, ext_path = nil, opts = nil)
-    "#{image_extension(path: path, ext_path: ext_path, opts: opts || {})}:#{path}"
-  end
+    opts ||= {}
 
-  def self.image_extension(path:, ext_path:, opts:)
     # This logic is a little messy but the result of using mocks for most
     # of the image tests. The idea here is you shouldn't trust the "original"
     # path of a file to figure out its extension. However, in certain cases
     # such as generating the loading upload thumbnail, we force the format,
     # and this allows us to use the forced format in that case.
     extension = nil
-    if opts[:format] && path != ext_path
+    if (opts[:format] && path != ext_path)
       extension = File.extname(path)[1..-1]
     else
       extension = File.extname(opts[:filename] || ext_path || path)[1..-1]
@@ -225,9 +216,8 @@ class OptimizedImage < ActiveRecord::Base
     if !extension || !extension.match?(IM_DECODERS)
       raise Discourse::InvalidAccess.new("Unsupported extension: #{extension}")
     end
-    extension
+    "#{extension}:#{path}"
   end
-  private_class_method :image_extension
 
   def self.thumbnail_or_resize
     SiteSetting.strip_image_metadata ? "thumbnail" : "resize"
@@ -240,7 +230,7 @@ class OptimizedImage < ActiveRecord::Base
     from = prepend_decoder!(from, to, opts)
     to = prepend_decoder!(to, to, opts)
 
-    instructions = ["#{from}[0]"]
+    instructions = ["convert", "#{from}[0]"]
 
     instructions << "-colors" << opts[:colors].to_s if opts[:colors]
 
@@ -265,7 +255,7 @@ class OptimizedImage < ActiveRecord::Base
         -interlace
         none
         -profile
-        #{Rails.root.join("vendor/data/RT_sRGB.icm")}
+        #{File.join(Rails.root, "vendor", "data", "RT_sRGB.icm")}
         #{to}
       ],
     )
@@ -278,6 +268,7 @@ class OptimizedImage < ActiveRecord::Base
     to = prepend_decoder!(to, to, opts)
 
     instructions = %W{
+      convert
       #{from}[0]
       -auto-orient
       -gravity
@@ -293,7 +284,7 @@ class OptimizedImage < ActiveRecord::Base
       -interlace
       none
       -profile
-      #{Rails.root.join("vendor/data/RT_sRGB.icm")}
+      #{File.join(Rails.root, "vendor", "data", "RT_sRGB.icm")}
     }
 
     instructions << "-quality" << opts[:quality].to_s if opts[:quality]
@@ -308,6 +299,7 @@ class OptimizedImage < ActiveRecord::Base
     to = prepend_decoder!(to, to, opts)
 
     %W{
+      convert
       #{from}[0]
       -auto-orient
       -gravity
@@ -319,182 +311,67 @@ class OptimizedImage < ActiveRecord::Base
       -resize
       #{dimensions}
       -profile
-      #{Rails.root.join("vendor/data/RT_sRGB.icm")}
+      #{File.join(Rails.root, "vendor", "data", "RT_sRGB.icm")}
       #{to}
     }
   end
 
   def self.resize(from, to, width, height, opts = {})
-    if opts[:quality].nil? &&
-         image_extension(path: to, ext_path: to, opts: opts).match?(/\Ajpe?g\z/i)
-      opts = opts.merge(quality: SiteSetting.ImageQuality.image_preview_jpg_quality)
-    end
-
-    if GlobalSetting.enable_vips_image_processing
-      ensure_safe_paths!(from, to)
-      resize_with_vips(from: from, to: to, width: width, height: height, opts: opts)
-    else
-      optimize(:optimized_image_resize, from, to, "#{width}x#{height}", opts)
-    end
+    optimize("resize", from, to, "#{width}x#{height}", opts)
   end
-
-  def self.resize_with_vips(from:, to:, width:, height:, opts:)
-    DiscourseVips.thumbnail(
-      input_path: from,
-      output_path: to,
-      input_format: image_extension(path: from, ext_path: to, opts: opts),
-      output_format: image_extension(path: to, ext_path: to, opts: opts),
-      width: width,
-      height: height,
-      size: :both,
-      crop: :centre,
-      sharpen: true,
-      operation: :optimized_image_resize,
-      quality: opts[:quality],
-      strip_metadata: SiteSetting.strip_image_metadata,
-      timeout: MAX_CONVERT_SECONDS,
-    )
-    optimize_image(to: to)
-  rescue => error
-    handle_optimization_error(error: error, to: to, opts: opts)
-  end
-  private_class_method :resize_with_vips
 
   def self.crop(from, to, width, height, opts = {})
-    if GlobalSetting.enable_vips_image_processing
-      ensure_safe_paths!(from, to)
-      crop_with_vips(from: from, to: to, width: width, height: height, opts: opts)
-    else
-      optimize(:optimized_image_crop, from, to, "#{width}x#{height}", opts)
-    end
+    optimize("crop", from, to, "#{width}x#{height}", opts)
   end
 
-  def self.crop_with_vips(from:, to:, width:, height:, opts:)
-    DiscourseVips.thumbnail(
-      input_path: from,
-      output_path: to,
-      input_format: image_extension(path: from, ext_path: to, opts: opts),
-      output_format: image_extension(path: to, ext_path: to, opts: opts),
-      width: width,
-      height: height,
-      crop: :all,
-      gravity: :north,
-      sharpen: true,
-      operation: :optimized_image_crop,
-      quality: opts[:quality],
-      strip_metadata: SiteSetting.strip_image_metadata,
-      timeout: MAX_CONVERT_SECONDS,
-    )
-    optimize_image(to: to)
-  rescue => error
-    handle_optimization_error(error: error, to: to, opts: opts)
+  def self.downsize(from, to, dimensions, opts = {})
+    optimize("downsize", from, to, dimensions, opts)
   end
-  private_class_method :crop_with_vips
-
-  def self.downsize(from:, to:, scale: nil, width: nil, height: nil, max_pixels: nil, **opts)
-    if GlobalSetting.enable_vips_image_processing
-      ensure_safe_paths!(from, to)
-      downsize_with_vips(
-        from: from,
-        to: to,
-        scale: scale,
-        width: width,
-        height: height,
-        max_pixels: max_pixels,
-        opts: opts,
-      )
-    else
-      dimensions =
-        if scale
-          "#{scale * 100}%"
-        elsif max_pixels
-          "#{max_pixels}@"
-        else
-          "#{width}x#{height}>"
-        end
-      optimize(:optimized_image_downsize, from, to, dimensions, opts)
-    end
-  end
-
-  def self.downsize_with_vips(from:, to:, scale:, width:, height:, max_pixels:, opts:)
-    DiscourseVips.thumbnail(
-      input_path: from,
-      output_path: to,
-      input_format: image_extension(path: from, ext_path: to, opts: opts),
-      output_format: image_extension(path: to, ext_path: to, opts: opts),
-      scale: scale,
-      width: width,
-      height: height,
-      max_pixels: max_pixels,
-      size: width ? :down : :both,
-      sharpen: true,
-      operation: :optimized_image_downsize,
-      strip_metadata: SiteSetting.strip_image_metadata,
-      timeout: MAX_CONVERT_SECONDS,
-    )
-    optimize_image(to: to)
-  rescue => error
-    handle_optimization_error(error: error, to: to, opts: opts)
-  end
-  private_class_method :downsize_with_vips
-
-  INSTRUCTION_METHODS = {
-    optimized_image_resize: :resize_instructions,
-    optimized_image_crop: :crop_instructions,
-    optimized_image_downsize: :downsize_instructions,
-  }.freeze
-  private_constant :INSTRUCTION_METHODS
 
   def self.optimize(operation, from, to, dimensions, opts = {})
-    instructions = nil
-    begin
-      ImageProcessing::OutputFile.write(to) do |temporary_path|
-        instructions =
-          public_send(INSTRUCTION_METHODS.fetch(operation), from, temporary_path, dimensions, opts)
-        ImageMagick.magick(
-          *instructions,
-          operation: operation,
-          read: [from],
-          write: [temporary_path],
-          nice: 10,
-          timeout: MAX_CONVERT_SECONDS,
-        )
-      end
-      optimize_image(to: to)
-    rescue => error
-      handle_optimization_error(error: error, to: to, opts: opts, instructions: instructions)
-    end
+    method_name = "#{operation}_instructions"
+
+    instructions = self.public_send(method_name.to_sym, from, to, dimensions, opts)
+    convert_with(instructions, to, opts)
   end
 
-  def self.optimize_image(to:)
+  MAX_PNGQUANT_SIZE = 500_000
+  MAX_CONVERT_SECONDS = 20
+
+  def self.convert_with(instructions, to, opts = {})
+    Discourse::Utils.execute_command(
+      "nice",
+      "-n",
+      "10",
+      *instructions,
+      timeout: MAX_CONVERT_SECONDS,
+    )
+
     allow_pngquant = to.downcase.ends_with?(".png") && File.size(to) < MAX_PNGQUANT_SIZE
     FileHelper.optimize_image!(to, allow_pngquant: allow_pngquant)
     true
-  end
-  private_class_method :optimize_image
-
-  def self.handle_optimization_error(error:, to:, opts:, instructions: nil)
-    raise error if opts[:raise_on_error]
-
-    message = +"Failed to optimize image:"
-    if error.message =~ /\A(?:convert|magick):([^`]+)/
-      message << $1
-    elsif error.is_a?(DiscourseVips::Error)
-      message << " #{error.message}"
+  rescue => e
+    if opts[:raise_on_error]
+      raise e
     else
-      message << " unknown reason"
-    end
+      error = +"Failed to optimize image:"
 
-    Discourse.warn(
-      message,
-      upload_id: opts[:upload_id],
-      location: to,
-      error_message: error.message,
-      instructions: instructions,
-    )
-    false
+      if e.message =~ /\Aconvert:([^`]+)/
+        error << $1
+      else
+        error << " unknown reason"
+      end
+
+      Discourse.warn(
+        error,
+        upload_id: opts[:upload_id],
+        location: to,
+        error_message: e.message,
+        instructions: instructions,
+      )
+      false
+    end
   end
-  private_class_method :handle_optimization_error
 end
 
 # == Schema Information
@@ -502,17 +379,17 @@ end
 # Table name: optimized_images
 #
 #  id         :integer          not null, primary key
-#  etag       :string
-#  extension  :string(10)       not null
-#  filesize   :integer
-#  height     :integer          not null
 #  sha1       :string(40)       not null
-#  url        :string           not null
-#  version    :integer
+#  extension  :string(10)       not null
 #  width      :integer          not null
+#  height     :integer          not null
+#  upload_id  :integer          not null
+#  url        :string           not null
+#  filesize   :integer
+#  etag       :string
+#  version    :integer
 #  created_at :datetime         not null
 #  updated_at :datetime         not null
-#  upload_id  :integer          not null
 #
 # Indexes
 #

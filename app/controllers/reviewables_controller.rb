@@ -8,15 +8,15 @@ class ReviewablesController < ApplicationController
   before_action :version_required, only: %i[update perform]
   before_action :ensure_can_see, except: [:destroy]
 
-  around_action :with_deleted_content, only: %i[index show]
+  around_action :with_deleted_content,
+                only: %i[index show],
+                if: ->(controller) { controller.guardian.is_staff? }
 
   def index
     offset = params[:offset].to_i
 
     if params[:type].present?
-      unless Reviewable.valid_filter_type?(params[:type])
-        raise Discourse::InvalidParameters.new(:type)
-      end
+      raise Discourse::InvalidParameters.new(:type) unless Reviewable.valid_type?(params[:type])
     end
 
     status = (params[:status] || "pending").to_sym
@@ -40,7 +40,6 @@ class ReviewablesController < ApplicationController
       priority
       username
       reviewed_by
-      claimed_by
       from_date
       to_date
       type
@@ -54,7 +53,6 @@ class ReviewablesController < ApplicationController
       Reviewable.list_for(current_user, **filters.merge(limit: PER_PAGE, offset: offset)).to_a
 
     claimed_topics = ReviewableClaimedTopic.claimed_hash(reviewables.map { |r| r.topic_id }.uniq)
-    Reviewable.preload_author_penalties(reviewables)
 
     # This is a bit awkward, but ActiveModel serializers doesn't seem to serialize STI. Note `hash`
     # is mutated by the serializer and contains the side loaded records which must be merged in the end.
@@ -75,17 +73,13 @@ class ReviewablesController < ApplicationController
         filters.merge(
           total_rows_reviewables: total_rows,
           types: meta_types,
-          reviewable_types:
-            Reviewable.types + Reviewable.custom_filter_type_options.map { |option| option[:id] },
+          reviewable_types: Reviewable.types,
           unknown_reviewable_types_and_sources: Reviewable.unknown_types_and_sources,
           score_types:
             ReviewableScore
               .types
               .filter { |k, v| k != :notify_user }
-              .map { |k, v| { id: v, name: ReviewableScore.type_title(k) } }
-              .concat(
-                Reviewable.custom_reason_filter_options.map { |option| option.slice(:id, :name) },
-              ),
+              .map { |k, v| { id: v, name: ReviewableScore.type_title(k) } },
           reviewable_count: current_user.reviewable_count,
           unseen_reviewable_count: Reviewable.unseen_reviewable_count(current_user),
         ),
@@ -95,14 +89,7 @@ class ReviewablesController < ApplicationController
     end
     json.merge!(hash)
 
-    render_json_dump(
-      json,
-      rest_serializer: true,
-      extras: {
-        dsa_classification:
-          DsaClassificationSerializer.new({}, scope: guardian, root: false).as_json,
-      },
-    )
+    render_json_dump(json, rest_serializer: true)
   end
 
   def user_menu_list
@@ -179,10 +166,6 @@ class ReviewablesController < ApplicationController
       rest_serializer: true,
       claimed_topics: ReviewableClaimedTopic.claimed_hash([reviewable.topic_id]),
       root: "reviewable",
-      extras: {
-        dsa_classification:
-          DsaClassificationSerializer.new({}, scope: guardian, root: false).as_json,
-      },
       meta: {
         types: meta_types,
       },
@@ -190,7 +173,16 @@ class ReviewablesController < ApplicationController
   end
 
   def destroy
-    user = fetch_target_user
+    user =
+      if is_api?
+        if @guardian.is_admin?
+          fetch_user_from_params
+        else
+          raise Discourse::InvalidAccess
+        end
+      else
+        current_user
+      end
 
     reviewable =
       Reviewable.find_by_flagger_or_queued_post_creator(
@@ -248,12 +240,6 @@ class ReviewablesController < ApplicationController
     begin
       if reviewable.update_fields(edit_params, current_user, version: params[:version].to_i)
         result = edit_params.merge(version: reviewable.version)
-        if reviewable.is_a?(ReviewableQueuedPost) && reviewable.payload.present?
-          result[:cooked] = PrettyText.cook(reviewable.payload["raw"]) if reviewable.payload["raw"]
-          if reviewable.payload["title"]
-            result[:fancy_title] = ERB::Util.html_escape(reviewable.payload["title"])
-          end
-        end
         render json: result
       else
         render_json_error(reviewable.errors)
@@ -265,11 +251,10 @@ class ReviewablesController < ApplicationController
 
   def perform
     args = { version: params[:version].to_i }
-    args[:dsa_classification] = dsa_classification_args if params.has_key?(:dsa_classification)
 
     result = nil
     begin
-      reviewable = with_deleted_content { find_reviewable }
+      reviewable = find_reviewable
 
       if error = claim_error?(reviewable)
         return render_json_error(error)
@@ -343,24 +328,6 @@ class ReviewablesController < ApplicationController
     end
   end
 
-  def dsa_classification_args
-    raise Discourse::InvalidAccess unless DsaStatementOfRecord.classification_enabled?
-
-    unless params[:dsa_classification].is_a?(ActionController::Parameters)
-      raise Discourse::InvalidParameters.new(:dsa_classification)
-    end
-
-    classification =
-      DsaStatementOfRecord::ClassificationContract.new(
-        **params.require(:dsa_classification).permit(:community_rule, :category).to_h,
-      )
-    rule = classification.rule
-
-    raise Discourse::InvalidParameters.new(:dsa_classification) if !classification.valid? || !rule
-
-    { community_rule: rule, category: classification.category }
-  end
-
   def find_reviewable
     reviewable = Reviewable.viewable_by(current_user).where(id: params[:reviewable_id]).first
     raise Discourse::NotFound.new if reviewable.blank?
@@ -376,13 +343,7 @@ class ReviewablesController < ApplicationController
   end
 
   def meta_types
-    {
-      created_by: "user",
-      target_created_by: "user",
-      target_deleted_by: "user",
-      reviewed_by: "user",
-      claimed_by: "claimed_by",
-    }
+    { created_by: "user", target_created_by: "user", reviewed_by: "user", claimed_by: "claimed_by" }
   end
 
   def ensure_can_see
@@ -390,6 +351,6 @@ class ReviewablesController < ApplicationController
   end
 
   def with_deleted_content
-    Reviewable.with_deleted_content { yield }
+    Post.unscoped { Topic.unscoped { PostAction.unscoped { yield } } }
   end
 end

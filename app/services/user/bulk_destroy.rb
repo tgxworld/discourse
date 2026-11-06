@@ -4,10 +4,12 @@ class User::BulkDestroy
   include Service::Base
 
   params do
-    attribute :user_ids, :array, compact_blank: true
+    attribute :user_ids, :array
     attribute :block_ip_and_email, :boolean, default: false
 
     validates :user_ids, length: { minimum: 1, maximum: 100 }
+
+    after_validation { user_ids&.compact_blank! }
   end
 
   model :users
@@ -27,7 +29,7 @@ class User::BulkDestroy
   end
 
   def can_delete_users(guardian:, users:)
-    users.all? { guardian.can_delete_user?(it) }
+    users.all? { guardian.can_delete_user?(_1) }
   end
 
   def delete(users:, guardian:, params:)

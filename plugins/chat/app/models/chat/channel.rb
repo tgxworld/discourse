@@ -6,9 +6,10 @@ module Chat
     include TypeMappable
     include HasCustomFields
 
+    # TODO (martin) Remove once we are using last_message instead,
+    # should be around August 2023.
+    self.ignored_columns = %w[last_message_sent_at]
     self.table_name = "chat_channels"
-
-    SLUG_MAX_LENGTH = 100
 
     belongs_to :chatable, polymorphic: true
     belongs_to :direct_message,
@@ -27,7 +28,7 @@ module Chat
                class_name: "Chat::Message",
                foreign_key: :last_message_id,
                optional: true
-    has_many :pinned_messages, class_name: "Chat::PinnedMessage", foreign_key: :chat_channel_id
+    has_one :icon_upload, class_name: "Upload", foreign_key: :id, primary_key: :icon_upload_id
 
     def last_message
       super || NullMessage.new
@@ -44,14 +45,9 @@ module Chat
     validates :description, length: { maximum: 500 }
     validates :chatable_type, length: { maximum: 100 }
     validates :type, length: { maximum: 100 }
-    validates :slug, length: { maximum: SLUG_MAX_LENGTH }
-    validates :emoji, length: { maximum: 100 }
+    validates :slug, length: { maximum: 100 }
     validate :ensure_slug_ok, if: :slug_changed?
     before_validation :generate_auto_slug
-    after_update :enqueue_channel_hashtag_remap, if: :saved_change_to_slug?
-    after_commit :clear_homepage_anon_cache,
-                 on: :update,
-                 if: -> { saved_change_to_slug? || saved_change_to_status? }
 
     scope :with_categories,
           -> do
@@ -61,9 +57,9 @@ module Chat
           end
     scope :public_channels,
           -> do
-            with_categories
-              .where(chatable_type: public_channel_chatable_types)
-              .where.not(categories: { id: nil })
+            with_categories.where(chatable_type: public_channel_chatable_types).where(
+              "categories.id IS NOT NULL",
+            )
           end
 
     delegate :empty?, to: :chat_messages, prefix: true
@@ -117,19 +113,6 @@ module Chat
 
     %i[allowed_user_ids allowed_group_ids chatable_url].each { |name| define_method(name) { nil } }
 
-    def enqueue_channel_hashtag_remap
-      old_ref = slug_before_last_save
-      return if old_ref.blank? || old_ref.casecmp?(slug.to_s)
-
-      HashtagRemapper.enqueue([{ type: Chat::ChannelHashtagDataSource.type, id:, old_ref: }])
-    end
-
-    # The anonymous site data caches the homepage path, which depends on the
-    # slug and on the channel being available.
-    def clear_homepage_anon_cache
-      Site.clear_anon_cache! if SiteSetting.chat_homepage_channel.to_s == id.to_s
-    end
-
     def ensure_slug_ok
       if self.slug.present?
         # if we don't unescape it first we strip the % from the encoded version
@@ -163,23 +146,19 @@ module Chat
     end
 
     def leave(user)
-      remove(user)
-    end
-
-    def pinned_messages_count
-      pinned_messages.size
+      self.remove(user)
     end
 
     def url
-      "#{Discourse.base_url}/chat/c/#{slug || "-"}/#{id}"
+      "#{Discourse.base_url}/chat/c/#{self.slug || "-"}/#{self.id}"
     end
 
     def relative_url
-      "#{Discourse.base_path}/chat/c/#{slug || "-"}/#{id}"
+      "#{Discourse.base_path}/chat/c/#{self.slug || "-"}/#{self.id}"
     end
 
     def update_last_message_id!
-      update!(last_message_id: latest_not_deleted_message_id)
+      self.update!(last_message_id: self.latest_not_deleted_message_id)
     end
 
     def self.ensure_consistency!
@@ -242,7 +221,7 @@ module Chat
     end
 
     def latest_not_deleted_message_id(anchor_message_id: nil)
-      DB.query_single(<<~SQL, channel_id: id, anchor_message_id: anchor_message_id).first
+      DB.query_single(<<~SQL, channel_id: self.id, anchor_message_id: anchor_message_id).first
         SELECT chat_messages.id
         FROM chat_messages
         LEFT JOIN chat_threads original_message_threads ON original_message_threads.original_message_id = chat_messages.id
@@ -257,23 +236,14 @@ module Chat
     end
 
     def mark_all_threads_as_read(user: nil)
-      return if !threading_enabled
+      return if !self.threading_enabled
 
-      params = { channel_id: id }
-      user_condition = ""
-
-      if user
-        params[:user_id] = user.id
-        user_condition = "AND user_chat_thread_memberships.user_id = :user_id"
-      end
-
-      DB.exec(<<~SQL, params)
+      DB.exec(<<~SQL, channel_id: self.id)
         UPDATE user_chat_thread_memberships
         SET last_read_message_id = chat_threads.last_message_id
         FROM chat_threads
         WHERE user_chat_thread_memberships.thread_id = chat_threads.id
-        AND chat_threads.channel_id = :channel_id
-        #{user_condition}
+        #{user ? "AND user_chat_thread_memberships.user_id = #{user.id}" : ""}
         AND (
           user_chat_thread_memberships.last_read_message_id < chat_threads.last_message_id OR
           user_chat_thread_memberships.last_read_message_id IS NULL
@@ -285,7 +255,7 @@ module Chat
 
     def change_status(acting_user, target_status)
       return if !Guardian.new(acting_user).can_change_channel_status?(self, target_status)
-      update!(status: target_status)
+      self.update!(status: target_status)
       log_channel_status_change(acting_user: acting_user)
     end
 
@@ -300,11 +270,10 @@ module Chat
       StaffActionLogger.new(acting_user).log_custom(
         "chat_channel_status_change",
         {
-          chat_channel_id: id,
-          chat_channel_name: name,
+          chat_channel_id: self.id,
+          chat_channel_name: self.name,
           previous_value: status_previously_was,
           new_value: status,
-          category_id: category_channel? ? chatable_id : nil,
         },
       )
 
@@ -312,7 +281,7 @@ module Chat
     end
 
     def duplicate_slug?
-      Chat::Channel.where(slug: slug).where.not(id: id).any?
+      Chat::Channel.where(slug: self.slug).where.not(id: self.id).any?
     end
   end
 end
@@ -322,27 +291,27 @@ end
 # Table name: chat_channels
 #
 #  id                          :bigint           not null, primary key
-#  allow_channel_wide_mentions :boolean          default(TRUE), not null
-#  auto_join_users             :boolean          default(FALSE), not null
-#  chatable_type               :string           not null
-#  delete_after_seconds        :integer
-#  deleted_at                  :datetime
-#  description                 :text
-#  emoji                       :string
-#  messages_count              :integer          default(0), not null
-#  name                        :string
-#  slug                        :string
-#  status                      :integer          default("open"), not null
-#  threading_enabled           :boolean          default(FALSE), not null
-#  type                        :string
-#  user_count                  :integer          default(0), not null
-#  user_count_stale            :boolean          default(FALSE), not null
-#  created_at                  :datetime         not null
-#  updated_at                  :datetime         not null
 #  chatable_id                 :bigint           not null
+#  deleted_at                  :datetime
 #  deleted_by_id               :integer
 #  featured_in_category_id     :integer
+#  delete_after_seconds        :integer
+#  chatable_type               :string           not null
+#  created_at                  :datetime         not null
+#  updated_at                  :datetime         not null
+#  name                        :string
+#  description                 :text
+#  status                      :integer          default("open"), not null
+#  user_count                  :integer          default(0), not null
+#  auto_join_users             :boolean          default(FALSE), not null
+#  user_count_stale            :boolean          default(FALSE), not null
+#  slug                        :string
+#  type                        :string
+#  allow_channel_wide_mentions :boolean          default(TRUE), not null
+#  messages_count              :integer          default(0), not null
+#  threading_enabled           :boolean          default(FALSE), not null
 #  last_message_id             :bigint
+#  icon_upload_id              :integer
 #
 # Indexes
 #

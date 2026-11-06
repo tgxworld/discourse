@@ -1,31 +1,23 @@
 import { module, test } from "qunit";
-import {
-  registerRichEditorExtension,
-  resetRichEditorExtensions,
-} from "discourse/lib/composer/rich-editor-extensions";
+import { withPluginApi } from "discourse/lib/plugin-api";
 import toMarkdown from "discourse/lib/to-markdown";
-import richEditorExtension from "discourse/plugins/spoiler-alert/lib/rich-editor-extension";
+import { initializeSpoiler } from "discourse/plugins/spoiler-alert/initializers/spoiler-alert";
 
 module("Spoiler Alert | Unit | to-markdown", function (hooks) {
-  hooks.beforeEach(async function () {
-    await resetRichEditorExtensions();
-    registerRichEditorExtension(richEditorExtension);
+  hooks.beforeEach(function () {
+    withPluginApi(initializeSpoiler);
   });
 
-  test("handles spoiler tags", async function (assert) {
+  test("handles spoiler tags", function (assert) {
     let html = `<div>Text with a</div><div class="spoiled spoiler-blurred">spoiled</div><div>word.</div>`;
-    let markdown = `Text with a\n\n[spoiler]\nspoiled\n\n[/spoiler]\n\nword.`;
+    let markdown = `Text with a\n\n[spoiler]\nspoiled\n[/spoiler]\n\nword.`;
 
-    assert.strictEqual(
-      await toMarkdown(html),
-      markdown,
-      "creates block spoiler tag"
-    );
+    assert.strictEqual(toMarkdown(html), markdown, "creates block spoiler tag");
 
     html = `Inline <span class="spoiled">spoiled</span> word.`;
     markdown = `Inline [spoiler]spoiled[/spoiler] word.`;
     assert.strictEqual(
-      await toMarkdown(html),
+      toMarkdown(html),
       markdown,
       "creates inline spoiler tag"
     );

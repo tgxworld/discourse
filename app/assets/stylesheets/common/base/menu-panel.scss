@@ -50,7 +50,7 @@
     max-width: calc(100vw - 2em);
   }
 
-  @include d-animation(float-down, 250ms, ease);
+  @include float-down;
 }
 
 .menu-panel {
@@ -164,7 +164,7 @@
     font-size: var(--font-down-1);
   }
 
-  .discourse-tags {
+  div.discourse-tags {
     font-size: var(--font-down-1);
   }
 
@@ -198,7 +198,9 @@
   }
 
   ul {
-    @include unstyled-list;
+    list-style: none;
+    margin: 0;
+    padding: 0;
   }
 
   .panel-body {
@@ -332,7 +334,7 @@
         background: none;
 
         .d-icon {
-          background-color: var(--d-hover);
+          background-color: var(--d-sidebar-highlight-background);
         }
       }
     }
@@ -570,12 +572,16 @@
   }
 
   .user-menu-button-profile {
-    .item-label {
-      font-weight: normal;
+    li svg {
+      color: var(--d-button-flat-icon-color);
     }
 
-    .d-icon {
-      color: var(--primary-500);
+    li:hover svg {
+      color: var(--d-button-flat-icon-color--hover);
+    }
+
+    .item-label {
+      font-weight: normal;
     }
   }
 
@@ -659,7 +665,7 @@
         overflow: hidden; // clears the text from wrapping below icons
         overflow-wrap: break-word;
 
-        @include line-clamp(3);
+        @include line-clamp(2);
       }
     }
 
@@ -754,7 +760,7 @@
       .item-description {
         color: var(--primary);
 
-        @include line-clamp(3);
+        @include line-clamp(2);
       }
 
       .icon-avatar {

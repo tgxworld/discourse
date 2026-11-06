@@ -69,7 +69,9 @@ module Email
 
       @message.charset = "UTF-8"
 
-      renderer = Email::Renderer.new(@message, user_id: @user&.id)
+      opts = {}
+
+      renderer = Email::Renderer.new(@message, opts)
 
       if @message.html_part
         @message.html_part.body = renderer.html
@@ -299,14 +301,7 @@ module Email
           email_log.smtp_transaction_response = message_response.message&.chomp
         end
       rescue *SMTP_CLIENT_ERRORS => e
-        error_message = smtp_error_message(e)
-        create_failed_email_whisper(topic, error_message)
-        return skip(SkippedEmailLog.reason_types[:custom], custom_reason: error_message)
-      rescue Net::SMTPError => e
-        response = e.try(:response)
-        response = " response: #{response.try(:string) || response}" if response
-        Rails.logger.error("SMTP Error #{e.class} with message: #{e.message}#{response}")
-        raise
+        return skip(SkippedEmailLog.reason_types[:custom], custom_reason: e.message)
       end
 
       DiscourseEvent.trigger(:after_email_send, @message, @email_type)
@@ -330,11 +325,17 @@ module Email
     end
 
     def cc_addresses
-      @cc_addresses ||= @message.try(:cc) || []
+      @cc_addresses ||=
+        begin
+          @message.try(:cc) || []
+        end
     end
 
     def bcc_addresses
-      @bcc_addresses ||= @message.try(:bcc) || []
+      @bcc_addresses ||=
+        begin
+          @message.try(:bcc) || []
+        end
     end
 
     def self.host_for(base_url)
@@ -383,7 +384,7 @@ module Email
               if attached_upload.local?
                 Discourse.store.path_for(attached_upload)
               else
-                Discourse.store.download!(attached_upload)
+                Discourse.store.download!(attached_upload).path
               end
 
             @message_attachments_index[original_upload.sha1] = @message.attachments.size
@@ -503,31 +504,6 @@ module Email
 
       attributes[:custom_reason] = custom_reason if custom_reason
       SkippedEmailLog.create!(attributes)
-    end
-
-    def smtp_error_message(error)
-      response = error.try(:response)
-      return error.message if response.blank?
-
-      response_string = response.respond_to?(:string) ? response.string : response.to_s
-      response_string.presence || error.message
-    end
-
-    def create_failed_email_whisper(topic, error_message)
-      return if topic.blank? || !topic.private_message?
-      return if SiteSetting.whispers_allowed_groups.blank?
-
-      PostCreator.create!(
-        Discourse.system_user,
-        topic_id: topic.id,
-        post_type: Post.types[:whisper],
-        skip_validations: true,
-        raw: I18n.t("system_messages.email_sending_failed", email: to_address, raw: error_message),
-      )
-    rescue StandardError => error
-      Rails.logger.warn(
-        "Failed to create email sending failure whisper for topic #{topic.id}: #{error.message}",
-      )
     end
 
     def merge_json_x_header(name, value)

@@ -36,7 +36,7 @@ unless user_id
   exit
 end
 
-require_relative "../config/environment"
+require File.expand_path(File.dirname(__FILE__) + "/../config/environment")
 
 if %w[profile development].exclude? Rails.env
   puts "Bad idea to run a script that inserts random posts in any non development environment"

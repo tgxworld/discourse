@@ -389,21 +389,7 @@
           },
           "tags": {
             "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "integer"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "slug": {
-                  "type": "string"
-                }
-              },
-              "required": ["id", "name", "slug"]
-            }
+            "items": {}
           },
           "tags_descriptions": {
             "type": "object",
@@ -505,21 +491,7 @@
     },
     "tags": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer"
-          },
-          "name": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          }
-        },
-        "required": ["id", "name", "slug"]
-      }
+      "items": {}
     },
     "tags_descriptions": {
       "type": "object",
@@ -781,9 +753,6 @@
           "type": "boolean"
         },
         "can_pin_unpin_topic": {
-          "type": "boolean"
-        },
-        "can_banner_topic": {
           "type": "boolean"
         },
         "can_moderate_category": {

@@ -26,12 +26,12 @@ end
 # Table name: post_hotlinked_media
 #
 #  id         :bigint           not null, primary key
-#  status     :enum             not null
+#  post_id    :bigint           not null
 #  url        :string           not null
+#  status     :enum             not null
+#  upload_id  :bigint
 #  created_at :datetime         not null
 #  updated_at :datetime         not null
-#  post_id    :bigint           not null
-#  upload_id  :bigint
 #
 # Indexes
 #

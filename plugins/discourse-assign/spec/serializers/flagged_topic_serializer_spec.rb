@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../support/assign_allowed_group"
+
 describe FlaggedTopicSerializer do
   fab!(:user)
   let(:guardian) { Guardian.new(user) }
@@ -8,7 +10,7 @@ describe FlaggedTopicSerializer do
 
   before do
     SiteSetting.assign_enabled = true
-    assign_allowed_group.add(user)
+    add_to_assign_allowed_group(user)
   end
 
   context "when there are no assignments" do

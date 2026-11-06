@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "Assign | User Menu" do
+RSpec.describe "Assign | User Menu", type: :system do
   fab!(:admin)
 
   let(:user_menu) { PageObjects::Components::UserMenu.new }
@@ -11,31 +11,30 @@ RSpec.describe "Assign | User Menu" do
   end
 
   describe "Assign tab ordering" do
-    fab!(:newest_topic) { Fabricate(:topic, bumped_at: 1.hour.ago) }
-    fab!(:middle_topic) { Fabricate(:topic, bumped_at: 2.hours.ago) }
-    fab!(:oldest_topic) { Fabricate(:topic, bumped_at: 3.hours.ago) }
-
-    fab!(:older_unread_assign) do
-      Fabricate(:assignment_notification, user: admin, topic: oldest_topic)
+    let!(:unread_user_assign) { Fabricate(:assignment_notification, user: admin) }
+    let!(:unread_user_assign_2) { Fabricate(:assignment_notification, user: admin) }
+    let!(:read_user_assign) { Fabricate(:assignment_notification, user: admin, read: true) }
+    let!(:read_user_assign_2) { Fabricate(:assignment_notification, user: admin, read: true) }
+    let!(:unread_group_assign) { Fabricate(:assignment_notification, user: admin, group: true) }
+    let!(:read_group_assign) do
+      Fabricate(:assignment_notification, user: admin, read: true, group: true)
+    end
+    let(:expected_order) do
+      [
+        unread_user_assign_2,
+        unread_user_assign,
+        unread_group_assign,
+        read_user_assign_2,
+        read_user_assign,
+        read_group_assign,
+      ].map { _1.topic.fancy_title }
     end
 
-    fab!(:newer_read_assign) do
-      Fabricate(:assignment_notification, user: admin, topic: newest_topic, read: true)
-    end
-
-    fab!(:middle_unread_group_assign) do
-      Fabricate(:assignment_notification, user: admin, topic: middle_topic, group: true)
-    end
-
-    it "keeps unread items first and orders them by topic bump date" do
+    it "orders the items properly" do
       visit "/"
       user_menu.open
       user_menu.click_assignments_tab
-      expect(user_menu).to have_assignments_in_order(
-        [middle_unread_group_assign, older_unread_assign, newer_read_assign].map do
-          it.topic.fancy_title
-        end,
-      )
+      expect(user_menu).to have_assignments_in_order(expected_order)
     end
   end
 end

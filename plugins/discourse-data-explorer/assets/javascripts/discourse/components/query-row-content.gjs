@@ -1,58 +1,65 @@
 import Component from "@glimmer/component";
 import { cached } from "@glimmer/tracking";
+import { classify } from "@ember/string";
 import getURL from "discourse/lib/get-url";
-import HiddenViewComponent from "./result-types/hidden.gjs";
-import TextViewComponent from "./result-types/text.gjs";
-
-const BASE_URI = getURL("");
+import { escapeExpression } from "discourse/lib/utilities";
+import TextViewComponent from "./result-types/text";
 
 export default class QueryRowContent extends Component {
   @cached
   get results() {
     return this.args.columnComponents.map((componentDefinition, idx) => {
-      const value = this.args.row[idx];
+      const value = this.args.row[idx],
+        id = parseInt(value, 10);
 
-      if (value === null) {
-        return { component: TextViewComponent, textValue: "NULL" };
+      const ctx = {
+        value,
+        id,
+        baseuri: getURL(""),
+      };
+
+      if (this.args.row[idx] === null) {
+        return {
+          component: TextViewComponent,
+          textValue: "NULL",
+        };
+      } else if (componentDefinition.name === "text") {
+        return {
+          component: TextViewComponent,
+          textValue: escapeExpression(this.args.row[idx].toString()),
+        };
       }
 
-      if (componentDefinition.name === "text") {
-        return { component: TextViewComponent, textValue: value.toString() };
-      }
-
-      const id = parseInt(value, 10);
-      const ctx = { value, id, baseuri: BASE_URI };
-
-      if (componentDefinition.table) {
-        ctx[componentDefinition.name] = componentDefinition.table[id];
-
-        if (!ctx[componentDefinition.name]) {
-          return {
-            component: componentDefinition.hidden?.includes(id)
-              ? HiddenViewComponent
-              : TextViewComponent,
-            textValue: value.toString(),
-          };
-        }
+      const lookupFunc =
+        this.args[`lookup${classify(componentDefinition.name)}`];
+      if (lookupFunc) {
+        ctx[componentDefinition.name] = lookupFunc.call(this.args, id);
       }
 
       if (componentDefinition.name === "url") {
-        [ctx.href, ctx.target] = guessUrl(value);
+        let [url, name] = guessUrl(value);
+        ctx["href"] = url;
+        ctx["target"] = name;
       }
 
-      return {
-        component: componentDefinition.component || TextViewComponent,
-        ctx,
-      };
+      try {
+        return {
+          component: componentDefinition.component || TextViewComponent,
+          ctx,
+        };
+      } catch {
+        return "error";
+      }
     });
   }
 
   <template>
-    <tr class="query-result-row">
+    <tr>
       {{#each this.results as |result|}}
-        <td class="query-result-cell">
+        <td>
           <result.component
             @ctx={{result.ctx}}
+            @params={{result.params}}
             @textValue={{result.textValue}}
           />
         </td>
@@ -62,7 +69,14 @@ export default class QueryRowContent extends Component {
 }
 
 function guessUrl(columnValue) {
-  const [name, dest = columnValue] = String(columnValue).split(/,(.+)/);
+  let [dest, name] = [columnValue, columnValue];
+
+  const split = columnValue.split(/,(.+)/);
+
+  if (split.length > 1) {
+    name = split[0];
+    dest = split[1];
+  }
 
   return [dest, name];
 }

@@ -1,7 +1,7 @@
 import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
 import { action } from "@ember/object";
-import Assignment from "./assignment.gjs";
+import Assignment from "./assignment";
 
 export default class AssignUserForm extends Component {
   @tracked showValidationErrors = false;

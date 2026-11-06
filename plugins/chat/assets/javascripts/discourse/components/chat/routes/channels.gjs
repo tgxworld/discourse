@@ -1,20 +1,23 @@
+import Component from "@glimmer/component";
+import { service } from "@ember/service";
 import { i18n } from "discourse-i18n";
-import ChannelsListPublic from "../../channels-list-public.gjs";
-import ChannelListOptionsButton from "../navbar/channel-list-options-button.gjs";
-import Navbar from "../navbar/index.gjs";
+import ChannelsListPublic from "discourse/plugins/chat/discourse/components/channels-list-public";
+import Navbar from "discourse/plugins/chat/discourse/components/chat/navbar";
 
-const ChatRoutesChannels = <template>
-  <div class="c-routes --channels">
-    <Navbar as |navbar|>
-      <navbar.Title @title={{i18n "chat.chat_channels"}} />
-      <navbar.Actions as |action|>
-        <action.OpenDrawerButton />
-        <ChannelListOptionsButton @section="channels" />
-      </navbar.Actions>
-    </Navbar>
+export default class ChatRoutesChannels extends Component {
+  @service site;
 
-    <ChannelsListPublic />
-  </div>
-</template>;
+  <template>
+    <div class="c-routes --channels">
+      <Navbar as |navbar|>
+        <navbar.Title @title={{i18n "chat.chat_channels"}} />
+        <navbar.Actions as |action|>
+          <action.OpenDrawerButton />
+          <action.BrowseChannelsButton />
+        </navbar.Actions>
+      </Navbar>
 
-export default ChatRoutesChannels;
+      <ChannelsListPublic />
+    </div>
+  </template>
+}

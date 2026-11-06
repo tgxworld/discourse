@@ -5,14 +5,9 @@
 # https://translate.discourse.org/
 
 ja:
-  admin_js:
-    admin:
-      site_settings:
-        categories:
-          discourse_details: "Discourse の詳細"
   js:
     details:
-      title: 詳細を非表示
+      title: 詳細を隠す
     composer:
       details_title: 要約
       details_text: "このテキストは表示されません"

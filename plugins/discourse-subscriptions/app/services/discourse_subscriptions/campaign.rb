@@ -3,6 +3,9 @@
 module DiscourseSubscriptions
   class Campaign
     include DiscourseSubscriptions::Stripe
+    def initialize
+      set_api_key # instantiates Stripe API
+    end
 
     def refresh_data
       product_ids = Set.new(Product.all.pluck(:external_id))
@@ -37,14 +40,16 @@ module DiscourseSubscriptions
     end
 
     def create_campaign
-      group = create_campaign_group
-      product = create_campaign_product
-      create_campaign_prices(product, group)
+      begin
+        group = create_campaign_group
+        product = create_campaign_product
+        create_campaign_prices(product, group)
 
-      SiteSetting.discourse_subscriptions_campaign_enabled = true
-      SiteSetting.discourse_subscriptions_campaign_product = product[:id]
-    rescue ::Stripe::InvalidRequestError => e
-      e
+        SiteSetting.discourse_subscriptions_campaign_enabled = true
+        SiteSetting.discourse_subscriptions_campaign_product = product[:id]
+      rescue ::Stripe::InvalidRequestError => e
+        e
+      end
     end
 
     protected
@@ -104,7 +109,7 @@ module DiscourseSubscriptions
         },
       }
 
-      product = ::Stripe::Product.create(product_params, stripe_request_opts)
+      product = ::Stripe::Product.create(product_params)
 
       Product.create(external_id: product[:id])
 
@@ -136,7 +141,7 @@ module DiscourseSubscriptions
         },
       }
 
-      ::Stripe::Price.create(price_object, stripe_request_opts)
+      plan = ::Stripe::Price.create(price_object)
     end
 
     def get_one_time_payments(product_ids)
@@ -147,10 +152,7 @@ module DiscourseSubscriptions
         # lots of matching because the Stripe API doesn't make it easy to match products => payments except from invoices
         until current_set[:has_more] == false
           all_invoices =
-            ::Stripe::Invoice.list(
-              { limit: 100, starting_after: current_set[:last_record] },
-              stripe_request_opts,
-            )
+            ::Stripe::Invoice.list(limit: 100, starting_after: current_set[:last_record])
 
           if all_invoices[:data].present?
             current_set[:last_record] = all_invoices[:data].last[:id]
@@ -190,12 +192,9 @@ module DiscourseSubscriptions
       until current_set[:has_more] == false
         current_set =
           ::Stripe::Subscription.list(
-            {
-              expand: ["data.plan.product"],
-              limit: 100,
-              starting_after: current_set[:last_record],
-            },
-            stripe_request_opts,
+            expand: ["data.plan.product"],
+            limit: 100,
+            starting_after: current_set[:last_record],
           )
 
         current_set[:last_record] = current_set[:data].last[:id] if current_set[:data].present?

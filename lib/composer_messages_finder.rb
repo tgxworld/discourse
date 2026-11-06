@@ -5,7 +5,6 @@ class ComposerMessagesFinder
     @user = user
     @details = details
     @topic = Topic.find_by(id: details[:topic_id]) if details[:topic_id]
-    @topic = nil if @topic && !@user.guardian.can_see?(@topic)
   end
 
   def self.check_methods
@@ -55,7 +54,7 @@ class ComposerMessagesFinder
 
   # New users have a limited number of replies in a topic
   def check_new_user_many_replies
-    return unless replying? && @user.posted_too_much_in_topic?(@topic&.id)
+    return unless replying? && @user.posted_too_much_in_topic?(@details[:topic_id])
 
     {
       id: "too_many_replies",
@@ -157,7 +156,6 @@ class ComposerMessagesFinder
       end
 
     return if post.blank?
-    return if !@user.guardian.can_see?(post)
 
     flags = post.flags.active.group(:user_id).count
     flagged_by_replier = flags[@user.id].to_i > 0
@@ -185,7 +183,7 @@ class ComposerMessagesFinder
   private
 
   def educate_reply?(type)
-    replying? && @details[:topic_id] && @topic.present? && !@topic.private_message? &&
+    replying? && @details[:topic_id] && (@topic.present? && !@topic.private_message?) &&
       (@user.post_count >= SiteSetting.educate_until_posts) &&
       !UserHistory.exists_for_user?(@user, type, topic_id: @details[:topic_id])
   end

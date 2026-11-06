@@ -60,10 +60,10 @@ module DiscourseNarrativeBot
           old_data = @data.dup
 
           new_post =
-            if @skip && @state != :end
+            if (@skip && @state != :end)
               skip_tutorial(next_state)
             else
-              send(action)
+              self.send(action)
             end
 
           if new_post
@@ -154,6 +154,7 @@ module DiscourseNarrativeBot
     end
 
     def reset_data(user, additional_data = {})
+      old_data = get_data(user)
       new_data = additional_data
       set_data(user, new_data)
       new_data
@@ -198,12 +199,12 @@ module DiscourseNarrativeBot
 
     def clean_up_state(state)
       clean_up_method = "clean_up_#{state}"
-      send(clean_up_method) if self.class.private_method_defined?(clean_up_method)
+      self.send(clean_up_method) if self.class.private_method_defined?(clean_up_method)
     end
 
     def init_state(state)
       init_method = "init_#{state}"
-      send(init_method) if self.class.private_method_defined?(init_method)
+      self.send(init_method) if self.class.private_method_defined?(init_method)
     end
   end
 end

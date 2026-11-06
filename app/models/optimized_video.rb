@@ -21,8 +21,6 @@ class OptimizedVideo < ActiveRecord::Base
         extension: options[:extension] || "mp4",
         url: options[:url],
         etag: options[:etag],
-        skip_video_conversion: true,
-        secure: upload.secure?,
       )
 
     optimized_video =
@@ -63,11 +61,11 @@ end
 # Table name: optimized_videos
 #
 #  id                  :bigint           not null, primary key
+#  upload_id           :integer          not null
+#  optimized_upload_id :integer          not null
 #  adapter             :string
 #  created_at          :datetime         not null
 #  updated_at          :datetime         not null
-#  optimized_upload_id :integer          not null
-#  upload_id           :integer          not null
 #
 # Indexes
 #

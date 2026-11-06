@@ -10,4 +10,5 @@ fa_IR:
       title: "قالب‌ها"
   js:
     templates:
+      filter_hint: "فیلتر بر اساس عنوان..."
       source: "منبع"

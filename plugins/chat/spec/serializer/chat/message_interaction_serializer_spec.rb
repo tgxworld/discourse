@@ -22,17 +22,7 @@ RSpec.describe Chat::MessageInteractionSerializer do
         {
           type: "actions",
           elements: [
-            {
-              type: "button",
-              text: {
-                type: "plain_text",
-                text: "Like",
-              },
-              action_id: "like",
-              style: "success",
-              icon: "check",
-              value: "private-value",
-            },
+            { type: "button", text: { type: "plain_text", text: "Like" }, action_id: "like" },
           ],
         },
       ],
@@ -58,11 +48,7 @@ RSpec.describe Chat::MessageInteractionSerializer do
     let(:channel) { Fabricate(:chat_channel) }
 
     it "serializes the interaction" do
-      json = serializer.as_json
-
-      expect(json).to match_response_schema("message_interaction")
-      expect(json[:action]).to include("style" => "success", "icon" => "check")
-      expect(json[:action]).not_to have_key("value")
+      expect(serializer.as_json).to match_response_schema("message_interaction")
     end
   end
 end

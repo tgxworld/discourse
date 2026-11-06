@@ -15,29 +15,27 @@ module DiscourseAi
         initial_data = {
           custom_instructions: initial_settings&.data&.dig("custom_instructions"),
           llm_model_id: initial_settings&.llm_model_id,
-          decision_model_id: initial_settings&.decision_model_id,
-          ai_agent_id: initial_settings&.ai_agent_id,
+          ai_persona_id: initial_settings&.ai_persona_id,
         }
+
+        initial_custom_instructions = initial_settings&.data&.dig("custom_instructions")
+        initial_llm_model_id = initial_settings&.llm_model_id
 
         updated_params = {}
         if allowed_params.key?(:llm_model_id)
-          updated_params[:llm_model_id] = allowed_params[:llm_model_id].presence
-        end
-        if allowed_params.key?(:decision_model_id)
-          updated_params[:decision_model_id] = allowed_params[:decision_model_id].presence
+          llm_model_id = updated_params[:llm_model_id] = allowed_params[:llm_model_id]
         end
 
-        ai_agent_id = allowed_params[:ai_agent_id]
-        if ai_agent_id.present?
-          updated_params[:ai_agent_id] = ai_agent_id
-          agent = AiAgent.find_by(id: ai_agent_id)
-          if agent.nil? ||
-               agent.response_format.to_a.none? { |rf|
+        if allowed_params.key?(:ai_persona_id)
+          updated_params[:ai_persona_id] = allowed_params[:ai_persona_id]
+          persona = AiPersona.find_by(id: allowed_params[:ai_persona_id])
+          if persona.nil? ||
+               persona.response_format.to_a.none? { |rf|
                  rf["key"] == "spam" && rf["type"] == "boolean"
                }
             return(
               render_json_error(
-                I18n.t("discourse_ai.llm.configuration.invalid_agent_response_format"),
+                I18n.t("discourse_ai.llm.configuration.invalid_persona_response_format"),
                 status: 422,
               )
             )
@@ -49,9 +47,11 @@ module DiscourseAi
 
         if updated_params.present?
           # not using upsert cause we will not get the correct validation errors
-          settings = AiModerationSetting.spam || AiModerationSetting.new(setting_type: :spam)
-          settings.assign_attributes(updated_params)
-          return render_json_error(settings) if !settings.save
+          if AiModerationSetting.spam
+            AiModerationSetting.spam.update!(updated_params)
+          else
+            AiModerationSetting.create!(updated_params.merge(setting_type: :spam))
+          end
 
           log_ai_spam_update(initial_data, allowed_params)
         end
@@ -59,9 +59,12 @@ module DiscourseAi
         is_enabled = ActiveModel::Type::Boolean.new.cast(allowed_params[:is_enabled])
 
         if allowed_params.key?(:is_enabled)
-          if is_enabled && !AiModerationSetting.spam
+          if is_enabled && !AiModerationSetting.spam&.llm_model_id
             return(
-              render_json_error(I18n.t("discourse_ai.spam_detection.model_missing"), status: 422)
+              render_json_error(
+                I18n.t("discourse_ai.llm.configuration.must_select_model"),
+                status: 422,
+              )
             )
           end
 
@@ -91,44 +94,14 @@ module DiscourseAi
 
         raise Discourse::NotFound if !post
 
-        settings = AiModerationSetting.spam
-        llm_model = params.key?(:llm_id) ? nil : settings&.llm_model
-        if params[:llm_id].present?
-          llm_model = LlmModel.find_by(id: params[:llm_id])
-          if !llm_model
-            return(
-              render_json_error(
-                I18n.t("discourse_ai.llm.configuration.invalid_llm_id"),
-                status: 422,
-              )
-            )
-          end
-        end
-        decision_model =
-          if params.key?(:decision_model_id)
-            if params[:decision_model_id].present?
-              DecisionModel.find_by(id: params[:decision_model_id])
-            end
-          else
-            settings&.decision_model
-          end
-        if !llm_model && !decision_model
-          return(
-            render_json_error(I18n.t("discourse_ai.spam_detection.model_missing"), status: 422)
-          )
-        end
-
         result =
           DiscourseAi::AiModeration::SpamScanner.test_post(
             post,
             custom_instructions: params[:custom_instructions],
-            llm_model:,
-            decision_model:,
+            llm_id: params[:llm_id],
           )
 
         render json: result
-      rescue DiscourseAi::Decisions::Error => e
-        render_json_error(e.message, status: 422)
       end
 
       def fix_errors
@@ -171,33 +144,20 @@ module DiscourseAi
           changes_to_log[:llm_model_id] = "#{old_model_name} → #{new_model_name}"
         end
 
-        initial_decision_model_id = initial_data[:decision_model_id]
-        if params.key?(:decision_model_id) &&
-             initial_decision_model_id.to_s != params[:decision_model_id].to_s
-          old_model_name =
-            DecisionModel.find_by(id: initial_decision_model_id)&.display_name ||
-              initial_decision_model_id
-          new_model_name =
-            DecisionModel.find_by(id: params[:decision_model_id])&.display_name ||
-              params[:decision_model_id]
-
-          changes_to_log[:decision_model_id] = "#{old_model_name} → #{new_model_name}"
-        end
-
         initial_custom_instructions = initial_data[:custom_instructions]
         if params.key?(:custom_instructions) &&
              initial_custom_instructions != params[:custom_instructions]
           changes_to_log[:custom_instructions] = params[:custom_instructions]
         end
 
-        initial_ai_agent_id = initial_data[:ai_agent_id]
-        updated_ai_agent_id = params[:ai_agent_id]
-        if updated_ai_agent_id.present? && initial_ai_agent_id.to_s != updated_ai_agent_id.to_s
-          old_agent_name = AiAgent.find_by(id: initial_ai_agent_id)&.name || initial_ai_agent_id
-          new_agent_name = AiAgent.find_by(id: updated_ai_agent_id)&.name || updated_ai_agent_id
+        initial_ai_persona_id = initial_data[:ai_persona_id]
+        if params.key?(:ai_persona_id) && initial_ai_persona_id.to_s != params[:ai_persona_id].to_s
+          old_persona_name =
+            AiPersona.find_by(id: initial_ai_persona_id)&.name || initial_ai_persona_id
+          new_persona_name =
+            AiPersona.find_by(id: params[:ai_persona_id])&.name || params[:ai_persona_id]
 
-          change_value = "#{old_agent_name} → #{new_agent_name}"
-          changes_to_log[:ai_agent_id] = change_value
+          changes_to_log[:ai_persona_id] = "#{old_persona_name} → #{new_persona_name}"
         end
 
         if changes_to_log.present?
@@ -208,13 +168,7 @@ module DiscourseAi
       end
 
       def allowed_params
-        params.permit(
-          :is_enabled,
-          :llm_model_id,
-          :decision_model_id,
-          :custom_instructions,
-          :ai_agent_id,
-        )
+        params.permit(:is_enabled, :llm_model_id, :custom_instructions, :ai_persona_id)
       end
 
       def spam_config

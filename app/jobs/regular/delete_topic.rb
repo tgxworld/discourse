@@ -12,7 +12,7 @@ module Jobs
           context: I18n.t("topic_statuses.auto_deleted_by_timer"),
         ).destroy
 
-        topic_timer.finish!(:completed)
+        topic_timer.trash!(Discourse.system_user)
       end
     end
   end

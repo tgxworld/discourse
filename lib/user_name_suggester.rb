@@ -4,12 +4,7 @@ module UserNameSuggester
   GENERIC_NAMES = %w[i me info support admin webmaster hello mail office contact team]
   LAST_RESORT_USERNAME = "user"
 
-  def self.suggest(
-    *input,
-    current_username: nil,
-    allow_generic_fallback: true,
-    skip_watched_words: false
-  )
+  def self.suggest(*input, current_username: nil)
     name =
       input.find do |item|
         if !SiteSetting.use_email_for_username_and_name_suggestions
@@ -19,9 +14,8 @@ module UserNameSuggester
         break parsed_name if sanitize_username(parsed_name).present?
       end
 
-    name = fix_username(name, allow_generic_fallback:)
-    return nil if name.blank?
-    find_available_username_based_on(name, current_username, skip_watched_words:)
+    name = fix_username(name)
+    find_available_username_based_on(name, current_username)
   end
 
   def self.parse_name_from_email(name_or_email)
@@ -35,13 +29,9 @@ module UserNameSuggester
     name
   end
 
-  def self.find_available_username_based_on(name, current_username = nil, skip_watched_words: false)
+  def self.find_available_username_based_on(name, current_username = nil)
     offset = nil
     i = 1
-    valid_and_available = ->(candidate) do
-      UsernameValidator.new(candidate, skip_watched_words:).valid_format? &&
-        User.username_available?(candidate)
-    end
 
     attempt = name
     normalized_attempt = User.normalize_username(attempt)
@@ -49,7 +39,7 @@ module UserNameSuggester
     original_allowed_username = current_username
     current_username = User.normalize_username(current_username) if current_username
 
-    until normalized_attempt == current_username || valid_and_available.call(attempt) || i > 100
+    until (normalized_attempt == current_username || User.username_available?(attempt) || i > 100)
       if offset.nil?
         normalized = User.normalize_username(name)
         similar = "#{normalized}(0|1|2|3|4|5|6|7|8|9)+"
@@ -98,33 +88,22 @@ module UserNameSuggester
       i += 1
     end
 
-    until normalized_attempt == current_username || valid_and_available.call(attempt) || i > 200
-      attempt = rightsize_username(SecureRandom.hex)
+    until normalized_attempt == current_username || User.username_available?(attempt) || i > 200
+      attempt = SecureRandom.hex[1..SiteSetting.max_username_length]
       normalized_attempt = User.normalize_username(attempt)
       i += 1
     end
 
     if current_username == normalized_attempt
       original_allowed_username
-    elsif valid_and_available.call(attempt)
-      attempt
     else
-      raise Discourse::InvalidParameters, "Unable to suggest a valid username"
+      attempt
     end
   end
 
-  # Whether a username is the generic fallback (e.g. "user1") rather than a name
-  # derived from real signup data. Callers use it to decide whether the name is
-  # worth offering back to the user as a suggestion.
-  def self.generic_username?(username)
-    base = User.normalize_username(username.to_s.sub(/\d+\z/, ""))
-    base.present? && base == User.normalize_username(fix_username(nil).to_s.sub(/\d+\z/, ""))
-  end
-
-  def self.fix_username(name, allow_generic_fallback: true)
+  def self.fix_username(name)
     fixed_username = sanitize_username(name)
-    if fixed_username.blank?
-      return nil unless allow_generic_fallback
+    if fixed_username.empty?
       fixed_username << sanitize_username(I18n.t("fallback_username"))
       fixed_username << LAST_RESORT_USERNAME if fixed_username.empty?
     end

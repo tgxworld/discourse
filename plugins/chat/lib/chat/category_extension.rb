@@ -11,11 +11,6 @@ module Chat
               as: :chatable,
               class_name: "Chat::CategoryChannel",
               dependent: :destroy
-      has_many :category_channels,
-               class_name: "Chat::CategoryChannel",
-               dependent: :destroy,
-               foreign_key: %i[chatable_id chatable_type],
-               inverse_of: :chatable
     end
 
     def cannot_delete_reason

@@ -1,4 +1,4 @@
-import DiscourseReactionsAdapter from "./discourse-reactions-adapter.js";
+import DiscourseReactionsAdapter from "./discourse-reactions-adapter";
 
 export default class DiscourseReactionsCustomReaction extends DiscourseReactionsAdapter {
   pathFor(store, type, findArgs) {

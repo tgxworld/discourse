@@ -22,23 +22,13 @@ class SiteSettings::TypeSupervisor
     json_schema
     schema
     requires_confirmation
-    depends_on
-    depends_behavior
-    authorized_extensions
-    max_file_size_kb
-    disallowed_groups
   ].freeze
   VALIDATOR_OPTS = %i[min max regex hidden regex_error json_schema schema].freeze
 
   # For plugins, so they can tell if a feature is supported
   SUPPORTED_TYPES = %i[email username list enum].freeze
 
-  REQUIRES_CONFIRMATION_TYPES = {
-    simple: "simple",
-    simple_on_enable: "simple_on_enable",
-    simple_on_disable: "simple_on_disable",
-    user_option: "user_option",
-  }.freeze
+  REQUIRES_CONFIRMATION_TYPES = { simple: "simple", user_option: "user_option" }.freeze
 
   def self.types
     @types ||=
@@ -72,27 +62,23 @@ class SiteSettings::TypeSupervisor
         file_size_restriction: 27,
         objects: 28,
         locale_enum: 29,
-        topic: 30,
-        datetime: 31,
-        icon: 32,
-        date: 33,
       )
   end
 
   def self.parse_value_type(val)
     case val
     when NilClass
-      types[:null]
+      self.types[:null]
     when String
-      types[:string]
+      self.types[:string]
     when Integer
-      types[:integer]
+      self.types[:integer]
     when Float
-      types[:float]
+      self.types[:float]
     when TrueClass, FalseClass
-      types[:bool]
+      self.types[:bool]
     else
-      raise ArgumentError.new("Invalid value type for site setting: #{val.class}")
+      raise ArgumentError.new :val
     end
   end
 
@@ -112,19 +98,12 @@ class SiteSettings::TypeSupervisor
     @textareas = {}
     @json_schemas = {}
     @schemas = {}
-    @authorized_extensions = {}
-    @max_file_size_kb = {}
-    @dependencies = SiteSettings::DependencyGraph.new
   end
-
-  attr_reader :dependencies
 
   def load_setting(name_arg, opts = {})
     name = name_arg.to_sym
 
     @textareas[name] = opts[:textarea] if opts[:textarea]
-    @authorized_extensions[name] = opts[:authorized_extensions] if opts[:authorized_extensions]
-    @max_file_size_kb[name] = opts[:max_file_size_kb] if opts[:max_file_size_kb]
 
     @json_schemas[name] = opts[:json_schema].constantize if opts[:json_schema]
     @schemas[name] = opts[:schema] if opts[:schema]
@@ -148,7 +127,7 @@ class SiteSettings::TypeSupervisor
       @static_types[name] = type.to_sym
 
       if type.to_sym == :list
-        @allow_any[name] = opts[:allow_any] != false
+        @allow_any[name] = opts[:allow_any] == false ? false : true
         @list_type[name] = opts[:list_type] if opts[:list_type]
       end
 
@@ -160,32 +139,17 @@ class SiteSettings::TypeSupervisor
     @types[name] = get_data_type(name, @defaults_provider[name])
 
     opts[:validator] = opts[:validator].try(:constantize)
-    if (validator_type = opts[:validator] || validator_for(@types[name]))
+    if (validator_type = (opts[:validator] || validator_for(@types[name])))
       validator_opts = opts.slice(*VALIDATOR_OPTS)
       validator_opts[:name] = name
       @validators[name] = { class: validator_type, opts: validator_opts }
     end
-
-    @dependencies[name] = (opts[:depends_on] || []).map(&:to_sym)
-    @dependencies.change_behavior(name, opts[:depends_behavior]) if opts[:depends_behavior]
   end
 
-  # Converts a site setting value to a Ruby value based on the type of the setting,
-  # which is necessary because the value is stored in the database as a string.
-  #
-  # @param name [Symbol] the name of the setting
-  # @param value [String] the value of the setting
-  # @param override_type [Symbol] the type of the setting to override the type of the setting
-  # @return [Object] the Ruby value of the setting
-  #
-  # @example
-  #   to_rb_value(:enable_badges, "true") # => true
-  #   to_rb_value(:topics_per_period_in_top_page, "50") # => 50
-  #   to_rb_value(:title, "My awesome forum") # => "My awesome forum"
   def to_rb_value(name, value, override_type = nil)
     name = name.to_sym
     @types[name] = (@types[name] || get_data_type(name, value))
-    type = override_type || @types[name]
+    type = (override_type || @types[name])
     case type
     when self.class.types[:float]
       value.to_f
@@ -199,8 +163,7 @@ class SiteSettings::TypeSupervisor
       nil
     when self.class.types[:enum]
       @defaults_provider[name].is_a?(Integer) ? value.to_i : value.to_s
-    when self.class.types[:string], self.class.types[:datetime], self.class.types[:icon],
-         self.class.types[:date]
+    when self.class.types[:string]
       value.to_s
     else
       return value if self.class.types[type]
@@ -218,9 +181,10 @@ class SiteSettings::TypeSupervisor
   def type_hash(name)
     name = name.to_sym
     type = get_type(name)
+    list_type = get_list_type(name)
     result = { type: type.to_s }
 
-    if type == :enum || (type == :list && get_enum_class(name))
+    if type == :enum || list_type == "locale"
       if (klass = get_enum_class(name))
         result.merge!(valid_values: klass.values, translate_names: klass.translate_names?)
       else
@@ -248,10 +212,6 @@ class SiteSettings::TypeSupervisor
     result[:list_type] = @list_type[name] if @list_type.has_key? name
     result[:textarea] = @textareas[name] if @textareas.has_key? name
     result[:schema] = @schemas[name] if @schemas.has_key? name
-    result[:authorized_extensions] = @authorized_extensions[
-      name
-    ] if @authorized_extensions.has_key? name
-    result[:max_file_size_kb] = @max_file_size_kb[name] if @max_file_size_kb.has_key? name
 
     if @json_schemas.has_key?(name) && json_klass = json_schema_class(name)
       result[:json_schema] = json_klass.schema
@@ -273,7 +233,7 @@ class SiteSettings::TypeSupervisor
   end
 
   def validate_value(name, type, val)
-    if type == self.class.types[:enum] || (type == self.class.types[:list] && get_enum_class(name))
+    if type == self.class.types[:enum] || get_list_type(name) == "locale"
       if get_enum_class(name)
         unless get_enum_class(name).valid_value?(val)
           raise Discourse::InvalidParameters.new("Invalid value `#{val}` for `#{name}`")
@@ -308,21 +268,12 @@ class SiteSettings::TypeSupervisor
     if (v = @validators[name])
       validator = v[:class].new(v[:opts])
       unless validator.valid_value?(val)
-        error = validator.error_message
-        if SiteSettings::LabelFormatter.contains_setting_links?(error)
-          raise Discourse::InvalidHTMLParameters.new(
-                  "#{name}: #{SiteSettings::LabelFormatter.plain_setting_links(error)}",
-                  html_message:
-                    "#{name}: #{SiteSettings::LabelFormatter.expand_setting_links(error, escape_text: true)}",
-                )
-        end
-
-        raise Discourse::InvalidParameters, "#{name}: #{error}"
+        raise Discourse::InvalidParameters, "#{name}: #{validator.error_message}"
       end
     end
 
     validate_method = "validate_#{name}"
-    public_send(validate_method, val) if respond_to? validate_method
+    public_send(validate_method, val) if self.respond_to? validate_method
   end
 
   private
@@ -330,14 +281,6 @@ class SiteSettings::TypeSupervisor
   def normalize_input(name, val)
     name = name.to_sym
     type = @types[name] || self.class.parse_value_type(val)
-
-    if val.nil?
-      Discourse.deprecate(
-        "Site setting #{name} expects a #{self.class.types[type]} value. Implicit casts from `nil` are a source of bugs and will not be supported in future releases.",
-        drop_from: "3.7.0",
-        output_in_test: true,
-      )
-    end
 
     if type == self.class.types[:bool]
       val = (val == true || val == "t" || val == "true") ? "t" : "f"
@@ -358,23 +301,6 @@ class SiteSettings::TypeSupervisor
       val = val.is_a?(String) ? val : val.map(&:id).join("|")
     elsif type == self.class.types[:upload] && val.present?
       val = val.is_a?(Integer) ? val : val.id
-    elsif type == self.class.types[:group] && val.present?
-      val = (Group.find_by_id_or_name(val)&.id || val).to_s
-    elsif type == self.class.types[:objects] && val.present?
-      begin
-        objects = val.is_a?(String) ? JSON.parse(val) : val
-
-        if objects.is_a?(Array) && @schemas[name]
-          val =
-            JSON.generate(
-              SchemaSettingsObjectValidator.normalize_uploads(
-                schema: @schemas[name],
-                objects: objects,
-              ),
-            )
-        end
-      rescue JSON::ParserError
-      end
     end
 
     [val, type]
@@ -412,12 +338,6 @@ class SiteSettings::TypeSupervisor
       StringSettingValidator
     when self.class.types[:host_list]
       HostListSettingValidator
-    when self.class.types[:topic]
-      TopicSettingValidator
-    when self.class.types[:datetime]
-      DatetimeSettingValidator
-    when self.class.types[:date]
-      DateSettingValidator
     else
       nil
     end

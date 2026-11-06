@@ -2,7 +2,7 @@
 
 # NOTE: This spec covers core functionality, but it is much easier
 # to test plugin related things inside an actual plugin.
-describe "Admin Plugins List" do
+describe "Admin Plugins List", type: :system do
   fab!(:current_user, :admin)
   let(:admin_plugins_list_page) { PageObjects::Pages::AdminPluginsList.new }
 
@@ -12,7 +12,7 @@ describe "Admin Plugins List" do
   end
 
   let(:automation_plugin) do
-    Plugin::Instance.parse_from_source(Rails.root.join("plugins/automation/plugin.rb").to_s)
+    Plugin::Instance.parse_from_source(File.join(Rails.root, "plugins", "automation", "plugin.rb"))
   end
 
   it "shows the list of plugins" do
@@ -34,20 +34,21 @@ describe "Admin Plugins List" do
 
   it "can toggle whether a plugin is enabled" do
     admin_plugins_list_page.visit
-
-    admin_plugins_list_page.toggle_plugin("automation")
-    expect(admin_plugins_list_page).to have_plugin_disabled("automation")
+    toggle_switch =
+      PageObjects::Components::DToggleSwitch.new(
+        admin_plugins_list_page.plugin_row_selector("automation") +
+          " .admin-plugins-list__enabled .d-toggle-switch__checkbox",
+      )
+    toggle_switch.toggle
+    expect(toggle_switch).to be_unchecked
     expect(SiteSetting.discourse_automation_enabled).to eq(false)
-
-    admin_plugins_list_page.toggle_plugin("automation")
-    expect(admin_plugins_list_page).to have_plugin_enabled("automation")
+    toggle_switch.toggle
+    expect(toggle_switch).to be_checked
     expect(SiteSetting.discourse_automation_enabled).to eq(true)
   end
 
-  it "links a plugin with a config page to its config page" do
+  it "shows a navigation tab for each plugin that needs it" do
     admin_plugins_list_page.visit
-    admin_plugins_list_page.click_plugin_name("automation")
-
-    expect(page).to have_css(".admin-plugin-config-page .d-page-header__title", text: "Automation")
+    expect(admin_plugins_list_page).to have_plugin_tab("automation")
   end
 end

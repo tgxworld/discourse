@@ -11,7 +11,6 @@ class ::UserNoteSerializer < ApplicationSerializer
     :post_id,
     :post_url,
     :post_title,
-    :reviewable_id,
   )
 
   def id
@@ -42,10 +41,6 @@ class ::UserNoteSerializer < ApplicationSerializer
     object[:post_id]
   end
 
-  def include_post_id?
-    object[:post].present?
-  end
-
   def post_url
     url = object[:post].try(:url)
 
@@ -55,23 +50,11 @@ class ::UserNoteSerializer < ApplicationSerializer
     "#{Discourse.base_path}#{url}"
   end
 
-  def include_post_url?
-    object[:post].present?
-  end
-
   def post_title
     object[:post].try(:title)
   end
 
-  def include_post_title?
-    object[:post].present?
-  end
-
   def topic_id
     object[:topic_id]
-  end
-
-  def reviewable_id
-    object[:reviewable_id]
   end
 end

@@ -18,8 +18,6 @@ be:
         many: "галасоў"
         other: "галасоў"
       average_rating: "Сярэдні рэйтынг: <strong>%{average}strong>."
-      keep-vote:
-        label: "Назад"
       show-results:
         label: "вынікі"
       export-results:

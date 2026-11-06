@@ -7,17 +7,7 @@
 bs_BA:
   js:
     styleguide:
-      example:
-        kind:
-          component: "Komponenta"
       sections:
-        context_menu:
-          actions:
-            delete: "Delete"
-        reorderable_list:
-          policies_pinned: "Zakačena"
-          policies_required: "Required"
-          table_type: "Tip"
         colors:
           title: "Colors"
         categories:
@@ -30,22 +20,8 @@ bs_BA:
           title: "Trajanje tema"
         post:
           title: "Objava"
-        more_topics:
-          title: "Još tema"
-        roving_focus:
-          toolbar:
-            copy: "Copy"
-          adjacent:
-            field: "Pretraži"
-            open: "Otvori"
-            recent: "Nove"
-          combobox:
-            daily: "Dnevno"
-            weekly: "Sedmično"
-            monthly: "Mesečno"
-            never: "Nikad"
-          tree:
-            components: "Komponenti"
+        suggested_topics:
+          title: "Preporučene teme"
         tooltips:
           description: "Opis"
           header: "Header"

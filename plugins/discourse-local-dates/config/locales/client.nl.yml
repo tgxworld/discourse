@@ -5,11 +5,6 @@
 # https://translate.discourse.org/
 
 nl:
-  admin_js:
-    admin:
-      site_settings:
-        categories:
-          discourse_local_dates: "Discourse lokale datums"
   js:
     discourse_local_dates:
       relative_dates:
@@ -19,11 +14,11 @@ nl:
         countdown:
           passed: datum is verstreken
       title: Datum / tijd invoegen
-      edit_date: '%{date} bewerken'
       create:
         form:
           insert: Invoegen
-          save: Opslaan
+          advanced_mode: Geavanceerde modus
+          simple_mode: Simpele modus
           format_description: "Gebruikte notatie om de datum aan de gebruiker weer te geven. Gebruik Z om de offset weer te geven en zz voor de tijdzonenaam."
           timezones_title: Tijdzones om weer te geven
           timezones_description: Tijdzones worden gebruikt voor het weergeven van datums in voorbeeld en terugval.

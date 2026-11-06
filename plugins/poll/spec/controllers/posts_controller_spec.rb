@@ -10,7 +10,7 @@ RSpec.describe PostsController do
   end
 
   describe "polls" do
-    it "creates the post and its poll" do
+    it "works" do
       Group.refresh_automatic_groups!
       post :create, params: { title: title, raw: "[poll]\n- A\n- B\n[/poll]" }, format: :json
 
@@ -63,7 +63,7 @@ RSpec.describe PostsController do
       expect(job_args["poll_name"]).to eq(name)
     end
 
-    it "requires different options" do
+    it "should have different options" do
       post :create, params: { title: title, raw: "[poll]\n- A\n- A\n[/poll]" }, format: :json
 
       expect(response).not_to be_successful
@@ -84,7 +84,7 @@ RSpec.describe PostsController do
       expect(response).to be_successful
     end
 
-    it "requires at least one option" do
+    it "should have at least 1 options" do
       post :create, params: { title: title, raw: "[poll]\n[/poll]" }, format: :json
 
       expect(response).not_to be_successful
@@ -92,7 +92,7 @@ RSpec.describe PostsController do
       expect(json["errors"][0]).to eq(I18n.t("poll.default_poll_must_have_at_least_1_option"))
     end
 
-    it "allows at most SiteSetting.poll_maximum_options options" do
+    it "should have at most 'SiteSetting.poll_maximum_options' options" do
       raw = +"[poll]\n"
       (SiteSetting.poll_maximum_options + 1).times { |n| raw << "\n- #{n}" }
       raw << "\n[/poll]"
@@ -106,7 +106,7 @@ RSpec.describe PostsController do
       )
     end
 
-    it "requires valid parameters" do
+    it "should have valid parameters" do
       post :create,
            params: {
              title: title,
@@ -131,9 +131,7 @@ RSpec.describe PostsController do
 
       expect(response.status).to eq(200)
       json = response.parsed_body
-      expect(json["cooked"]).to include(
-        "data-poll-name=\"&lt;script&gt;alert('xss')&lt;/script&gt;\"",
-      )
+      expect(json["cooked"]).to include("data-poll-name=\"<script>alert('xss')</script>\"")
       expect(Poll.find_by(post_id: json["id"]).name).to eq(
         "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;",
       )
@@ -306,7 +304,7 @@ RSpec.describe PostsController do
   end
 
   describe "named polls" do
-    it "requires different options" do
+    it "should have different options" do
       post :create,
            params: {
              title: title,
@@ -324,7 +322,7 @@ RSpec.describe PostsController do
       )
     end
 
-    it "requires at least one option" do
+    it "should have at least 1 option" do
       post :create, params: { title: title, raw: "[poll name='foo']\n[/poll]" }, format: :json
 
       expect(response).not_to be_successful
@@ -336,7 +334,7 @@ RSpec.describe PostsController do
   end
 
   describe "multiple polls" do
-    it "creates a post with multiple polls" do
+    it "works" do
       post :create,
            params: {
              title: title,
@@ -350,7 +348,7 @@ RSpec.describe PostsController do
       expect(Poll.where(post_id: json["id"]).count).to eq(2)
     end
 
-    it "requires a name" do
+    it "should have a name" do
       post :create,
            params: {
              title: title,
@@ -363,7 +361,7 @@ RSpec.describe PostsController do
       expect(json["errors"][0]).to eq(I18n.t("poll.multiple_polls_without_name"))
     end
 
-    it "requires a unique name" do
+    it "should have unique name" do
       post :create,
            params: {
              title: title,

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-ruby "~> 4.0.0"
+ruby "~> 3.3"
 
 source "https://rubygems.org"
 # if there is a super emergency and rubygems is playing up, try
@@ -8,19 +8,19 @@ source "https://rubygems.org"
 
 gem "bootsnap", require: false, platform: :mri
 
-gem "actionmailer", "~> 8.1.0"
-gem "actionpack", "~> 8.1.0"
-gem "actionview", "~> 8.1.0"
-gem "activemodel", "~> 8.1.0"
-gem "activerecord", "~> 8.1.0"
-gem "activesupport", "~> 8.1.0"
-gem "railties", "~> 8.1.0"
+gem "actionmailer", "~> 8.0.0"
+gem "actionpack", "~> 8.0.0"
+gem "actionview", "~> 8.0.0"
+gem "activemodel", "~> 8.0.0"
+gem "activerecord", "~> 8.0.0"
+gem "activesupport", "~> 8.0.0"
+gem "railties", "~> 8.0.0"
 
 gem "propshaft"
 gem "json"
 
 # this will eventually be added to rails,
-# allows us to precompile all our templates in the app server master
+# allows us to precompile all our templates in the unicorn master
 gem "actionview_precompiler", require: false
 
 gem "discourse-seed-fu"
@@ -53,47 +53,43 @@ gem "http_accept_language", require: false
 
 gem "discourse-fonts", require: "discourse_fonts"
 gem "discourse-emojis", require: "discourse_emojis"
-gem "discourse_math_bundle"
 
 gem "message_bus"
 
 gem "rails_multisite"
 
 gem "fastimage"
-gem "msgpack"
-gem "ruby-vips", "~> 2.3", require: false
 
 gem "aws-sdk-s3", require: false
 gem "aws-sdk-sns", require: false
-gem "aws-sdk-sts", require: false
 gem "aws-sdk-mediaconvert", require: false
-gem "aws-sdk-bedrockruntime", require: false
-gem "excon"
+gem "excon", require: false
 gem "unf", require: false
 
 gem "email_reply_trimmer"
 
+gem "image_optim"
 gem "multi_json"
 gem "mustache"
-gem "liquid", "5.12.0"
 gem "nokogiri"
 gem "loofah"
 gem "css_parser", require: false
 
 gem "omniauth"
-gem "omniauth-facebook", require: false
-gem "omniauth-twitter", require: false
-gem "omniauth-github", require: false
+gem "omniauth-facebook"
+gem "omniauth-twitter"
+gem "omniauth-github"
 
 gem "omniauth-oauth2", require: false
 
-gem "omniauth-google-oauth2", require: false
+gem "omniauth-google-oauth2"
 
 gem "oj"
 
 gem "pg"
 gem "mini_sql"
 gem "pry-rails", require: false
+gem "pry-byebug", require: false
 gem "rtlcss", require: false
 gem "messageformat-wrapper", require: false
 gem "rake"
@@ -101,74 +97,73 @@ gem "rake"
 gem "thor", require: false
 gem "diffy", require: false
 gem "rinku"
-gem "sidekiq", ">= 7.3.10" # ensuring it won't get downgraded to accomodate a connection_pool upgrade
+gem "sidekiq"
 gem "mini_scheduler"
 
 gem "mini_racer"
 
 gem "highline", require: false
 
-# TODO: upgrade to Rack 3 now that Unicorn has been removed
+# When unicorn is not used anymore, we can use Rack 3
 gem "rack", "< 3"
 
 gem "rack-protection" # security
 gem "cbor", require: false
 gem "cose", require: false
 gem "addressable"
-gem "json_schemer", require: false
+gem "json_schemer"
 
 gem "net-smtp", require: false
+gem "net-imap", require: false
 gem "net-pop", require: false
 gem "digest", require: false
 
-gem "goldiloader"
+gem "goldiloader", require: false
 
 group :test do
-  gem "gitlab-crystalball", "~> 1.1.3", require: false
   gem "capybara", require: false
   gem "webmock", require: false
   gem "simplecov", require: false
-  gem "test-prof", require: false
+  gem "test-prof"
   gem "rails-dom-testing", require: false
-  gem "capybara-playwright-driver", require: false
-  gem "puma", require: false
+  gem "minio_runner", require: false
+  gem "capybara-playwright-driver"
 end
 
 group :test, :development do
-  gem "rspec", require: false
+  gem "rspec"
   gem "listen", require: false
   gem "certified", require: false
   gem "fabrication", require: false
   gem "mocha", require: false
 
-  gem "rb-fsevent", require: false
+  gem "rb-fsevent", require: RUBY_PLATFORM =~ /darwin/i ? "rb-fsevent" : false
 
-  gem "rspec-rails", require: false
+  gem "rspec-rails"
 
   gem "shoulda-matchers", require: false
-  gem "rspec-html-matchers", require: false
-  gem "debug", ">= 1.0.0", require: "debug/prelude"
+  gem "rspec-html-matchers"
+  gem "pry-stack_explorer", require: false
+  gem "byebug", require: ENV["RM_INFO"].nil?, platform: :mri
   gem "rubocop-discourse", require: false
-  gem "parallel_tests", require: false
+  gem "parallel_tests"
 
-  gem "rswag-specs", require: false
+  gem "rswag-specs"
 
-  gem "annotaterb", require: false
+  gem "annotaterb"
 
-  gem "syntax_tree", require: false
+  gem "syntax_tree"
 
-  gem "rspec-multi-mock", require: false
+  gem "rspec-multi-mock"
 end
 
 group :development do
   gem "ruby-prof", require: false, platform: :mri
   gem "bullet", require: !!ENV["BULLET"]
   gem "better_errors", platform: :mri, require: !!ENV["BETTER_ERRORS"]
+  gem "binding_of_caller"
   gem "yaml-lint"
   gem "yard"
-  gem "ruby-lsp", require: false
-  gem "ruby-lsp-rails", require: false
-  gem "ruby-lsp-rspec", require: false
 end
 
 if ENV["ALLOW_DEV_POPULATE"] == "1"
@@ -176,8 +171,8 @@ if ENV["ALLOW_DEV_POPULATE"] == "1"
   gem "faker"
 else
   group :development, :test do
-    gem "discourse_dev_assets", require: false
-    gem "faker", require: false
+    gem "discourse_dev_assets"
+    gem "faker"
   end
 end
 
@@ -197,11 +192,8 @@ gem "htmlentities", require: false
 
 gem "rack-mini-profiler", require: ["enable_rails_patches"]
 
-gem "pitchfork", require: false
-
-# Used by discourse-prometheus to collect socket queue stats.
-# Was previously a transitive dependency of the unicorn gem.
-gem "raindrops", git: "https://github.com/discourse/raindrops", require: false, platform: :ruby
+gem "unicorn", require: false, platform: :ruby
+gem "puma", require: false
 
 gem "rbtrace", require: false, platform: :mri
 
@@ -225,18 +217,16 @@ gem "sassc-embedded"
 
 gem "rotp", require: false
 
-gem "rqrcode", require: false
+gem "rqrcode"
 
 gem "rubyzip", require: false
 
-gem "landlock", require: false
-
 gem "sshkey", require: false
 
+gem "rchardet", require: false
 gem "lz4-ruby", require: false, platform: :ruby
 
 gem "sanitize"
-gem "reverse_markdown", "3.0.2", require: false
 
 if ENV["IMPORT"] == "1"
   gem "mysql2"
@@ -245,6 +235,7 @@ if ENV["IMPORT"] == "1"
   # NOTE: in import mode the version of sqlite can matter a lot, so we stick it to a specific one
   gem "sqlite3", "~> 1.3", ">= 1.3.13"
   gem "ruby-bbcode-to-md", git: "https://github.com/nlalonde/ruby-bbcode-to-md"
+  gem "reverse_markdown"
   gem "tiny_tds"
   gem "csv"
 end
@@ -273,24 +264,29 @@ gem "cgi", ">= 0.3.6", require: false
 gem "tzinfo-data"
 gem "csv", require: false
 
-# Rails 8.1 drops its own dependency on `benchmark`.
-gem "benchmark", require: false
-
 # dependencies for the automation plugin
 gem "iso8601"
 gem "rrule"
 
 group :migrations, optional: true do
-  gem "migrations-core", path: "migrations/core"
-  gem "migrations-tooling", path: "migrations/tooling"
-  gem "migrations-converters", path: "migrations/converters"
-  gem "migrations-importer", path: "migrations/importer"
+  gem "extralite-bundle", require: "extralite"
+
+  # auto-loading
+  gem "zeitwerk"
+
+  # databases
+  gem "trilogy"
+
+  # CLI
+  gem "ruby-progressbar"
+
+  # non-cryptographic hashing algorithm for generating placeholder IDs
+  gem "digest-xxhash"
 end
 
 gem "dry-initializer", "~> 3.1"
 
 gem "parallel"
-gem "tty-prompt", require: false
 
 # for discourse-zendesk-plugin
 gem "inflection", require: false
@@ -301,19 +297,14 @@ gem "zendesk_api", require: false
 # for discourse-subscriptions
 gem "stripe", require: false
 
-# for discourse-code-review
+# for discourse-github
 gem "sawyer", require: false
 gem "octokit", require: false
 
 # for discourse-ai
 gem "tokenizers", require: false
 gem "tiktoken_ruby", require: false
-gem "smarter_json", require: false
-gem "json_completer", require: false
 gem "discourse_ai-tokenizers", require: false
-
-# for the live plugin
-gem "discourse_voice_assets", require: false
 gem "ed25519" # TODO: remove this as existing ssl gem should handle this
 gem "Ascii85", require: false
 gem "ruby-rc4", require: false

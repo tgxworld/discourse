@@ -39,12 +39,8 @@ module PageObjects
         @element.find(".image-uploader-lightbox-btn").click
       end
 
-      def close_lightbox_preview
-        find(".pswp__button--close").click
-      end
-
-      def has_lightbox_preview?
-        has_css?(".pswp--open")
+      def has_lighbox_preview?
+        has_css?(".mfp-container")
       end
     end
   end

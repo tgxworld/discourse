@@ -2,10 +2,8 @@ import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
 import { LinkTo } from "@ember/routing";
 import { service } from "@ember/service";
+import icon from "discourse/helpers/d-icon";
 import getURL from "discourse/lib/get-url";
-import { discoveryHomepageRoute } from "discourse/lib/homepage-router-overrides";
-import { defaultHomepage } from "discourse/lib/utilities";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { i18n } from "discourse-i18n";
 
 export default class ChatHeader extends Component {
@@ -39,20 +37,11 @@ export default class ChatHeader extends Component {
   }
 
   get forumLink() {
-    if (this.previousURL) {
-      return getURL(this.previousURL);
-    }
-
-    // `/` would lead straight back into chat
-    if (defaultHomepage() === "chat") {
-      return getURL(this.router.urlFor(discoveryHomepageRoute()));
-    }
-
-    return getURL(this.router.rootURL);
+    return getURL(this.previousURL ?? this.router.rootURL);
   }
 
   #updatePreviousURL() {
-    if (!this.router.currentRouteName?.startsWith("chat")) {
+    if (!this.isChatOpen) {
       this.previousURL = this.router.currentURL;
     }
   }
@@ -61,15 +50,15 @@ export default class ChatHeader extends Component {
     {{#if this.shouldRender}}
       <div class="c-header">
         <a
-          class="btn-flat back-to-forum"
           href={{this.forumLink}}
+          class="btn-flat back-to-forum"
           title={{this.title}}
         >
-          {{dIcon "arrow-left"}}
+          {{icon "arrow-left"}}
           {{this.title}}
         </a>
 
-        <LinkTo class="c-heading" @route="chat.index">{{this.heading}}</LinkTo>
+        <LinkTo @route="chat.index" class="c-heading">{{this.heading}}</LinkTo>
       </div>
     {{else}}
       {{yield}}

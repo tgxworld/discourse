@@ -1,5 +1,5 @@
 import { withPluginApi } from "discourse/lib/plugin-api";
-import AssignedTopicListColumn from "../components/assigned-topic-list-column.gjs";
+import AssignedTopicListColumn from "../components/assigned-topic-list-column";
 
 const ASSIGN_LIST_ROUTES = ["userActivity.assigned", "group.assigned.show"];
 

@@ -24,18 +24,21 @@ module PageObjects
       end
 
       def click_categories_header_button
-        page.find("[data-section-name='categories'] .sidebar-section-header-button").click
+        page.click_button(
+          I18n.t("js.sidebar.sections.categories.header_action_title"),
+          class: "sidebar-section-header-button",
+        )
       end
 
       def click_topics_link
         find(".sidebar-section-link[data-link-name='everything']").click
       end
 
-      def click_edit_categories_dropdown_option
-        find("[data-section-name='categories'] .sidebar-section-header-dropdown").click
-        find(
-          ".sidebar-section-header-dropdown-menu-content [data-menu-option-id='edit-categories']",
-        ).click
+      def click_toggle_to_desktop_view_button
+        page.click_button(
+          I18n.t("js.desktop_view"),
+          class: "sidebar-footer-actions-toggle-mobile-view",
+        )
       end
 
       def click_outside

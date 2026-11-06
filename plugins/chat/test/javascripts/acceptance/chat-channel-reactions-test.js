@@ -19,9 +19,9 @@ const message = {
   },
 };
 
-acceptance("Channel Reactions", function (needs) {
+acceptance("Discourse Chat - Channel Reactions", function (needs) {
   needs.user({ has_chat_enabled: true });
-  needs.settings({ chat_enabled: true, enable_emoji: true });
+  needs.settings({ chat_enabled: true });
 
   needs.hooks.beforeEach(function () {
     pretender.get("/chat/api/me/channels", () =>
@@ -57,8 +57,6 @@ acceptance("Channel Reactions", function (needs) {
         meta: { can_delete_self: true },
       })
     );
-
-    pretender.post(`/chat/api/channels/11/drafts`, () => response({}));
   });
 
   test("shows the reaction button with the count", async function (assert) {

@@ -27,13 +27,6 @@ module PageObjects
         )
       end
 
-      def has_translation_fields_only?
-        form.has_no_field_with_name?("contactEmail") &&
-          form.has_no_field_with_name?("contactURL") &&
-          form.has_no_field_with_name?("contactUsername") &&
-          form.has_no_field_with_name?("contactGroupName")
-      end
-
       def submit
         form.submit
       end

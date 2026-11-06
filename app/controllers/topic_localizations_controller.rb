@@ -3,59 +3,41 @@
 class TopicLocalizationsController < ApplicationController
   before_action :ensure_logged_in
 
-  def show
-    topic = Topic.find_by(id: params[:topic_id])
-    raise Discourse::NotFound unless topic
-
-    guardian.ensure_can_see!(topic)
-
-    localization = TopicLocalization.find_by(topic_id: topic.id, locale: params[:locale])
-    raise Discourse::NotFound unless localization
-
-    render json: TopicLocalizationSerializer.new(localization, root: false)
-  end
-
   def create_or_update
-    topic_id, locale, title = params.require(%i[topic_id locale title])
+    guardian.ensure_can_localize_content!
 
-    topic = Topic.find_by(id: topic_id)
-    raise Discourse::NotFound unless topic
+    params.require(%i[topic_id locale title])
 
-    guardian.ensure_can_localize_topic!(topic)
-
-    topic_localization = TopicLocalization.find_by(topic_id: topic.id, locale: params[:locale])
+    topic_localization =
+      TopicLocalization.find_by(topic_id: params[:topic_id], locale: params[:locale])
     if topic_localization
       TopicLocalizationUpdater.update(
-        topic:,
+        topic_id: params[:topic_id],
         locale: params[:locale],
         title: params[:title],
         user: current_user,
       )
       render json: success_json, status: :ok
     else
-      TopicLocalizationCreator.create(topic:, locale:, title:, user: current_user)
+      TopicLocalizationCreator.create(
+        topic_id: params[:topic_id],
+        locale: params[:locale],
+        title: params[:title],
+        user: current_user,
+      )
       render json: success_json, status: :created
     end
   end
 
-  def update_locale
-    topic = Topic.find_by(id: params[:topic_id])
-    raise Discourse::NotFound unless topic
-
-    updated_topic =
-      TopicLocaleUpdater.update(topic:, locale: params.fetch(:locale).presence, user: current_user)
-    render json: { locale: updated_topic.locale }, status: :ok
-  end
-
   def destroy
-    topic_id, locale = params.require(%i[topic_id locale])
+    guardian.ensure_can_localize_content!
 
-    topic = Topic.find_by(id: topic_id)
-    raise Discourse::NotFound unless topic
-
-    guardian.ensure_can_localize_topic!(topic)
-
-    TopicLocalizationDestroyer.destroy(topic:, locale:, acting_user: current_user)
+    params.require(%i[topic_id locale])
+    TopicLocalizationDestroyer.destroy(
+      topic_id: params[:topic_id],
+      locale: params[:locale],
+      acting_user: current_user,
+    )
     head :no_content
   end
 end

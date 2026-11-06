@@ -6,10 +6,6 @@
 
 sw:
   js:
-    discourse_ai:
-      features:
-        data_explorer:
-          name: "Utafiti wa Taarifa"
     errors:
       explorer:
         no_semicolons: "Ondoa alama ya mkato kwenye swali."
@@ -18,10 +14,12 @@ sw:
       or: "au"
       admins_only: "Uwezo wa kupitia taarifa zote unapatikana kwa viongozi tu."
       title: "Utafiti wa Taarifa"
+      create: "Tengeneza Mpya"
       create_placeholder: "Jina la ulizo..."
       description_placeholder: "Andika maelezo hapa"
-      ai:
-        generate: "Tengeneza"
+      import:
+        label: "Imeingizwa kutoka sehemu nyingine"
+        modal: "Ingiza Ulizo"
       help:
         label: "Msaada"
       schema:
@@ -33,18 +31,20 @@ sw:
           yes: "Ndio"
           no: "Hapana"
           null_: "Hamna Kitu"
+      export: "Hamisha"
+      save: "Hifadhi Mabadiliko"
+      undo: "Kataa Mabadiliko"
+      edit: "Hariri"
       delete: "Futa"
-      name: "Jina"
+      recover: "Rejesha Suala"
+      download_json: "JSON"
+      download_csv: "CSV"
+      others_dirty: "Mabaliko uliyofanya kwenye ulizo hayajahifadhiwa, hifadhi kabla ya kwenda kwingine."
+      query_name: "Swali"
       query_groups: "Makundi"
-      query_tags: "Lebo"
       query_description: "Maelezo"
       query_user: "Imetengenezwa na"
+      explain_label: "pamoja na mpango wa swala?"
+      save_params: "Seti Chaguo-misingi"
       reset_params: "Weka/Anzisha Upya"
-    discourse_workflows:
-      nodes:
-        "action:sql": "Utafiti wa Taarifa"
-      sql:
-        query_id: "Swali"
-        param_value: "Thamani"
-        output:
-          results: "Majibu"
+      search_placeholder: "Tafuta"

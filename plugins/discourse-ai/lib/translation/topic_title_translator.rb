@@ -5,8 +5,8 @@ module DiscourseAi
     class TopicTitleTranslator < BaseTranslator
       private
 
-      def agent_setting
-        SiteSetting.ai_translation_topic_title_translator_agent
+      def persona_setting
+        SiteSetting.ai_translation_topic_title_translator_persona
       end
     end
   end

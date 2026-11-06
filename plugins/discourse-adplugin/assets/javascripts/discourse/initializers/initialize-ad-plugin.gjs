@@ -1,7 +1,9 @@
+import { hbs } from "ember-cli-htmlbars";
+import { withSilencedDeprecations } from "discourse/lib/deprecated";
 import { withPluginApi } from "discourse/lib/plugin-api";
 import Site from "discourse/models/site";
-import NestedRootAd from "../components/nested-root-ad.gjs";
-import PostBottomAd from "../components/post-bottom-ad.gjs";
+import { registerWidgetShim } from "discourse/widgets/render-glimmer";
+import PostBottomAd from "../components/post-bottom-ad";
 
 export default {
   name: "initialize-ad-plugin",
@@ -27,13 +29,25 @@ function customizePost(api) {
   api.renderAfterWrapperOutlet(
     "post-article",
     <template>
-      {{#unless @nestedReplyView}}
-        <div class="ad-connector">
-          <PostBottomAd @model={{@post}} />
-        </div>
-      {{/unless}}
+      <div class="ad-connector">
+        <PostBottomAd @model={{@post}} />
+      </div>
     </template>
   );
 
-  api.renderInOutlet("nested-roots-between", NestedRootAd);
+  withSilencedDeprecations("discourse.post-stream-widget-overrides", () =>
+    customizeWidgetPost(api)
+  );
+}
+
+function customizeWidgetPost(api) {
+  registerWidgetShim(
+    "after-post-ad",
+    "div.ad-connector",
+    hbs`<PostBottomAd @model={{@data}} />`
+  );
+
+  api.decorateWidget("post:after", (helper) => {
+    return helper.attach("after-post-ad", helper.widget.model);
+  });
 }

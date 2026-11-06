@@ -6,18 +6,8 @@
 
 da:
   js:
-    admin:
-      logs:
-        staff_actions:
-          actions:
-            create_automation: opret automatisering
-            update_automation: opdater automatisering
-            delete_automation: slet automatisering
     discourse_automation:
       title: Automatisering
-      table_title: Automatiseringer
-      create: Tilføj automatisering
-      update: Opdater automatisering
       back: Tilbage
       edit: Rediger
       select_script: Vælg et script
@@ -51,17 +41,13 @@ da:
             label: Brødtekst
           delay:
             label: Forsinkelse (minutter)
+          prefers_encrypt:
+            label: Krypterer PM hvis tilgængelig
         group:
           label: Gruppe
         text:
           label: Tekst
       triggerables:
-        post_flag_created:
-          fields:
-            categories:
-              label: Kategorier
-            tags:
-              label: Mærker
         user_badge_granted:
           fields:
             badge:
@@ -80,7 +66,7 @@ da:
             categories:
               label: Begrænset til kategorier
             tags:
-              label: Begrænset til tags
+              label: Begrænset til mærker
             stalled_after:
               label: Gået i stå efter
         recurring:
@@ -133,52 +119,26 @@ da:
             TL12: "TL1 til TL2"
             TL23: "TL2 til TL3"
             TL34: "TL3 til TL4"
-        point_in_time:
-          fields:
-            execute_at:
-              label: Udførsel
         topic:
           fields:
             restricted_topic:
               label: Emne ID
         post_created_edited:
           fields:
-            original_post_only:
-              label: Kun oprindelige indlæg
             action_type:
               label: Handlingstype
             valid_trust_levels:
               label: Gyldige tillidsniveauer
             restricted_tags:
-              label: Tags
+              label: Mærker
             restricted_categories:
               label: Kategorier
-            restricted_archetype:
-              label: Emne Type
-            excluded_groups:
-              label: Ekskluderede grupper
-            ignore_automated:
-              label: Ignorer automatiserede
-            first_post_only:
-              label: Kun første indlæg
-            first_topic_only:
-              label: Kun første emne
           created: Oprettet
           edited: Redigeret
           with_images: Billeder
           with_links: Links
           with_code: Kode
           with_uploads: Overførsler
-        user_updated:
-          fields:
-            user_profile:
-              label: Bruger profilfelter
-            custom_fields:
-              label: Brugerdefinerede felter
-            once_per_user:
-              label: Én gang pr. bruger
-            new_users_only:
-              label: Kun nye brugere
         category_created_edited:
           fields:
             restricted_category:
@@ -189,18 +149,8 @@ da:
               label: Brugere
             restricted_group:
               label: Gruppe
-            ignore_staff:
-              label: Ignorer personale
-            ignore_group_members:
-              label: Ignorer gruppemedlemmer
-            ignore_automated:
-              label: Ignorer automatiseret
             valid_trust_levels:
               label: Gyldige tillidsniveauer
-        topic_tags_changed:
-          fields:
-            trigger_on:
-              label: Udløsning
         after_post_cook:
           fields:
             valid_trust_levels:
@@ -208,7 +158,7 @@ da:
             restricted_category:
               label: Kategori
             restricted_tags:
-              label: Tags
+              label: Mærker
       scriptables:
         zapier_webhook:
           fields:
@@ -218,22 +168,14 @@ da:
           fields:
             once:
               label: En Gang
-            answering_user:
-              label: Svarende bruger
         auto_tag_topic:
           fields:
             tags:
-              label: Tags
+              label: Mærker
         post:
           fields:
             topic:
               label: Emne ID
-        topic:
-          fields:
-            category:
-              label: Emne kategori
-            tags:
-              label: Emnetags
         group_category_notification_default:
           fields:
             group:
@@ -262,11 +204,8 @@ da:
               label: Gruppe
             badge:
               label: Emblem
-              description: Vælg emblem
         suspend_user_by_email:
           fields:
-            reason:
-              label: Årsag (standard)
             actor:
               label: Bruger
         pin_topic:
@@ -281,8 +220,6 @@ da:
           fields:
             topic_id:
               label: Emne ID
-            banner_until:
-              label: Gør til banner indtil
             user:
               label: Bruger
               description: "Brugeren, der opretter banneret (standard: system)"
@@ -305,9 +242,6 @@ da:
             user:
               label: Bruger
               description: "Brugeren, der lukker emnet (standard: system)"
-        set_topic_timer:
-          title: Indstil timerfunktion for emne
-      unnamed_automation: "Unavngiven automatisering"
       models:
         script:
           name:
@@ -316,11 +250,6 @@ da:
           name:
             label: Udløser
         automation:
-          runs_today: "%{count} i dag"
-          runs_this_week: "%{count} denne uge"
-          runs_this_month: "%{count} denne måned"
-          runs:
-            label: Kørsler
           name:
             label: Navn
           trigger:
@@ -332,14 +261,12 @@ da:
           status:
             label: Status
           enabled:
-            label: "Aktiver automatisering"
+            label: Aktiveret
           disabled:
             label: Deaktiveret
           placeholders:
             label: Pladsholdere
           last_updated_at:
             label: Sidst opdateret
-          last_run:
-            label: Sidste kørsel
           last_updated_by:
             label: Opdateret af

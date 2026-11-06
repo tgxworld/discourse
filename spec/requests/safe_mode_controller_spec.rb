@@ -31,14 +31,14 @@ RSpec.describe SafeModeController do
 
   describe "enter" do
     context "when no params are given" do
-      it "redirects back to the safe-mode page" do
+      it "should redirect back to safe mode page" do
         post "/safe-mode"
         expect(response.status).to redirect_to(safe_mode_path)
       end
     end
 
     context "when safe mode is not enabled" do
-      it "returns an error" do
+      it "should raise an error" do
         SiteSetting.enable_safe_mode = false
         post "/safe-mode"
         expect(response.status).to eq(404)

@@ -14,7 +14,9 @@
   }
 
   ul {
-    @include unstyled-list;
+    list-style: none;
+    padding: 0;
+    margin: 0;
 
     li {
       &:first-of-type a {
@@ -28,6 +30,7 @@
       }
 
       a {
+        @include ellipsis;
         align-items: center;
         color: var(--primary);
         display: flex;
@@ -41,7 +44,6 @@
 
         &.selected {
           background-color: var(--d-selected);
-          color: var(--d-selected-text-color);
         }
 
         .avatar {
@@ -70,22 +72,6 @@
         .relative-date {
           font-size: var(--font-down-3);
         }
-
-        .text-content {
-          @include ellipsis;
-          display: inline-block;
-          max-width: 100%;
-          vertical-align: top;
-
-          .username,
-          .name {
-            display: inline;
-          }
-        }
-
-        .d-icon + .text-content {
-          max-width: calc(100% - 1em);
-        }
       }
 
       .d-icon-users {
@@ -98,10 +84,6 @@
   &.ac-user {
     li a {
       padding: 0.5em 1em;
-
-      .text-content {
-        max-width: calc(100% - 24px); // 24px is for `tiny` avatar width
-      }
     }
 
     .emoji {

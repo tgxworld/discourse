@@ -51,3 +51,25 @@
     }
   }
 }
+
+.rtl .counters-list .counters-header .counters-cell {
+  text-align: left;
+}
+
+.rtl .counters-list {
+  .cell {
+    text-align: left;
+
+    &.title {
+      text-align: right;
+    }
+  }
+}
+
+.mobile-view {
+  .counters-list {
+    .counters-header .counters-cell {
+      font-weight: normal;
+    }
+  }
+}

@@ -9,10 +9,6 @@ module PageObjects
         page.has_css?("tr[data-category-id='#{category.id}']")
       end
 
-      def has_no_category?(category)
-        page.has_no_css?("tr[data-category-id='#{category.id}']")
-      end
-
       def has_topic?(topic)
         page.has_css?(topic_list_item_class(topic))
       end
@@ -35,10 +31,6 @@ module PageObjects
 
       def click_topic(topic)
         page.find("a", text: topic.title).click
-      end
-
-      def category_box(category)
-        find("div.category-box[data-category-id='#{category.id}']")
       end
 
       def topic_list_item_class(topic)

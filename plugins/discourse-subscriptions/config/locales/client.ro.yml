@@ -27,12 +27,12 @@ ro:
           update_card:
             single: "Actualizează"
           created_at: Creat
-          cancel: anulează
+          cancel: Anulează
       subscribe:
         cardholder_address:
           city: Oraș
       billing:
-        email: Email
+        email: E-mail
       admin:
         dashboard:
           title: Panou de control
@@ -50,7 +50,7 @@ ro:
             active: Activă
             created_at: Creat
         coupons:
-          active: Activ?
+          active: Activă?
           actions: Acțiuni
         subscriptions:
           subscription:

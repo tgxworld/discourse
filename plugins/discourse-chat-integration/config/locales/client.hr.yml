@@ -14,13 +14,16 @@ hr:
     chat_integration:
       menu_title: "Chat integracije"
       settings: "Postavke"
-      more_providers: "Više"
+      no_providers: "Morate omogućiti neke davatelje usluga u postavkama dodatka"
       channels_with_errors: "Neki kanali za tog davatelja usluga nisu uspjeli zadnji put kada su poruke poslane. Kliknite ikon(u) pogreške da biste saznali više."
+      channel_exception: "Došlo je do nepoznate pogreške kada je poruka zadnji put poslana na ovaj kanal."
       group_mention_template: "Spominjanje: @%{name}"
       group_message_template: "Poruke na: @%{name}"
-      choose_group: "(Odaberite grupu)"
-      all_categories: "(Sve kategorije)"
-      all_tags: "(Sve oznake)"
+      choose_group: "(odaberite grupu)"
+      all_categories: "(sve kategorije)"
+      all_tags: "(sve oznake)"
+      create_rule: "Stvori pravilo"
+      create_channel: "Stvori kanal"
       delete_channel: "Izbriši"
       test_channel: "Test"
       edit_channel: "Uredi"
@@ -28,15 +31,19 @@ hr:
       test_modal:
         title: "Pošaljite probnu poruku"
         topic: "Tema"
+        send: "Pošalji testnu poruku"
         close: "Zatvori"
+        error: "Došlo je do nepoznate pogreške prilikom slanja poruke. Više podataka potražite u zapisnicima web mjesta."
         success: "Poruka je uspješno poslana"
       type:
         normal: Normalno
+        group_message: Grupna poruka
+        group_mention: Spomena grupe
       filter:
         mute: 'Utišaj'
-        follow: 'Samo prva objava'
-        watch: 'Sve objave i odgovori'
-        thread: 'Sve objave s odgovorima u nizu'
+        follow: 'Samo prvi post'
+        watch: 'Svi postovi i odgovori'
+        thread: 'Svi postovi s navojnim odgovorima'
       rule_table:
         filter: "Filter"
         category: "Kategorija"
@@ -52,6 +59,8 @@ hr:
           ok: "Vrijedi"
           fail: "Neispravan format"
       edit_rule_modal:
+        title: Uredi pravilo
+        save: Spremi pravilo
         cancel: Odustani
         provider: Pružatelj usluga
         type: Tip
@@ -72,8 +81,10 @@ hr:
           param:
             identifier:
               title: Kanal
+              help: "npr. #channel, @username."
           errors:
             action_prohibited: "Bot nema dozvolu za objavljivanje na tom kanalu"
+            channel_not_found: "Navedeni kanal ne postoji na slacku"
         telegram:
           title: "Telegram"
           param:
@@ -81,7 +92,7 @@ hr:
               title: "Ime"
               help: "Naziv za opis kanala. Ne koristi se za vezu s Telegramom."
             chat_id:
-              title: Chat ID
+              title: ID chata
               help: Broj koji vam je dodijelio bot ili identifikator kanala emitiranog kanala u obliku @channelname
           errors:
             channel_not_found: "Navedeni kanal ne postoji na Telegramu"
@@ -99,6 +110,7 @@ hr:
           param:
             identifier:
               title: Kanal
+              help: "npr. #channel, @username."
         matrix:
           param:
             name:
@@ -111,6 +123,7 @@ hr:
           param:
             identifier:
               title: Kanal
+              help: "npr. #channel, @username."
         gitter:
           param:
             name:
@@ -149,7 +162,3 @@ hr:
               label: Naziv kanala
             provider:
               label: Pružatelj usluga
-    discourse_workflows:
-      send_chat_integration_message:
-        channel_id: "Kanal"
-        message: "Poruka"

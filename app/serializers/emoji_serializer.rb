@@ -8,6 +8,7 @@ class EmojiSerializer < ApplicationSerializer
   end
 
   def url
-    object.cdn_url
+    return nil if object.url.blank?
+    Discourse.store.cdn_url(object.url)
   end
 end

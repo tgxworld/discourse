@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-describe UserOption do
+RSpec.describe UserOption do
   fab!(:user)
   fab!(:llm_model)
   fab!(:group)
-  fab!(:ai_agent) do
-    Fabricate(:ai_agent, allowed_group_ids: [group.id], default_llm_id: llm_model.id)
+  fab!(:ai_persona) do
+    Fabricate(:ai_persona, allowed_group_ids: [group.id], default_llm_id: llm_model.id)
   end
 
   before do
@@ -16,7 +16,7 @@ describe UserOption do
 
   describe "#ai_search_discoveries" do
     before do
-      SiteSetting.ai_discover_agent = ai_agent.id
+      SiteSetting.ai_bot_discover_persona = ai_persona.id
       group.add(user)
     end
 

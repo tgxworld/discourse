@@ -1,16 +1,42 @@
+import LatestTopicListItem from "discourse/components/topic-list/latest-topic-list-item";
 import StyleguideExample from "discourse/plugins/styleguide/discourse/components/styleguide-example";
-import TopicListItemExample from "../../examples/molecules/topic-list-item.gjs";
-import topicListItemSource from "../../examples/molecules/topic-list-item?source=file";
 
-export default <template>
-  <StyleguideExample @code={{topicListItemSource}} @title="<TopicListItem>">
+const TopicListItem = <template>
+  <StyleguideExample @title="<TopicListItem>">
     <table class="topic-list">
       <tbody>
-        <TopicListItemExample
-          @showPosters={{@showPosters}}
+        <LatestTopicListItem @topic={{@dummy.topic}} @showPosters={{true}} />
+      </tbody>
+    </table>
+  </StyleguideExample>
+
+  <StyleguideExample @title="<TopicListItem> - hide category">
+    <table class="topic-list">
+      <tbody>
+        <LatestTopicListItem
           @topic={{@dummy.topic}}
+          @hideCategory={{true}}
+          @showPosters={{true}}
         />
       </tbody>
     </table>
   </StyleguideExample>
-</template>
+
+  <StyleguideExample @title="<TopicListItem> - show likes">
+    <table class="topic-list">
+      <tbody>
+        <LatestTopicListItem
+          @topic={{@dummy.topic}}
+          @showLikes={{true}}
+          @showPosters={{true}}
+        />
+      </tbody>
+    </table>
+  </StyleguideExample>
+
+  <StyleguideExample @title="<TopicListItem> - latest" class="half-size">
+    <LatestTopicListItem @topic={{@dummy.topic}} />
+  </StyleguideExample>
+</template>;
+
+export default TopicListItem;

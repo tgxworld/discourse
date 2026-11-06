@@ -1,8 +1,6 @@
 import { withPluginApi } from "discourse/lib/plugin-api";
 import ChatAdminPluginActions from "discourse/plugins/chat/admin/components/chat-admin-plugin-actions";
 
-const PLUGIN_ID = "chat";
-
 export default {
   name: "discourse-chat-admin-plugin-configuration-nav",
 
@@ -13,8 +11,7 @@ export default {
     }
 
     withPluginApi((api) => {
-      api.setAdminPluginIcon(PLUGIN_ID, "d-chat");
-      api.addAdminPluginConfigurationNav(PLUGIN_ID, [
+      api.addAdminPluginConfigurationNav("chat", [
         {
           label: "chat.incoming_webhooks.title",
           route: "adminPlugins.show.discourse-chat-incoming-webhooks",

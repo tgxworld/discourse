@@ -1,3 +1,4 @@
+import { observer } from "@ember/object";
 import { withPluginApi } from "discourse/lib/plugin-api";
 import { CREATE_TOPIC } from "discourse/models/composer";
 import { i18n } from "discourse-i18n";
@@ -41,17 +42,24 @@ export default {
         },
       });
 
-      api.registerValueTransformer(
-        "composer-actions-content",
-        ({ value, context }) => {
-          const { action, composerModel } = context;
+      api.modifyClass("component:composer-actions", {
+        pluginId: "discourse-post-voting",
 
-          if (action === CREATE_TOPIC) {
-            if (
-              composerModel.createAsPostVoting &&
-              !composerModel.onlyPostVotingInThisCategory
-            ) {
-              value.push({
+        togglePostVotingSelected(options, model) {
+          model.toggleProperty("createAsPostVoting");
+          model.notifyPropertyChange("replyOptions");
+          model.notifyPropertyChange("action");
+        },
+      });
+
+      api.modifySelectKit("composer-actions").appendContent((options) => {
+        if (options.action === CREATE_TOPIC) {
+          if (
+            options.composerModel.createAsPostVoting &&
+            !options.composerModel.onlyPostVotingInThisCategory
+          ) {
+            return [
+              {
                 name: i18n(
                   "composer.composer_actions.remove_as_post_voting.label"
                 ),
@@ -60,9 +68,13 @@ export default {
                 ),
                 icon: "plus",
                 id: "togglePostVoting",
-              });
-            } else if (!composerModel.onlyPostVotingInThisCategory) {
-              value.push({
+              },
+            ];
+          } else if (options.composerModel.onlyPostVotingInThisCategory) {
+            return [];
+          } else {
+            return [
+              {
                 name: i18n(
                   "composer.composer_actions.create_as_post_voting.label"
                 ),
@@ -71,53 +83,41 @@ export default {
                 ),
                 icon: "plus",
                 id: "togglePostVoting",
-              });
-            }
+              },
+            ];
           }
-
-          return value;
+        } else {
+          return [];
         }
-      );
+      });
 
-      api.registerBehaviorTransformer(
-        "composer-actions-on-select",
-        ({ context, next }) => {
-          if (context.actionId === "togglePostVoting") {
-            context.model.toggleProperty("createAsPostVoting");
-            context.model.notifyPropertyChange("replyOptions");
-            context.model.notifyPropertyChange("action");
-          } else {
-            next();
-          }
-        }
-      );
+      api.modifyClass("model:composer", {
+        pluginId: "discourse-post-voting",
 
-      // Purely derived from the category.
-      api.addModelGetter(
-        "composer",
-        "onlyPostVotingInThisCategory",
-        function () {
-          return (
+        categoryCreateAsPostVotingDefault: observer("categoryId", function () {
+          const createAsPostVoting =
+            this.category?.create_as_post_voting_default;
+
+          const onlyPostVotingInThisCategory =
+            this.category?.only_post_voting_in_this_category;
+
+          if (this.creatingTopic && onlyPostVotingInThisCategory) {
+            this.set("createAsPostVoting", true);
+            this.set(
+              "onlyPostVotingInThisCategory",
+              onlyPostVotingInThisCategory
+            );
+            this.notifyPropertyChange("replyOptions");
+            this.notifyPropertyChange("action");
+          } else if (
             this.creatingTopic &&
-            !!this.category?.only_post_voting_in_this_category
-          );
-        }
-      );
-
-      // Defaults from the category (forced on when it's post-voting-only),
-      // resets on category change, and is user-toggleable until then.
-      api.addModelField("composer", "createAsPostVoting", {
-        resettable: true,
-        defaultValue() {
-          if (!this.creatingTopic) {
-            return false;
+            createAsPostVoting !== this.createAsPostVoting
+          ) {
+            this.set("createAsPostVoting", createAsPostVoting);
+            this.notifyPropertyChange("replyOptions");
+            this.notifyPropertyChange("action");
           }
-
-          return (
-            this.onlyPostVotingInThisCategory ||
-            !!this.category?.create_as_post_voting_default
-          );
-        },
+        }),
       });
     });
   },

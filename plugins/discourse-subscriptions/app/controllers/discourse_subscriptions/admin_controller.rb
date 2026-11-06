@@ -2,10 +2,10 @@
 
 module DiscourseSubscriptions
   class AdminController < ::Admin::AdminController
-    requires_plugin PLUGIN_NAME
+    requires_plugin DiscourseSubscriptions::PLUGIN_NAME
 
     def index
-      head :ok
+      head 200
     end
 
     def refresh_campaign
@@ -14,10 +14,12 @@ module DiscourseSubscriptions
     end
 
     def create_campaign
-      DiscourseSubscriptions::Campaign.new.create_campaign
-      render json: success_json
-    rescue => e
-      render_json_error e.message
+      begin
+        DiscourseSubscriptions::Campaign.new.create_campaign
+        render json: success_json
+      rescue => e
+        render_json_error e.message
+      end
     end
   end
 end

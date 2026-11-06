@@ -404,6 +404,8 @@ ar:
         confirm_payment: تأكيد الدفع
         success: العودة
       admin:
+        unconfigured: 'لم يتم إعداد Stripe بشكلٍ صحيح. يُرجى الاطلاع على Discourse Meta للحصول على المعلومات.'
+        on_meta: اشتراكات Discourse على Meta
         dashboard:
           title: لوحة المعلومات
           table:
@@ -430,7 +432,7 @@ ar:
             description_help: هذا يصف منتج الاشتراك الخاص بك.
             repurchaseable: هل هو قابل لإعادة الشراء؟
             repurchase_help: السماح بشراء المنتج والخطط المرتبطة به عدة مرات
-            active: نشط
+            active: نشطة
             active_help: شغِّل هذا الخيار حتى يصبح منتجك جاهزًا للمستهلكين.
             created_at: تاريخ الإنشاء
             updated_at: تاريخ التحديث
@@ -456,7 +458,7 @@ ar:
             trial_help: ستبدأ الاشتراكات في هذه الخطة تلقائيًا بفترة تجريبية مجانية بهذا الطول
             group: مجموعة المستخدمين
             group_help: هذه هي مجموعة مستخدمي Discourse التي تمت إضافة العميل إليها عند إنشاء الاشتراك.
-            active: نشط
+            active: نشطة
             created_at: تاريخ الإنشاء
             recurring: هل هي خطة متكررة؟
         coupons:

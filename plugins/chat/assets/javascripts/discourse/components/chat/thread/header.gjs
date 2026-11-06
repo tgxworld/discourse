@@ -1,11 +1,10 @@
 import Component from "@glimmer/component";
 import { on } from "@ember/modifier";
 import { service } from "@ember/service";
-import PluginOutlet from "discourse/components/plugin-outlet";
-import lazyHash from "discourse/helpers/lazy-hash";
+import { and, or } from "truth-helpers";
+import icon from "discourse/helpers/d-icon";
 import noop from "discourse/helpers/noop";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
-import dReplaceEmoji from "discourse/ui-kit/helpers/d-replace-emoji";
+import replaceEmoji from "discourse/helpers/replace-emoji";
 import { i18n } from "discourse-i18n";
 import ThreadSettingsModal from "discourse/plugins/chat/discourse/components/chat/modal/thread-settings";
 import Navbar from "discourse/plugins/chat/discourse/components/chat/navbar";
@@ -33,7 +32,7 @@ export default class ChatThreadHeader extends Component {
       route = "chat.threads";
       title = i18n("chat.my_threads.title");
       models = [];
-    } else if (!this.currentUser?.isInDoNotDisturb() && this.unreadCount > 0) {
+    } else if (!this.currentUser.isInDoNotDisturb() && this.unreadCount > 0) {
       route = "chat.channel.threads";
       title = i18n("chat.return_to_threads_list");
       models = this.channel?.routeModels;
@@ -66,8 +65,8 @@ export default class ChatThreadHeader extends Component {
 
   get openThreadTitleModal() {
     if (
-      this.currentUser?.admin ||
-      this.currentUser?.id === this.args.thread?.originalMessage?.user?.id
+      this.currentUser.admin ||
+      this.currentUser.id === this.args.thread?.originalMessage?.user?.id
     ) {
       return () =>
         this.modal.show(ThreadSettingsModal, { model: this.args.thread });
@@ -85,29 +84,19 @@ export default class ChatThreadHeader extends Component {
           {{#if this.showThreadUnreadIndicator}}
             <ChatThreadHeaderUnreadIndicator @channel={{this.channel}} />
           {{/if}}
-          {{dIcon "chevron-left"}}
+          {{icon "chevron-left"}}
         </navbar.BackButton>
       {{/if}}
 
       <navbar.Title
-        class={{if this.openThreadTitleModal "clickable"}}
-        role={{if this.openThreadTitleModal "button"}}
-        @title={{dReplaceEmoji this.headerTitle}}
+        @title={{replaceEmoji this.headerTitle}}
         {{on "click" (or this.openThreadTitleModal noop)}}
+        role={{if this.openThreadTitleModal "button"}}
+        class={{if this.openThreadTitleModal "clickable"}}
       />
       <navbar.Actions as |action|>
-        <PluginOutlet
-          @name="chat-thread-navbar-actions"
-          @outletArgs={{lazyHash
-            thread=@thread
-            channel=this.channel
-            context="full-page"
-          }}
-        />
-        {{#if this.currentUser}}
-          <action.ThreadTrackingDropdown @thread={{@thread}} />
-          <action.ThreadSettingsButton @thread={{@thread}} />
-        {{/if}}
+        <action.ThreadTrackingDropdown @thread={{@thread}} />
+        <action.ThreadSettingsButton @thread={{@thread}} />
         <action.CloseThreadButton @thread={{@thread}} />
       </navbar.Actions>
     </Navbar>

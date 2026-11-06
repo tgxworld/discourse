@@ -11,10 +11,12 @@ const OPTIONS = [
 
 const ID = "23";
 
-module("Component | PollResultsPie", function (hooks) {
+module("Poll | Component | poll-results-pie", function (hooks) {
   setupRenderingTest(hooks);
 
   test("Renders the pie chart Component correctly", async function (assert) {
+    const self = this;
+
     this.setProperties({
       id: ID,
       options: OPTIONS,
@@ -22,7 +24,7 @@ module("Component | PollResultsPie", function (hooks) {
 
     await render(
       <template>
-        <PollResultsPie @id={{this.id}} @options={{this.options}} />
+        <PollResultsPie @id={{self.id}} @options={{self.options}} />
       </template>
     );
 

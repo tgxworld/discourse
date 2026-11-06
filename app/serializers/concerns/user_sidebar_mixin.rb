@@ -8,7 +8,7 @@ module UserSidebarMixin
   end
 
   def display_sidebar_tags
-    Tag.browsable(scope).exists?
+    DiscourseTagging.filter_visible(Tag, scope).exists?
   end
 
   def include_display_sidebar_tags?

@@ -2,7 +2,7 @@
 
 RSpec.describe LocaleSiteSetting do
   def core_locales
-    pattern = Rails.root.join("config/locales/client.*.yml").to_s
+    pattern = File.join(Rails.root, "config", "locales", "client.*.yml")
     Dir.glob(pattern).map { |x| x.split(".")[-2] }
   end
 

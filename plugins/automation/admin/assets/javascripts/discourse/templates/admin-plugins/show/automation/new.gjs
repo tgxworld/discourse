@@ -1,36 +1,41 @@
 import { fn } from "@ember/helper";
 import { on } from "@ember/modifier";
-import AdminConfigAreaCard from "discourse/admin/components/admin-config-area-card";
-import AdminSectionLandingItem from "discourse/admin/components/admin-section-landing-item";
+import RouteTemplate from "ember-route-template";
 import BackButton from "discourse/components/back-button";
 import { i18n } from "discourse-i18n";
+import AdminConfigAreaCard from "admin/components/admin-config-area-card";
+import AdminSectionLandingItem from "admin/components/admin-section-landing-item";
 
-export default <template>
-  <div class="admin-detail discourse-automation-new discourse-automation-form">
-    <BackButton
-      class="discourse-automation-back"
-      @label="discourse_automation.back"
-      @route="adminPlugins.show.automation.index"
-    />
-    <AdminConfigAreaCard @heading="discourse_automation.select_script">
-      <:content>
-        <input
-          class="admin-section-landing__header-filter"
-          placeholder={{i18n "discourse_automation.filter_placeholder"}}
-          type="text"
-          {{on "input" @controller.updateFilterText}}
-        />
+export default RouteTemplate(
+  <template>
+    <div
+      class="admin-detail discourse-automation-new discourse-automation-form"
+    >
+      <BackButton
+        @label="discourse_automation.back"
+        @route="adminPlugins.show.automation.index"
+        class="discourse-automation-back"
+      />
+      <AdminConfigAreaCard @heading="discourse_automation.select_script">
+        <:content>
+          <input
+            type="text"
+            placeholder={{i18n "discourse_automation.filter_placeholder"}}
+            {{on "input" @controller.updateFilterText}}
+            class="admin-section-landing__header-filter"
+          />
 
-        <div class="admin-section-landing__wrapper">
-          {{#each @controller.scriptableContent as |script|}}
-            <AdminSectionLandingItem
-              @descriptionLabelTranslated={{script.description}}
-              @titleLabelTranslated={{script.name}}
-              {{on "click" (fn @controller.selectScriptToEdit script)}}
-            />
-          {{/each}}
-        </div>
-      </:content>
-    </AdminConfigAreaCard>
-  </div>
-</template>
+          <div class="admin-section-landing__wrapper">
+            {{#each @controller.scriptableContent as |script|}}
+              <AdminSectionLandingItem
+                {{on "click" (fn @controller.selectScriptToEdit script)}}
+                @titleLabelTranslated={{script.name}}
+                @descriptionLabelTranslated={{script.description}}
+              />
+            {{/each}}
+          </div>
+        </:content>
+      </AdminConfigAreaCard>
+    </div>
+  </template>
+);

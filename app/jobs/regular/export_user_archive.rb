@@ -26,7 +26,7 @@ module Jobs
     ]
 
     HEADER_ATTRS_FOR =
-      ActiveSupport::HashWithIndifferentAccess.new(
+      HashWithIndifferentAccess.new(
         user_archive: %w[
           topic_title
           categories
@@ -36,7 +36,6 @@ module Jobs
           like_count
           reply_count
           url
-          post_id
           created_at
         ],
         user_archive_profile: %w[location website bio views],
@@ -131,7 +130,7 @@ module Jobs
         @requesting_user = @archive_for_user
       end
 
-      @extra = ActiveSupport::HashWithIndifferentAccess.new(args[:args]) if args[:args]
+      @extra = HashWithIndifferentAccess.new(args[:args]) if args[:args]
       @timestamp ||= Time.now.strftime("%y%m%d-%H%M%S")
 
       components = []
@@ -166,7 +165,6 @@ module Jobs
           case component[:filetype]
           when :csv
             CSV.open("#{dirname}/#{component[:filename]}.csv", "w") do |csv|
-              csv.to_io.write(Encodings::BOM)
               csv << get_header(component[:name])
               public_send(component[:method]) { |d| csv << d }
             end
@@ -188,14 +186,16 @@ module Jobs
     end
 
     def provide_results(user_export, zip_filename, export_title, args)
-      user_export.attach_upload(zip_filename, @requesting_user.id)
-    ensure
-      post = notify_user(user_export, export_title)
+      begin
+        create_upload_for_user(user_export, zip_filename)
+      ensure
+        post = notify_user(user_export, export_title)
 
-      if user_export.present? && post.present?
-        topic = post.topic
-        user_export.update_columns(topic_id: topic.id)
-        topic.update_status("closed", true, Discourse.system_user)
+        if user_export.present? && post.present?
+          topic = post.topic
+          user_export.update_columns(topic_id: topic.id)
+          topic.update_status("closed", true, Discourse.system_user)
+        end
       end
     end
 
@@ -205,7 +205,7 @@ module Jobs
       Post
         .includes(topic: :category)
         .where(user_id: @archive_for_user.id)
-        .select(:id, :topic_id, :post_number, :raw, :cooked, :like_count, :reply_count, :created_at)
+        .select(:topic_id, :post_number, :raw, :cooked, :like_count, :reply_count, :created_at)
         .order(:created_at)
         .with_deleted
         .each { |user_archive| yield get_user_archive_fields(user_archive) }
@@ -396,34 +396,25 @@ module Jobs
 
     def likes_export
       return enum_for(:likes_export) unless block_given?
-
       PostAction
         .with_deleted
         .where(user_id: @archive_for_user.id)
         .where(post_action_type_id: post_action_type_view.types[:like])
-        .in_batches(of: 1000) do |batch|
-          posts_by_id =
-            Post
-              .with_deleted
-              .where(id: batch.select(:post_id))
-              .select(:id, :topic_id, :post_number)
-              .index_by(&:id)
-
-          batch.each do |pa|
-            post = posts_by_id[pa.post_id]
-            yield(
-              [
-                pa.id,
-                pa.post_id,
-                post&.topic_id,
-                post&.post_number,
-                pa.created_at,
-                pa.updated_at,
-                pa.deleted_at,
-                self_or_other(pa.deleted_by_id),
-              ]
-            )
-          end
+        .order(:created_at)
+        .each do |pa|
+          post = Post.with_deleted.find_by(id: pa.post_id)
+          yield(
+            [
+              pa.id,
+              pa.post_id,
+              post&.topic_id,
+              post&.post_number,
+              pa.created_at,
+              pa.updated_at,
+              pa.deleted_at,
+              self_or_other(pa.deleted_by_id),
+            ]
+          )
         end
     end
 
@@ -494,9 +485,53 @@ module Jobs
         .each { |uv| yield [uv.visited_at, uv.posts_read, uv.mobile, uv.time_read] }
     end
 
-    def get_header(entity) = HEADER_ATTRS_FOR[entity]
+    def get_header(entity)
+      if entity == "user_list"
+        header_array =
+          HEADER_ATTRS_FOR["user_list"] + HEADER_ATTRS_FOR["user_stats"] +
+            HEADER_ATTRS_FOR["user_profile"]
+        header_array.concat(HEADER_ATTRS_FOR["user_sso"]) if SiteSetting.enable_discourse_connect
+        user_custom_fields = UserField.all
+        if user_custom_fields.present?
+          user_custom_fields.each do |custom_field|
+            header_array.push("#{custom_field.name} (custom user field)")
+          end
+        end
+        header_array.push("group_names")
+      else
+        header_array = HEADER_ATTRS_FOR[entity]
+      end
+
+      header_array
+    end
 
     private
+
+    def create_upload_for_user(user_export, zip_filename)
+      upload = nil
+      if File.exist?(zip_filename)
+        File.open(zip_filename) do |file|
+          upload =
+            UploadCreator.new(
+              file,
+              File.basename(zip_filename),
+              type: "csv_export",
+              for_export: "true",
+            ).create_for(@requesting_user.id)
+
+          if upload.persisted?
+            user_export.update_columns(upload_id: upload.id)
+          else
+            Rails.logger.warn(
+              "Failed to upload the file #{zip_filename}: #{upload.errors.full_messages}",
+            )
+          end
+        end
+
+        File.delete(zip_filename)
+      end
+      upload
+    end
 
     def guardian
       @guardian ||= Guardian.new(@archive_for_user)
@@ -555,7 +590,6 @@ module Jobs
         "categories" => categories,
         "is_pm" => is_pm,
         "url" => url,
-        "post_id" => user_archive["id"],
       }
 
       user_archive.merge!(topic_hash)

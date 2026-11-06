@@ -28,8 +28,6 @@ gl:
       cast-votes:
         title: "Vote"
         label: "Vote agora!"
-      keep-vote:
-        label: "Volver"
       show-results:
         title: "Amosar os resultados da enquisa"
         label: "Resultados"
@@ -67,6 +65,7 @@ gl:
       error_while_fetching_voters: "Desculpe, produciuse un erro ao presentar os votantes."
       error_while_exporting_results: "Desculpe, produciuse un erro ao exportar os resultados da enquisa."
       ui_builder:
+        title: Construír a enquisa
         insert: Inserir enquisa
         help:
           options_min_count: Introducir cando menos 1 opción.
@@ -91,3 +90,5 @@ gl:
           label: Título (opcional)
         automatic_close:
           label: Pechar automaticamente a enquisa
+        show_advanced: "Amosar opcións avanzadas"
+        hide_advanced: "Agochar opcións avanzadas"

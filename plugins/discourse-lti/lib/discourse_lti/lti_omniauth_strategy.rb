@@ -34,6 +34,7 @@ class DiscourseLti::LtiOmniauthStrategy
   end
 
   def other_phase
+    methods = %i[get post]
     if on_initiate_path? && %i[get post].include?(request.request_method.downcase.to_sym)
       return initiate_phase
     end
@@ -105,7 +106,7 @@ class DiscourseLti::LtiOmniauthStrategy
 
     session["omniauth.state"] = state
     session["omniauth.nonce"] = nonce
-    request.server_session["destination_url"] = target_link_uri
+    session["destination_url"] = target_link_uri
 
     params = {
       scope: "openid",
@@ -196,7 +197,7 @@ class DiscourseLti::LtiOmniauthStrategy
     html = <<~HTML
       <html>
         <head>
-          <script src="#{UrlHelper.absolute(script_path, GlobalSetting.cdn_url)}" nonce="#{ContentSecurityPolicy.try(:nonce_placeholder, response_headers, request_env: request.env)}"></script>
+          <script src="#{UrlHelper.absolute(script_path, GlobalSetting.cdn_url)}" nonce="#{ContentSecurityPolicy.try(:nonce_placeholder, response_headers)}"></script>
         </head>
         <body>
           <form method="post">
@@ -219,7 +220,7 @@ class DiscourseLti::LtiOmniauthStrategy
   end
 
   def decode_token(token)
-    payload, _header =
+    payload, header =
       ::JWT.decode(
         request.params["id_token"],
         public_key,

@@ -76,10 +76,7 @@ class DiscourseConnectProvider < DiscourseConnectBase
       provider_secrets.find do |domain, configured_secret|
         if WildcardDomainChecker.check_domain(domain, return_url_host)
           first_domain_match ||= configured_secret
-          ActiveSupport::SecurityUtils.secure_compare(
-            sign(parsed_payload["sso"], configured_secret),
-            parsed_payload["sig"].to_s,
-          )
+          sign(parsed_payload["sso"], configured_secret) == parsed_payload["sig"]
         end
       end
 

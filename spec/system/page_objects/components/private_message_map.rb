@@ -32,7 +32,6 @@ module PageObjects
       def has_no_add_participants_button?
         controls.has_no_button?(class: "add-participant-btn")
       end
-
       def click_add_participants_button
         controls.click_button(class: "add-participant-btn")
       end

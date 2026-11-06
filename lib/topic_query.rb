@@ -16,15 +16,13 @@ class TopicQuery
       begin
         int = lambda { |x| Integer === x || (String === x && x.match?(/\A-?[0-9]+\z/)) }
         zero_up_to_max_int = lambda { |x| int.call(x) && x.to_i.between?(0, PG_MAX_INT) }
-        zero_up_to_max_page =
-          lambda { |x| int.call(x) && x.to_i.between?(0, SiteSetting.max_topic_query_page_param) }
         one_up_to_one_hundred = lambda { |x| int.call(x) && x.to_i.between?(1, 100) }
         array_or_string = lambda { |x| Array === x || String === x }
         string = lambda { |x| String === x }
         true_or_false = lambda { |x| x == true || x == false || x == "true" || x == "false" }
 
         {
-          page: zero_up_to_max_page,
+          page: zero_up_to_max_int,
           per_page: one_up_to_one_hundred,
           before: zero_up_to_max_int,
           bumped_before: zero_up_to_max_int,
@@ -119,7 +117,6 @@ class TopicQuery
   self.results_filter_callbacks = []
 
   attr_accessor :options, :user, :guardian
-  attr_reader :invalid_filters
 
   def self.add_custom_filter(key, &blk)
     @custom_filters ||= {}
@@ -147,7 +144,6 @@ class TopicQuery
     @options = options.dup
     @user = user
     @guardian = options[:guardian] || Guardian.new(@user)
-    @invalid_filters = []
   end
 
   def joined_topic_user(list = nil)
@@ -168,7 +164,7 @@ class TopicQuery
           AND gu.user_id = #{@user.id.to_i}
         ",
           )
-          .where.not(gu: { group_id: nil })
+          .where("gu.group_id IS NOT NULL")
           .pluck(:group_id)
 
       target_group_ids = topic.topic_allowed_groups.pluck(:group_id)
@@ -246,7 +242,7 @@ class TopicQuery
     if DiscoursePluginRegistry.list_suggested_for_providers.any?
       DiscoursePluginRegistry.list_suggested_for_providers.each do |provider|
         suggested = provider.call(topic, pm_params, self)
-        builder.add_results(suggested[:result]) if suggested && suggested[:result].present?
+        builder.add_results(suggested[:result]) if suggested && !suggested[:result].blank?
       end
     end
 
@@ -261,13 +257,12 @@ class TopicQuery
           builder.add_results(unread_messages(pm_params.merge(count: builder.results_left)))
         end
       else
-        if @user.unified_new_enabled?
+        if @user.new_new_view_enabled?
           builder.add_results(
             new_and_unread_results(
               topic:,
               per_page: builder.results_left,
               max_age: SiteSetting.suggested_topics_unread_max_days_old,
-              age_column: :bumped_at,
             ),
           )
         else
@@ -276,7 +271,6 @@ class TopicQuery
               topic: topic,
               per_page: builder.results_left,
               max_age: SiteSetting.suggested_topics_unread_max_days_old,
-              age_column: :bumped_at,
             ),
             :high,
           )
@@ -307,46 +301,35 @@ class TopicQuery
   end
 
   def list_filter
-    query = @options[:q]
-    if @user&.unified_new_enabled? && %w[new new-topics new-replies].include?(@options[:subset])
-      query = "#{query} in:#{@options[:subset]}"
-    end
-    results, topics_filter = filter_results(query)
-    @invalid_filters = topics_filter.invalid_filters
-    results = apply_ordering(results) if results.order_values.empty?
-
-    list =
-      create_list(
-        :filter,
-        {
-          include_filter_option_info: @options[:include_filter_option_info].to_s != "false",
-          unordered: topics_filter.topic_ids.present?,
-        },
-        results,
+    topics_filter =
+      TopicsFilter.new(
+        guardian: @guardian,
+        scope: latest_results(include_muted: false, skip_ordering: true),
       )
 
-    if @user&.unified_new_enabled?
-      candidate_ids = TopicTrackingState.report(@user).map(&:topic_id)
-      list.filter_new_topic_ids =
-        if candidate_ids.empty?
-          []
-        else
-          matches, = filter_results
-          matches.where(id: candidate_ids).except(:limit, :offset, :order).distinct.pluck(:id)
-        end
+    results = topics_filter.filter_from_query_string(@options[:q])
+
+    if !topics_filter.topic_notification_levels.include?(NotificationLevels.all[:muted])
+      results = remove_muted_topics(results, @user)
     end
 
-    list
+    results = apply_ordering(results) if results.order_values.empty?
+
+    create_list(
+      :filter,
+      { include_filter_option_info: @options[:include_filter_option_info].to_s != "false" },
+      results,
+    )
   end
 
   def list_read
     create_list(:read, unordered: true) do |topics|
-      topics.where.not(tu: { last_visited_at: nil }).order("tu.last_visited_at DESC")
+      topics.where("tu.last_visited_at IS NOT NULL").order("tu.last_visited_at DESC")
     end
   end
 
   def list_new
-    if @user&.unified_new_enabled?
+    if @user&.new_new_view_enabled?
       list =
         case @options[:subset]
         when "topics"
@@ -446,10 +429,6 @@ class TopicQuery
     end
   end
 
-  def self.unseen_filter(list, user)
-    new.unseen_filter(list, user.first_seen_at || user.created_at, user.whisperer?)
-  end
-
   def self.new_filter(list, treat_as_new_topic_start_date: nil, treat_as_new_topic_clause_sql: nil)
     if treat_as_new_topic_start_date
       list =
@@ -468,7 +447,8 @@ class TopicQuery
     col_name = whisperer ? "highest_staff_post_number" : "highest_post_number"
 
     list.where("tu.last_read_post_number < topics.#{col_name}").where(
-      "tu.notification_level >= :tracking",
+      "COALESCE(tu.notification_level, :regular) >= :tracking",
+      regular: TopicUser.notification_levels[:regular],
       tracking: TopicUser.notification_levels[:tracking],
     )
   end
@@ -507,40 +487,6 @@ class TopicQuery
       SQL
 
     list.where(sql, user_id: user_id, tracking: NotificationLevels.all[:tracking])
-  end
-
-  def self.watching_first_post_filter(list, user)
-    return list.none if user.nil?
-
-    category_scope =
-      list.where(
-        "topics.category_id IN (
-          SELECT category_id
-          FROM category_users
-          WHERE user_id = ? AND notification_level = ?
-        )",
-        user.id,
-        CategoryUser.notification_levels[:watching_first_post],
-      )
-
-    return category_scope if !SiteSetting.tagging_enabled
-
-    tag_scope =
-      list.where(
-        "topics.id IN (
-          SELECT topic_id
-          FROM topic_tags
-          WHERE tag_id IN (
-            SELECT tag_id
-            FROM tag_users
-            WHERE user_id = ? AND notification_level = ?
-          )
-        )",
-        user.id,
-        TagUser.notification_levels[:watching_first_post],
-      )
-
-    category_scope.or(tag_scope)
   end
 
   def prioritize_pinned_topics(topics, options)
@@ -710,13 +656,6 @@ class TopicQuery
     suggested_ordering(results, options)
   end
 
-  def unseen_filter(list, user_first_seen_at, whisperer)
-    list = list.where("topics.bumped_at >= ?", user_first_seen_at)
-
-    col_name = whisperer ? "highest_staff_post_number" : "highest_post_number"
-    list.where("tu.last_read_post_number IS NULL OR tu.last_read_post_number < topics.#{col_name}")
-  end
-
   protected
 
   def per_page_setting
@@ -748,7 +687,7 @@ class TopicQuery
       )
     end
 
-    result.where.not(topics: { category_id: drafts_category_id })
+    result.where("topics.category_id != ?", drafts_category_id)
   end
 
   def apply_ordering(result, options = {})
@@ -832,7 +771,6 @@ class TopicQuery
 
     # Start with a list of all topics
     result = Topic.includes(:category)
-    result = result.includes(:nested_topic) if SiteSetting.nested_replies_enabled
 
     if @user
       result =
@@ -859,7 +797,7 @@ class TopicQuery
       result = result.references(:categories)
 
       if !@options[:order]
-        filter = options[:filter] || options[:f]
+        filter = (options[:filter] || options[:f])
         # category default sort order
         sort_order, sort_ascending =
           Category.where(id: category_id).pick(:sort_order, :sort_ascending)
@@ -876,12 +814,7 @@ class TopicQuery
     if SiteSetting.tagging_enabled
       # Use `preload` here instead since `includes` can end up calling `eager_load` which can unnecessarily lead to
       # joins on the `topic_tags` and `tags` table leading to a much slower query.
-      result =
-        if SiteSetting.content_localization_enabled
-          result.preload(tags: :localizations)
-        else
-          result.preload(:tags)
-        end
+      result = result.preload(:tags)
       result = filter_by_tags(result)
     end
 
@@ -933,23 +866,21 @@ class TopicQuery
         )
     end
 
-    if state = options[:state]
-      # Special handling for watching_first_post - it's a category/tag level notification
-      # not a topic level notification, so we need to query CategoryUser and TagUser tables
-      if state == "watching_first_post"
-        result = TopicQuery.watching_first_post_filter(result, @user)
-      elsif @user && TopicUser.notification_levels.keys.map(&:to_s).include?(state)
-        result =
-          result.where(
-            "topics.id IN (
-              SELECT topic_id
-              FROM topic_users
-              WHERE user_id = ? AND notification_level = ?
-            )",
-            @user.id,
-            TopicUser.notification_levels[state.to_sym],
-          )
-      end
+    # NOTE protect against SYM attack can be removed with Ruby 2.2
+    #
+    state = options[:state]
+    if @user && state && TopicUser.notification_levels.keys.map(&:to_s).include?(state)
+      level = TopicUser.notification_levels[state.to_sym]
+      result =
+        result.where(
+          "topics.id IN (
+                                SELECT topic_id
+                                FROM topic_users
+                                WHERE user_id = ? AND
+                                      notification_level = ?)",
+          @user.id,
+          level,
+        )
     end
 
     if before = options[:before]
@@ -972,7 +903,7 @@ class TopicQuery
         )
     end
 
-    if (filter = options[:filter] || options[:f]) && @user
+    if (filter = (options[:filter] || options[:f])) && @user
       action = (PostActionType.types[:like] if filter == "liked")
       if action
         result =
@@ -1031,7 +962,7 @@ class TopicQuery
 
     if user
       watched_tag_ids =
-        if user.user_option.watched_precedence_over_muted
+        if user.watched_precedence_over_muted
           TagUser
             .where(user: user)
             .where("notification_level >= ?", TopicUser.notification_levels[:watching])
@@ -1040,35 +971,32 @@ class TopicQuery
           []
         end
 
-      query_params = {
-        category_id: category_id || -1,
-        default: CategoryUser.default_notification_level,
-        indirectly_muted_category_ids:
-          CategoryUser.indirectly_muted_category_ids(user).presence || [-1],
-        muted: CategoryUser.notification_levels[:muted],
-        regular: TopicUser.notification_levels[:regular],
-      }
-
+      # OR watched_topic_tags.id IS NOT NULL",
       list =
         list.references("cu").joins(
           "LEFT JOIN category_users ON category_users.category_id = topics.category_id AND category_users.user_id = #{user.id}",
         )
-      query_params[:watched_tag_ids] = watched_tag_ids if watched_tag_ids.present?
-
-      muted_category_condition =
-        +"topics.category_id = :category_id
-                OR
-                (COALESCE(category_users.notification_level, :default) <> :muted AND (topics.category_id IS NULL OR topics.category_id NOT IN(:indirectly_muted_category_ids)))"
-
       if watched_tag_ids.present?
-        muted_category_condition << "
-                OR EXISTS (SELECT 1 FROM topic_tags watched_topic_tags WHERE watched_topic_tags.topic_id = topics.id AND watched_topic_tags.tag_id IN (:watched_tag_ids))"
+        list =
+          list.joins(
+            "LEFT JOIN topic_tags watched_topic_tags ON watched_topic_tags.topic_id = topics.id AND #{DB.sql_fragment("watched_topic_tags.tag_id IN (?)", watched_tag_ids)}",
+          )
       end
 
-      muted_category_condition << "
-                OR tu.notification_level > :regular"
-
-      list = list.where(muted_category_condition, query_params)
+      list =
+        list.where(
+          "topics.category_id = :category_id
+                OR
+                (COALESCE(category_users.notification_level, :default) <> :muted AND (topics.category_id IS NULL OR topics.category_id NOT IN(:indirectly_muted_category_ids)))
+                #{watched_tag_ids.present? ? "OR watched_topic_tags.id IS NOT NULL" : ""}
+                OR tu.notification_level > :regular",
+          category_id: category_id || -1,
+          default: CategoryUser.default_notification_level,
+          indirectly_muted_category_ids:
+            CategoryUser.indirectly_muted_category_ids(user).presence || [-1],
+          muted: CategoryUser.notification_levels[:muted],
+          regular: TopicUser.notification_levels[:regular],
+        )
     elsif SiteSetting.mute_all_categories_by_default
       category_ids = [
         SiteSetting.default_categories_watching.split("|"),
@@ -1083,7 +1011,7 @@ class TopicQuery
       category_ids = SiteSetting.default_categories_muted.split("|").map(&:to_i)
       category_ids -= [category_id] if category_id.present? && category_ids.include?(category_id)
 
-      list = list.where.not(categories: { id: category_ids }) if category_ids.present?
+      list = list.where("categories.id NOT IN (?)", category_ids) if category_ids.present?
     end
 
     list
@@ -1122,7 +1050,8 @@ class TopicQuery
     if user && !opts[:skip_categories]
       query_params[:regular] = CategoryUser.notification_levels[:regular]
 
-      query_params[:watching_or_infinite] = if user.user_option.watched_precedence_over_muted
+      query_params[:watching_or_infinite] = if user.watched_precedence_over_muted ||
+           SiteSetting.watched_precedence_over_muted
         CategoryUser.notification_levels[:watching]
       else
         99
@@ -1208,8 +1137,8 @@ class TopicQuery
   end
 
   def allowed_messages(messages, params)
-    user_ids = params[:target_user_ids] || []
-    group_ids = (params[:target_group_ids] - params[:my_group_ids]) || []
+    user_ids = (params[:target_user_ids] || [])
+    group_ids = ((params[:target_group_ids] - params[:my_group_ids]) || [])
 
     if user_ids.present?
       messages =
@@ -1237,17 +1166,16 @@ class TopicQuery
       if user_ids.present? && group_ids.present?
         messages.where("ta2.topic_id IS NOT NULL OR tg2.topic_id IS NOT NULL")
       elsif user_ids.present?
-        messages.where.not(ta2: { topic_id: nil })
+        messages.where("ta2.topic_id IS NOT NULL")
       elsif group_ids.present?
-        messages.where.not(tg2: { topic_id: nil })
+        messages.where("tg2.topic_id IS NOT NULL")
       end
   end
 
   def messages_for_groups_or_user(group_ids)
     if group_ids.present?
-      base_messages
-        .joins(
-          "
+      base_messages.joins(
+        "
           LEFT JOIN (
             SELECT * FROM topic_allowed_groups _tg
             LEFT JOIN group_users gu
@@ -1256,23 +1184,20 @@ class TopicQuery
             WHERE #{DB.sql_fragment("gu.group_id IN (?)", group_ids)}
           ) tg ON topics.id = tg.topic_id
         ",
-        )
-        .where.not(tg: { topic_id: nil })
+      ).where("tg.topic_id IS NOT NULL")
     else
       messages_for_user
     end
   end
 
   def messages_for_user
-    base_messages
-      .joins(
-        "
+    base_messages.joins(
+      "
         LEFT JOIN topic_allowed_users ta
         ON topics.id = ta.topic_id
         AND ta.user_id = #{@user.id.to_i}
       ",
-      )
-      .where.not(ta: { topic_id: nil })
+    ).where("ta.topic_id IS NOT NULL")
   end
 
   def base_messages
@@ -1281,14 +1206,7 @@ class TopicQuery
         "LEFT JOIN topic_users tu ON topics.id = tu.topic_id AND tu.user_id = #{@user.id.to_i}",
       )
 
-    if SiteSetting.tagging_enabled
-      query =
-        if SiteSetting.content_localization_enabled
-          query.includes(tags: :localizations)
-        else
-          query.includes(:tags)
-        end
-    end
+    query = query.includes(:tags) if SiteSetting.tagging_enabled
     query.order("topics.bumped_at DESC")
   end
 
@@ -1300,7 +1218,8 @@ class TopicQuery
     else
       excluded_topic_ids += Category.topic_ids.to_a
     end
-    result = result.where.not(topics: { id: excluded_topic_ids }) unless excluded_topic_ids.empty?
+    result =
+      result.where("topics.id NOT IN (?)", excluded_topic_ids) unless excluded_topic_ids.empty?
 
     result = remove_muted(result, @user, @options)
 
@@ -1337,21 +1256,11 @@ class TopicQuery
 
   private
 
-  def filter_results(query = @options[:q])
-    topics_filter =
-      TopicsFilter.new(
-        guardian: @guardian,
-        scope: latest_results(include_muted: false, skip_ordering: true),
-        loaded_topic_users_reference: @guardian.authenticated?,
-      )
+  def unseen_filter(list, user_first_seen_at, whisperer)
+    list = list.where("topics.bumped_at >= ?", user_first_seen_at)
 
-    results = topics_filter.filter_from_query_string(query)
-
-    if !topics_filter.topic_notification_levels.include?(NotificationLevels.all[:muted])
-      results = remove_muted_topics(results, @user)
-    end
-
-    [results, topics_filter]
+    col_name = whisperer ? "highest_staff_post_number" : "highest_post_number"
+    list.where("tu.last_read_post_number IS NULL OR tu.last_read_post_number < topics.#{col_name}")
   end
 
   def apply_max_age_limit(results, options)
@@ -1368,11 +1277,7 @@ class TopicQuery
 
       # perf note, in the past we tried doing this in a subquery but performance was
       # terrible, also tried with a join and it was bad
-      #
-      # Default to updated_at so the unread/new lists stay consistent with the unread
-      # count (TopicTrackingState); suggested topics opt into bumped_at via age_column.
-      age_column = options[:age_column] == :bumped_at ? "bumped_at" : "updated_at"
-      results = results.where("topics.#{age_column} >= ?", unread_at)
+      results = results.where("topics.updated_at >= ?", unread_at)
     end
     results
   end
@@ -1390,23 +1295,14 @@ class TopicQuery
       if ActiveModel::Type::Boolean.new.cast(@options[:match_all_tags])
         # ALL of the given tags:
         if tags_arg.length == tags.length
-          tag_subqueries = tags.map { |tag| TopicTag.select(:topic_id).where(tag_id: tag).to_sql }
+          tags.each_with_index do |tag, index|
+            sql_alias = ["t", index].join
 
-          joined_subqueries = nil
-
-          tag_subqueries.each_with_index do |sql, index|
-            alias_name = "t#{index}"
-            subquery_with_alias = "(#{sql}) #{alias_name}"
-
-            if joined_subqueries
-              joined_subqueries =
-                "#{joined_subqueries} INNER JOIN #{subquery_with_alias} ON #{alias_name}.topic_id = t0.topic_id"
-            else
-              joined_subqueries = subquery_with_alias
-            end
+            result =
+              result.joins(
+                "INNER JOIN topic_tags #{sql_alias} ON #{sql_alias}.topic_id = topics.id AND #{sql_alias}.tag_id = #{tag}",
+              )
           end
-
-          result = result.where("topics.id IN (SELECT t0.topic_id FROM #{joined_subqueries})")
         else
           result = result.none # don't return any results unless all tags exist in the database
         end

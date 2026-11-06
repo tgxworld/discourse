@@ -1,5 +1,4 @@
 import { performEmojiUnescape } from "pretty-text/emoji";
-import escape from "discourse/lib/escape";
 import { i18n } from "discourse-i18n";
 
 // NOTE: When updating this file you also must consider the ProseMirror rich editor extension
@@ -28,9 +27,6 @@ const chatTranscriptRule = {
     const channelId = tagInfo.attrs.channelId;
     const threadId = tagInfo.attrs.threadId;
     const threadTitle = tagInfo.attrs.threadTitle;
-    // names a transcript that didn't come from a chat channel; never linked
-    const source = tagInfo.attrs.source;
-    const sourceType = tagInfo.attrs.sourceType;
     const channelLink = channelId
       ? options.getURL(`/chat/c/-/${channelId}`)
       : null;
@@ -69,7 +65,7 @@ const chatTranscriptRule = {
 
       channelToken.content = i18n("chat.quote.original_channel", {
         channel: unescapedChannelName,
-        channelLink: channelLink && escape(channelLink),
+        channelLink,
       });
       state.push("div_chat_transcript_meta_close", "div", -1);
     }
@@ -149,14 +145,6 @@ const chatTranscriptRule = {
 
     if (channelId) {
       wrapperDivToken.attrs.push(["data-channel-id", channelId]);
-    }
-
-    if (source) {
-      wrapperDivToken.attrs.push(["data-source", source]);
-    }
-
-    if (sourceType) {
-      wrapperDivToken.attrs.push(["data-source-type", sourceType]);
     }
 
     if (multiQuote) {
@@ -372,8 +360,6 @@ export function setup(helper) {
     "div[data-message-id]",
     "div[data-channel-name]",
     "div[data-channel-id]",
-    "div[data-source]",
-    "div[data-source-type]",
     "div[data-username]",
     "div[data-datetime]",
     "a.chat-transcript-channel",

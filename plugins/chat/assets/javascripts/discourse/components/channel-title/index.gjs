@@ -1,10 +1,10 @@
-import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
+import concatClass from "discourse/helpers/concat-class";
 import ChannelIcon from "discourse/plugins/chat/discourse/components/channel-icon";
 import ChannelName from "discourse/plugins/chat/discourse/components/channel-name";
 
 const ChatChannelTitle = <template>
   <div
-    class={{dConcatClass
+    class={{concatClass
       "chat-channel-title"
       (if @channel.isDirectMessageChannel "is-dm" "is-category")
     }}
@@ -13,9 +13,7 @@ const ChatChannelTitle = <template>
     <ChannelName @channel={{@channel}} />
 
     {{#if @isUnread}}
-      <div
-        class="unread-indicator d-new-indicator {{if @isUrgent '-urgent'}}"
-      ></div>
+      <div class="unread-indicator {{if @isUrgent '-urgent'}}"></div>
     {{/if}}
 
     {{#if (has-block)}}

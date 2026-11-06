@@ -58,7 +58,7 @@ RSpec.describe DiscourseWebauthn::AuthenticationService do
   let(:credential_id) do
     "mJAJ4CznTO0SuLkJbYwpgK75ao4KMNIPlU5KWM92nq39kRbXzI9mSv6GxTcsMYoiPgaouNw7b7zBiS4vsQaO6A=="
   end
-  let(:server_session) { ServerSession.new("tester") }
+  let(:secure_session) { SecureSession.new("tester") }
   let(:challenge) { "81d4acfbd69eafa8f02bc2ecbec5267be8c9b28c1e0ba306d52b79f0f13d" }
   let(:client_data_challenge) { Base64.strict_encode64(challenge) }
   let(:client_data_webauthn_type) { "webauthn.get" }
@@ -92,7 +92,7 @@ RSpec.describe DiscourseWebauthn::AuthenticationService do
   end
 
   let(:options) do
-    { session: server_session, factor_type: UserSecurityKey.factor_types[:second_factor] }
+    { session: secure_session, factor_type: UserSecurityKey.factor_types[:second_factor] }
   end
   let(:current_user) { Fabricate(:user) }
 
@@ -110,7 +110,6 @@ RSpec.describe DiscourseWebauthn::AuthenticationService do
 
   context "when params is blank" do
     let(:params) { nil }
-
     it "raises a MalformedPublicKeyCredentialError" do
       expect { service.authenticate_security_key }.to raise_error(
         DiscourseWebauthn::MalformedPublicKeyCredentialError,
@@ -121,7 +120,6 @@ RSpec.describe DiscourseWebauthn::AuthenticationService do
 
   context "when params is not blank and not a hash" do
     let(:params) { "test" }
-
     it "raises a MalformedPublicKeyCredentialError" do
       expect { service.authenticate_security_key }.to raise_error(
         DiscourseWebauthn::MalformedPublicKeyCredentialError,
@@ -274,13 +272,8 @@ RSpec.describe DiscourseWebauthn::AuthenticationService do
   end
 
   describe "authenticating passkeys" do
-    # Passkey login is initiated without a current_user — the user is identified
-    # via userHandle in the response. This matches the production call site at
-    # SessionController#passkey_login.
-    let(:current_user) { nil }
-    let(:security_key_user) { Fabricate(:user) }
     let(:options) do
-      { factor_type: UserSecurityKey.factor_types[:first_factor], session: server_session }
+      { factor_type: UserSecurityKey.factor_types[:first_factor], session: secure_session }
     end
 
     ##

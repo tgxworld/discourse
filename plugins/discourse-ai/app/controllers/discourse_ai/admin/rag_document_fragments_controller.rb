@@ -3,11 +3,11 @@
 module DiscourseAi
   module Admin
     class RagDocumentFragmentsController < ::Admin::AdminController
-      requires_plugin PLUGIN_NAME
+      requires_plugin ::DiscourseAi::PLUGIN_NAME
 
       def indexing_status_check
-        if params[:target_type] == "AiAgent"
-          @target = AiAgent.find(params[:target_id])
+        if params[:target_type] == "AiPersona"
+          @target = AiPersona.find(params[:target_id])
         elsif params[:target_type] == "AiTool"
           @target = AiTool.find(params[:target_id])
         else
@@ -39,8 +39,7 @@ module DiscourseAi
           if upload.persisted?
             render json: UploadSerializer.new(upload)
           else
-            render json: failed_json.merge(errors: upload.errors.full_messages),
-                   status: :unprocessable_entity
+            render json: failed_json.merge(errors: upload.errors.full_messages), status: 422
           end
         end
       end

@@ -1,5 +1,5 @@
 import { withPluginApi } from "discourse/lib/plugin-api";
-import { addSection } from "../lib/styleguide.js";
+import { addSection } from "../lib/styleguide";
 
 /**
  * Add a section to the styleguide

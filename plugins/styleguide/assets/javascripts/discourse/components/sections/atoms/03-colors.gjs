@@ -15,7 +15,7 @@ const Colors = <template>
     </section>
   </StyleguideExample>
 
-  <StyleguideExample @title="primary cont'd">
+  <StyleguideExample @title="primary-100">
     <section class="color-row">
       <ColorExample @color="primary-50" />
       <ColorExample @color="primary-100" />
@@ -51,7 +51,7 @@ const Colors = <template>
     </section>
   </StyleguideExample>
 
-  <StyleguideExample @title="tertiary cont'd">
+  <StyleguideExample @title="tertiary-100">
     <section class="color-row">
       <ColorExample @color="tertiary-25" />
       <ColorExample @color="tertiary-50" />
@@ -108,7 +108,7 @@ const Colors = <template>
     </section>
   </StyleguideExample>
 
-  <StyleguideExample @title="header">
+  <StyleguideExample @title="header_primary">
     <section class="color-row">
       <ColorExample @color="header_background" />
     </section>

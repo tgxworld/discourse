@@ -3,6 +3,8 @@
 module PageObjects
   module Pages
     class Category < PageObjects::Pages::Base
+      # keeping the various category related features combined for now
+
       def visit(category)
         page.visit("/c/#{category.id}")
         self
@@ -10,20 +12,6 @@ module PageObjects
 
       def visit_settings(category)
         page.visit("/c/#{category.slug}/edit/settings")
-        self
-      end
-
-      def visit_moderation(category)
-        page.visit("/c/#{category.slug}/edit/moderation")
-        self
-      end
-
-      def visit_general(category, subcategory = nil)
-        if subcategory
-          page.visit("/c/#{category.slug}/#{subcategory.slug}/edit/general")
-        else
-          page.visit("/c/#{category.slug}/edit/general")
-        end
         self
       end
 
@@ -42,22 +30,12 @@ module PageObjects
       end
 
       def visit_new_category
-        page.visit("/new-category/setup")
+        page.visit("/new-category")
         self
       end
 
       def visit_security(category)
         page.visit("/c/#{category.slug}/edit/security")
-        self
-      end
-
-      def visit_tags(category)
-        page.visit("/c/#{category.slug}/edit/tags")
-        self
-      end
-
-      def visit_appearance(category)
-        visit_images(category)
         self
       end
 
@@ -67,16 +45,12 @@ module PageObjects
       end
 
       def back_to_category
-        find(".edit-category-page .back-button").click
+        find(".edit-category-title-bar span", text: "Back to category").click
         self
       end
 
       def save_settings
-        if page.has_css?(".admin-changes-banner", wait: 0)
-          find(".admin-changes-banner .btn-primary").click
-        else
-          find("#save-category").click
-        end
+        find("#save-category").click
         self
       end
 
@@ -85,6 +59,7 @@ module PageObjects
         self
       end
 
+      # Edit Category Page
       def has_form_template_enabled?
         find(".d-toggle-switch .toggle-template-type", visible: false)["aria-checked"] == "true"
       end
@@ -104,22 +79,7 @@ module PageObjects
       end
 
       def toggle_form_templates
-        PageObjects::Components::DToggleSwitch.new(".toggle-template-type").toggle
-        self
-      end
-
-      def toggle_advanced_settings
-        PageObjects::Components::DToggleSwitch.new(".d-toggle-switch__checkbox").toggle
-        self
-      end
-
-      def toggle_checkbox(label_text)
-        find("label.checkbox-label", text: label_text).click
-        self
-      end
-
-      def toggle_form_container(title)
-        find(".form-kit__container", text: title).find("label.d-toggle-switch__label").click
+        find(".d-toggle-switch .d-toggle-switch__checkbox-slider").click
         self
       end
 
@@ -131,10 +91,6 @@ module PageObjects
 
       def new_topic_button
         find("#create-topic")
-      end
-
-      def category_box(category)
-        find(".category-boxes .category-box[data-category-id='#{category.id}']")
       end
 
       CATEGORY_NAVIGATION_NEW_NAV_ITEM_SELECTOR = ".category-navigation .nav-item_new"
@@ -151,27 +107,12 @@ module PageObjects
         page.find(CATEGORY_NAVIGATION_NEW_NAV_ITEM_SELECTOR).click
       end
 
-      def click_edit_category
-        find(".navigation-controls .edit-category").click
-        self
-      end
-
       def has_public_access_message?
-        page.has_content?(
-          I18n.t(
-            "js.category.permissions.everyone_full_access",
-            everyone_group: ::Group[:everyone].name,
-          ),
-        )
+        page.has_content?(I18n.t("js.category.permissions.everyone_has_access"))
       end
 
       def has_no_public_access_message?
-        page.has_no_content?(
-          I18n.t(
-            "js.category.permissions.everyone_full_access",
-            everyone_group: ::Group[:everyone].name,
-          ),
-        )
+        page.has_no_content?(I18n.t("js.category.permissions.everyone_has_access"))
       end
 
       def has_setting_tab?(tab_name)
@@ -182,59 +123,6 @@ module PageObjects
       def has_no_setting_tab?(tab_name)
         tab_css = ".edit-category-#{tab_name}"
         page.has_no_css?(tab_css)
-      end
-
-      def has_changes_banner?
-        page.has_css?(".admin-changes-banner")
-      end
-
-      def has_powered_by_discourse?
-        page.has_css?(".powered-by-discourse")
-      end
-
-      def changes_banner_is_clear_of_powered_by_discourse?
-        page.evaluate_script(<<~JS)
-          document.querySelector(".admin-changes-banner").getBoundingClientRect().bottom <=
-            document.querySelector(".powered-by-discourse").getBoundingClientRect().top
-        JS
-      end
-
-      def has_category_title?(title)
-        page.has_css?(".category-header h1", text: title)
-      end
-
-      def topic_posting_review_mode_chooser(simplified: true)
-        if simplified
-          PageObjects::Components::SelectKit.new(
-            ".form-kit__field[data-name='category_setting.topic_posting_review_mode'] .combo-box",
-          )
-        else
-          PageObjects::Components::SelectKit.new(".topic-posting-review-mode .combo-box")
-        end
-      end
-
-      def topic_posting_review_group_chooser(simplified: true)
-        if simplified
-          PageObjects::Components::SelectKit.new(".form-kit .group-chooser")
-        else
-          PageObjects::Components::SelectKit.new(".topic-posting-review-mode .group-chooser")
-        end
-      end
-
-      def has_posting_review_groups_error?
-        page.has_content?(I18n.t("js.category.validations.groups_required"))
-      end
-
-      def has_no_posting_review_groups_error?
-        page.has_no_content?(I18n.t("js.category.validations.groups_required"))
-      end
-
-      def has_topic_posting_review_mode?(mode, simplified: true)
-        topic_posting_review_mode_chooser(simplified: simplified).has_selected_value?(mode)
-      end
-
-      def has_topic_posting_review_groups?(group, simplified: true)
-        topic_posting_review_group_chooser(simplified: simplified).has_selected_value?(group.id)
       end
     end
   end

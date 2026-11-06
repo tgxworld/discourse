@@ -5,10 +5,11 @@ import { i18n } from "discourse-i18n";
 import ChatModalEditChannelName from "discourse/plugins/chat/discourse/components/chat/modal/edit-channel-name";
 import Navbar from "discourse/plugins/chat/discourse/components/chat/navbar";
 import ChatChannelStatus from "discourse/plugins/chat/discourse/components/chat-channel-status";
-import ChannelInfoNav from "./channel-info-nav.gjs";
+import ChannelInfoNav from "./channel-info-nav";
 
 export default class ChatRoutesChannelInfo extends Component {
   @service chatChannelInfoRouteOriginManager;
+  @service site;
   @service modal;
   @service chatGuardian;
 

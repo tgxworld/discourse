@@ -13,10 +13,7 @@ describe Jobs::LocalizeCategories do
     assign_fake_provider_to(:ai_default_llm_model)
     enable_current_plugin
     SiteSetting.ai_translation_enabled = true
-    SiteSetting.default_locale = "pt_BR"
     SiteSetting.content_localization_supported_locales = "pt_BR|zh_CN"
-    SiteSetting.ai_translation_category_scope = "all"
-    SiteSetting.ai_translation_categories = ""
 
     Jobs.run_immediately!
   end
@@ -53,13 +50,6 @@ describe Jobs::LocalizeCategories do
     job.execute({ limit: 10 })
   end
 
-  it "skips translation when credits are unavailable" do
-    DiscourseAi::Translation.expects(:credits_available_for_category_localization?).returns(false)
-    DiscourseAi::Translation::CategoryLocalizer.expects(:localize).never
-
-    job.execute({ limit: 10 })
-  end
-
   it "does nothing when the limit is zero" do
     DiscourseAi::Translation::CategoryLocalizer.expects(:localize).never
 
@@ -73,26 +63,17 @@ describe Jobs::LocalizeCategories do
 
     DiscourseAi::Translation::CategoryLocalizer
       .expects(:localize)
-      .with(
-        is_a(Category),
-        "pt_BR",
-        has_entries(short_text_llm_model: anything, post_raw_llm_model: anything),
-      )
+      .with(is_a(Category), "pt_BR")
       .times(number_of_categories)
     DiscourseAi::Translation::CategoryLocalizer
       .expects(:localize)
-      .with(
-        is_a(Category),
-        "zh_CN",
-        has_entries(short_text_llm_model: anything, post_raw_llm_model: anything),
-      )
+      .with(is_a(Category), "zh_CN")
       .times(number_of_categories)
 
     job.execute({ limit: 10 })
   end
 
   it "limits the number of localizations" do
-    SiteSetting.default_locale = "pt"
     SiteSetting.content_localization_supported_locales = "pt"
 
     6.times { Fabricate(:category) }
@@ -100,11 +81,7 @@ describe Jobs::LocalizeCategories do
 
     DiscourseAi::Translation::CategoryLocalizer
       .expects(:localize)
-      .with(
-        is_a(Category),
-        "pt",
-        has_entries(short_text_llm_model: anything, post_raw_llm_model: anything),
-      )
+      .with(is_a(Category), "pt")
       .times(5)
 
     job.execute({ limit: 5 })
@@ -115,95 +92,43 @@ describe Jobs::LocalizeCategories do
 
     DiscourseAi::Translation::CategoryLocalizer
       .expects(:localize)
-      .with(
-        is_a(Category),
-        "pt_BR",
-        has_entries(short_text_llm_model: anything, post_raw_llm_model: anything),
-      )
+      .with(is_a(Category), "pt_BR")
       .never
     DiscourseAi::Translation::CategoryLocalizer
       .expects(:localize)
-      .with(
-        is_a(Category),
-        "zh_CN",
-        has_entries(short_text_llm_model: anything, post_raw_llm_model: anything),
-      )
+      .with(is_a(Category), "zh_CN")
       .never
 
     job.execute({ limit: 10 })
-  end
-
-  it "retranslates existing localizations for a requested category" do
-    localize_all_categories("pt_BR", "zh_CN")
-    category = Fabricate(:category, locale: "en", description: "Source description")
-    localizations =
-      %w[pt_BR zh_CN].map do |locale|
-        Fabricate(
-          :category_localization,
-          category:,
-          locale:,
-          name: "Old name",
-          description: "Old description",
-        )
-      end
-
-    short_text_translator = instance_double(DiscourseAi::Translation::ShortTextTranslator)
-    allow(DiscourseAi::Translation::ShortTextTranslator).to receive(:new).and_return(
-      short_text_translator,
-    )
-    allow(short_text_translator).to receive(:translate).and_return("New name")
-    post_raw_translator = instance_double(DiscourseAi::Translation::PostRawTranslator)
-    allow(DiscourseAi::Translation::PostRawTranslator).to receive(:new).and_return(
-      post_raw_translator,
-    )
-    allow(post_raw_translator).to receive(:translate).and_return("New description")
-
-    job.execute({ limit: 1, category_id: category.id, fields: ["description"], force: true })
-
-    expect(
-      CategoryLocalization.where(id: localizations.map(&:id)).pluck(:name, :description),
-    ).to contain_exactly(["Old name", "New description"], ["Old name", "New description"])
   end
 
   it "handles translation errors gracefully" do
     localize_all_categories("pt", "zh_CN")
 
     category1 = Fabricate(:category, name: "First", description: "First description", locale: "en")
-
     DiscourseAi::Translation::CategoryLocalizer
       .expects(:localize)
-      .with(
-        category1,
-        "pt_BR",
-        has_entries(short_text_llm_model: anything, post_raw_llm_model: anything),
-      )
+      .with(category1, "pt_BR")
       .once
       .raises(StandardError.new("API error"))
-    DiscourseAi::Translation::CategoryLocalizer
-      .expects(:localize)
-      .with(
-        category1,
-        "zh_CN",
-        has_entries(short_text_llm_model: anything, post_raw_llm_model: anything),
-      )
-      .once
+    DiscourseAi::Translation::CategoryLocalizer.expects(:localize).with(category1, "zh_CN").once
 
     expect { job.execute({ limit: 10 }) }.not_to raise_error
   end
 
-  it "does not translate categories excluded by the category scope" do
-    included = Fabricate(:category, locale: "en")
-    excluded = Fabricate(:category, locale: "en")
-    SiteSetting.ai_translation_category_scope = "exclude"
-    SiteSetting.ai_translation_categories = excluded.id.to_s
+  it "skips read-restricted categories when configured" do
+    SiteSetting.ai_translation_backfill_limit_to_public_content = true
+
+    category1 = Fabricate(:category, name: "Public Category", read_restricted: false, locale: "en")
+    category2 = Fabricate(:category, name: "Private Category", read_restricted: true, locale: "en")
 
     DiscourseAi::Translation::CategoryLocalizer
       .expects(:localize)
-      .with(included, any_parameters)
+      .with(category1, any_parameters)
       .twice
     DiscourseAi::Translation::CategoryLocalizer
       .expects(:localize)
-      .with(excluded, any_parameters)
+      .with(category2, any_parameters)
       .never
 
     job.execute({ limit: 10 })
@@ -212,21 +137,10 @@ describe Jobs::LocalizeCategories do
   it "skips creating localizations in the same language as the category's locale" do
     Category.update_all(locale: "pt")
 
+    DiscourseAi::Translation::CategoryLocalizer.expects(:localize).with(is_a(Category), "pt").never
     DiscourseAi::Translation::CategoryLocalizer
       .expects(:localize)
-      .with(
-        is_a(Category),
-        "pt",
-        has_entries(short_text_llm_model: anything, post_raw_llm_model: anything),
-      )
-      .never
-    DiscourseAi::Translation::CategoryLocalizer
-      .expects(:localize)
-      .with(
-        is_a(Category),
-        "zh_CN",
-        has_entries(short_text_llm_model: anything, post_raw_llm_model: anything),
-      )
+      .with(is_a(Category), "zh_CN")
       .times(Category.count)
 
     job.execute({ limit: 10 })

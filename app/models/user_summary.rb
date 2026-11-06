@@ -121,7 +121,7 @@ class UserSummary
   end
 
   def bookmark_count
-    BookmarkQuery.new(user: @user, guardian: @guardian).count_all
+    Bookmark.where(user: @user).count
   end
 
   def recent_time_read

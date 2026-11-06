@@ -7,10 +7,7 @@ module Jobs
       post = Post.find_by(id: args[:post_id])
       return if !post
 
-      DiscourseAi::AiModeration::SpamScanner.perform_scan(
-        post,
-        triggering_user_id: args[:triggering_user_id],
-      )
+      DiscourseAi::AiModeration::SpamScanner.perform_scan(post)
     end
   end
 end

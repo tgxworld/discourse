@@ -75,24 +75,9 @@ class Search
     OMISSION = "..."
     SCRUB_HEADLINE_REGEXP =
       %r{<span(?: \w+="[^"]+")* class="#{Search::HIGHLIGHT_CSS_CLASS}"(?: \w+="[^"]+")*>([^<]*)</span>}
-    HIGHLIGHT_START_TAG = %(<span class="#{Search::HIGHLIGHT_CSS_CLASS}">)
-    HIGHLIGHT_END_TAG = "</span>"
-    ESCAPED_HIGHLIGHT_TAGS = {
-      ERB::Util.html_escape(HIGHLIGHT_START_TAG) => HIGHLIGHT_START_TAG,
-      ERB::Util.html_escape(HIGHLIGHT_END_TAG) => HIGHLIGHT_END_TAG,
-    }
-    private_constant :HIGHLIGHT_START_TAG, :HIGHLIGHT_END_TAG, :ESCAPED_HIGHLIGHT_TAGS
 
-    def blurb(post, scope: nil)
+    def blurb(post)
       opts = { term: @blurb_term, blurb_length: @blurb_length }
-
-      if ContentLocalization.show_translated_post?(post, scope) &&
-           (localization = post.get_localization(I18n.locale))
-        opts[:cooked] = localization.cooked
-        opts[:scrub] = true
-        return GroupedSearchResults.blurb_for(**opts)
-      end
-
       post_search_data_version = post&.post_search_data&.version
 
       if post_search_data_version.present? &&
@@ -102,7 +87,7 @@ class Search
           scrubbed_headline = post.headline.gsub(SCRUB_HEADLINE_REGEXP, '\1')
           prefix_omission = scrubbed_headline.start_with?(post.leading_raw_data) ? "" : OMISSION
           postfix_omission = scrubbed_headline.end_with?(post.trailing_raw_data) ? "" : OMISSION
-          return "#{prefix_omission}#{escape_headline(post.headline)}#{postfix_omission}"
+          return "#{prefix_omission}#{post.headline}#{postfix_omission}"
         else
           opts[:cooked] = post.post_search_data.raw_data
           opts[:scrub] = false
@@ -119,9 +104,9 @@ class Search
       if !@is_header_search && public_send(type).length == Search.per_filter
         @more_full_page_results = true
       elsif @is_header_search && public_send(type).length == Search.per_facet
-        instance_variable_set(:"@more_#{type}", true)
+        instance_variable_set("@more_#{type}".to_sym, true)
       else
-        public_send(type) << object
+        (self.public_send(type)) << object
       end
 
       if can_lazy_load_categories
@@ -149,13 +134,15 @@ class Search
         urls = Set.new
         cooked.scan(Discourse::Utils::URI_REGEXP) { urls << $& }
         urls.each do |url|
-          case File.extname(URI(url).path || "")
-          when Oneboxer::VIDEO_REGEX
-            cooked.gsub!(url, I18n.t("search.video"))
-          when Oneboxer::AUDIO_REGEX
-            cooked.gsub!(url, I18n.t("search.audio"))
+          begin
+            case File.extname(URI(url).path || "")
+            when Oneboxer::VIDEO_REGEX
+              cooked.gsub!(url, I18n.t("search.video"))
+            when Oneboxer::AUDIO_REGEX
+              cooked.gsub!(url, I18n.t("search.audio"))
+            end
+          rescue URI::InvalidURIError
           end
-        rescue URI::InvalidURIError
         end
       end
 
@@ -167,15 +154,6 @@ class Search
 
       blurb = TextHelper.truncate(cooked, length: blurb_length) if blurb.blank?
       Sanitize.clean(blurb)
-    end
-
-    private
-
-    def escape_headline(headline)
-      ERB::Util.html_escape(headline).gsub(
-        Regexp.union(ESCAPED_HIGHLIGHT_TAGS.keys),
-        ESCAPED_HIGHLIGHT_TAGS,
-      )
     end
   end
 end

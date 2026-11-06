@@ -47,6 +47,7 @@ module DiscourseDev
 
     def incoming_email_data
       user = User.random
+      subject = Faker::Lorem.sentence
       email_content = <<-EMAIL
         Return-Path: #{user.email}
         From: #{user.email}

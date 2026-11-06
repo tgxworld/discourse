@@ -4,8 +4,8 @@ module DiscourseAi
   module Completions
     module Endpoints
       class HuggingFace < Base
-        def self.can_contact?(llm_model)
-          llm_model.provider == "hugging_face"
+        def self.can_contact?(model_provider)
+          model_provider == "hugging_face"
         end
 
         def normalize_model_params(model_params)
@@ -20,7 +20,7 @@ module DiscourseAi
         end
 
         def default_options
-          { model: llm_model.name }
+          { model: llm_model.name, temperature: 0.7 }
         end
 
         def provider_id
@@ -39,12 +39,9 @@ module DiscourseAi
             .merge(messages: prompt)
             .tap do |payload|
               if !payload[:max_tokens]
-                # Unlike most providers, HF/TGI defaults an omitted limit
-                # to 100 tokens, so "no limit" is expressed explicitly as
-                # whatever the context window has left.
                 token_limit = llm_model.max_prompt_tokens
 
-                payload[:max_tokens] = [token_limit - prompt_size(prompt), 1].max
+                payload[:max_tokens] = token_limit - prompt_size(prompt)
               end
 
               payload[:stream] = true if @streaming_mode

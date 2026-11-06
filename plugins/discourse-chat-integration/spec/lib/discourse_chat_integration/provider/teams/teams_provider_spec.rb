@@ -27,7 +27,7 @@ RSpec.describe DiscourseChatIntegration::Provider::TeamsProvider do
       stub1 = stub_request(:post, chan1.data["webhook_url"]).to_return(status: 400, body: "{}")
       expect(stub1).to have_been_requested.times(0)
       expect { described_class.trigger_notification(post, chan1, nil) }.to raise_exception(
-        DiscourseChatIntegration::ProviderError,
+        ::DiscourseChatIntegration::ProviderError,
       )
       expect(stub1).to have_been_requested.once
     end
@@ -35,18 +35,10 @@ RSpec.describe DiscourseChatIntegration::Provider::TeamsProvider do
     describe "with nil user.name" do
       before { post.user.update!(name: nil) }
 
-      it "handles nil user name correctly" do
+      it "handles nil username correctly" do
         message = described_class.get_message(post)
-        name = message[:body][2][:columns][1][:items][0][:text]
-        expect(name).to eq("@#{post.user.username}")
-      end
-    end
-
-    describe "with present user.name" do
-      it "handles user name correctly" do
-        message = described_class.get_message(post)
-        name = message[:body][2][:columns][1][:items][0][:text]
-        expect(name).to eq("#{post.user.name} (@#{post.user.username})")
+        name = message[:sections].first[:facts].first[:name]
+        expect(name).to eq("")
       end
     end
   end

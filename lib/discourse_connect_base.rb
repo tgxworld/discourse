@@ -10,9 +10,6 @@ class DiscourseConnectBase
   class SignatureError < ParseError
   end
 
-  class BlankSecretError < ParseError
-  end
-
   ACCESSORS = %i[
     add_groups
     admin
@@ -88,8 +85,6 @@ class DiscourseConnectBase
     sso = new(**init_kwargs)
     sso.sso_secret = sso_secret if sso_secret
 
-    raise BlankSecretError if sso.sso_secret.blank?
-
     parsed = Rack::Utils.parse_query(payload)
 
     raise PayloadParseError.new(<<~MSG) if parsed["sso"] =~ %r{[^a-zA-Z0-9=\r\n/+]}m
@@ -103,19 +98,15 @@ class DiscourseConnectBase
     decoded = Base64.decode64(parsed["sso"])
     decoded_hash = Rack::Utils.parse_query(decoded)
 
-    expected_sig = sso.sign(parsed["sso"])
-
-    if !ActiveSupport::SecurityUtils.secure_compare(expected_sig, parsed["sig"].to_s)
-      raise SignatureError, <<~MSG
+    raise SignatureError, <<~MSG if sso.sign(parsed["sso"]) != parsed["sig"]
         Bad signature for payload
 
         sso: #{parsed["sso"]}
         
         sig: #{parsed["sig"]}
         
-        expected sig: #{expected_sig}
+        expected sig: #{sso.sign(parsed["sso"])}
         MSG
-    end
 
     ACCESSORS.each do |k|
       val = decoded_hash[k.to_s]
@@ -159,7 +150,7 @@ class DiscourseConnectBase
   end
 
   def to_json
-    to_h.to_json
+    self.to_h.to_json
   end
 
   def to_url(base_url = nil)
@@ -173,7 +164,7 @@ class DiscourseConnectBase
   end
 
   def unsigned_payload
-    Rack::Utils.build_query(to_h)
+    Rack::Utils.build_query(self.to_h)
   end
 
   def to_h

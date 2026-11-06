@@ -7,7 +7,7 @@ module DiscourseSolved::TopicPostersSummaryExtension
     if !defined?(@descriptions_by_id)
       super(ids: old_user_ids)
 
-      Array(topic.accepted_answer_user_ids).each do |id|
+      if id = topic.accepted_answer_user_id
         @descriptions_by_id[id] ||= []
         @descriptions_by_id[id] << I18n.t(:accepted_answer)
       end
@@ -17,11 +17,14 @@ module DiscourseSolved::TopicPostersSummaryExtension
   end
 
   def last_poster_is_topic_creator?
-    super || Array(topic.accepted_answer_user_ids).include?(topic.last_post_user_id)
+    super || topic.accepted_answer_user_id == topic.last_post_user_id
   end
 
   def user_ids
-    ids = Array(topic.accepted_answer_user_ids)
-    ids.any? ? super.insert(1, *ids) : super
+    if id = topic.accepted_answer_user_id
+      super.insert(1, id)
+    else
+      super
+    end
   end
 end

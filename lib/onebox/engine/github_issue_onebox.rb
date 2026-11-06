@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../mixins/github_body"
-require_relative "../mixins/github_api"
+require_relative "../mixins/github_auth_header"
 
 module Onebox
   module Engine
@@ -11,7 +11,7 @@ module Onebox
       include LayoutSupport
       include JSON
       include Onebox::Mixins::GithubBody
-      include Onebox::Mixins::GithubApi
+      include Onebox::Mixins::GithubAuthHeader
 
       matches_regexp(
         %r{^https?://(?:www\.)?(?:(?:\w)+\.)?github\.com/(?<org>.+)/(?<repo>.+)/issues/([[:digit:]]+)},
@@ -21,19 +21,6 @@ module Onebox
       def url
         m = match
         "https://api.github.com/repos/#{m["org"]}/#{m["repo"]}/issues/#{m["item_id"]}"
-      end
-
-      def inline_data
-        return unless github_token?
-
-        result = raw
-        {
-          title:
-            "#{result["title"]} - Issue ##{match["item_id"]} - #{match["org"]}/#{match["repo"]} - GitHub",
-        }
-      rescue StandardError => e
-        Rails.logger.warn("Inline GitHub issue onebox error for #{@url}: #{e.message}")
-        nil
       end
 
       private
@@ -46,18 +33,11 @@ module Onebox
       end
 
       def i18n
-        {
-          opened: I18n.t("onebox.github.opened"),
-          closed: I18n.t("onebox.github.closed"),
-          header: {
-            open_issue: I18n.t("onebox.github.header.open_issue"),
-            closed_issue: I18n.t("onebox.github.header.closed_issue"),
-          },
-        }
+        { opened: I18n.t("onebox.github.opened"), closed: I18n.t("onebox.github.closed") }
       end
 
       def data
-        result = raw.clone
+        result = raw(github_auth_header(match[:org])).clone
         repo = load_repo
         created_at = Time.parse(result["created_at"])
         closed_at = Time.parse(result["closed_at"]) if result["closed_at"]
@@ -71,8 +51,6 @@ module Onebox
 
         {
           link: @url,
-          layout_class: "github-onebox",
-          repository: "#{ulink.path.split("/")[1]}/#{ulink.path.split("/")[2]}",
           title: result["title"],
           body: body,
           excerpt: excerpt,
@@ -92,8 +70,16 @@ module Onebox
         }
       end
 
+      private
+
       def load_repo
         load_json("https://api.github.com/repos/#{match[:org]}/#{match[:repo]}")
+      end
+
+      def load_json(url)
+        ::MultiJson.load(
+          URI.parse(url).open({ read_timeout: timeout }.merge(github_auth_header(match[:org]))),
+        )
       end
     end
   end

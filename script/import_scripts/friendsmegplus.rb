@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "base"
+require File.expand_path(File.dirname(__FILE__) + "/base.rb")
 
 require "csv"
 

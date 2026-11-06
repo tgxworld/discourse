@@ -2,10 +2,10 @@
 
 <%= server_plugin_outlet "topic_list_header" %>
 
-<%- if SiteSetting.tagging_enabled && @tag_name %>
+<%- if SiteSetting.tagging_enabled && @tag_id %>
   <h1>
-    <%= link_to "#{Discourse.base_url}/tag/#{@tag_name}", itemprop: 'item' do %>
-      <span itemprop='name'><%= @tag_name %></span>
+    <%= link_to "#{Discourse.base_url}/tag/#{@tag_id}", itemprop: 'item' do %>
+      <span itemprop='name'><%= @tag_id %></span>
     <% end %>
   </h1>
 <% end %>
@@ -133,27 +133,16 @@
 <% if @rss %>
   <% content_for :head do %>
     <%= auto_discovery_link_tag(:rss, "#{Discourse.base_url}/posts.rss", title: I18n.t("rss_description.posts")) %>
-    <% if @rss_link %>
-      <%= auto_discovery_link_tag(:rss, @rss_link, title: I18n.t("rss_description.#{@rss_description}")) %>
-    <% else %>
-      <%= auto_discovery_link_tag(:rss, { action: "#{@rss}_feed", params: @params || {} }, title: I18n.t("rss_description.#{@rss_description}")) %>
-    <% end %>
+    <%= auto_discovery_link_tag(:rss, { action: "#{@rss}_feed", params: @params || {} }, title: I18n.t("rss_description.#{@rss_description}")) %>
   <% end %>
 <% end %>
 
 <% if @category %>
   <% content_for :head do %>
     <%= auto_discovery_link_tag(:rss, { action: :category_feed }, rel: 'alternate nofollow', title: t('rss_topics_in_category', category: @category.name)) %>
-    <%= raw crawlable_meta_data(
-      title: @category.name,
-      description: @category.plain_text_description,
-      image: @category.uploaded_logo&.url.presence,
-      image_width: @category.uploaded_logo&.width,
-      image_height: @category.uploaded_logo&.height,
-      image_type: @category.uploaded_logo&.extension&.then { |ext| MiniMime.lookup_by_extension(ext)&.content_type },
-    ) %>
+    <%= raw crawlable_meta_data(title: @category.name, description: @category.description, image: @category.uploaded_logo&.url.presence) %>
   <% end %>
-<% elsif @tag_name %>
+<% elsif @tag_id %>
   <% content_for :head do %>
     <%= raw crawlable_meta_data(title: @title, description: @description_meta) %>
   <% end %>

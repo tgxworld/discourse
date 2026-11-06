@@ -2,6 +2,7 @@
 
 require "socket"
 require "ipaddr"
+require "excon"
 require "rate_limiter"
 require "url_helper"
 
@@ -36,7 +37,7 @@ class FinalDestination
   end
 
   DEFAULT_USER_AGENT =
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
 
   attr_reader :status, :cookie, :status_code, :content_type, :ignored
 
@@ -58,15 +59,13 @@ class FinalDestination
 
     @ignored = []
     if @limit > 0
-      ignore_redirects = [Discourse.base_url]
+      ignore_redirects = [Discourse.base_url_no_prefix]
 
       ignore_redirects.concat(@opts[:ignore_redirects]) if @opts[:ignore_redirects]
 
       ignore_redirects.each do |ignore_redirect|
         ignore_redirect = uri(ignore_redirect)
-        if ignore_redirect.present? && ignore_redirect.hostname
-          @ignored << { hostname: ignore_redirect.hostname, path: ignore_redirect.path }
-        end
+        @ignored << ignore_redirect.hostname if ignore_redirect.present? && ignore_redirect.hostname
       end
     end
 
@@ -113,10 +112,6 @@ class FinalDestination
 
   def redirected?
     @limit < @max_redirects
-  end
-
-  def bot_challenge?
-    !!@bot_challenge
   end
 
   def request_headers
@@ -234,14 +229,8 @@ class FinalDestination
       return
     end
 
-    if @stop_at_blocked_pages && blocked_domain?(@uri)
-      @status = :blocked_page
-      return
-    end
-
-    @ignored.each do |ignored|
-      if @uri&.hostname == ignored[:hostname] &&
-           @uri.path.start_with?(ignored[:path].presence || "/")
+    @ignored.each do |host|
+      if @uri&.hostname&.match?(host)
         @status = :resolved
         return @uri
       end
@@ -388,9 +377,6 @@ class FinalDestination
     # this is weird an exception seems better
     @status = :failure
     @status_code = response.status
-    @bot_challenge =
-      response.headers["x-amzn-waf-action"].present? ||
-        response.headers["cf-mitigated"] == "challenge"
 
     log(:warn, "FinalDestination could not resolve URL (status #{response.status}): #{@uri}")
     nil
@@ -569,8 +555,10 @@ class FinalDestination
   private
 
   def uri(location)
-    URI.parse(location)
-  rescue URI::Error
+    begin
+      URI.parse(location)
+    rescue URI::Error
+    end
   end
 
   def fetch_canonical_url(body)

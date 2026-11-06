@@ -8,8 +8,7 @@ sq:
   js:
     chat_integration:
       settings: "Rregullimet"
-      more_providers: "Më shumë"
-      all_categories: "(Të gjitha kategoritë)"
+      all_categories: "(të gjitha kategoritë)"
       delete_channel: "Fshij"
       edit_channel: "Redaktoni"
       test_modal:
@@ -84,6 +83,3 @@ sq:
               label: Mesazh
             url:
               label: URL
-    discourse_workflows:
-      send_chat_integration_message:
-        message: "Mesazh"

@@ -1,67 +1,63 @@
-import Component from "@glimmer/component";
-import { tracked } from "@glimmer/tracking";
+/* eslint-disable ember/no-classic-components */
+import Component from "@ember/component";
 import { on } from "@ember/modifier";
-import { trustHTML } from "@ember/template";
-import { loadChartJSGetHoverColor } from "discourse/lib/load-chart-js";
-import { deepEqual } from "discourse/lib/object";
+import { equal } from "@ember/object/computed";
+import { htmlSafe } from "@ember/template";
+import { tagName } from "@ember-decorators/component";
+import { propertyEqual } from "discourse/lib/computed";
+import discourseComputed from "discourse/lib/decorators";
 import I18n, { i18n } from "discourse-i18n";
 import { getColors } from "discourse/plugins/poll/lib/chart-colors";
-import decoratePollOption from "../modifiers/decorate-poll-option.js";
 
+@tagName("")
 export default class PollBreakdownOption extends Component {
-  @tracked getHoverColor;
+  // Arguments:
+  option = null;
+  index = null;
+  totalVotes = null;
+  optionsCount = null;
+  displayMode = null;
+  highlightedOption = null;
+  onMouseOver = null;
+  onMouseOut = null;
 
-  constructor() {
-    super(...arguments);
-    loadChartJSGetHoverColor().then((getHoverColor) => {
-      this.getHoverColor = getHoverColor;
-    });
+  @propertyEqual("highlightedOption", "index") highlighted;
+  @equal("displayMode", "percentage") showPercentage;
+
+  @discourseComputed("option.votes", "totalVotes")
+  percent(votes, total) {
+    return I18n.toNumber((votes / total) * 100.0, { precision: 1 });
   }
 
-  get highlighted() {
-    return deepEqual(this.args.highlightedOption, this.args.index);
+  @discourseComputed("optionsCount")
+  optionColors(optionsCount) {
+    return getColors(optionsCount);
   }
 
-  get showPercentage() {
-    return this.args.displayMode === "percentage";
-  }
-
-  get percent() {
-    return I18n.toNumber(
-      (this.args.option?.votes / this.args.totalVotes) * 100.0,
-      {
-        precision: 1,
-      }
-    );
-  }
-
-  get optionColors() {
-    return getColors(this.args.optionsCount);
-  }
-
-  get colorBackgroundStyle() {
-    if (this.highlighted) {
+  @discourseComputed("highlighted")
+  colorBackgroundStyle(highlighted) {
+    if (highlighted) {
       // TODO: Use CSS variables (#10341)
-      return trustHTML("background: rgba(0, 0, 0, 0.1);");
+      return htmlSafe("background: rgba(0, 0, 0, 0.1);");
     }
   }
 
-  get colorPreviewStyle() {
-    const color = this.optionColors[this.args.index];
-    const previewColor = this.highlighted
-      ? (this.getHoverColor?.(color) ?? color)
-      : color;
+  @discourseComputed("highlighted", "optionColors", "index")
+  colorPreviewStyle(highlighted, optionColors, index) {
+    const color = highlighted
+      ? window.Chart.helpers.getHoverColor(optionColors[index])
+      : optionColors[index];
 
-    return trustHTML(`background: ${previewColor};`);
+    return htmlSafe(`background: ${color};`);
   }
 
   <template>
     <li
       class="poll-breakdown-option"
-      role="button"
       style={{this.colorBackgroundStyle}}
       {{on "mouseover" @onMouseOver}}
       {{on "mouseout" @onMouseOut}}
+      role="button"
     >
       <span
         class="poll-breakdown-option-color"
@@ -75,10 +71,7 @@ export default class PollBreakdownOption extends Component {
           {{@option.votes}}
         {{/if}}
       </span>
-      <span
-        class="poll-breakdown-option-text"
-        {{decoratePollOption @option.html}}
-      ></span>
+      <span class="poll-breakdown-option-text">{{htmlSafe @option.html}}</span>
     </li>
   </template>
 }

@@ -3,8 +3,11 @@
 class Tag < ActiveRecord::Base
   include Searchable
   include HasDestroyedWebHook
-  include HasCookedTagDescription
-  include Localizable
+  include HasSanitizableFields
+
+  self.ignored_columns = [
+    "topic_count", # TODO: Remove when 20240212034010_drop_deprecated_columns has been promoted to pre-deploy
+  ]
 
   RESERVED_TAGS = [
     "none",
@@ -12,15 +15,11 @@ class Tag < ActiveRecord::Base
   ]
 
   validates :name, presence: true, uniqueness: { case_sensitive: false }
-  validates :slug, uniqueness: { case_sensitive: false }, allow_blank: true
 
   validate :target_tag_validator,
            if: Proc.new { |t| t.new_record? || t.will_save_change_to_target_tag_id? }
   validate :name_validator
   validates :description, length: { maximum: 1000 }
-  validates :locale, length: { maximum: 20 }
-
-  before_validation :ensure_slug
 
   scope :where_name,
         ->(name) do
@@ -28,13 +27,12 @@ class Tag < ActiveRecord::Base
           where("lower(tags.name) IN (?)", name)
         end
 
-  # base tags that have never been used and don't belong to a tag group
+  # tags that have never been used and don't belong to a tag group
   scope :unused,
         -> do
-          base_tags
-            .where(staff_topic_count: 0, pm_topic_count: 0)
-            .joins("LEFT JOIN tag_group_memberships tgm ON tags.id = tgm.tag_id")
-            .where("tgm.tag_id IS NULL")
+          where(staff_topic_count: 0, pm_topic_count: 0, target_tag_id: nil).joins(
+            "LEFT JOIN tag_group_memberships tgm ON tags.id = tgm.tag_id",
+          ).where("tgm.tag_id IS NULL")
         end
 
   scope :used_tags_in_regular_topics,
@@ -42,14 +40,6 @@ class Tag < ActiveRecord::Base
 
   scope :base_tags, -> { where(target_tag_id: nil) }
   scope :visible, ->(guardian = nil) { merge(DiscourseTagging.visible_tags(guardian)) }
-
-  scope :without_pm_only_tags,
-        ->(guardian) do
-          next all if guardian.can_tag_pms?
-          where("NOT (tags.pm_topic_count > 0 AND tags.#{Tag.topic_count_column(guardian)} = 0)")
-        end
-
-  scope :browsable, ->(guardian) { base_tags.visible(guardian) }
 
   has_many :tag_users, dependent: :destroy # notification settings
 
@@ -70,9 +60,8 @@ class Tag < ActiveRecord::Base
   has_many :embeddable_host_tags
   has_many :embeddable_hosts, through: :embeddable_host_tags
 
-  before_save :cook_description
+  before_save :sanitize_description
 
-  after_update :enqueue_tag_hashtag_remap, if: :saved_change_to_name?
   after_save :index_search
   after_save :update_synonym_associations
 
@@ -143,7 +132,7 @@ class Tag < ActiveRecord::Base
   end
 
   def self.find_by_name(name)
-    find_by("lower(name) = ?", name.downcase)
+    self.find_by("lower(name) = ?", name.downcase)
   end
 
   def self.top_tags(limit_arg: nil, category: nil, guardian: Guardian.new)
@@ -155,47 +144,27 @@ class Tag < ActiveRecord::Base
 
     return [] if scope_category_ids.empty?
 
-    filter_sql = +" AND tags.target_tag_id IS NULL"
-    if !guardian.is_admin?
-      filter_sql << " AND tags.id IN (#{DiscourseTagging.visible_tags(guardian).select(:id).to_sql})"
-    end
+    filter_sql =
+      (
+        if guardian.is_staff?
+          ""
+        else
+          " AND tags.id IN (#{DiscourseTagging.visible_tags(guardian).select(:id).to_sql})"
+        end
+      )
 
-    tag_data = DB.query <<~SQL
-      SELECT tags.id as tag_id, tags.name as tag_name, tags.slug as tag_slug, SUM(stats.topic_count) AS sum_topic_count
+    tag_names_with_counts = DB.query <<~SQL
+      SELECT tags.name as tag_name, SUM(stats.topic_count) AS sum_topic_count
         FROM category_tag_stats stats
         JOIN tags ON stats.tag_id = tags.id AND stats.topic_count > 0
        WHERE stats.category_id in (#{scope_category_ids.join(",")})
        #{filter_sql}
-      GROUP BY tags.id
-      ORDER BY sum_topic_count DESC, tag_name ASC
-      LIMIT #{limit}
+    GROUP BY tags.name
+    ORDER BY sum_topic_count DESC, tag_name ASC
+       LIMIT #{limit}
     SQL
 
-    return [] if tag_data.empty?
-
-    unless SiteSetting.content_localization_enabled
-      return(
-        tag_data.map do |row|
-          slug = row.tag_slug.presence || "#{row.tag_id}-tag"
-          { id: row.tag_id, name: row.tag_name, slug: }
-        end
-      )
-    end
-
-    tags_by_id = Tag.where(id: tag_data.map(&:tag_id)).includes(:localizations).index_by(&:id)
-    tag_data.filter_map do |row|
-      tag = tags_by_id[row.tag_id]
-      next unless tag
-
-      name =
-        if ContentLocalization.show_translated_tag?(tag, guardian)
-          tag.get_localization&.name || tag.name
-        else
-          tag.name
-        end
-      slug = row.tag_slug.presence || "#{row.tag_id}-tag"
-      { id: tag.id, name:, slug: }
-    end
+    tag_names_with_counts.map { |row| row.tag_name }
   end
 
   def self.topic_count_column(guardian)
@@ -206,19 +175,12 @@ class Tag < ActiveRecord::Base
     end
   end
 
-  def self.with_localizations(tags)
-    return tags unless SiteSetting.content_localization_enabled && tags.present?
-    tag_ids = tags.map(&:id)
-    tags_by_id = where(id: tag_ids).includes(:localizations).index_by(&:id)
-    tag_ids.filter_map { |id| tags_by_id[id] }
-  end
-
   def self.pm_tags(limit: 1000, guardian: nil, allowed_user: nil)
     return [] if allowed_user.blank? || !(guardian || Guardian.new).can_tag_pms?
     user_id = allowed_user.id
 
     DB.query_hash(<<~SQL).map!(&:symbolize_keys!)
-      SELECT tags.id as id, tags.name as name, COUNT(topics.id) AS count
+      SELECT tags.name as id, tags.name as text, COUNT(topics.id) AS count
         FROM tags
         JOIN topic_tags ON tags.id = topic_tags.tag_id
         JOIN topics ON topics.id = topic_tags.topic_id
@@ -234,28 +196,10 @@ class Tag < ActiveRecord::Base
             JOIN group_users gu ON gu.user_id = #{user_id.to_i}
                                AND gu.group_id = tg.group_id
        )
-       GROUP BY tags.id, tags.name
+       GROUP BY tags.name
        ORDER BY count DESC
        LIMIT #{limit.to_i}
     SQL
-  end
-
-  def self.recently_used_by(user, limit: 10)
-    return [] if user.blank?
-
-    recent_topic_ids =
-      Topic
-        .where(user:, archetype: Archetype.default)
-        .order(created_at: :desc, id: :desc)
-        .limit(limit)
-        .select(:id)
-
-    TopicTag
-      .joins(:topic)
-      .where(topic_id: recent_topic_ids)
-      .group(:tag_id)
-      .order(Arel.sql("MAX(topics.created_at) DESC, MAX(topics.id) DESC"))
-      .pluck(:tag_id)
   end
 
   def self.include_tags?
@@ -263,17 +207,13 @@ class Tag < ActiveRecord::Base
   end
 
   def url
-    "#{Discourse.base_path}/tag/#{slug_for_url}/#{id}"
+    "#{Discourse.base_path}/tag/#{UrlHelper.encode_component(self.name)}"
   end
 
   alias_method :relative_url, :url
 
   def full_url
-    "#{Discourse.base_url}/tag/#{slug_for_url}/#{id}"
-  end
-
-  def slug_for_url
-    slug.presence || "#{id}-tag"
+    "#{Discourse.base_url}/tag/#{UrlHelper.encode_component(self.name)}"
   end
 
   def index_search
@@ -281,7 +221,7 @@ class Tag < ActiveRecord::Base
   end
 
   def synonym?
-    !target_tag_id.nil?
+    !self.target_tag_id.nil?
   end
 
   def target_tag_validator
@@ -324,38 +264,12 @@ class Tag < ActiveRecord::Base
 
   private
 
-  def ensure_slug
-    self.slug ||= ""
-    return if name.blank?
-
-    if slug.present? && will_save_change_to_slug? && slug != slugified_custom_slug
-      errors.add(:slug, :invalid)
-    elsif slug.blank? || (will_save_change_to_name? && !will_save_change_to_slug?)
-      self.slug = Slug.for(name, "")
-      self.slug = "" if slug.blank? || duplicate_slug?
-    end
-  end
-
-  def slugified_custom_slug
-    slug.parameterize
-  end
-
-  def duplicate_slug?
-    return false if slug.blank?
-    scope = Tag.where("lower(slug) = ?", slug.downcase)
-    scope = scope.where.not(id: id) if id.present?
-    scope.exists?
+  def sanitize_description
+    self.description = sanitize_field(self.description) if description_changed?
   end
 
   def name_validator
-    errors.add(:name, :invalid) if name.present? && RESERVED_TAGS.include?(name.strip.downcase)
-  end
-
-  def enqueue_tag_hashtag_remap
-    old_ref = name_before_last_save
-    return if old_ref.blank? || old_ref.casecmp?(name)
-
-    HashtagRemapper.enqueue([{ type: TagHashtagDataSource.type, id:, old_ref: }])
+    errors.add(:name, :invalid) if name.present? && RESERVED_TAGS.include?(self.name.strip.downcase)
   end
 end
 
@@ -363,25 +277,18 @@ end
 #
 # Table name: tags
 #
-#  id                         :integer          not null, primary key
-#  description                :string(1000)
-#  description_cooked         :string(2000)
-#  description_cooked_version :integer
-#  locale                     :string(20)
-#  name                       :string           not null
-#  pm_topic_count             :integer          default(0), not null
-#  public_topic_count         :integer          default(0), not null
-#  slug                       :string           default(""), not null
-#  staff_topic_count          :integer          default(0), not null
-#  created_at                 :datetime         not null
-#  updated_at                 :datetime         not null
-#  target_tag_id              :integer
+#  id                 :integer          not null, primary key
+#  name               :string           not null
+#  created_at         :datetime         not null
+#  updated_at         :datetime         not null
+#  pm_topic_count     :integer          default(0), not null
+#  target_tag_id      :integer
+#  description        :string(1000)
+#  public_topic_count :integer          default(0), not null
+#  staff_topic_count  :integer          default(0), not null
 #
 # Indexes
 #
-#  index_tags_on_description_cooked_version  (description_cooked_version)
-#  index_tags_on_lower_name                  (lower((name)::text)) UNIQUE
-#  index_tags_on_name                        (name) UNIQUE
-#  index_tags_on_slug                        (slug) WHERE ((slug)::text <> ''::text)
-#  index_tags_on_target_tag_id               (target_tag_id) WHERE (target_tag_id IS NOT NULL)
+#  index_tags_on_lower_name  (lower((name)::text)) UNIQUE
+#  index_tags_on_name        (name) UNIQUE
 #

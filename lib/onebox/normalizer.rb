@@ -11,8 +11,6 @@ module Onebox
       sanitize_value(value, *args)
     end
 
-    private
-
     def method_missing(attr, *args, &block)
       value = get(attr, *args)
 
@@ -28,17 +26,7 @@ module Onebox
       end
     end
 
-    def respond_to_missing?(attr, include_private = false)
-      data.key?(attr) || super
-    end
-
-    def sanitize_value(value, length = nil, sanitize = true)
-      value = html_entities.decode(value)
-      value = html_entities.decode(Sanitize.fragment(value)) if sanitize
-      value.strip!
-      value = Onebox::Helpers.truncate(value, length) if length
-      value
-    end
+    private
 
     def integer_suffixes
       %w[width height]
@@ -50,6 +38,14 @@ module Onebox
 
     def html_entities
       @html_entities ||= HTMLEntities.new
+    end
+
+    def sanitize_value(value, length = nil, sanitize = true)
+      value = html_entities.decode(value)
+      value = Sanitize.fragment(value) if sanitize
+      value.strip!
+      value = Onebox::Helpers.truncate(value, length) if length
+      value
     end
   end
 end

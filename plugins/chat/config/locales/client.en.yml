@@ -14,7 +14,6 @@ en:
       logs:
         staff_actions:
           actions:
-            chat_bot_discoverability_change: "Chat bot discoverability changed"
             chat_channel_status_change: "Chat channel status changed"
             chat_channel_delete: "Chat channel deleted"
             chat_auto_remove_membership: "Memberships automatically removed from channels"
@@ -40,22 +39,6 @@ en:
           other: "%{formatted_number} chat messages"
 
     chat:
-      homepage_option: "Chat channel"
-      admin_onboarding:
-        start_posting:
-          title: "Start chatting"
-          description: "Send your first message in #%{channel}."
-          action: "Write a message"
-          completed: "Keep chatting"
-      edit_category:
-        tab_title: "Chat"
-        channel: "Channel"
-        description: "Description"
-        actions: "Actions"
-        settings: "Settings"
-        no_channels: "There are no chat channels associated with this category"
-        no_channels_body: "You can have multiple channels per category, accessible to the same members based on the category's Security settings. <a href='%{chatBrowseUrl}'>Create a chat channel</a>."
-        include_subcategories: "Include subcategory channels"
       text_copied: Text copied to clipboard
       link_copied: Link copied to clipboard
       back_to_forum: "Forum"
@@ -70,27 +53,8 @@ en:
       cancel: "Cancel"
       cancel_reply: "Cancel reply"
       chat_channels: "Channels"
-      starred: "Starred"
-      starred_channels: "Starred channels"
-      starred_channels_empty: "You haven't starred any channels yet. Star channels to see them here for quick access."
-      pinned_messages:
-        title: "Pinned messages"
-        close: "Close pinned messages"
-        dismiss: "Dismiss pinned banner for me"
-        show: "Show pinned banner"
-        pinned_by_you: "Pinned by you"
-        pinned_by_user: "Pinned by %{username}"
-        message_unpinned: "Message unpinned"
-      pinned_bar:
-        title: "Pinned"
-        jump_to_pinned: "Jump to pinned message"
-      no_pinned_messages: "No pinned messages in this channel."
-      pin_message: "Pin message"
-      unpin_message: "Unpin message"
-      pinned: "Pinned"
       browse_all_channels: "Browse all channels"
       see_in: "See in"
-      open_channel_menu: "Open channel menu"
       move_to_channel:
         title: "Move messages to channel"
         instructions:
@@ -105,19 +69,13 @@ en:
         title: "Channel settings"
         edit: "Edit"
         add: "Add"
-        star_channel: "Star channel"
-        unstar_channel: "Unstar channel"
         close_channel: "Close channel"
         open_channel: "Open channel"
-        open_channel_disabled_archived: "Archived channels cannot be reopened."
-        open_channel_disabled_read_only: "Read-only channels cannot be reopened."
         archive_channel: "Archive channel"
         delete_channel: "Delete channel"
         join_channel: "Join channel"
         leave_channel: "Leave channel"
         leave_groupchat_info: "By leaving this group chat, you will no longer have access to it and won’t receive notifications related to it. To rejoin, you will need to be re-invited by a member of the group chat."
-        notification_settings: "Notification settings"
-        notification_settings_context: "Notifications"
         join: "Join"
         leave: "Leave"
         save_label:
@@ -144,7 +102,7 @@ en:
         process_started: "The process to delete the channel has started. This modal will close shortly, you will no longer see the deleted channel anywhere."
       channels_list_popup:
         browse: "Browse channels"
-        create: "New channel..."
+        create: "New channel"
 
       close: "Close"
       remove: "Remove"
@@ -161,14 +119,14 @@ en:
       muted: "muted"
       joined: "joined"
       empty_state:
-        direct_message_cta: "Start a direct message or group chat"
-        direct_message: "You can also start a direct message or group chat with one or more users."
+        direct_message_cta: "Start a personal Chat"
+        direct_message: "You can also start a personal chat with one or more users."
         title: "No channels found"
         my_threads: "You don't have any threads yet. Threads you participate in will be displayed here."
       email_frequency:
         description: "We'll only email you if we haven't seen you in the last 15 minutes."
         never: "Never"
-        title: "Email me when I am sent a chat direct message or group chat"
+        title: "Email Notifications"
         when_away: "Only when away"
       header_indicator_preference:
         title: "Show activity indicator in header"
@@ -178,6 +136,13 @@ en:
         never: "Never"
       separate_sidebar_mode:
         title: "Show separate sidebar modes for forum and chat"
+      send_shortcut:
+        enter:
+          label: "Send by Enter"
+          description: "New line by Shift + Enter"
+        meta_enter:
+          label: "Send by %{meta_key} + Enter"
+          description: "New line by Enter"
       enable: "Enable chat"
       flag: "Flag"
       emoji: "Insert emoji"
@@ -270,38 +235,17 @@ en:
         composer: "Chat composer"
         channels_list: "Chat channels list"
 
-      screen_reader:
-        new_message: "%{username}: %{message}"
-        new_messages:
-          one: "%{count} new message"
-          other: "%{count} new messages"
-        new_image:
-          one: "%{username} sent an image"
-          other: "%{username} sent %{count} images"
-        new_attachment:
-          one: "%{username} sent an attachment"
-          other: "%{username} sent %{count} attachments"
-        new_message_with_image:
-          one: "%{username}: %{message} (with an image)"
-          other: "%{username}: %{message} (with %{count} images)"
-        new_message_with_attachment:
-          one: "%{username}: %{message} (with an attachment)"
-          other: "%{username}: %{message} (with %{count} attachments)"
-
       no_direct_message_channels: "You have not joined any direct messages yet!"
       no_direct_message_channels_cta: "Start a conversation"
       no_public_channels: "You have not joined any channels yet!"
       no_public_channels_cta: "Browse channels"
       kicked_from_channel: "You can no longer access this channel."
-      chat_notifications_title: "Chat notifications"
-      personalization_title: "Personalization"
-      accessibility_title: "Accessibility"
+      only_chat_push_notifications:
+        title: "Only send chat push notifications"
+        description: "Block all non-chat push notifications from being sent"
       ignore_channel_wide_mention:
         title: "Ignore channel-wide mentions"
-      announce_new_messages:
-        title: "Announce new messages to screen readers"
-      new_message_sound:
-        title: "Play sounds for new messages while chat is in the foreground"
+        description: "Do not send notifications for channel-wide mentions (@here and @all)"
       show_thread_title_prompts:
         title: "Show thread title prompts"
         description: "Show prompts to set a title for new threads"
@@ -320,11 +264,8 @@ en:
         read_only: "Channel is read only, you cannot send new messages right now."
       placeholder_silenced: "You cannot send messages at this time."
       remove_upload: "Remove file"
-      preview_upload: "Preview %{filename}"
       react: "React with emoji"
       reply: "Reply"
-      message_actions: "Message actions"
-      more_message_actions: "More message actions"
       edit: "Edit"
       copy_link: "Copy link"
       copy_text: "Copy text"
@@ -332,9 +273,8 @@ en:
       message_too_long: "Message is too long, messages must be a maximum of %{count} characters."
       retry_staged_message:
         title: "Network error"
-        rate_limited_title: "Too many messages"
-        rate_limited_waiting: "Too many messages, wait a moment"
         action: "Send again?"
+      unreliable_network: "Network is unreliable, sending messages and saving draft might not work"
       bookmark_message: "Bookmark"
       bookmark_message_edit: "Edit Bookmark"
       restore: "Restore deleted message"
@@ -348,32 +288,20 @@ en:
         other: "You have %{count} unread discussions"
       scroll_to_bottom: "Scroll to bottom"
       scroll_to_new_messages: "See new messages"
-      new_messages:
-        one: "%{count} new message"
-        other: "%{count} new messages"
       sound:
         title: "Desktop chat notification sound"
-        preview: "Play a preview of the selected sound"
       sounds:
         none: "None"
-        classic: "Classic and clean"
-        soft: "Soft marimba"
-        retro: "Retro 8-bit"
-        bubble: "Playful bubble"
-        ethereal: "Ethereal glass"
+        bell: "Bell"
+        ding: "Ding"
       title: "chat"
       title_capitalized: "Chat"
-      disabled:
-        title: "You have disabled chat"
-        body: "Turn it back on to view channels and messages."
-        cta: "My chat preferences"
       upload: "Attach a file"
       upload_to_channel: "Upload to %{title}"
       upload_to_thread: "Upload to thread"
       uploaded_files:
         one: "%{count} file"
         other: "%{count} files"
-      youtube: "YouTube"
       you_flagged: "You flagged this message"
       exit: "exit chat"
       channel_status:
@@ -397,20 +325,10 @@ en:
         filter_closed: Closed
         filter_archived: Archived
         filter_input_placeholder: Search channel by name
-        filter_joined_all: "All"
-        filter_joined_joined: "Joined"
-        filter_joined_not_joined: "Not joined"
 
       chat_message_separator:
         today: Today
         yesterday: Yesterday
-
-      search_view:
-        filter_placeholder: Search messages
-        message_result_label: "Chat message from %{username}: %{preview} %{threadInfo}"
-        in_thread: "in thread %{title}"
-        sr_instructions: "Press Enter or Space to open message. Use Tab to navigate between results."
-        results_list_label: "Chat message search results"
 
       members_view:
         filter_placeholder: Find members
@@ -430,7 +348,6 @@ en:
         tabs:
           members: Members
           settings: Settings
-          search: Search
         remove_member: "Remove"
 
       new_message_modal:
@@ -457,9 +374,7 @@ en:
         input_placeholder: Add a name
         slug_description: A channel slug is used in the URL instead of the channel name
         name: Channel name
-        slug: Channel slug
-        emoji: Channel emoji
-        reset_emoji: Reset emoji
+        slug: Channel slug (optional)
 
       channel_edit_description_modal:
         title: Edit description
@@ -483,24 +398,6 @@ en:
         memberships_count:
           one: "%{count} member"
           other: "%{count} members"
-        empty_state:
-          title: "This is the start of %{channelName}"
-          joined_title: "You're the first in %{channelName}"
-          direct_message_title: "Start the conversation with %{name}"
-          guest_tip: "You're reading along as a guest. The conversation starts the moment members post — join in to be one of them."
-          joined_tip: "Be the first to post and start the conversation."
-          members_here:
-            one: "<strong>%{count} member</strong> here"
-            other: "<strong>%{count} members</strong> here"
-          no_other_members: "No other members yet"
-        preview_card:
-          guest_title: "Join %{channelName} to start chatting"
-          guest_body: "Reading is free for everyone. Sign up to post, react, and reply — it takes about 30 seconds."
-          join_body: "You'll be able to post and reply, and it'll show up in your channel list."
-          no_access_title: "You can't join %{channelName}"
-          no_access_body: "This channel isn't open to new members right now."
-          log_in: "Log in"
-          sign_up: "Sign up"
 
       create_channel:
         threading:
@@ -538,28 +435,19 @@ en:
             one: 'Users in %{group} and %{count} other group will have access to this channel per the <a href="%{settingLink}" target="_blank">security settings</a>'
             other: 'Users in %{group} and %{count} other groups will have access to this channel per the <a href="%{settingLink}" target="_blank">security settings</a>'
         create: "Create channel"
-        description: "Description"
+        description: "Description (optional)"
         name: "Channel name"
-        slug: "Channel slug"
+        slug: "Channel slug (optional)"
         title: "New channel"
         type: "Type"
         types:
           category: "Category"
           topic: "Topic"
-        emoji:
-          label: "Channel emoji"
-          reset: "Reset emoji"
 
       reviewable:
         type: "Chat message"
-        message_in_channel: "Channel"
 
       reactions:
-        add: "React with %{emoji}"
-        remove: "Remove your %{emoji} reaction"
-        counted:
-          one: "%{emoji} reaction, %{count} person"
-          other: "%{emoji} reaction, %{count} people"
         only_you: "<span>You reacted with </span>:%{emoji}:"
         you_and_single_user: "<span>You and %{username} reacted with </span>:%{emoji}:"
         you_and_multiple_users: "<span>You, %{commaSeparatedUsernames} and %{username} reacted with </span>:%{emoji}:"
@@ -568,10 +456,6 @@ en:
           other: "<span>You, %{commaSeparatedUsernames} and %{count} others reacted with </span>:%{emoji}:"
         single_user: "<span>%{username} reacted with </span>:%{emoji}:"
         multiple_users: "<span>%{commaSeparatedUsernames} and %{username} reacted with </span>:%{emoji}:"
-        users_popup:
-          title:
-            one: "%{count} reaction"
-            other: "%{count} reactions"
         multiple_users_and_more:
           one: "<span>%{commaSeparatedUsernames} and %{count} other reacted with </span>:%{emoji}:"
           other: "<span>%{commaSeparatedUsernames} and %{count} others reacted with </span>:%{emoji}:"
@@ -587,8 +471,6 @@ en:
         original_channel: 'Originally sent in <a href="%{channelLink}">%{channel}</a>'
         copy_success: "Chat quote copied to clipboard"
         default_thread_title: "Thread"
-        transcript_label: "Transcript"
-        transcript_region: "Transcript from %{channel}"
 
       notification_levels:
         never: "Never"
@@ -608,7 +490,6 @@ en:
         follow: "Join"
         followed: "Joined"
         mute: "Mute channel"
-        unmute: "Unmute channel"
         threading_enabled: "Enabled"
         threading_disabled: "Disabled"
         muted_on: "On"
@@ -626,9 +507,6 @@ en:
         members_label: "Members"
 
       admin:
-        bot_discoverability:
-          label: "Show in chat"
-          description: "Let people find this bot when starting a chat direct message"
         title: "Chat"
         export_messages:
           title: "Export chat messages"
@@ -637,15 +515,6 @@ en:
           confirm_export: "This exports all messages from all channels and sends the result to you in a personal message. Are you sure you want to export?"
           export_has_started: "The export has started. You'll receive a PM when it's ready."
 
-      search:
-        short_title: Search
-        title: Search chat
-        aria_label: "Switch to chat search"
-        no_results: "No results found"
-        sort:
-          relevance: "Relevance"
-          latest: "Latest"
-
       my_threads:
         title: My Threads
         aria_label: "Switch to my threads list"
@@ -653,40 +522,15 @@ en:
       direct_messages:
         title: "DMs"
         aria_label: "Switch to direct messages"
-        new: "New direct message"
-        new_group: "New group chat"
+        new: "Create a personal chat"
         create: "Go"
-        leave: "Leave channel"
-        close: "Close channel"
+        leave: "Leave this personal chat"
+        close: "Close this personal chat"
         cannot_create: "Sorry, you cannot send direct messages."
 
       channel_list:
-        apply_filters: "Apply filters to channels"
         title: "Channels"
         aria_label: "Switch to channels list"
-        options:
-          title: "Channel list options"
-          filter: "Filter"
-          sort: "Sort"
-          current_filter: "Filter: %{filter}"
-          current_sort: "Sort: %{sort}"
-        filter:
-          title: "Filter channels by:"
-          all: "All channels"
-          active: "Active only"
-          active_description: "New activity in last %{days} days"
-          unread: "Unreads"
-          mentions: "Mentions"
-        sort:
-          title: "Sort channels by:"
-          alphabetical: "Alphabetically"
-          recent_activity: "Recent activity"
-          priority: "Priority"
-          priority_description: "Mentions, then unreads, then recent activity, each sorted alphabetically"
-          priority_description_dms: "Mentions, then unreads, then recent activity"
-        empty:
-          filtered: "No channels match this filter."
-          show_all: "Show all channels"
 
       incoming_webhooks:
         back: "Back"
@@ -753,15 +597,14 @@ en:
           other: "%{commaSeparatedUsernames} and %{count} others are typing"
 
       retention_reminders:
-        chat_settings: "Chat settings"
         indefinitely_short: "indefinitely"
-        indefinitely_long: "%{chatSettingsLink} have been set to retain channel messages indefinitely."
+        indefinitely_long: "Chat settings have been set to retain channel messages indefinitely."
         short:
           one: "%{count} day"
           other: "%{count} days"
         long:
-          one: "%{chatSettingsLink} have been set to retain channel messages for %{count} day."
-          other: "%{chatSettingsLink} have been set to retain channel messages for %{count} days."
+          one: "Chat settings have been set to retain channel messages for %{count} day."
+          other: "Chat settings have been set to retain channel messages for %{count} days."
 
       flags:
         off_topic: "This message is not relevant to the current discussion as defined by the channel title, and should probably be moved elsewhere."
@@ -773,9 +616,6 @@ en:
 
       flagging:
         action: "Flag message"
-
-      anonymous_flagging:
-        description: "To report illegal content, please contact <a href='mailto:%{email}?subject=Illegal content: %{channel_title}&body=This chat message %{url} contains illegal content.'>%{email}</a>"
 
       emoji_picker:
         favorites: "Frequently used"
@@ -856,11 +696,11 @@ en:
           # %{identifier} is either @here or @all
           other_html: '<span>%{username}</span> <span>mentioned %{identifier} in "%{channel}"</span>'
         direct_message_chat_mention:
-          direct: "mentioned you in a direct message"
-          direct_html: "<span>%{username}</span> <span>mentioned you in a direct message</span>"
-          other_plain: "mentioned %{identifier} in a direct message"
+          direct: "mentioned you in personal chat"
+          direct_html: "<span>%{username}</span> <span>mentioned you in personal chat</span>"
+          other_plain: "mentioned %{identifier} in personal chat"
           # %{identifier} is either @here or @all
-          other_html: "<span>%{username}</span> <span>mentioned %{identifier} in a direct message</span>"
+          other_html: "<span>%{username}</span> <span>mentioned %{identifier} in personal chat</span>"
         chat_message: "New chat message"
         chat_quoted: "%{username} quoted your chat message"
 
@@ -905,7 +745,7 @@ en:
           composer_bold: "%{shortcut} Bold (composer only)"
           composer_italic: "%{shortcut} Italic (composer only)"
           composer_code: "%{shortcut} Code (composer only)"
-          drawer_toggle: "%{shortcut} Toggle chat drawer"
+          drawer_open: "%{shortcut} Open chat drawer"
           drawer_close: "%{shortcut} Close chat drawer"
           mark_all_channels_read: "%{shortcut} Mark all channels read"
     topic_statuses:
@@ -935,73 +775,6 @@ en:
           title: Chat
 
     sidebar:
-      start_new_dm:
-        text: Start DM or group chat
-        title: New direct message or group chat
       panels:
         chat:
           label: "Chat"
-
-    discourse_workflows:
-      node_unavailable:
-        requires_chat: "Requires the Chat plugin to be enabled"
-      nodes:
-        "action:send_chat_message": "Send chat message"
-        "action:chat_approval": "Chat approval"
-        "trigger:chat_message_created": "Chat message created"
-      node_descriptions:
-        "action:send_chat_message": "Send a message to a chat channel, or a direct message to one or more users"
-        "action:chat_approval": "Send an approval request to a chat channel and wait for a response"
-        "trigger:chat_message_created": "Fires when a new chat message is created"
-      chat_message_created:
-        channel_id: "Channel"
-        channel_id_description: "Leave blank to trigger for all chat channels."
-      send_chat_message:
-        target: "Send to"
-        targets:
-          channel: "Channel"
-          user: "Users (a direct message each)"
-          group: "Group (one direct message with everyone)"
-        channel_id: "Channel"
-        thread_id: "Thread ID"
-        thread_id_description: "Reply in this thread instead of the main channel. Leave blank to post in the channel."
-        target_usernames: "Recipients"
-        target_usernames_description: "Users to message. Use an expression such as $trigger.user.username to pick them from each item."
-        message: "Message"
-        actor_username: "Sender"
-        actor_username_description: "Messages are sent as this user, and everyone sees them as written by them. When posting to a channel, the user must be a member of it."
-      chat_approval:
-        message: "Message"
-        buttons: "Buttons"
-        buttons_description: "Add between one and ten response buttons."
-        add_button: "Add button"
-        label: "Label"
-        label_description: "The text shown on the button."
-        label_placeholder: "Button label"
-        value: "Value"
-        value_description: "The value returned by the workflow when this button is clicked."
-        value_placeholder: "Returned value"
-        style: "Style"
-        style_description: "Choose a button style or leave blank to preserve the standard chat button appearance."
-        style_none: "No style"
-        style_default: "Default"
-        style_primary: "Primary"
-        style_danger: "Danger"
-        style_success: "Success"
-        style_flat: "Flat"
-        style_transparent: "Transparent"
-        icon: "Icon"
-        icon_description: "Choose an icon to show before the button label."
-        approve_label: "Approve button label"
-        approve_label_description: "Defaults to \"Approve\" if left blank."
-        deny_label: "Deny button label"
-        deny_label_description: "Defaults to \"Deny\" if left blank."
-        channel_id: "Channel"
-        channel_id_description: "The chat channel to send the approval message to."
-        timeout_minutes: "Timeout (minutes)"
-        timeout_minutes_description: "Leave blank for no timeout."
-        timeout_action: "On timeout"
-        timeout_action_description: "What happens when the approval times out."
-        timeout_action_continue: "Continue the workflow"
-        timeout_action_deny: "Resume as denied"
-        timeout_action_fail: "Fail the workflow"

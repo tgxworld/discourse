@@ -8,8 +8,7 @@
 
     &.--text-only {
       .empty-state__title {
-        font-family: var(--heading-font-family);
-        font-weight: var(--heading-font-weight);
+        font-weight: bold;
         font-size: var(--font-up-1);
       }
     }
@@ -49,17 +48,6 @@
     @include viewport.until(sm) {
       margin-top: 8vh;
     }
-
-    // Sized as a glyph, overriding the illustration width above.
-    &.--icon svg {
-      width: 3rem;
-      height: 3rem;
-      color: var(--primary-low-mid);
-
-      @include viewport.until(sm) {
-        width: 3rem;
-      }
-    }
   }
 
   &__cta {
@@ -73,6 +61,14 @@
 
     .d-icon {
       font-size: var(--font-down-1);
+    }
+
+    @include viewport.until(sm) {
+      position: absolute;
+      bottom: 3rem;
+      margin-inline: auto;
+      margin-top: 0;
+      left: 0;
     }
   }
 }

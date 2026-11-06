@@ -10,8 +10,4 @@ class ScreenedEmailSerializer < ApplicationSerializer
   def ip_address
     object.ip_address.try(:to_s)
   end
-
-  def include_ip_address?
-    scope.can_see_ip?
-  end
 end

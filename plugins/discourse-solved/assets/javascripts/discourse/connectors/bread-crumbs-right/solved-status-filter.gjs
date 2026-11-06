@@ -2,8 +2,8 @@ import Component from "@glimmer/component";
 import { hash } from "@ember/helper";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
-import ComboBox from "discourse/select-kit/components/combo-box";
 import { i18n } from "discourse-i18n";
+import ComboBox from "select-kit/components/combo-box";
 
 const QUERY_PARAM_VALUES = {
   solved: "yes",
@@ -32,9 +32,7 @@ export default class SolvedStatusFilter extends Component {
     ) {
       return true;
     } else {
-      return (
-        args.currentCategory?.custom_fields?.enable_accepted_answers === "true"
-      );
+      return args.currentCategory?.enable_accepted_answers;
     }
   }
 
@@ -66,12 +64,12 @@ export default class SolvedStatusFilter extends Component {
     {{#if this.siteSettings.solved_enabled}}
       <li>
         <ComboBox
-          class="solved-status-filter"
           @content={{this.statuses}}
-          @onChange={{this.changeStatus}}
-          @options={{hash caretDownIcon="angle-right" caretUpIcon="angle-down"}}
           @value={{this.status}}
           @valueProperty="value"
+          @options={{hash caretDownIcon="caret-right" caretUpIcon="caret-down"}}
+          @onChange={{this.changeStatus}}
+          class="solved-status-filter"
         />
       </li>
     {{/if}}

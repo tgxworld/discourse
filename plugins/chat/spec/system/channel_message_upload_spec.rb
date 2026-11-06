@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "Channel message selection" do
+RSpec.describe "Channel message selection", type: :system do
   fab!(:current_user, :user)
   fab!(:channel_1, :chat_channel)
   fab!(:message_1) { Fabricate(:chat_message, chat_channel: channel_1) }
@@ -33,7 +33,7 @@ RSpec.describe "Channel message selection" do
     expect(page).to have_no_css(".chat-message-collapser-body.hidden")
     find(".chat-img-upload").click
 
-    # upload doesn’t exist but it's enough to know lightbox is working
-    expect(page).to have_css(".pswp--open")
+    # visible false is because the upload doesn’t exist but it's enough to know lightbox is working
+    expect(page).to have_css(".mfp-image-holder img[src*='#{image.url}']", visible: :hidden)
   end
 end

@@ -9,11 +9,3 @@ tr_TR:
     login:
       oauth2_basic:
         name: "OAuth 2"
-    admin:
-      site_settings:
-        categories:
-          discourse_oauth2_basic: "OAuth2 Girişi"
-      config:
-        login:
-          sub_pages:
-            oauth2: "OAuth2"

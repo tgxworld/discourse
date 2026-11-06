@@ -12,7 +12,7 @@ module DiscourseDev
 
     def create!
       super
-    rescue ActiveRecord::RecordInvalid
+    rescue ActiveRecord::RecordInvalid => e
       # If the name is taken, try again
       retry
     end

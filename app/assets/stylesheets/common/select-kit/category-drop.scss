@@ -1,5 +1,3 @@
-@use "lib/viewport";
-
 .select-kit {
   &.combo-box {
     &.category-drop {
@@ -21,7 +19,7 @@
         }
       }
 
-      .angle-icon {
+      .caret-icon {
         color: var(--primary-high);
       }
 

@@ -1,15 +1,6 @@
 # frozen_string_literal: true
 
 class UserActivator
-  def self.activate(guardian, user)
-    guardian.ensure_can_activate!(user)
-    if !user.email_tokens.active.exists?
-      user.email_tokens.create!(email: user.email, scope: EmailToken.scopes[:signup])
-    end
-    user.activate
-    StaffActionLogger.new(guardian.user).log_user_activate(user, I18n.t("user.activated_by_staff"))
-  end
-
   attr_reader :user, :request, :session, :cookies, :message
 
   def initialize(user, request, session, cookies)
@@ -38,7 +29,7 @@ class UserActivator
   end
 
   def factory
-    invite = Invite.find_by(email: Email.downcase(user.email))
+    invite = Invite.find_by(email: Email.downcase(@user.email))
 
     if !user.active?
       EmailActivator
@@ -76,11 +67,7 @@ class LoginActivator < UserActivator
   include CurrentUser
 
   def activate
-    log_on_user(
-      user,
-      { authenticated_with_oauth: session[:authenticated_with_oauth] },
-      replay_anonymous_action: true,
-    )
+    log_on_user(user, { authenticated_with_oauth: @session["authenticated_with_oauth"] })
     user.enqueue_welcome_message("welcome_user")
     success_message
   end

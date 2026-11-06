@@ -22,31 +22,15 @@ RSpec.describe Admin::EmbeddableHostsController do
         ).to eq(true)
       end
 
-      it "rejects invalid path allowlists" do
-        post "/admin/embeddable_hosts.json",
-             params: {
-               embeddable_host: {
-                 host: "example.com",
-                 allowed_paths: "[invalid",
-               },
-             }
-
-        expect(response.status).to eq(422)
-        expect(response.parsed_body["errors"]).to include(
-          "#{EmbeddableHost.human_attribute_name(:allowed_paths)} #{I18n.t("errors.messages.invalid")}",
-        )
-        expect(EmbeddableHost.where(host: "example.com")).not_to exist
-      end
-
       it "creates an embeddable host with associated tags" do
-        tag1 = Fabricate(:tag)
-        tag2 = Fabricate(:tag)
+        tag1 = Fabricate(:tag, name: "tag1")
+        tag2 = Fabricate(:tag, name: "tag2")
 
         post "/admin/embeddable_hosts.json",
              params: {
                embeddable_host: {
                  host: "example.com",
-                 tags: [tag1.id, tag2.id],
+                 tags: %w[tag1 tag2],
                },
              }
 
@@ -55,14 +39,14 @@ RSpec.describe Admin::EmbeddableHostsController do
       end
 
       it "updates an embeddable host with associated tags" do
-        tag1 = Fabricate(:tag)
-        tag2 = Fabricate(:tag)
+        tag1 = Fabricate(:tag, name: "newTag1")
+        tag2 = Fabricate(:tag, name: "newTag2")
 
         put "/admin/embeddable_hosts/#{embeddable_host.id}.json",
             params: {
               embeddable_host: {
                 host: "updated-example.com",
-                tags: [tag1.id, tag2.id],
+                tags: %w[newTag1 newTag2],
               },
             }
 

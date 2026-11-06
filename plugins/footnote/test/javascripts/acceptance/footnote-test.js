@@ -18,18 +18,10 @@ acceptance("Discourse Footnote Plugin", function (needs) {
       topic["post_stream"]["posts"][0]["cooked"] = `
         <p>Lorem ipsum dolor sit amet<sup class="footnote-ref"><a href="#footnote-17-1" id="footnote-ref-17-1">[1]</a></sup></p>
         <p class="second">Second reference should also work. <sup class="footnote-ref"><a href="#footnote-17-1" id="footnote-ref-17-0">[1]</a></sup></p>
-        <p class="other">Other page should close<sup class="footnote-ref"><a href="#footnote-17-2" id="footnote-ref-17-2">[2]</a></sup></p>
-        <p class="nested">Nested footnote<sup class="footnote-ref"><a href="#footnote-17-3" id="footnote-ref-17-3">[3]</a></sup></p>
         <hr class="footnotes-sep">
         <ol class="footnotes-list">
           <li id="footnote-17-1" class="footnote-item">
           <p>consectetur adipiscing elit <a href="#footnote-ref-17-1" class="footnote-backref">↩︎</a></p>
-          </li>
-          <li id="footnote-17-2" class="footnote-item">
-          <p><a class="link-in-tooltip" href="/">Index ↩︎</a></p>
-          </li>
-          <li id="footnote-17-3" class="footnote-item">
-          <p>Nested content <sup class="footnote-ref"><a href="#footnote-17-4" id="footnote-ref-17-4">[4]</a></sup> <a href="#footnote-ref-17-3" class="footnote-backref">↩︎</a></p>
           </li>
         </ol>
       `;
@@ -43,7 +35,7 @@ acceptance("Discourse Footnote Plugin", function (needs) {
     // open
     await click(".expand-footnote");
 
-    assert.dom(TOOLTIP_SELECTOR).hasText("consectetur adipiscing elit");
+    assert.dom(TOOLTIP_SELECTOR).hasText("consectetur adipiscing elit ↩︎");
 
     // close by clicking outside
     await triggerEvent(".d-header", "pointerdown");
@@ -51,36 +43,13 @@ acceptance("Discourse Footnote Plugin", function (needs) {
 
     // open again
     await click(".expand-footnote");
-    assert.dom(TOOLTIP_SELECTOR).hasText("consectetur adipiscing elit");
+    assert.dom(TOOLTIP_SELECTOR).hasText("consectetur adipiscing elit ↩︎");
   });
 
   test("clicking a second footnote with same name works", async function (assert) {
     await visit("/t/-/45");
 
     await click(".second .expand-footnote");
-    assert.dom(TOOLTIP_SELECTOR).hasText("consectetur adipiscing elit");
-  });
-
-  test("closes tooltip when clicking link within tooltip content", async function (assert) {
-    await visit("/t/-/45");
-
-    // open
-    await click(".other .expand-footnote");
-    assert.dom(TOOLTIP_SELECTOR).hasText("Index ↩︎");
-
-    await click(".link-in-tooltip");
-    assert.dom(TOOLTIP_SELECTOR).doesNotExist();
-  });
-
-  test("removes nested footnotes", async function (assert) {
-    await visit("/t/-/45");
-
-    await click(".nested .expand-footnote");
-
-    // the nested footnote does not work, so we strip them out completely
-    assert
-      .dom(`${TOOLTIP_SELECTOR} sup.footnote-ref`)
-      .doesNotExist("removes the nested footnote-ref");
-    assert.dom(TOOLTIP_SELECTOR).hasText("Nested content");
+    assert.dom(TOOLTIP_SELECTOR).hasText("consectetur adipiscing elit ↩︎");
   });
 });

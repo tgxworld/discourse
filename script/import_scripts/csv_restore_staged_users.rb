@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "csv"
-require_relative "base"
+require File.expand_path(File.dirname(__FILE__) + "/base.rb")
 
 # Edit the constants and initialize method for your import data.
 

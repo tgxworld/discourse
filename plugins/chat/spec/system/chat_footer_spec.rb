@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "Mobile Chat footer", mobile: true do
+RSpec.describe "Mobile Chat footer", type: :system, mobile: true do
   fab!(:current_user, :user)
   fab!(:other_user, :user)
   fab!(:channel) { Fabricate(:chat_channel, threading_enabled: true) }
@@ -22,7 +22,7 @@ RSpec.describe "Mobile Chat footer", mobile: true do
       chat_page.open_from_header
 
       expect(page).to have_css(".c-footer")
-      expect(page).to have_css(".c-footer__item", count: 3)
+      expect(page).to have_css(".c-footer__item", count: 2)
       expect(page).to have_css("#c-footer-direct-messages")
       expect(page).to have_css("#c-footer-channels")
     end
@@ -40,16 +40,10 @@ RSpec.describe "Mobile Chat footer", mobile: true do
       expect(page).to have_current_path("/chat/channels")
     end
 
-    context "when user has viewable threads" do
-      before do
-        SiteSetting.chat_threads_enabled = true
-        thread = Fabricate(:chat_thread, channel: channel, original_message: message)
-        thread.add(current_user)
-        Fabricate(:chat_message, chat_channel: channel, thread: thread, user: other_user)
-        thread.set_replies_count_cache(1, update_db: true)
-      end
-
+    context "when user is a member of at least one channel with threads" do
       it "shows threads tab when user has threads" do
+        SiteSetting.chat_threads_enabled = true
+
         visit("/")
         chat_page.open_from_header
 
@@ -115,8 +109,6 @@ RSpec.describe "Mobile Chat footer", mobile: true do
         visit("/")
         chat_page.open_from_header
 
-        expect(page).to have_css("#c-footer-channels")
-
         Fabricate(
           :chat_message_with_service,
           chat_channel: channel,
@@ -129,9 +121,7 @@ RSpec.describe "Mobile Chat footer", mobile: true do
     end
 
     context "for direct messages" do
-      fab!(:dm_channel) do
-        Fabricate(:direct_message_channel, users: [current_user], threading_enabled: true)
-      end
+      fab!(:dm_channel) { Fabricate(:direct_message_channel, users: [current_user]) }
       fab!(:dm_message) { Fabricate(:chat_message, chat_channel: dm_channel, user: current_user) }
 
       it "is urgent" do
@@ -159,7 +149,6 @@ RSpec.describe "Mobile Chat footer", mobile: true do
           visit("/")
           chat_page.open_from_header
 
-          expect(page).to have_css("#c-footer-direct-messages")
           expect(page).to have_no_css("#c-footer-direct-messages .c-unread-indicator.-urgent")
 
           Fabricate(
@@ -182,11 +171,7 @@ RSpec.describe "Mobile Chat footer", mobile: true do
         fab!(:thread) { Fabricate(:chat_thread, channel: channel, original_message: message) }
         fab!(:thread_message) { Fabricate(:chat_message, chat_channel: channel, thread: thread) }
 
-        before do
-          SiteSetting.chat_threads_enabled = true
-          thread.add(current_user)
-          thread.set_replies_count_cache(1, update_db: true)
-        end
+        before { SiteSetting.chat_threads_enabled = true }
 
         it "is unread" do
           visit("/")
@@ -232,11 +217,7 @@ RSpec.describe "Mobile Chat footer", mobile: true do
           Fabricate(:chat_message, chat_channel: dm_channel, thread: dm_thread, user: other_user)
         end
 
-        before do
-          SiteSetting.chat_threads_enabled = true
-          dm_thread.add(current_user)
-          dm_thread.set_replies_count_cache(1, update_db: true)
-        end
+        before { SiteSetting.chat_threads_enabled = true }
 
         it "is unread" do
           visit("/")

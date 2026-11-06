@@ -16,28 +16,19 @@ module DiscourseChatIntegration
     end
 
     def self.enabled_providers
-      providers.select { |provider| is_enabled(provider) }
-    end
-
-    def self.disabled_providers
-      providers
-        .reject { |provider| is_enabled(provider) }
-        .sort_by do |provider|
-          score = defined?(provider::POPULARITY_SCORE) ? provider::POPULARITY_SCORE : 0
-          [-score, provider::PROVIDER_NAME]
-        end
+      self.providers.select { |provider| self.is_enabled(provider) }
     end
 
     def self.provider_names
-      providers.map! { |provider_klass| provider_klass::PROVIDER_NAME }
+      self.providers.map! { |x| x::PROVIDER_NAME }
     end
 
     def self.enabled_provider_names
-      enabled_providers.map! { |provider_klass| provider_klass::PROVIDER_NAME }
+      self.enabled_providers.map! { |x| x::PROVIDER_NAME }
     end
 
     def self.get_by_name(name)
-      providers.find { |provider_klass| provider_klass::PROVIDER_NAME == name }
+      self.providers.find { |p| p::PROVIDER_NAME == name }
     end
 
     def self.is_enabled(provider)
@@ -50,25 +41,13 @@ module DiscourseChatIntegration
       end
     end
 
-    def self.display_tag_names(topic)
-      DiscourseTagging.filter_visible(topic.tags, Manager.guardian).map(&:name).join(", ")
-    end
-
-    def self.setup(provider_klass, current_user, provider_site_settings)
-      if provider_klass.respond_to?(:setup)
-        provider_klass.setup(current_user, provider_site_settings)
-      else
-        SiteSetting.set_and_log(provider_klass::PROVIDER_ENABLED_SETTING, true, current_user)
-      end
-    end
-
     class HookEngine < ::Rails::Engine
-      engine_name PLUGIN_NAME + "-hooks"
-      isolate_namespace Provider
+      engine_name DiscourseChatIntegration::PLUGIN_NAME + "-hooks"
+      isolate_namespace DiscourseChatIntegration::Provider
     end
 
     class HookController < ::ApplicationController
-      requires_plugin PLUGIN_NAME
+      requires_plugin DiscourseChatIntegration::PLUGIN_NAME
 
       class ProviderDisabled < StandardError
       end
@@ -95,7 +74,7 @@ module DiscourseChatIntegration
         engine =
           provider
             .constants
-            .select { |constant| constant.to_s =~ /Engine$/ && (constant.to_s != "HookEngine") }
+            .select { |constant| constant.to_s =~ (/Engine$/) && (constant.to_s != "HookEngine") }
             .map(&provider.method(:const_get))
             .first
 
@@ -117,6 +96,7 @@ require_relative "provider/matrix/matrix_provider"
 require_relative "provider/zulip/zulip_provider"
 require_relative "provider/rocketchat/rocketchat_provider"
 require_relative "provider/gitter/gitter_provider"
+require_relative "provider/flowdock/flowdock_provider"
 require_relative "provider/groupme/groupme_provider"
 require_relative "provider/teams/teams_provider"
 require_relative "provider/powerautomate/powerautomate_provider"

@@ -20,12 +20,6 @@ module PageObjects
         PageObjects::Components::SelectKit.new("#search-sort-by")
       end
 
-      def bulk_select_result_and_open_dropdown(topic)
-        find(".search-info .bulk-select").click
-        find(".fps-result .fps-topic[data-topic-id='#{topic.id}'] .bulk-select input").click
-        find(".search-info .bulk-select-topics-dropdown-trigger").click
-      end
-
       def click_search_menu_link
         find(".search-menu .results .search-link").click
       end
@@ -39,12 +33,12 @@ module PageObjects
         find("input.full-page-search")
       end
 
-      def has_result_count?
-        has_selector?("#search-result-count")
+      def has_heading_text?(text)
+        has_selector?("h1.search-page-heading", text: text)
       end
 
-      def has_no_result_count?
-        has_no_selector?("#search-result-count")
+      def has_no_heading_text?(text)
+        has_no_selector?("h1.search-page-heading", text: text)
       end
 
       def click_search_button
@@ -99,10 +93,6 @@ module PageObjects
 
       def has_search_field?
         page.has_selector?(SEARCH_FIELD_SELECTOR, visible: true)
-      end
-
-      def has_header_search_menu?
-        page.has_css?("#{SEARCH_FIELD_SELECTOR} .search-menu-panel", visible: false)
       end
 
       def has_no_search_field?

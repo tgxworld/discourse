@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "Viewing user private messages" do
+describe "Viewing user private messages", type: :system do
   fab!(:user) { Fabricate(:user, username: "mIxed_caSE_usERNAME") }
   fab!(:user2, :user)
 
@@ -29,6 +29,8 @@ describe "Viewing user private messages" do
 
     context "when user has unread messages" do
       fab!(:pm_topic) { Fabricate(:private_message_topic, user: user2, recipient: user) }
+
+      before { SiteSetting.experimental_sidebar_messages_count_enabled_groups = "trust_level_0" }
 
       it "shows unread icon in inbox dropdown trigger and dropdown" do
         user_private_messages_page.visit(user)

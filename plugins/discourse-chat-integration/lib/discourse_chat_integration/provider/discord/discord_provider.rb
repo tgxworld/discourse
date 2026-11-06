@@ -3,10 +3,9 @@
 module DiscourseChatIntegration
   module Provider
     module DiscordProvider
-      PROVIDER_NAME = "discord"
-      POPULARITY_SCORE = 100
+      PROVIDER_NAME = "discord".freeze
       PROVIDER_ENABLED_SETTING = :chat_integration_discord_enabled
-      CHANNEL_IDENTIFIER_KEY = "name"
+      CHANNEL_IDENTIFIER_KEY = "name".freeze
       CHANNEL_PARAMETERS = [
         { key: "name", regex: '^\S+' },
         {
@@ -36,7 +35,7 @@ module DiscourseChatIntegration
       end
 
       def self.generate_discord_message(post)
-        display_name = DiscourseChatIntegration::Helper.formatted_display_name(post.user)
+        display_name = ::DiscourseChatIntegration::Helper.formatted_display_name(post.user)
 
         topic = post.topic
 
@@ -44,7 +43,7 @@ module DiscourseChatIntegration
         if topic.category
           category =
             (
-              if topic.category.parent_category
+              if (topic.category.parent_category)
                 "[#{topic.category.parent_category.name}/#{topic.category.name}]"
               else
                 "[#{topic.category.name}]"
@@ -57,7 +56,7 @@ module DiscourseChatIntegration
           embeds: [
             {
               title:
-                "#{topic.title} #{(category == "[uncategorized]") ? "" : category} #{DiscourseChatIntegration::Provider.display_tag_names(topic)}",
+                "#{topic.title} #{(category == "[uncategorized]") ? "" : category} #{topic.tags.present? ? topic.tags.map(&:name).join(", ") : ""}",
               color: topic.category ? topic.category.color.to_i(16) : nil,
               description:
                 post.excerpt(
@@ -100,7 +99,7 @@ module DiscourseChatIntegration
         end
 
         if !response.kind_of?(Net::HTTPSuccess)
-          raise DiscourseChatIntegration::ProviderError.new(
+          raise ::DiscourseChatIntegration::ProviderError.new(
                   info: {
                     error_key: nil,
                     message: message,

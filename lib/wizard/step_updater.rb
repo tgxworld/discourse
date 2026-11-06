@@ -4,11 +4,12 @@ class Wizard
   class StepUpdater
     include ActiveModel::Model
 
-    attr_accessor :fields
+    attr_accessor :refresh_required, :fields
 
     def initialize(current_user, step, fields)
       @current_user = current_user
       @step = step
+      @refresh_required = false
       @fields = fields
       @settings_changed = Set.new
     end
@@ -24,6 +25,10 @@ class Wizard
 
     def success?
       @errors.blank?
+    end
+
+    def refresh_required?
+      @refresh_required
     end
 
     def setting_changed?(id)

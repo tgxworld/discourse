@@ -10,8 +10,6 @@ class UserMerger
   end
 
   def merge!
-    raise Discourse::InvalidParameters.new(:target_user) if @source_user.id == @target_user.id
-
     update_username
     move_posts
     update_user_ids
@@ -99,7 +97,35 @@ class UserMerger
                            user_ids: [@acting_user.id]
     end
 
-    GivenDailyLike.recalculate!([@target_user.id])
+    sql = <<~SQL
+      INSERT INTO given_daily_likes AS g (user_id, likes_given, given_date, limit_reached)
+        SELECT
+          :target_user_id                AS user_id,
+          COUNT(1)                       AS likes_given,
+          a.created_at::DATE             AS given_date,
+          COUNT(1) >= :max_likes_per_day AS limit_reached
+        FROM post_actions AS a
+        WHERE a.user_id = :target_user_id
+              AND a.deleted_at IS NULL
+              AND EXISTS(
+                  SELECT 1
+                  FROM given_daily_likes AS g
+                  WHERE g.user_id = :source_user_id AND a.created_at::DATE = g.given_date
+              )
+        GROUP BY given_date
+      ON CONFLICT (user_id, given_date)
+        DO UPDATE
+          SET likes_given = EXCLUDED.likes_given,
+            limit_reached = EXCLUDED.limit_reached
+    SQL
+
+    DB.exec(
+      sql,
+      source_user_id: @source_user.id,
+      target_user_id: @target_user.id,
+      max_likes_per_day: SiteSetting.max_likes_per_day,
+      action_type_id: PostActionType.types[:like],
+    )
   end
 
   def merge_post_timings
@@ -209,12 +235,12 @@ class UserMerger
       WHERE user_id = :target_user_id
     SQL
 
-    UserStat.recalculate_likes!([@target_user.id])
-
-    # new_since, read_faq, first_post_created_at
+    # likes_given, likes_received, new_since, read_faq, first_post_created_at
     DB.exec(<<~SQL, source_user_id: @source_user.id, target_user_id: @target_user.id)
       UPDATE user_stats AS t
-      SET new_since             = LEAST(t.new_since, s.new_since),
+      SET likes_given         = t.likes_given + s.likes_given,
+        likes_received        = t.likes_received + s.likes_received,
+        new_since             = LEAST(t.new_since, s.new_since),
         read_faq              = LEAST(t.read_faq, s.read_faq),
         first_post_created_at = LEAST(t.first_post_created_at, s.first_post_created_at)
       FROM user_stats AS s
@@ -334,11 +360,6 @@ class UserMerger
       .where(deleted_by_id: @source_user.id)
       .update_all(deleted_by_id: @target_user.id)
 
-    McpAuditLog.where(user_id: @source_user.id).update_all(user_id: @target_user.id)
-    McpOauthAuthorization.where(revoked_by_user_id: @source_user.id).update_all(
-      revoked_by_user_id: @target_user.id,
-    )
-
     update_user_id(:muted_users, conditions: "x.muted_user_id = y.muted_user_id")
     update_user_id(
       :muted_users,
@@ -359,8 +380,8 @@ class UserMerger
       :post_actions,
       conditions: [
         "x.post_id = y.post_id",
+        "x.post_action_type_id = y.post_action_type_id",
         "x.targets_topic = y.targets_topic",
-        "x.post_action_type_id = y.post_action_type_id OR (x.post_action_type_id IN (3,4,7,8) AND y.post_action_type_id IN (3,4,7,8))",
       ],
     )
 
@@ -415,7 +436,7 @@ class UserMerger
       :topic_timers,
       conditions: [
         "x.status_type = y.status_type",
-        "x.timerable_id = y.timerable_id",
+        "x.topic_id = y.topic_id",
         "y.deleted_at IS NULL",
       ],
     )
@@ -462,14 +483,6 @@ class UserMerger
         "x.badge_id = y.badge_id",
         "x.seq = y.seq",
         "x.post_id IS NOT DISTINCT FROM y.post_id",
-      ],
-    )
-
-    update_user_id(
-      :bookmarks,
-      conditions: [
-        "x.bookmarkable_type = y.bookmarkable_type",
-        "x.bookmarkable_id = y.bookmarkable_id",
       ],
     )
 

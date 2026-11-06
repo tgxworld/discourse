@@ -6,6 +6,8 @@
 
 et:
   js:
+    details:
+      title: Peida üksikasjad
     composer:
       details_title: Kokkuvõte
       details_text: "See tekst on peidetud"

@@ -63,6 +63,14 @@ function createFootnoteNodeView({
       });
     }
 
+    #getFootnoteCounterValue() {
+      const footnotes = this.dom
+        .closest(".ProseMirror")
+        ?.querySelectorAll(".footnote");
+
+      return Array.from(footnotes).indexOf(this.dom) + 1;
+    }
+
     close() {
       this.innerView.destroy();
       this.innerView = null;
@@ -127,14 +135,6 @@ function createFootnoteNodeView({
 
     ignoreMutation() {
       return true;
-    }
-
-    #getFootnoteCounterValue() {
-      const footnotes = this.dom
-        .closest(".ProseMirror")
-        ?.querySelectorAll(".footnote");
-
-      return Array.from(footnotes).indexOf(this.dom) + 1;
     }
   };
 }

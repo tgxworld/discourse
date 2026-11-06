@@ -1,6 +1,9 @@
 // We should try to reuse the user page HTML for groups when possible
 // To style group content differently, use the existing classes with a .group parent class.
 // For example: .group .user-secondary-navigation
+
+@use "sass:math";
+
 .container.group {
   background: var(--d-content-background);
 }
@@ -96,9 +99,27 @@
     color: var(--primary-high-or-secondary-low);
   }
 
+  $size: 50px;
+  $icon-size: math.div($size, 1.8);
+
+  .avatar-flair-image {
+    width: $size;
+  }
+
   .avatar-flair {
-    --avatar-flair-size: 50px;
+    background-size: $size;
+    height: $size;
+    width: $size;
     border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-repeat: no-repeat;
+
+    .d-icon {
+      height: $icon-size;
+      width: $icon-size;
+    }
   }
 
   .group-details-button {
@@ -140,7 +161,7 @@ table.group-manage-logs {
 }
 
 .group-members {
-  grid-template-columns: 3fr repeat(4, minmax(min-content, 1fr));
+  grid-template-columns: 3fr repeat(3, minmax(min-content, 1fr));
 
   &--can-manage {
     grid-template-columns: 3fr repeat(4, minmax(min-content, 1fr)) 3em;
@@ -232,7 +253,7 @@ table.group-manage-logs {
     align-items: center;
   }
 
-  .file-uploader__preview {
+  .uploaded-image-preview {
     height: 75px;
     width: 275px;
   }
@@ -243,6 +264,10 @@ table.group-manage-logs {
 }
 
 .group-add-members {
+  .ac-wrap {
+    overflow: hidden;
+  }
+
   .group-add-members-make-owner {
     label {
       display: inline;
@@ -292,7 +317,8 @@ table.group-category-permissions {
   }
 }
 
-.group-smtp-email-settings {
+.group-smtp-email-settings,
+.group-imap-email-settings {
   background-color: var(--primary-very-low);
   padding: 1em;
   margin: 1em 0;

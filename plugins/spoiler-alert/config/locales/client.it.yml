@@ -5,14 +5,9 @@
 # https://translate.discourse.org/
 
 it:
-  admin_js:
-    admin:
-      site_settings:
-        categories:
-          spoiler_alert: "Avviso spoiler di Discourse"
   js:
     spoiler:
-      title: Spoiler sfocato
+      title: Rendi illeggibile spoiler
       label:
         show: "Mostra contenuti nascosti"
     composer:

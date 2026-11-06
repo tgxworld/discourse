@@ -62,7 +62,7 @@ describe ChatSDK::Message do
 
         before { channel_1.add(user) }
 
-        it "rejects messages with blocks from non-bot users" do
+        it "fails" do
           expect { described_class.create(**params) }.to raise_error(
             "Only bots can create messages with blocks",
           )
@@ -96,7 +96,7 @@ describe ChatSDK::Message do
     end
 
     context "when channel doesn’t exist" do
-      it "rejects a nonexistent channel" do
+      it "fails" do
         expect { described_class.create(**params, channel_id: -999) }.to raise_error(
           "Couldn't find channel with id: `-999`",
         )
@@ -104,7 +104,7 @@ describe ChatSDK::Message do
     end
 
     context "when user can't join channel" do
-      it "rejects users without channel membership" do
+      it "fails" do
         params[:guardian] = Fabricate(:user).guardian
 
         expect { described_class.create(**params) }.to raise_error(
@@ -114,7 +114,7 @@ describe ChatSDK::Message do
     end
 
     context "when membership is enforced" do
-      it "creates the message and enforces channel membership" do
+      it "works" do
         SiteSetting.chat_allowed_groups = Group::AUTO_GROUPS[:everyone]
         params[:enforce_membership] = true
         params[:guardian] = Fabricate(:user).guardian
@@ -126,7 +126,7 @@ describe ChatSDK::Message do
     end
 
     context "when thread doesn't exist" do
-      it "rejects a nonexistent thread" do
+      it "fails" do
         expect { described_class.create(**params, thread_id: -999) }.to raise_error(
           "Couldn't find thread with id: `-999`",
         )
@@ -134,7 +134,7 @@ describe ChatSDK::Message do
     end
 
     context "when params are invalid" do
-      it "rejects a missing channel and message body" do
+      it "fails" do
         expect { described_class.create(**params, raw: nil, channel_id: nil) }.to raise_error(
           "Chat channel can't be blank, Message can't be blank",
         )
@@ -182,7 +182,7 @@ describe ChatSDK::Message do
     end
 
     context "when user can't stop streaming" do
-      it "rejects users without permission to stop the stream" do
+      it "fails" do
         user = Fabricate(:user)
         message_1.chat_channel.add(user)
 
@@ -197,7 +197,7 @@ describe ChatSDK::Message do
         Fabricate(:chat_message, chat_channel: Fabricate(:private_category_channel))
       end
 
-      it "rejects users outside the channel" do
+      it "fails" do
         user = Fabricate(:user)
 
         expect {

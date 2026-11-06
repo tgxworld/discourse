@@ -106,9 +106,11 @@ module Jobs
       end
 
       def self.raw_log(message)
-        logger << message
-      rescue => e
-        Discourse.warn_exception(e, message: "Exception encountered while logging Sidekiq job")
+        begin
+          logger << message
+        rescue => e
+          Discourse.warn_exception(e, message: "Exception encountered while logging Sidekiq job")
+        end
       end
 
       # For test environment only
@@ -124,7 +126,7 @@ module Jobs
       end
 
       def self.log_path
-        @@log_path ||= "#{Rails.root.join("log/sidekiq.log")}"
+        @@log_path ||= "#{Rails.root}/log/sidekiq.log"
       end
 
       def self.logger
@@ -160,17 +162,19 @@ module Jobs
         interval = interval.to_i
         @@interval_thread ||=
           Thread.new do
-            loop do
-              sleep interval
-              mutex.synchronize do
-                @@active_jobs.each { |j| j.write_to_log if j.current_duration > interval }
+            begin
+              loop do
+                sleep interval
+                mutex.synchronize do
+                  @@active_jobs.each { |j| j.write_to_log if j.current_duration > interval }
+                end
               end
+            rescue Exception => e
+              Discourse.warn_exception(
+                e,
+                message: "Sidekiq interval logging thread terminated unexpectedly",
+              )
             end
-          rescue Exception => e
-            Discourse.warn_exception(
-              e,
-              message: "Sidekiq interval logging thread terminated unexpectedly",
-            )
           end
       end
     end
@@ -211,7 +215,7 @@ module Jobs
     end
 
     def self.delayed_perform(opts = {})
-      new.perform(opts)
+      self.new.perform(opts)
     end
 
     def execute(opts = {})
@@ -295,38 +299,38 @@ module Jobs
 
       exceptions = []
       dbs.each do |db|
-        exception = {}
+        begin
+          exception = {}
 
-        RailsMultisite::ConnectionManagement.with_connection(db) do
-          next if skip_current_site?
-
-          job_instrumenter =
-            JobInstrumenter.new(job_class: self.class, opts: opts, db: db, jid: jid)
-          begin
-            I18n.locale =
-              SiteSetting.default_locale || SiteSettings::DefaultsProvider::DEFAULT_LOCALE
-            I18n.ensure_all_loaded!
+          RailsMultisite::ConnectionManagement.with_connection(db) do
+            job_instrumenter =
+              JobInstrumenter.new(job_class: self.class, opts: opts, db: db, jid: jid)
             begin
-              logster_env = {}
-              Logster.add_to_env(logster_env, :job, self.class.to_s)
-              Logster.add_to_env(logster_env, :db, db)
-              Thread.current[Logster::Logger::LOGSTER_ENV] = logster_env
+              I18n.locale =
+                SiteSetting.default_locale || SiteSettings::DefaultsProvider::DEFAULT_LOCALE
+              I18n.ensure_all_loaded!
+              begin
+                logster_env = {}
+                Logster.add_to_env(logster_env, :job, self.class.to_s)
+                Logster.add_to_env(logster_env, :db, db)
+                Thread.current[Logster::Logger::LOGSTER_ENV] = logster_env
 
-              execute(opts)
+                execute(opts)
+              rescue => e
+                exception[:ex] = e
+                exception[:other] = { problem_db: db }
+              end
             rescue => e
               exception[:ex] = e
+              exception[:message] = "While establishing database connection to #{db}"
               exception[:other] = { problem_db: db }
+            ensure
+              job_instrumenter.stop(exception: exception)
             end
-          rescue => e
-            exception[:ex] = e
-            exception[:message] = "While establishing database connection to #{db}"
-            exception[:other] = { problem_db: db }
-          ensure
-            job_instrumenter.stop(exception: exception)
           end
-        end
 
-        exceptions << exception unless exception.empty?
+          exceptions << exception unless exception.empty?
+        end
       end
 
       Thread.current[Logster::Logger::LOGSTER_ENV] = nil
@@ -352,12 +356,6 @@ module Jobs
 
       ActiveRecord::Base.connection_handler.clear_active_connections!
     end
-
-    private
-
-    def skip_current_site?
-      false
-    end
   end
 
   class HandledExceptionWrapper < StandardError
@@ -379,10 +377,8 @@ module Jobs
       @perform_when_readonly || false
     end
 
-    private
-
-    def skip_current_site?
-      Sidekiq.paused? || (!self.class.perform_when_readonly? && Discourse.readonly_mode?)
+    def perform(*args)
+      super if self.class.perform_when_readonly? || !Discourse.readonly_mode?
     end
   end
 
@@ -427,7 +423,7 @@ module Jobs
 
       DB.after_commit { klass.client_push(hash) }
     else
-      if Rails.env.development?
+      if Rails.env == "development"
         Scheduler::Defer.later("job") { klass.new.perform(opts) }
       else
         # Run the job synchronously

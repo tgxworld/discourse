@@ -6,7 +6,7 @@ require "faker"
 
 module DiscourseDev
   class Record
-    DEFAULT_COUNT = 30
+    DEFAULT_COUNT = 30.freeze
     AUTO_POPULATED = "auto_populated"
 
     attr_reader :model, :type
@@ -69,7 +69,7 @@ module DiscourseDev
     end
 
     def self.populate!(**args)
-      new(**args).populate!
+      self.new(**args).populate!
     end
 
     def self.random(model, use_existing_records: true)

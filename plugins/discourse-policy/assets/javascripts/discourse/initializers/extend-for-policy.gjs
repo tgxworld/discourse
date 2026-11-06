@@ -2,7 +2,7 @@ import EmberObject from "@ember/object";
 import { withPluginApi } from "discourse/lib/plugin-api";
 import { escapeExpression } from "discourse/lib/utilities";
 import { i18n } from "discourse-i18n";
-import PostPolicy from "../components/post-policy.gjs";
+import PostPolicy from "../components/post-policy";
 
 const SETTINGS = [
   { name: "groups" },
@@ -30,7 +30,7 @@ const SETTINGS = [
 ];
 
 const PolicyWrapper = <template>
-  <PostPolicy @policy={{@data.policy}} @post={{@data.post}} />
+  <PostPolicy @post={{@data.post}} @policy={{@data.policy}} />
 </template>;
 
 function _buildPolicyAttributes(policy) {
@@ -86,24 +86,6 @@ export default {
 
   initialize() {
     withPluginApi(function (api) {
-      api.addTrackedPostProperties(
-        "policy_accepted",
-        "policy_accepted_by_count",
-        "policy_can_accept",
-        "policy_can_revoke",
-        "policy_not_accepted_by_count",
-        "policy_revoked"
-      );
-
-      api.addModelField("post", "policy_accepted_by", {
-        type: "array",
-        defaultValue: [],
-      });
-      api.addModelField("post", "policy_not_accepted_by", {
-        type: "array",
-        defaultValue: [],
-      });
-
       api.decorateCookedElement(attachPolicy, {
         onlyStream: false,
         id: "discourse-policy",

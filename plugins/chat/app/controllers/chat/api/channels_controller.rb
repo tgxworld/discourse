@@ -1,44 +1,24 @@
 # frozen_string_literal: true
 
 class Chat::Api::ChannelsController < Chat::ApiController
-  CHANNEL_EDITABLE_PARAMS = %i[name description slug threading_enabled emoji]
+  CHANNEL_EDITABLE_PARAMS = %i[name description slug threading_enabled]
   CATEGORY_CHANNEL_EDITABLE_PARAMS = %i[auto_join_users allow_channel_wide_mentions]
 
   def index
-    permitted =
-      params.permit(
-        :filter,
-        :limit,
-        :offset,
-        :status,
-        :chatable_id,
-        :chatable_type,
-        :include_subcategories,
-      )
+    permitted = params.permit(:filter, :limit, :offset, :status)
 
     options = { filter: permitted[:filter], limit: (permitted[:limit] || 25).to_i }
     options[:offset] = permitted[:offset].to_i
     options[:status] = Chat::Channel.statuses[permitted[:status]] ? permitted[:status] : nil
-    options[:chatable_id] = permitted[:chatable_id]
-    options[:chatable_type] = permitted[:chatable_type]
 
-    if options[:chatable_type] == "Category"
-      options[:include_subcategories] = ActiveModel::Type::Boolean.new.cast(
-        permitted[:include_subcategories],
-      )
-    end
-
-    memberships = current_user ? Chat::ChannelMembershipManager.all_for_user(current_user) : []
+    memberships = Chat::ChannelMembershipManager.all_for_user(current_user)
     channels = Chat::ChannelFetcher.secured_public_channels(guardian, options)
-    shared_channel_serializer_options =
-      DiscoursePluginRegistry.apply_modifier(:chat_channel_serializer_public_options, {}, guardian)
     serialized_channels =
       channels.map do |channel|
         Chat::ChannelSerializer.new(
           channel,
-          scope: guardian,
+          scope: Guardian.new(current_user),
           membership: memberships.find { |membership| membership.chat_channel_id == channel.id },
-          **shared_channel_serializer_options,
         )
       end
 
@@ -53,9 +33,9 @@ class Chat::Api::ChannelsController < Chat::ApiController
       on_failed_policy(:invalid_access) { raise Discourse::InvalidAccess }
       on_model_not_found(:channel) { raise ActiveRecord::RecordNotFound }
       on_success { render(json: success_json) }
-      on_failure { render(json: failed_json, status: :unprocessable_entity) }
+      on_failure { render(json: failed_json, status: 422) }
       on_failed_contract do |contract|
-        render(json: failed_json.merge(errors: contract.errors.full_messages), status: :bad_request)
+        render(json: failed_json.merge(errors: contract.errors.full_messages), status: 400)
       end
     end
   end
@@ -69,7 +49,6 @@ class Chat::Api::ChannelsController < Chat::ApiController
         :description,
         :auto_join_users,
         :threading_enabled,
-        :emoji,
       )
 
     # NOTE: We don't allow creating channels for anything but category chatable types
@@ -83,10 +62,6 @@ class Chat::Api::ChannelsController < Chat::ApiController
       end
       on_model_not_found(:category) { raise ActiveRecord::RecordNotFound }
       on_failed_policy(:can_create_channel) { raise Discourse::InvalidAccess }
-      on_failed_policy(:public_channels_enabled) do
-        render_json_error(I18n.t("chat.errors.public_channels_disabled"))
-      end
-      on_failed_policy(:can_create_channel_in_category) { raise Discourse::InvalidAccess }
       on_failed_policy(:category_channel_does_not_exist) do
         raise Discourse::InvalidParameters.new(I18n.t("chat.errors.channel_exists_for_category"))
       end
@@ -96,9 +71,9 @@ class Chat::Api::ChannelsController < Chat::ApiController
       on_model_errors(:membership) do |model|
         render_json_error(model, type: :record_invalid, status: 422)
       end
-      on_failure { render(json: failed_json, status: :unprocessable_entity) }
+      on_failure { render(json: failed_json, status: 422) }
       on_failed_contract do |contract|
-        render(json: failed_json.merge(errors: contract.errors.full_messages), status: :bad_request)
+        render(json: failed_json.merge(errors: contract.errors.full_messages), status: 400)
       end
     end
   end
@@ -115,7 +90,7 @@ class Chat::Api::ChannelsController < Chat::ApiController
 
   def update
     params_to_edit = editable_params(params, channel_from_params)
-    params_to_edit.each { |k, v| params_to_edit[k] = nil if v.is_a?(String) && v.blank? }
+    params_to_edit.each { |k, v| params_to_edit[k] = nil if params_to_edit[k].blank? }
     if ActiveRecord::Type::Boolean.new.deserialize(params_to_edit[:auto_join_users])
       auto_join_limiter(channel_from_params).performed!
     end
@@ -131,6 +106,7 @@ class Chat::Api::ChannelsController < Chat::ApiController
       end
       on_model_not_found(:channel) { raise ActiveRecord::RecordNotFound }
       on_failed_policy(:check_channel_permission) { raise Discourse::InvalidAccess }
+      on_failed_policy(:no_direct_message_channel) { raise Discourse::InvalidAccess }
     end
   end
 

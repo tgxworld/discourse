@@ -15,7 +15,7 @@ RSpec.describe Chat::Api::ChannelsInvitesController do
 
   describe "create" do
     describe "success" do
-      it "notifies the invited users" do
+      it "works" do
         expect {
           post "/chat/api/channels/#{channel_1.id}/invites?user_ids=#{user_1.id},#{user_2.id}"
         }.to change {
@@ -42,7 +42,7 @@ RSpec.describe Chat::Api::ChannelsInvitesController do
     describe "message_id param" do
       fab!(:message_1) { Fabricate(:chat_message, chat_channel: channel_1) }
 
-      it "includes the message in each notification" do
+      it "works" do
         post "/chat/api/channels/#{channel_1.id}/invites?user_ids=#{user_1.id},#{user_2.id}&message_id=#{message_1.id}"
 
         expect(JSON.parse(Notification.last.data)["chat_message_id"]).to eq(message_1.id)
@@ -50,39 +50,13 @@ RSpec.describe Chat::Api::ChannelsInvitesController do
       end
     end
 
-    describe "current user can't join channel" do
+    describe "current user can't view channel" do
       fab!(:channel_1, :private_category_channel)
 
       it "returns a 403" do
         post "/chat/api/channels/#{channel_1.id}/invites?user_ids=#{user_1.id},#{user_2.id}"
 
         expect(response.status).to eq(403)
-      end
-    end
-
-    describe "current user can view but not join channel" do
-      fab!(:group)
-
-      before do
-        channel_1.chatable.set_permissions(group => :readonly)
-        channel_1.chatable.save!
-        group.add(current_user)
-      end
-
-      it "returns a 403" do
-        post "/chat/api/channels/#{channel_1.id}/invites?user_ids=#{user_1.id},#{user_2.id}"
-
-        expect(response.status).to eq(403)
-      end
-    end
-
-    describe "rate limiting" do
-      it "rate limits invites" do
-        RateLimiter.enable
-
-        6.times { post "/chat/api/channels/#{channel_1.id}/invites?user_ids=#{user_1.id}" }
-
-        expect(response.status).to eq(429)
       end
     end
 

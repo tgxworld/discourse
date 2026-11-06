@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "Kick user from chat channel" do
+describe "Kick user from chat channel", type: :system do
   fab!(:current_user, :user)
   fab!(:channel_1, :chat_channel)
   fab!(:channel_2, :chat_channel)
@@ -8,7 +8,7 @@ describe "Kick user from chat channel" do
   let(:chat) { PageObjects::Pages::Chat.new }
   let(:channel) { PageObjects::Pages::ChatChannel.new }
   let(:dialog) { PageObjects::Components::Dialog.new }
-  let(:sidebar_page) { PageObjects::Pages::ChatSidebar.new }
+  let(:sidebar_page) { PageObjects::Pages::Sidebar.new }
 
   before do
     SiteSetting.navigation_menu = "sidebar"
@@ -18,12 +18,16 @@ describe "Kick user from chat channel" do
     channel_2.add(current_user)
   end
 
+  def publish_kick
+    Chat::Publisher.publish_kick_users(channel_1.id, [current_user.id])
+  end
+
   context "when the user is looking at the channel they are kicked from" do
     before { chat.visit_channel(channel_1) }
 
     context "when the user presses ok" do
       it "redirects them to the first other public channel they have" do
-        Chat::Publisher.publish_kick_users(channel_1.id, [current_user.id])
+        publish_kick
         dialog.click_yes
         expect(page).to have_current_path(channel_2.url)
       end
@@ -35,7 +39,7 @@ describe "Kick user from chat channel" do
         end
 
         it "redirects them to the chat browse page" do
-          Chat::Publisher.publish_kick_users(channel_1.id, [current_user.id])
+          publish_kick
           dialog.click_yes
           expect(page).to have_current_path("/chat/browse/open")
         end
@@ -47,8 +51,8 @@ describe "Kick user from chat channel" do
     before { chat.visit_channel(channel_2) }
 
     it "removes it from their sidebar and does not redirect" do
-      Chat::Publisher.publish_kick_users(channel_1.id, [current_user.id])
-      expect(sidebar_page.channels_section).to have_no_css(
+      publish_kick
+      expect(sidebar_page.channels_section).not_to have_css(
         ".sidebar-section-link.channel-#{channel_1.id}",
       )
     end

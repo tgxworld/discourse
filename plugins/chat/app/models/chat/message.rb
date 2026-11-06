@@ -10,20 +10,6 @@ module Chat
 
     BAKED_VERSION = 2
     EXCERPT_LENGTH = 150
-    SLASH_COMMAND_PATTERNS = {
-      me: {
-        pattern: %r{\A/me[ \t]+([^\r\n]+)\z},
-        formatter: :action,
-      },
-      shrug: {
-        pattern: %r{\A/shrug(?:[ \t]+([^\r\n]+))?\z},
-        text: "¯\\_(ツ)_/¯",
-      },
-      tableflip: {
-        pattern: %r{\A/tableflip(?:[ \t]+([^\r\n]+))?\z},
-        text: "(╯°□°)╯︵ ┻━┻",
-      },
-    }.freeze
 
     attribute :has_oneboxes, default: false
 
@@ -63,11 +49,6 @@ module Chat
              foreign_key: :target_id
     has_many :uploads, through: :upload_references, class_name: "::Upload"
 
-    has_many :hotlinked_media,
-             dependent: :destroy,
-             foreign_key: :chat_message_id,
-             class_name: "Chat::MessageHotlinkedMedia"
-
     has_one :chat_webhook_event,
             dependent: :destroy,
             class_name: "Chat::WebhookEvent",
@@ -76,10 +57,6 @@ module Chat
              dependent: :destroy,
              class_name: "Chat::Mention",
              foreign_key: :chat_message_id
-    has_one :pinned_message,
-            class_name: "Chat::PinnedMessage",
-            foreign_key: :chat_message_id,
-            dependent: :destroy
     has_many :user_mentions,
              dependent: :destroy,
              class_name: "Chat::UserMention",
@@ -96,7 +73,6 @@ module Chat
             dependent: :destroy,
             class_name: "Chat::HereMention",
             foreign_key: :chat_message_id
-    has_one :message_search_data, dependent: :destroy, foreign_key: :chat_message_id
 
     scope :in_public_channel,
           -> do
@@ -144,12 +120,12 @@ module Chat
     def validate_message
       WatchedWordsValidator.new(attributes: [:message]).validate(self) if !user&.bot?
 
-      if new_record? || changed.include?("message")
+      if self.new_record? || self.changed.include?("message")
         Chat::DuplicateMessageValidator.new(self).validate
       end
 
       if uploads.empty? && message_too_short?
-        errors.add(
+        self.errors.add(
           :base,
           I18n.t(
             "chat.errors.minimum_length_not_met",
@@ -159,45 +135,33 @@ module Chat
       end
 
       if message_too_long?
-        errors.add(
+        self.errors.add(
           :base,
           I18n.t("chat.errors.message_too_long", count: SiteSetting.chat_maximum_message_length),
         )
       end
     end
 
-    def build_excerpt(strip_links: true)
+    def build_excerpt
       # just show the URL if the whole message is a URL, because we cannot excerpt oneboxes
       urls = PrettyText.extract_links(cooked).map(&:url)
       if urls.present?
         regex = %r{^[^:]+://}
         clean_urls = urls.map { |url| url.sub(regex, "") }
         if message.gsub(regex, "").split.sort == clean_urls.sort
-          return(
-            if strip_links
-              PrettyText.excerpt(urls.join(" "), EXCERPT_LENGTH)
-            else
-              PrettyText.excerpt(urls_as_links(urls), EXCERPT_LENGTH, strip_links: false)
-            end
-          )
+          return PrettyText.excerpt(urls.join(" "), EXCERPT_LENGTH)
         end
       end
 
       # upload-only messages are better represented as the filename
-      return upload_filename_excerpt if cooked.blank? && uploads.present?
+      return uploads.first.original_filename if cooked.blank? && uploads.present?
 
       # this may return blank for some complex things like quotes, that is acceptable
-      PrettyText.excerpt(cooked, EXCERPT_LENGTH, strip_links:, keep_mentions: true)
-    end
-
-    def excerpt_for_display
-      return upload_filename_excerpt if only_uploads?
-
-      excerpt || build_excerpt
+      PrettyText.excerpt(cooked, EXCERPT_LENGTH, strip_links: true, keep_mentions: true)
     end
 
     def cooked_for_excerpt
-      (cooked.blank? && uploads.present?) ? "<p>#{upload_filename_excerpt}</p>" : cooked
+      (cooked.blank? && uploads.present?) ? "<p>#{uploads.first.original_filename}</p>" : cooked
     end
 
     def push_notification_excerpt
@@ -205,16 +169,21 @@ module Chat
     end
 
     def only_uploads?
-      message.blank? && uploads.present?
+      self.message.blank? && self.uploads.present?
     end
 
     def to_markdown
       upload_markdown =
-        upload_references.includes(:upload).order(:created_at).map(&:to_markdown).reject(&:empty?)
+        self
+          .upload_references
+          .includes(:upload)
+          .order(:created_at)
+          .map(&:to_markdown)
+          .reject(&:empty?)
 
-      return message if upload_markdown.empty?
+      return self.message if upload_markdown.empty?
 
-      return ["#{message}\n"].concat(upload_markdown).join("\n") if message.present?
+      return ["#{self.message}\n"].concat(upload_markdown).join("\n") if self.message.present?
 
       upload_markdown.join("\n")
     end
@@ -222,18 +191,15 @@ module Chat
     def cook
       ensure_last_editor_id
 
-      self.cooked =
-        self.class.cook(message, user_id: last_editor_id, author_username: user&.username)
+      self.cooked = self.class.cook(self.message, user_id: self.last_editor_id)
       self.cooked_version = BAKED_VERSION
 
       invalidate_parsed_mentions
     end
 
-    def rebake!(invalidate_oneboxes: false, priority: nil, skip_notifications: false)
+    def rebake!(invalidate_oneboxes: false, priority: nil)
       ensure_last_editor_id
-      args = { chat_message_id: id }
-      args[:invalidate_oneboxes] = true if invalidate_oneboxes
-      args[:skip_notifications] = true if skip_notifications
+      args = { chat_message_id: self.id, invalidate_oneboxes: invalidate_oneboxes }
       args[:queue] = priority.to_s if priority && priority != :normal
       Jobs.enqueue(Jobs::Chat::ProcessMessage, args)
     end
@@ -279,10 +245,9 @@ module Chat
       emphasis
       replacements
       escape
-      entity
     ]
 
-    def self.markdown_options(opts = {})
+    def self.cook(message, opts = {})
       bot = opts[:user_id] && opts[:user_id].negative?
 
       features = MARKDOWN_FEATURES.dup
@@ -298,22 +263,15 @@ module Chat
       # this when cooking #hashtags to determine whether we should render
       # the found hashtag based on whether the user can access the channel it
       # is referencing.
-      {
-        features_override: features + DiscoursePluginRegistry.chat_markdown_features.to_a,
-        markdown_it_rules: rules,
-        force_quote_link: true,
-        onebox_limit: PrettyText::NO_ONEBOX_LIMIT,
-        user_id: opts[:user_id],
-        hashtag_context: "chat-composer",
-      }
-    end
-
-    def self.cook(message, opts = {})
-      slash_command = match_slash_command(message, opts[:author_username])
-      message_to_cook = slash_command ? slash_command[:content] : message
-
-      cooked = PrettyText.cook(message_to_cook, markdown_options(opts))
-      cooked = format_slash_command(cooked, slash_command, opts[:author_username]) if slash_command
+      cooked =
+        PrettyText.cook(
+          message,
+          features_override: features + DiscoursePluginRegistry.chat_markdown_features.to_a,
+          markdown_it_rules: rules,
+          force_quote_link: true,
+          user_id: opts[:user_id],
+          hashtag_context: "chat-composer",
+        )
 
       result =
         Oneboxer.apply(cooked) do |url|
@@ -329,75 +287,15 @@ module Chat
       cooked
     end
 
-    def action?
-      SLASH_COMMAND_PATTERNS.any? do |_, command|
-        command[:formatter] == :action && message&.match?(command[:pattern])
-      end
-    end
-
-    def self.match_slash_command(message, author_username)
-      return if message.blank?
-
-      SLASH_COMMAND_PATTERNS.each do |name, command|
-        next if command[:formatter] == :action && author_username.blank?
-        next if !(match = message.match(command[:pattern]))
-
-        return { name:, content: match[1].to_s, **command }
-      end
-
-      nil
-    end
-    private_class_method :match_slash_command
-
-    def self.format_slash_command(cooked, command, author_username)
-      if command[:formatter] == :action
-        format_action(cooked, author_username)
-      else
-        append_command_text(cooked, command[:text])
-      end
-    end
-    private_class_method :format_slash_command
-
-    def self.format_action(cooked, author_username)
-      fragment = Loofah.html5_fragment(cooked)
-      elements = fragment.children.select(&:element?)
-      return cooked if elements.length != 1 || elements.first.name != "p"
-
-      paragraph = elements.first
-      emphasis = Nokogiri::XML::Node.new("em", fragment.document)
-      emphasis["class"] = "chat-message-action"
-      emphasis.add_child(Nokogiri::XML::Text.new("#{author_username} ", fragment.document))
-      paragraph.children.to_a.each { |child| emphasis.add_child(child) }
-      paragraph.add_child(emphasis)
-
-      fragment.to_html
-    end
-    private_class_method :format_action
-
-    def self.append_command_text(cooked, text)
-      fragment = Loofah.html5_fragment(cooked)
-      elements = fragment.children.select(&:element?)
-      return cooked if elements.length > 1
-      return cooked if elements.one? && elements.first.name != "p"
-
-      paragraph = elements.first || Nokogiri::XML::Node.new("p", fragment.document)
-      fragment.add_child(paragraph) if elements.empty?
-      separator = paragraph.children.empty? ? "" : " "
-      paragraph.add_child(Nokogiri::XML::Text.new("#{separator}#{text}", fragment.document))
-
-      fragment.to_html
-    end
-    private_class_method :append_command_text
-
     def full_url
       "#{Discourse.base_url_no_prefix}#{url}"
     end
 
     def url
       if in_thread?
-        "#{Discourse.base_path}/chat/c/-/#{chat_channel_id}/t/#{thread_id}/#{id}"
+        "#{Discourse.base_path}/chat/c/-/#{self.chat_channel_id}/t/#{self.thread_id}/#{self.id}"
       else
-        "#{Discourse.base_path}/chat/c/-/#{chat_channel_id}/#{id}"
+        "#{Discourse.base_path}/chat/c/-/#{self.chat_channel_id}/#{self.id}"
       end
     end
 
@@ -409,7 +307,7 @@ module Chat
     end
 
     def in_thread?
-      thread_id.present? && (chat_channel.threading_enabled || thread&.force)
+      self.thread_id.present? && (self.chat_channel.threading_enabled || self.thread&.force)
     end
 
     def thread_reply?
@@ -417,7 +315,7 @@ module Chat
     end
 
     def thread_om?
-      in_thread? && thread&.original_message_id == id
+      in_thread? && self.thread&.original_message_id == self.id
     end
 
     def parsed_mentions
@@ -430,21 +328,6 @@ module Chat
 
     private
 
-    def upload_filename_excerpt
-      ERB::Util.html_escape(uploads.first.original_filename.truncate(EXCERPT_LENGTH, omission: ""))
-    end
-
-    def urls_as_links(urls)
-      html =
-        urls.map { |url| "<a href=\"#{CGI.escapeHTML(url)}\">#{CGI.escapeHTML(url)}</a>" }.join(" ")
-      doc = Nokogiri::HTML5.fragment(html)
-      PrettyText.add_rel_attributes_to_user_content(
-        doc,
-        SiteSetting.add_rel_nofollow_to_user_content,
-      )
-      doc.to_html
-    end
-
     def delete_mentions(mention_type, target_ids)
       chat_mentions.where(type: mention_type, target_id: target_ids).destroy_all
     end
@@ -453,7 +336,9 @@ module Chat
       return if target_ids.empty?
 
       mentions =
-        target_ids.map { |target_id| { chat_message_id: id, target_id: target_id, type: type } }
+        target_ids.map do |target_id|
+          { chat_message_id: self.id, target_id: target_id, type: type }
+        end
 
       Chat::Mention.insert_all(mentions)
     end
@@ -467,7 +352,7 @@ module Chat
     end
 
     def ensure_last_editor_id
-      self.last_editor_id ||= user_id
+      self.last_editor_id ||= self.user_id
     end
 
     def create_or_delete_all_mention
@@ -513,31 +398,29 @@ end
 # Table name: chat_messages
 #
 #  id              :bigint           not null, primary key
-#  blocks          :jsonb
-#  cooked          :text
-#  cooked_version  :integer
-#  created_by_sdk  :boolean          default(FALSE), not null
-#  deleted_at      :datetime
-#  excerpt         :string(1000)
-#  message         :text
-#  streaming       :boolean          default(FALSE), not null
+#  chat_channel_id :bigint           not null
+#  user_id         :integer
 #  created_at      :datetime         not null
 #  updated_at      :datetime         not null
-#  chat_channel_id :bigint           not null
+#  deleted_at      :datetime
 #  deleted_by_id   :integer
 #  in_reply_to_id  :bigint
+#  message         :text
+#  cooked          :text
+#  cooked_version  :integer
 #  last_editor_id  :integer          not null
 #  thread_id       :bigint
-#  user_id         :integer
+#  streaming       :boolean          default(FALSE), not null
+#  excerpt         :string(1000)
+#  created_by_sdk  :boolean          default(FALSE), not null
+#  blocks          :jsonb
 #
 # Indexes
 #
 #  idx_chat_messages_by_created_at_not_deleted            (created_at) WHERE (deleted_at IS NULL)
 #  idx_chat_messages_by_thread_id_not_deleted             (thread_id) WHERE (deleted_at IS NULL)
-#  idx_chat_messages_thread_id_id_user_id_not_deleted     (thread_id,id) WHERE (deleted_at IS NULL)
 #  index_chat_messages_on_chat_channel_id_and_created_at  (chat_channel_id,created_at)
 #  index_chat_messages_on_chat_channel_id_and_id          (chat_channel_id,id) WHERE (deleted_at IS NOT NULL)
-#  index_chat_messages_on_in_reply_to_id                  (in_reply_to_id) WHERE (in_reply_to_id IS NOT NULL)
 #  index_chat_messages_on_last_editor_id                  (last_editor_id)
 #  index_chat_messages_on_thread_id                       (thread_id)
 #

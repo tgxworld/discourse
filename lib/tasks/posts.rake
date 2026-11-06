@@ -289,7 +289,7 @@ task "posts:remap", %i[find replace type ignore_case] => [:environment] do |_, a
       ask(
         "Are you sure you want to replace all #{type} occurrences of '#{find}' with '#{replace}'? (Y/n)",
       )
-    exit 1 unless confirm_replace == "" || confirm_replace.downcase == "y"
+    exit 1 unless (confirm_replace == "" || confirm_replace.downcase == "y")
   end
 
   puts "Remapping"
@@ -318,7 +318,7 @@ task "posts:delete_word", %i[find type ignore_case] => [:environment] do |_, arg
   else
     confirm_delete =
       ask("Are you sure you want to remove all #{type} occurrences of '#{find}'? (Y/n)")
-    exit 1 unless confirm_delete == "" || confirm_delete.downcase == "y"
+    exit 1 unless (confirm_delete == "" || confirm_delete.downcase == "y")
   end
 
   puts "Processing"
@@ -334,10 +334,12 @@ task "posts:delete_all_likes" => :environment do
   total = post_actions.count
 
   post_actions.each do |post_action|
-    post_action.remove_act!(Discourse.system_user)
-    print_status(likes_deleted += 1, total)
-  rescue StandardError
-    # skip
+    begin
+      post_action.remove_act!(Discourse.system_user)
+      print_status(likes_deleted += 1, total)
+    rescue StandardError
+      # skip
+    end
   end
 
   UserStat.update_all(likes_given: 0, likes_received: 0) # clear user likes stats
@@ -386,17 +388,16 @@ task "posts:reorder_posts", [:topic_id] => [:environment] do |_, args|
     builder = DB.build <<~SQL
       WITH ordered_posts AS (
         SELECT
-          p.id,
+          id,
           ROW_NUMBER() OVER (
             PARTITION BY
-              p.topic_id
+              topic_id
             ORDER BY
-              p.created_at,
-              p.post_number
+              created_at,
+              post_number
           ) AS new_post_number
         FROM
-          posts p
-        INNER JOIN topics t ON t.id = p.topic_id
+          posts
         /*where*/
       )
       UPDATE
@@ -411,7 +412,7 @@ task "posts:reorder_posts", [:topic_id] => [:environment] do |_, args|
         p.post_number <> o.new_post_number
     SQL
 
-    builder.where("p.topic_id = ?", args[:topic_id]) if args[:topic_id]
+    builder.where("topic_id = ?", args[:topic_id]) if args[:topic_id]
     builder.exec
 
     [
@@ -425,12 +426,11 @@ task "posts:reorder_posts", [:topic_id] => [:environment] do |_, args|
         UPDATE
           #{table} AS x
         SET
-          #{column} = x.#{column} * -1
+          #{column} = p.sort_order * -1
         FROM
           posts AS p
-        INNER JOIN topics t ON t.id = p.topic_id
-          /*where*/
-        SQL
+        /*where*/
+      SQL
 
       builder.where("p.topic_id = ?", args[:topic_id]) if args[:topic_id]
       builder.where("p.post_number < 0")
@@ -438,66 +438,26 @@ task "posts:reorder_posts", [:topic_id] => [:environment] do |_, args|
       builder.where("x.#{column} = ABS(p.post_number)")
       builder.exec
 
-      # Mark orphaned records from the current table as negative so they
-      # don't collide (PostTimings) or are mismatched when reordering
-
-      orphan_builder = DB.build <<~SQL
-          UPDATE 
-            #{table} AS x
-          SET 
-            #{column} = x.#{column} * -1
-          FROM topics t
-          /*where*/
-        SQL
-
-      orphan_builder.where("t.id = x.topic_id")
-      orphan_builder.where("x.#{column} > 0")
-      orphan_builder.where("x.topic_id = ?", args[:topic_id]) if args[:topic_id]
-      orphan_builder.where(<<~SQL)
-          NOT EXISTS (
-            SELECT 
-              1
-            FROM 
-              posts p
-            WHERE
-              p.topic_id = x.topic_id
-              AND p.post_number = x.#{column}
-          )
-        SQL
-      orphan_builder.exec
-
-      builder = DB.build <<~SQL
+      DB.exec <<~SQL
         UPDATE
-          #{table} AS x
+          #{table}
         SET
-          #{column} = p.sort_order
-        FROM
-          posts AS p
-        INNER JOIN topics t ON t.id = p.topic_id
-        /*where*/
+          #{column} = #{column} * -1
+        WHERE
+          #{column} < 0
       SQL
-
-      builder.where("p.topic_id = ?", args[:topic_id]) if args[:topic_id]
-      builder.where("p.post_number < 0")
-      builder.where("x.#{column} < 0")
-      builder.where("x.topic_id = p.topic_id")
-      builder.where("ABS(x.#{column}) = ABS(p.post_number)")
-      builder.exec
     end
 
     builder = DB.build <<~SQL
       UPDATE
-        posts AS p
+        posts
       SET
         post_number = sort_order
-      FROM
-        topics t
       /*where*/
     SQL
 
-    builder.where("t.id = p.topic_id")
-    builder.where("p.topic_id = ?", args[:topic_id]) if args[:topic_id]
-    builder.where("p.post_number < 0")
+    builder.where("topic_id = ?", args[:topic_id]) if args[:topic_id]
+    builder.where("post_number < 0")
     builder.exec
   end
 
@@ -705,17 +665,19 @@ def recover_uploads_from_index(path)
       end
 
       File.open(found) do |f|
-        upload = UploadCreator.new(f, "upload").create_for(post.user_id)
-        if upload && upload.url
-          post.raw = post.raw.sub(url, upload.url)
-          changed = true
-        else
-          puts "Skipping #{url} in #{post.full_url} unable to create upload (unknown error)"
+        begin
+          upload = UploadCreator.new(f, "upload").create_for(post.user_id)
+          if upload && upload.url
+            post.raw = post.raw.sub(url, upload.url)
+            changed = true
+          else
+            puts "Skipping #{url} in #{post.full_url} unable to create upload (unknown error)"
+            next
+          end
+        rescue Discourse::InvalidAccess
+          puts "Skipping #{url} in #{post.full_url} unable to create upload (bad format)"
           next
         end
-      rescue Discourse::InvalidAccess
-        puts "Skipping #{url} in #{post.full_url} unable to create upload (bad format)"
-        next
       end
     end
     if changed

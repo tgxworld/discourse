@@ -7,5 +7,9 @@
 id:
   js:
     user_notes:
-      title: "Catatan pengguna"
+      title: "Catatan Pengguna"
+      attach: "Tambahkan Catatan Pengguna"
+      remove: "Hapus Catatan Pengguna"
+      show: "Catatan Pengguna (%{count})"
       delete_confirm: "Apakah Anda yakin ingin menghapus catatan pengguna tersebut?"
+      show_post: "Tampilkan Postingan"

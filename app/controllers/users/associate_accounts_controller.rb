@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Users::AssociateAccountsController < ApplicationController
-  SERVER_SESSION_PREFIX = "omniauth_reconnect"
+  SECURE_SESSION_PREFIX = "omniauth_reconnect"
 
   before_action :ensure_logged_in
 
@@ -25,16 +25,7 @@ class Users::AssociateAccountsController < ApplicationController
     auth_result = authenticator.after_authenticate(auth_hash, existing_account: current_user)
     DiscourseEvent.trigger(:after_auth, authenticator, auth_result, session, cookies, request)
 
-    server_session.delete(self.class.key(params[:token]))
-
-    if !auth_result.failed?
-      Jobs.enqueue(
-        :critical_user_email,
-        type: "account_associated",
-        user_id: current_user.id,
-        provider_name: authenticator.display_name,
-      )
-    end
+    secure_session[self.class.key(params[:token])] = nil
 
     render json: success_json
   end
@@ -45,7 +36,7 @@ class Users::AssociateAccountsController < ApplicationController
     @auth_hash ||=
       begin
         token = params[:token]
-        json = server_session[self.class.key(token)]
+        json = secure_session[self.class.key(token)]
         raise Discourse::NotFound if json.nil?
 
         OmniAuth::AuthHash.new(JSON.parse(json))
@@ -63,6 +54,6 @@ class Users::AssociateAccountsController < ApplicationController
   end
 
   def self.key(token)
-    "#{SERVER_SESSION_PREFIX}_#{token}"
+    "#{SECURE_SESSION_PREFIX}_#{token}"
   end
 end

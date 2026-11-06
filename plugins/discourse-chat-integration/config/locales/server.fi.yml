@@ -47,8 +47,12 @@ fi:
     chat_integration_rocketchat_webhook_url: "Rocket Chat -integraation webhookin URL-osoite"
     chat_integration_rocketchat_excerpt_length: "Rocket Chat -viestin otteen pituus"
     chat_integration_gitter_enabled: "Ota Gitterin chat-integraatiopalveluntarjoaja käyttöön"
+    chat_integration_flowdock_enabled: "Ota Flowdockin chat-integraatiopalveluntarjoaja käyttöön"
+    chat_integration_flowdock_excerpt_length: "Flowdock-viestin otteen pituus"
     chat_integration_groupme_enabled: "Ota Groupmen chat-integraatiopalveluntarjoaja käyttöön"
     chat_integration_groupme_excerpt_length: "Groupme-viestin otteen pituus"
+    chat_integration_groupme_bot_ids: "*pakollinen* Bottitunnukset, erotettu pilkulla, jos niitä on useita"
+    chat_integration_groupme_instance_names: " *pakollinen* GroupMe-keskutelun nimi, erotettuna pilkulla, jos niitä on useita (sama järjestys kuin bottitunnuksilla)"
     chat_integration_teams_enabled: "Ota Microsoft Teamsin chat-integraatiopalveluntarjoaja käyttöön"
     chat_integration_teams_excerpt_length: "Microsoft Teams -viestin otteen pituus"
     chat_integration_powerautomate_enabled: "Ota Microsoft Power Automate -integraatiopalveluntarjoaja käyttöön"
@@ -64,7 +68,7 @@ fi:
       send_chat_integration_message:
         title: Lähetä chat-integraatioviesti
   chat_integration:
-    all_categories: "(kaikki alueet)"
+    all_categories: "(kaikki luokat)"
     deleted_category: "(poistettu alue)"
     deleted_group: "(poistettu ryhmä)"
     group_mention_template: "@%{name} mainittu"
@@ -75,8 +79,6 @@ fi:
       removed: "Poistettiin %{removed}"
     provider:
       slack:
-        errors:
-          action_prohibited: "Botilla ei ole oikeuksia lähettää viestejä tälle kanavalle"
         status:
           header: |
             *Tämän kanavan säännöt*
@@ -88,8 +90,10 @@ fi:
         create:
           created: "Säännön luominen onnistui"
           updated: "Säännön päivittäminen onnistui"
+          error: "Virhe luotaessa tätä sääntöä."
         delete:
           success: "Säännön poistaminen onnistui"
+          error: "Sääntöä poistettaessa tapahtui virhe. Katso sääntöjen luettelo suorittamalla `/discourse status'."
         not_found:
           tag: "Tunnistetta *%{name}* ei löydy."
           category: "Aluetta *%{name}* ei löydy. Käytettävissä olevat alueet: *%{list}*"
@@ -151,8 +155,10 @@ fi:
         create:
           created: "Säännön luominen onnistui"
           updated: "Säännön päivittäminen onnistui"
+          error: "Virhe luotaessa tätä sääntöä."
         delete:
           success: "Säännön poistaminen onnistui"
+          error: "Sääntöä poistettaessa tapahtui virhe. Katso sääntöjen luettelo suorittamalla <code>/status</code>."
         not_found:
           tag: "Tunnistetta <b>%{name}</b> ei löydy."
           category: "Aluetta <b>%{name}</b> ei löydy. Käytettävissä olevat alueet: <b>%{list}</b>"
@@ -183,8 +189,10 @@ fi:
         create:
           created: "Säännön luominen onnistui"
           updated: "Säännön päivittäminen onnistui"
+          error: "Virhe luotaessa tätä sääntöä."
         delete:
           success: "Säännön poistaminen onnistui"
+          error: "Sääntöä poistettaessa tapahtui virhe. Katso sääntöjen luettelo suorittamalla `/discourse status'."
         not_found:
           tag: "Tunnistetta *%{name}* ei löydy."
           category: "Aluetta *%{name}* ei löydy. Käytettävissä olevat alueet: *%{list}*"
@@ -214,6 +222,8 @@ fi:
           ~~~quote
           %{excerpt}
           ~~~
+      flowdock:
+        message_title: "lähetti viestin"
       google:
         new_post: "Uusi viesti sivustolla %{site_title}"
         new_topic: "Uusi ketju sivustolla %{site_title}"

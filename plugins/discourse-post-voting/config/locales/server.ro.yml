@@ -5,13 +5,6 @@
 # https://translate.discourse.org/
 
 ro:
-  discourse_post_voting:
-    reviewables:
-      actions:
-        agree_and_suspend:
-          title: "Suspendă utilizatorul"
-        agree_and_silence:
-          title: "Redu la tăcere utilizatorul"
   post_action_types:
     vote:
       title: "Votează"
@@ -22,9 +15,11 @@ ro:
       reviewables:
         actions:
           agree_and_suspend:
-            title: "Suspendă utilizator"
+            title: "Suspendă Utilizator"
           agree_and_silence:
             title: "Reducere la tăcere utilizator"
+          disagree:
+            title: "Nu sunt de acord"
       reviewable_score_types:
         notify_user:
           comment_pm_body: "%{link}\n\n%{comment}"

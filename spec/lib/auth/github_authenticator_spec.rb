@@ -18,7 +18,6 @@ end
 
 RSpec.describe Auth::GithubAuthenticator do
   let(:authenticator) { described_class.new }
-
   fab!(:user)
 
   describe "after_authenticate" do
@@ -60,7 +59,7 @@ RSpec.describe Auth::GithubAuthenticator do
       ).to eq(user.username)
     end
 
-    it "uses the primary email when creating a user" do
+    it "should use primary email for new user creation over other available emails" do
       hash = {
         provider: "github",
         extra: {
@@ -82,7 +81,7 @@ RSpec.describe Auth::GithubAuthenticator do
       expect(result.email).to eq("john@example.com")
     end
 
-    it "handles a user with a different GitHub account already attached" do
+    it "should not error out if user already has a different old github account attached" do
       # There is a rare case where an end user had
       # 2 different github accounts and moved emails between the 2
 
@@ -114,7 +113,7 @@ RSpec.describe Auth::GithubAuthenticator do
       expect(UserAssociatedAccount.where(user_id: user.id).pluck(:provider_uid)).to eq(["1001"])
     end
 
-    it "does not authenticate existing users with an unverified email" do
+    it "will not authenticate for already existing users with an unverified email" do
       hash = {
         provider: "github",
         extra: {
@@ -160,7 +159,7 @@ RSpec.describe Auth::GithubAuthenticator do
       expect(result.email_valid).to eq(hash[:info][:email].present?)
     end
 
-    it "skips blocklisted domains for new users" do
+    it "will skip blocklisted domains for non existing users" do
       hash = {
         provider: "github",
         extra: {
@@ -187,7 +186,7 @@ RSpec.describe Auth::GithubAuthenticator do
       expect(result.email_valid).to eq(true)
     end
 
-    it "finds allowlisted domains for new users" do
+    it "will find allowlisted domains for non existing users" do
       hash = {
         provider: "github",
         extra: {
@@ -262,18 +261,32 @@ RSpec.describe Auth::GithubAuthenticator do
   end
 
   describe "avatar retrieval" do
-    it "queues the GitHub picture for its associated account" do
-      expect { authenticator.after_authenticate(auth_token_for(user)) }.to change {
-        Jobs::DownloadAvatarFromUrl.jobs.size
-      }.by(1)
+    let(:job_klass) { Jobs::DownloadAvatarFromUrl }
 
-      account = user.user_associated_accounts.find_by!(provider_name: "github")
+    context "when user has a custom avatar" do
+      fab!(:user_avatar) { Fabricate(:user_avatar, custom_upload: Fabricate(:upload)) }
+      fab!(:user_with_custom_avatar) { Fabricate(:user, user_avatar: user_avatar) }
 
-      expect(Jobs::DownloadAvatarFromUrl.jobs.last["args"].first).to include(
-        "url" => "https://avatars3.githubusercontent.com/u/#{user.username}",
-        "user_id" => user.id,
-        "associated_account_id" => account.id,
-      )
+      it "does not enqueue a download_avatar_from_url job" do
+        expect {
+          authenticator.after_authenticate(auth_token_for(user_with_custom_avatar))
+        }.to_not change(job_klass.jobs, :size)
+      end
+    end
+
+    context "when user does not have a custom avatar" do
+      it "enqueues a download_avatar_from_url job" do
+        expect { authenticator.after_authenticate(auth_token_for(user)) }.to change(
+          job_klass.jobs,
+          :size,
+        ).by(1)
+
+        job_args = job_klass.jobs.last["args"].first
+
+        expect(job_args["url"]).to eq("https://avatars3.githubusercontent.com/u/#{user.username}")
+        expect(job_args["user_id"]).to eq(user.id)
+        expect(job_args["override_gravatar"]).to eq(false)
+      end
     end
   end
 end

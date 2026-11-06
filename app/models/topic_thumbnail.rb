@@ -23,10 +23,7 @@ class TopicThumbnail < ActiveRecord::Base
         { max_width: max_width, max_height: max_height },
       )
 
-    needs_optimization = target_width < original.width && target_height < original.height
-    skip_animated = SiteSetting.animated_topic_thumbnails && original.animated?
-
-    if needs_optimization && !skip_animated
+    if target_width < original.width && target_height < original.height
       optimized = OptimizedImage.create_for(original, target_width, target_height)
     end
 
@@ -69,10 +66,10 @@ end
 # Table name: topic_thumbnails
 #
 #  id                 :bigint           not null, primary key
-#  max_height         :integer          not null
-#  max_width          :integer          not null
-#  optimized_image_id :bigint
 #  upload_id          :bigint           not null
+#  optimized_image_id :bigint
+#  max_width          :integer          not null
+#  max_height         :integer          not null
 #
 # Indexes
 #

@@ -14,12 +14,15 @@ da:
     chat_integration:
       menu_title: "Chat Integrationer"
       settings: "Indstillinger"
-      more_providers: "Flere"
+      no_providers: "Du skal aktivere nogle udbydere i udvidelses-indstillingerne"
       channels_with_errors: "Nogle kanaler for denne udbyder gav fejl sidste gang beskeder blev sendt. Klik på fejlikonet/fejlikonerne for at få mere at vide."
+      channel_exception: "Der opstod en ukendt fejl, da en meddelelse sidst blev sendt til denne kanal."
       group_message_template: "Meddelelser til: @%{name}"
-      choose_group: "(Vælg en gruppe)"
-      all_categories: "(Alle kategorier)"
-      all_tags: "(Alle tags)"
+      choose_group: "(vælg en gruppe)"
+      all_categories: "(alle kategorier)"
+      all_tags: "(alle mærker)"
+      create_rule: "Opret Regel"
+      create_channel: "Opret Kanal"
       delete_channel: "Slet"
       test_channel: "Test"
       edit_channel: "Rediger"
@@ -27,6 +30,7 @@ da:
       test_modal:
         title: "Send en testmeddelelse"
         topic: "Emne"
+        send: "Send Testmeddelelse"
         close: "Luk"
       type:
         normal: Normal
@@ -35,7 +39,7 @@ da:
       rule_table:
         filter: "Filter"
         category: "Kategori"
-        tags: "Tags"
+        tags: "Mærker"
         edit_rule: "Rediger"
         delete_rule: "Slet"
       edit_channel_modal:
@@ -46,7 +50,7 @@ da:
         filter: Filter
         category: Kategori
         group: Gruppe
-        tags: Tags
+        tags: Mærker
       provider:
         telegram:
           param:
@@ -97,15 +101,3 @@ da:
               label: Meddelelse
             url:
               label: URL
-            channel:
-              label: Kanal
-        send_chat_integration_message:
-          fields:
-            channel_name:
-              label: Kanal navn
-            provider:
-              label: Udbyder
-    discourse_workflows:
-      send_chat_integration_message:
-        channel_id: "Kanal"
-        message: "Meddelelse"

@@ -1,9 +1,10 @@
 import Component from "@glimmer/component";
 import { service } from "@ember/service";
 import { isPresent } from "@ember/utils";
-import DButton from "discourse/ui-kit/d-button";
+import DButton from "discourse/components/d-button";
 
 export default class ChatChannelLeaveBtn extends Component {
+  @service chat;
   @service site;
 
   get shouldRender() {
@@ -21,10 +22,10 @@ export default class ChatChannelLeaveBtn extends Component {
   <template>
     {{#if this.shouldRender}}
       <DButton
-        class="btn-flat chat-channel-leave-btn"
-        @action={{@onLeaveChannel}}
         @icon="xmark"
+        @action={{@onLeaveChannel}}
         @title={{this.leaveChatTitleKey}}
+        class="btn-flat chat-channel-leave-btn"
       />
     {{/if}}
   </template>

@@ -83,7 +83,7 @@ RSpec.describe DiscourseAi::Embeddings::Vector do
     end
 
     describe "#gen_bulk_reprensentations" do
-      fab!(:topic_2, :topic)
+      fab!(:topic_2) { Fabricate(:topic) }
       fab!(:post_2_1) { Fabricate(:post, post_number: 1, topic: topic_2) }
       fab!(:post_2_2) { Fabricate(:post, post_number: 2, topic: topic_2) }
 
@@ -128,8 +128,7 @@ RSpec.describe DiscourseAi::Embeddings::Vector do
           text2 = vdef.prepare_target_text(topic_2)
 
           stub_vector_mapping(text, expected_embedding_1)
-          # A 429 would pause the provider and skip requests that haven't started yet.
-          stub_vector_mapping(text2, expected_embedding_2, result_status: 400)
+          stub_vector_mapping(text2, expected_embedding_2, result_status: 429)
 
           vector.gen_bulk_reprensentations(Topic.where(id: [topic.id, topic_2.id]))
 
@@ -137,30 +136,11 @@ RSpec.describe DiscourseAi::Embeddings::Vector do
           expect(topics_schema.find_by_target(topic_2)).to be_nil
         end
       end
-
-      context "when the provider rate limits the batch" do
-        it "pauses the provider and skips the remaining embeddings" do
-          stub_vector_mapping(
-            vdef.prepare_target_text(topic),
-            expected_embedding_1,
-            result_status: 429,
-          )
-          topic_2_request =
-            stub_vector_mapping(vdef.prepare_target_text(topic_2), expected_embedding_2)
-
-          stub_const(described_class, :MAX_CONCURRENT_EMBEDDINGS, 1) do
-            vector.gen_bulk_reprensentations([topic, topic_2])
-          end
-
-          expect(DiscourseAi::Embeddings::ProviderHealth).to be_paused(vdef)
-          expect(topic_2_request).not_to have_been_requested
-        end
-      end
     end
   end
 
   context "with open_ai as the provider" do
-    fab!(:vdef, :open_ai_embedding_def)
+    fab!(:vdef) { Fabricate(:open_ai_embedding_def) }
 
     def stub_vector_mapping(text, expected_embedding, result_status: 200)
       EmbeddingsGenerationStubs.openai_service(
@@ -195,7 +175,7 @@ RSpec.describe DiscourseAi::Embeddings::Vector do
   end
 
   context "with hugging_face as the provider" do
-    fab!(:vdef, :embedding_definition)
+    fab!(:vdef) { Fabricate(:embedding_definition) }
 
     def stub_vector_mapping(text, expected_embedding, result_status: 200)
       EmbeddingsGenerationStubs.hugging_face_service(
@@ -209,7 +189,7 @@ RSpec.describe DiscourseAi::Embeddings::Vector do
   end
 
   context "with google as the provider" do
-    fab!(:vdef, :gemini_embedding_def)
+    fab!(:vdef) { Fabricate(:gemini_embedding_def) }
 
     def stub_vector_mapping(text, expected_embedding, result_status: 200)
       EmbeddingsGenerationStubs.gemini_service(
@@ -224,7 +204,7 @@ RSpec.describe DiscourseAi::Embeddings::Vector do
   end
 
   context "with cloudflare as the provider" do
-    fab!(:vdef, :cloudflare_embedding_def)
+    fab!(:vdef) { Fabricate(:cloudflare_embedding_def) }
 
     def stub_vector_mapping(text, expected_embedding, result_status: 200)
       EmbeddingsGenerationStubs.cloudflare_service(

@@ -13,9 +13,7 @@ cs:
   js:
     styleguide:
       title: "Průvodce styly"
-      example:
-        kind:
-          component: "Komponenta"
+      welcome: "Pro začátek, vyberte položku z menu po levé straně."
       categories:
         syntax: Syntaxe
         atoms: Atomy
@@ -32,28 +30,14 @@ cs:
           title: "Vstupy data/času"
         menus:
           title: "Menu"
-        context_menu:
-          actions:
-            duplicate: "Duplikovat"
-            delete: "Smazat"
         multi_select:
           title: "Vícenásobný výběr"
-        reorderable_list:
-          policies_pinned: "Připnuto"
-          policies_required: "Povinné"
-          table_field: "Pole"
-          table_type: "Typ"
-          cross_list_primary: "Primární"
         toasts:
-          title: "Toasty"
+          title: "Přípitky"
         font_scale:
           title: "Systém písem"
         colors:
           title: "Barvy"
-        dialog:
-          title: "Dialog"
-        drag_and_drop:
-          locked: "Uzamčeno"
         icons:
           title: "Ikony"
           full_list: "Podívejte se na úplný seznam Font Awesome Icons"
@@ -66,7 +50,7 @@ cs:
         categories:
           title: "Kategorie"
         bread_crumbs:
-          title: "Bread Crumbs"
+          title: "Strouhanka"
         navigation:
           title: "Navigace"
         navigation_bar:
@@ -76,7 +60,7 @@ cs:
         categories_list:
           title: "Seznam kategorií"
         topic_link:
-          title: "Odkaz na téma a stav"
+          title: "Odkaz na téma"
         topic_list_item:
           title: "Položka seznamu témat"
         topic_statuses:
@@ -85,6 +69,8 @@ cs:
           title: "Seznam témat"
         basic_topic_list:
           title: "Seznam základních témat"
+        footer_message:
+          title: "Zpráva v zápatí"
         signup_cta:
           title: "CTA registrace"
         topic_timer_info:
@@ -99,50 +85,24 @@ cs:
           title: "Seznam příspěvků"
           empty_example: "<PostList /> prázdný stav"
           populated_example: "<PostList /> zaplněný stav"
-        post_oneboxes:
-          title: "Oneboxy příspěvků"
         topic_map:
           title: "Mapa tématu"
         site_header:
           title: "Záhlaví webu"
-        more_topics:
-          title: "Více témat"
+        suggested_topics:
+          title: "Doporučená témata"
         post_menu:
           title: "Nabídka příspěvku"
-        roving_focus:
-          toolbar:
-            copy: "Kopírovat"
-          tags:
-            remove: "Odstranit %{tag}"
-            design: "Vzhled"
-          adjacent:
-            label: "Filtry"
-            field: "Vyhledávání"
-            placeholder: "Hledat témata"
-            open: "Otevřeno"
-            recent: "Nedávné"
-          listbox:
-            apple: "Apple"
-          combobox:
-            daily: "Denně"
-            weekly: "Týdně"
-            monthly: "Měsíčně"
-            never: "Nikdy"
-          tree:
-            components: "Komponenty"
-            select: "Vybrat"
         modal:
           title: "Modální"
-          header: "Název dialogu"
-          footer: "Zápatí dialogu"
+          header: "Modální název"
+          footer: "Modální zápatí"
         user_about:
           title: "O uživateli"
         header_icons:
           title: "Ikony záhlaví"
         spinners:
           title: "Spinnery"
-        otp:
-          title: "OTP"
         empty_state:
           title: "Prázdný stav"
         tooltips:

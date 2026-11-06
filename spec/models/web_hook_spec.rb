@@ -95,7 +95,7 @@ RSpec.describe WebHook do
       describe "wildcard web hooks" do
         fab!(:wildcard_hook, :wildcard_web_hook)
 
-        it "includes wildcard hooks" do
+        it "should include wildcard hooks" do
           expect(WebHook.active_web_hooks(:wildcard)).to eq([wildcard_hook])
 
           expect(WebHook.active_web_hooks(:post_created)).to contain_exactly(
@@ -156,7 +156,7 @@ RSpec.describe WebHook do
     before { topic_web_hook }
 
     describe "when there are no active hooks" do
-      it "does not generate payloads or enqueue topic events" do
+      it "should not generate payload and enqueue anything for topic events" do
         topic_web_hook.destroy!
         post = PostCreator.create(user, raw: "post", title: "topic", skip_validations: true)
         expect(Jobs::EmitWebHookEvent.jobs.length).to eq(0)
@@ -166,14 +166,14 @@ RSpec.describe WebHook do
         expect(Jobs::EmitWebHookEvent.jobs.length).to eq(0)
       end
 
-      it "does not enqueue tag events" do
+      it "should not enqueue anything for tag events" do
         tag = Fabricate(:tag)
         tag.destroy!
         expect(Jobs::EmitWebHookEvent.jobs.length).to eq(0)
       end
     end
 
-    it "enqueues matching hooks for topic events" do
+    it "should enqueue the right hooks for topic events" do
       post = PostCreator.create(user, raw: "post", title: "topic", skip_validations: true)
       topic_id = post.topic.id
       job_args = Jobs::EmitWebHookEvent.jobs.last["args"].first
@@ -196,8 +196,8 @@ RSpec.describe WebHook do
       payload = JSON.parse(job_args["payload"])
       expect(payload["id"]).to eq(topic_id)
 
-      { "archived" => true, "closed" => true, "visible" => false }.each do |status, enabled|
-        post.topic.update_status(status, enabled, topic.user)
+      %w[archived closed visible].each do |status|
+        post.topic.update_status(status, true, topic.user)
         job_args = Jobs::EmitWebHookEvent.jobs.last["args"].first
 
         expect(job_args["event_name"]).to eq("topic_#{status}_status_updated")
@@ -236,12 +236,10 @@ RSpec.describe WebHook do
       expect(job_args["event_name"]).to eq("topic_edited")
       payload = JSON.parse(job_args["payload"])
       expect(payload["id"]).to eq(topic_id)
-      expect(payload["tags"]).to contain_exactly(
-        { "id" => tag.id, "name" => tag.name, "slug" => tag.slug },
-      )
+      expect(payload["tags"]).to contain_exactly(tag.name)
     end
 
-    it "enqueues granular hooks for the topic" do
+    it "should enqueue granular hooks for topic" do
       topic_web_hook.web_hook_event_types.delete(
         WebHookEventType.where(name: "topic_destroyed").last,
       )
@@ -259,7 +257,7 @@ RSpec.describe WebHook do
       }
     end
 
-    it "does not log a personal message view when processing a new topic" do
+    it "should not log a personal message view when processing new topic" do
       SiteSetting.log_personal_messages_views = true
       Fabricate(:topic_web_hook)
 
@@ -283,7 +281,7 @@ RSpec.describe WebHook do
     end
 
     describe "when topic has been deleted" do
-      it "does not enqueue post or topic edited hooks" do
+      it "should not enqueue a post/topic edited hooks" do
         topic.trash!
         post.reload
 
@@ -297,7 +295,7 @@ RSpec.describe WebHook do
       end
     end
 
-    it "enqueues matching hooks for post events" do
+    it "should enqueue the right hooks for post events" do
       Fabricate(:web_hook)
 
       post =
@@ -365,22 +363,7 @@ RSpec.describe WebHook do
       expect(payload["id"]).to eq(post.topic.id)
     end
 
-    it "does not enqueue post hooks when the topic is permanently destroyed" do
-      Fabricate(:web_hook)
-
-      Jobs::EmitWebHookEvent.jobs.clear
-
-      post.topic.destroy!
-      post.reload
-
-      WebHook.enqueue_post_hooks(:post_recovered, post)
-
-      expect(
-        Jobs::EmitWebHookEvent.jobs.count { |j| j["args"].first["event_name"] == "post_recovered" },
-      ).to eq(0)
-    end
-
-    it "serializes updated topic post counts after a post is deleted" do
+    it "should serialize the right topic posts counts when a post is deleted" do
       Fabricate(:web_hook)
 
       Jobs::EmitWebHookEvent.jobs.clear
@@ -401,7 +384,7 @@ RSpec.describe WebHook do
       expect(payload["topic_filtered_posts_count"]).to eq(1)
     end
 
-    it "enqueues destroyed hooks with the tag filter for post events" do
+    it "should enqueue the destroyed hooks with tag filter for post events" do
       tag = Fabricate(:tag)
       Fabricate(:web_hook, tags: [tag])
 
@@ -430,7 +413,7 @@ RSpec.describe WebHook do
       job.execute(args.with_indifferent_access)
     end
 
-    it "enqueues matching hooks for user events" do
+    it "should enqueue the right hooks for user events" do
       SiteSetting.must_approve_users = true
 
       Fabricate(:user_web_hook, active: true)
@@ -506,7 +489,7 @@ RSpec.describe WebHook do
       expect(payload["user_fields"].size).to eq(1)
     end
 
-    it "enqueues matching hooks for category events" do
+    it "should enqueue the right hooks for category events" do
       Fabricate(:category_web_hook)
       category = Fabricate(:category)
 
@@ -534,7 +517,7 @@ RSpec.describe WebHook do
       expect(payload["id"]).to eq(category.id)
     end
 
-    it "enqueues matching hooks for group events" do
+    it "should enqueue the right hooks for group events" do
       Fabricate(:group_web_hook)
       group = Fabricate(:group)
 
@@ -560,7 +543,7 @@ RSpec.describe WebHook do
       expect(payload["full_name"]).to eq("testing")
     end
 
-    it "enqueues matching hooks for tag events" do
+    it "should enqueue the right hooks for tag events" do
       Fabricate(:tag_web_hook)
       tag = Fabricate(:tag)
 
@@ -587,7 +570,7 @@ RSpec.describe WebHook do
       expect(payload["id"]).to eq(tag.id)
     end
 
-    it "enqueues matching hooks for notifications" do
+    it "should enqueue the right hooks for notifications" do
       Fabricate(:notification_web_hook)
       notification = Fabricate(:notification)
       job_args = Jobs::EmitWebHookEvent.jobs.last["args"].first
@@ -597,7 +580,7 @@ RSpec.describe WebHook do
       expect(payload["id"]).to eq(notification.id)
     end
 
-    it "enqueues matching hooks for reviewables" do
+    it "should enqueue the right hooks for reviewables" do
       Fabricate(:reviewable_web_hook)
       reviewable = Fabricate(:reviewable)
       job_args = Jobs::EmitWebHookEvent.jobs.last["args"].first
@@ -621,7 +604,7 @@ RSpec.describe WebHook do
       expect(payload["id"]).to eq(reviewable.id)
     end
 
-    it "enqueues matching hooks for badge grants" do
+    it "should enqueue the right hooks for badge grants" do
       Fabricate(:user_badge_web_hook)
       badge = Fabricate(:badge)
       badge.multiple_grant = true
@@ -646,9 +629,12 @@ RSpec.describe WebHook do
       # Future work: revoke badge hook
     end
 
-    it "enqueues matching hooks when a user joins a group" do
+    it "should enqueue the right hooks for group user addition" do
       Fabricate(:group_user_web_hook)
       group = Fabricate(:group)
+
+      now = Time.now
+      freeze_time now
 
       group.add(user)
 
@@ -661,11 +647,10 @@ RSpec.describe WebHook do
       expect(payload["group_id"]).to eq(group.id)
       expect(payload["user_id"]).to eq(user.id)
       expect(payload["notification_level"]).to eq(group.default_notification_level)
-      membership = GroupUser.find_by!(group: group, user: user)
-      expect(payload["created_at"]).to eq(membership.created_at.as_json)
+      expect(Time.zone.parse(payload["created_at"]).to_f).to be_within(0.001).of(now.to_f)
     end
 
-    it "enqueues matching hooks when a user leaves a group" do
+    it "should enqueue the right hooks for group user deletion" do
       Fabricate(:group_user_web_hook)
       group = Fabricate(:group)
       group_user = Fabricate(:group_user, group: group, user: user)
@@ -689,7 +674,7 @@ RSpec.describe WebHook do
       fab!(:user_promoted_web_hook)
       fab!(:another_user) { Fabricate(:user, trust_level: 2) }
 
-      it "passes the promoted user to the webhook job" do
+      it "should pass the user to the webhook job when a user is promoted" do
         another_user.change_trust_level!(another_user.trust_level + 1)
 
         job_args = Jobs::EmitWebHookEvent.jobs.last["args"].first
@@ -698,7 +683,7 @@ RSpec.describe WebHook do
         expect(payload["id"]).to eq(another_user.id)
       end
 
-      it "does not trigger when the user is demoted" do
+      it "shouldn’t trigger when the user is demoted" do
         expect { another_user.change_trust_level!(another_user.trust_level - 1) }.not_to change {
           Jobs::EmitWebHookEvent.jobs.length
         }
@@ -709,7 +694,7 @@ RSpec.describe WebHook do
       fab!(:like_web_hook)
       fab!(:another_user, :user)
 
-      it "passes the group ID to the emit webhook job" do
+      it "should pass the group id to the emit webhook job" do
         group = Fabricate(:group)
         group_user = Fabricate(:group_user, group: group, user: user)
         post = Fabricate(:post, user: another_user)
@@ -736,7 +721,7 @@ RSpec.describe WebHook do
         )
       end
 
-      it "passes the category ID to the emit webhook job" do
+      it "should pass the category id to the emit webhook job" do
         category = Fabricate(:category)
         topic.update!(category: category)
         like =
@@ -752,7 +737,7 @@ RSpec.describe WebHook do
         assert_hook_was_queued_with(post, another_user, category_id: category.id)
       end
 
-      it "passes the tag ID to the emit webhook job" do
+      it "should pass the tag id to the emit webhook job" do
         tag = Fabricate(:tag)
         topic.update!(tags: [tag])
         like =

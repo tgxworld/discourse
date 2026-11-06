@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-RSpec.describe "AI Post helper" do
-  fab!(:user, :admin)
-  fab!(:non_member_group, :group)
+RSpec.describe "AI Post helper", type: :system do
+  fab!(:user) { Fabricate(:admin) }
+  fab!(:non_member_group) { Fabricate(:group) }
   fab!(:topic)
   fab!(:category)
-  fab!(:category_2, :category)
+  fab!(:category_2) { Fabricate(:category) }
   fab!(:post) do
     Fabricate(
       :post,
@@ -30,12 +30,11 @@ RSpec.describe "AI Post helper" do
   end
   let(:topic_page) { PageObjects::Pages::Topic.new }
   let(:suggestion_menu) { PageObjects::Components::AiSplitTopicSuggester.new }
-
-  fab!(:video, :tag)
-  fab!(:music, :tag)
-  fab!(:cloud, :tag)
-  fab!(:feedback, :tag)
-  fab!(:review, :tag)
+  fab!(:video) { Fabricate(:tag) }
+  fab!(:music) { Fabricate(:tag) }
+  fab!(:cloud) { Fabricate(:tag) }
+  fab!(:feedback) { Fabricate(:tag) }
+  fab!(:review) { Fabricate(:tag) }
   fab!(:embedding_definition)
 
   before do
@@ -126,8 +125,9 @@ RSpec.describe "AI Post helper" do
         response =
           Tag
             .take(5)
-            .map { |t| { id: t.id, name: t.name, score: rand(0.0...45.0) } }
-            .sort_by { |h| h[:score] }
+            .pluck(:name)
+            .map { |s| { name: s, score: rand(0.0...45.0) } }
+            .sort { |h| h[:score] }
         DiscourseAi::AiHelper::SemanticCategorizer.any_instance.stubs(:tags).returns(response)
 
         open_move_topic_modal

@@ -3,22 +3,24 @@ import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { getOwner } from "@ember/owner";
 import { service } from "@ember/service";
-import DToggleSwitch from "discourse/ui-kit/d-toggle-switch";
+import DToggleSwitch from "discourse/components/d-toggle-switch";
+import { optionalRequire } from "discourse/lib/utilities";
 import Channel from "discourse/plugins/chat/discourse/components/chat/composer/channel";
 import ChatFabricators from "discourse/plugins/chat/discourse/lib/fabricators";
 import { CHANNEL_STATUSES } from "discourse/plugins/chat/discourse/models/chat-channel";
-import StyleguideComponent from "discourse/plugins/styleguide/discourse/components/styleguide/component" with {
-  discourseImport: "optional",
-};
-import Controls from "discourse/plugins/styleguide/discourse/components/styleguide/controls" with {
-  discourseImport: "optional",
-};
-import Row from "discourse/plugins/styleguide/discourse/components/styleguide/controls/row" with {
-  discourseImport: "optional",
-};
-import StyleguideExample from "discourse/plugins/styleguide/discourse/components/styleguide-example" with {
-  discourseImport: "optional",
-};
+
+const StyleguideComponent = optionalRequire(
+  "discourse/plugins/styleguide/discourse/components/styleguide/component"
+);
+const Controls = optionalRequire(
+  "discourse/plugins/styleguide/discourse/components/styleguide/controls"
+);
+const Row = optionalRequire(
+  "discourse/plugins/styleguide/discourse/components/styleguide/controls/row"
+);
+const StyleguideExample = optionalRequire(
+  "discourse/plugins/styleguide/discourse/components/styleguide-example"
+);
 
 export default class ChatStyleguideChatComposer extends Component {
   @service chatChannelComposer;

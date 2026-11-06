@@ -6,7 +6,7 @@ import selectKit from "discourse/tests/helpers/select-kit-helper";
 import AutomationField from "discourse/plugins/automation/admin/components/automation-field";
 import AutomationFabricators from "discourse/plugins/automation/admin/lib/fabricators";
 
-module("Integration | Component | DaTagsField", function (hooks) {
+module("Integration | Component | da-tags-field", function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function () {
@@ -14,6 +14,8 @@ module("Integration | Component | DaTagsField", function (hooks) {
   });
 
   test("set value", async function (assert) {
+    const self = this;
+
     this.field = new AutomationFabricators(getOwner(this)).field({
       component: "tags",
     });
@@ -21,19 +23,21 @@ module("Integration | Component | DaTagsField", function (hooks) {
     await render(
       <template>
         <AutomationField
-          @automation={{this.automation}}
-          @field={{this.field}}
+          @automation={{self.automation}}
+          @field={{self.field}}
         />
       </template>
     );
 
     await selectKit().expand();
-    await selectKit().selectRowByName("monkey");
+    await selectKit().selectRowByValue("monkey");
 
     assert.deepEqual(this.field.metadata.value, ["monkey"]);
   });
 
   test("empty tags", async function (assert) {
+    const self = this;
+
     this.field = new AutomationFabricators(getOwner(this)).field({
       component: "tags",
     });
@@ -41,17 +45,17 @@ module("Integration | Component | DaTagsField", function (hooks) {
     await render(
       <template>
         <AutomationField
-          @automation={{this.automation}}
-          @field={{this.field}}
+          @automation={{self.automation}}
+          @field={{self.field}}
         />
       </template>
     );
     await selectKit().expand();
-    await selectKit().selectRowByName("monkey");
+    await selectKit().selectRowByValue("monkey");
 
     assert.deepEqual(this.field.metadata.value, ["monkey"]);
 
-    await selectKit().deselectItemByName("monkey");
+    await selectKit().deselectItemByValue("monkey");
 
     assert.strictEqual(this.field.metadata.value, undefined);
   });

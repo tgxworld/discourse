@@ -1,18 +1,18 @@
-import Component from "@glimmer/component";
-import GroupAssignedMenuItem from "../../components/group-assigned-menu-item.gjs";
+/* eslint-disable ember/no-classic-components */
+import Component from "@ember/component";
+import { classNames, tagName } from "@ember-decorators/component";
+import GroupAssignedMenuItem from "../../components/group-assigned-menu-item";
 
+@tagName("li")
+@classNames("group-reports-nav-item-outlet", "assigned-topic-list")
 export default class AssignedTopicList extends Component {
   static shouldRender(args, context) {
     return (
-      context.currentUser?.can_assign_globally &&
+      context.currentUser?.can_assign &&
       args.group.can_show_assigned_tab &&
-      args.group.can_see_members
+      args.group.assignment_count > 0
     );
   }
 
-  <template>
-    <li class="group-reports-nav-item-outlet assigned-topic-list" ...attributes>
-      <GroupAssignedMenuItem @group={{@group}} />
-    </li>
-  </template>
+  <template><GroupAssignedMenuItem @group={{this.group}} /></template>
 }

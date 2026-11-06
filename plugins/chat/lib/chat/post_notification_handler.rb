@@ -19,7 +19,9 @@ module Chat
       return false if post.topic.private_message?
 
       quoted_users = extract_quoted_users(post)
-      quoted_users = quoted_users.where.not(id: @notified_users) if @notified_users.present?
+      if @notified_users.present?
+        quoted_users = quoted_users.where("users.id NOT IN (?)", @notified_users)
+      end
 
       opts = { user_id: post.user.id, display_username: post.user.username }
       quoted_users.each do |user|

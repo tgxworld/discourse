@@ -67,10 +67,9 @@ $SQRT2: 1.4142135623730951;
 // @param {Number} $x
 // @param {Number} $exp
 @function ldexp($x, $exp) {
-  $b: 2;
+  $b: if($exp >= 0, 2, 1 * 0.5);
 
   @if $exp < 0 {
-    $b: 0.5;
     $exp: $exp * -1;
   }
 
@@ -136,11 +135,7 @@ $SQRT2: 1.4142135623730951;
     $base: $base * $base;
   }
 
-  @if $s != 0 {
-    $r: math.div(1, $r);
-  }
-
-  @return $r;
+  @return if($s != 0, math.div(1, $r), $r);
 }
 
 // Returns E^x, where x is the argument, and E is Euler's constant, the base of the natural logarithms.

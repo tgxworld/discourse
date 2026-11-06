@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "Message user info" do
+RSpec.describe "Message user info", type: :system do
   fab!(:current_user, :user)
   fab!(:channel_1, :category_channel)
 
@@ -74,7 +74,7 @@ RSpec.describe "Message user info" do
 
   context "with large time difference between messages" do
     fab!(:message_1) do
-      Fabricate(:chat_message, chat_channel: channel_1, user: current_user, created_at: 1.day.ago)
+      Fabricate(:chat_message, chat_channel: channel_1, user: current_user, created_at: 1.days.ago)
     end
     fab!(:message_2) { Fabricate(:chat_message, chat_channel: channel_1, user: current_user) }
 

@@ -1,6 +1,5 @@
 .c-user-thread {
   display: flex;
-  align-items: center;
   gap: 1rem;
   margin-inline: 0;
   padding: 0.5rem 1.5rem;
@@ -18,7 +17,7 @@
 
   .c-user-thread__link {
     display: grid;
-    column-gap: 0.75em;
+    grid-column-gap: 0.75em;
     grid-template-columns: 1fr auto;
     margin-inline: 0;
     width: 100%;
@@ -29,7 +28,6 @@
   }
 
   .avatar-flair.--threads {
-    --avatar-flair-size: auto;
     position: absolute;
     top: -4px;
     right: -3px;
@@ -39,12 +37,6 @@
     line-height: var(--line-height-small);
     border: 2px solid var(--secondary-very-high);
     color: var(--primary-high);
-
-    // sized by its padding rather than a fixed box
-    .d-icon {
-      width: 1em;
-      height: 1em;
-    }
   }
 
   .chat__thread-title-container {

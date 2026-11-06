@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-describe "User preferences | Navigation menu" do
+describe "User preferences | Navigation menu", type: :system do
   fab!(:user)
   let(:everyone_group) { Group[:everyone] }
   let(:user_preferences_page) { PageObjects::Pages::UserPreferences.new }
 
   describe "when visiting the user's preferences page" do
-    it "allows horizontal navigation scrolling in a narrow window" do
-      resize_window(width: 650) do # narrow enough to hide some links, but higher than 640px so we don't trigger mobile styling
+    it "should allow the user to scroll the horizontal navigation menu when window width is narrow" do
+      resize_window(width: 400) do
         sign_in(user)
 
         user_preferences_page.visit(user)

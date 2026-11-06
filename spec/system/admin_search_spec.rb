@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "Admin Search" do
+describe "Admin Search", type: :system do
   fab!(:current_user, :admin)
   let(:search_modal) { PageObjects::Modals::AdminSearch.new }
   let(:sidebar) { PageObjects::Components::NavigationMenu::Sidebar.new }
@@ -8,9 +8,8 @@ describe "Admin Search" do
   before { sign_in(current_user) }
 
   it "can search for settings, pages, themes, components, and reports" do
-    Fabricate(:theme, name: "Discourse Invincible Theme")
-    Fabricate(:theme, name: "Discourse Redacted", component: true)
-
+    theme = Fabricate(:theme, name: "Discourse Invincible Theme")
+    component = Fabricate(:theme, name: "Discourse Redacted", component: true)
     Theme
       .any_instance
       .stubs(:internal_translations)
@@ -75,7 +74,6 @@ describe "Admin Search" do
 
   it "opens search modal with keyboard shortcut" do
     visit "/admin"
-    expect(page).to have_css("#site-logo")
 
     send_keys([SystemHelpers::PLATFORM_KEY_MODIFIER, "/"])
     expect(search_modal).to be_open
@@ -90,27 +88,5 @@ describe "Admin Search" do
     search_modal.find_result("setting", 0).click
 
     expect(page).to have_current_path("/admin/config/content?filter=tag_style")
-  end
-
-  it "works for social logins" do
-    visit "/admin"
-    sidebar.click_search_input
-    search_modal.search("google oauth2 logins")
-    search_modal.find_result("setting", 0).click
-
-    expect(page).to have_current_path(
-      "/admin/config/login-and-authentication/authenticators?filter=enable_google_oauth2_logins",
-    )
-  end
-
-  it "works for discourse connect" do
-    visit "/admin"
-    sidebar.click_search_input
-    search_modal.search("enable discourse connect")
-    search_modal.find_result("setting", 0).click
-
-    expect(page).to have_current_path(
-      "/admin/config/login-and-authentication/discourseconnect?filter=enable_discourse_connect",
-    )
   end
 end

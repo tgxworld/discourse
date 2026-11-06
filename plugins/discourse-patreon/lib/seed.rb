@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-module Patreon
+module ::Patreon
   class Seed
     def self.seed_content!
       flair =
         File.open(
-          "#{Rails.root.join("plugins/discourse-patreon/public/images/patreon-logomark-color-on-white.png")}",
+          "#{Rails.root}/plugins/discourse-patreon/public/images/patreon-logomark-color-on-white.png",
         )
       flair_upload =
         UploadCreator.new(flair, "patreon-flair.png").create_for(Discourse.system_user.id)
@@ -43,7 +43,7 @@ module Patreon
       badge.save!
 
       basic_filter = { default_group.id.to_s => ["0"] }
-      Patreon.set("filters", basic_filter)
+      ::Patreon.set("filters", basic_filter)
     end
   end
 end

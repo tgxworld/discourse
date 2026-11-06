@@ -1,23 +1,10 @@
 import { cached, tracked } from "@glimmer/tracking";
-import { trackedArray } from "@ember/reactive/collections";
-import {
-  isRateLimitError,
-  MAX_RATE_LIMIT_RETRY_SECONDS,
-  rateLimitWaitSeconds,
-} from "discourse/lib/ajax-error";
-import { removeValueFromArray } from "discourse/lib/array-tools";
+import { TrackedArray } from "@ember-compat/tracked-built-ins";
 import { getOwnerWithFallback } from "discourse/lib/get-owner";
-import getURL from "discourse/lib/get-url";
 import discourseLater from "discourse/lib/later";
 import { generateCookFunction, parseMentions } from "discourse/lib/text";
-import { autoTrackedArray } from "discourse/lib/tracked-tools";
 import Bookmark from "discourse/models/bookmark";
 import User from "discourse/models/user";
-import {
-  NETWORK_ERROR,
-  RATE_LIMIT_COOLDOWN_ERROR,
-  RATE_LIMIT_ERROR,
-} from "discourse/plugins/chat/discourse/lib/chat-constants";
 import transformAutolinks from "discourse/plugins/chat/discourse/lib/transform-auto-links";
 import ChatMessageReaction from "discourse/plugins/chat/discourse/models/chat-message-reaction";
 
@@ -44,6 +31,7 @@ export default class ChatMessage {
   @tracked createdAt;
   @tracked uploads;
   @tracked excerpt;
+  @tracked reactions;
   @tracked reviewableId;
   @tracked user;
   @tracked inReplyTo;
@@ -63,11 +51,6 @@ export default class ChatMessage {
   @tracked manager;
   @tracked deletedById;
   @tracked streaming;
-  @tracked pinned;
-  @tracked isAction;
-  @tracked blocks;
-  @tracked aiLlmName;
-  @autoTrackedArray reactions;
 
   @tracked _deletedAt;
   @tracked _cooked;
@@ -106,21 +89,27 @@ export default class ChatMessage {
         ? ChatMessage.create(channel, args.in_reply_to ?? args.replyToMsg)
         : null);
     this.reactions = this.#initChatMessageReactionModel(args.reactions);
-    this.uploads = trackedArray(args.uploads || []);
+    this.uploads = new TrackedArray(args.uploads || []);
     this.user = this.#initUserModel(args.user);
     this.bookmark = args.bookmark ? Bookmark.create(args.bookmark) : null;
     this.mentionedUsers = this.#initMentionedUsers(args.mentioned_users);
     this.blocks = args.blocks;
-    this.aiLlmName = args.ai_llm_name;
-    this.threadTitle = args.thread_title;
-    this.threadId = args.thread_id;
 
     if (args.thread) {
       this.thread = args.thread;
     }
+  }
 
-    this.pinned = args.pinned ?? false;
-    this.isAction = args.isAction ?? args.is_action ?? false;
+  get persisted() {
+    return !!this.id && !this.staged;
+  }
+
+  get replyable() {
+    return !this.staged && !this.error;
+  }
+
+  get editable() {
+    return !this.staged && !this.error;
   }
 
   get thread() {
@@ -160,26 +149,12 @@ export default class ChatMessage {
     }
   }
 
-  get url() {
-    if (this.threadId) {
-      return getURL(
-        `/chat/c/-/${this.channel.id}/t/${this.threadId}/${this.id}`
-      );
+  async cook() {
+    if (this.isDestroyed || this.isDestroying) {
+      return;
     }
-
-    return getURL(`/chat/c/-/${this.channel.id}/${this.id}`);
-  }
-
-  get persisted() {
-    return !!this.id && !this.staged;
-  }
-
-  get replyable() {
-    return !this.staged && !this.error;
-  }
-
-  get editable() {
-    return !this.staged && !this.error;
+    await this.#ensureCookFunctionInitialized();
+    this.cooked = ChatMessage.cookFunction(this.message);
   }
 
   get read() {
@@ -197,67 +172,24 @@ export default class ChatMessage {
 
   @cached
   get previousMessage() {
-    return this.manager?.messages?.[this.index - 1];
+    return this.manager?.messages?.objectAt?.(this.index - 1);
   }
 
   @cached
   get nextMessage() {
-    return this.manager?.messages?.[this.index + 1];
-  }
-
-  get #markdownOptions() {
-    const site = getOwnerWithFallback(this).lookup("service:site");
-    return {
-      featuresOverride:
-        site.markdown_additional_options?.chat?.limited_pretty_text_features,
-      markdownItRules:
-        site.markdown_additional_options?.chat
-          ?.limited_pretty_text_markdown_rules,
-      hashtagTypesInPriorityOrder:
-        site.hashtag_configurations?.["chat-composer"],
-      hashtagIcons: site.hashtag_icons,
-      oneboxLimit: site.markdown_additional_options?.chat?.onebox_limit,
-    };
-  }
-
-  async cook() {
-    if (this.isDestroying) {
-      return;
-    }
-    await this.#ensureCookFunctionInitialized();
-    this.cooked = ChatMessage.cookFunction(this.message);
+    return this.manager?.messages?.objectAt?.(this.index + 1);
   }
 
   highlight() {
     this.highlighted = true;
 
     discourseLater(() => {
-      if (this.isDestroying) {
+      if (this.isDestroying || this.isDestroyed) {
         return;
       }
 
       this.highlighted = false;
     }, 2000);
-  }
-
-  setSendError(error) {
-    if (!isRateLimitError(error)) {
-      this.error = error.jqXHR?.responseJSON?.errors?.[0] ?? NETWORK_ERROR;
-      return;
-    }
-
-    this.error = RATE_LIMIT_COOLDOWN_ERROR;
-
-    discourseLater(
-      () => {
-        if (this.isDestroying || this.isDestroyed) {
-          return;
-        }
-
-        this.error = RATE_LIMIT_ERROR;
-      },
-      Math.min(rateLimitWaitSeconds(error), MAX_RATE_LIMIT_RETRY_SECONDS) * 1000
-    );
   }
 
   incrementVersion() {
@@ -331,7 +263,7 @@ export default class ChatMessage {
         if (selfReaction) {
           existingReaction.reacted = true;
         }
-        existingReaction.users.push(actor);
+        existingReaction.users.pushObject(actor);
       } else {
         const existingUserReaction = existingReaction.users.find(
           (user) => user.id === actor.id
@@ -346,15 +278,15 @@ export default class ChatMessage {
         }
 
         if (existingReaction.count === 1) {
-          removeValueFromArray(this.reactions, existingReaction);
+          this.reactions.removeObject(existingReaction);
         } else {
           existingReaction.count = existingReaction.count - 1;
-          removeValueFromArray(existingReaction.users, existingUserReaction);
+          existingReaction.users.removeObject(existingUserReaction);
         }
       }
     } else {
       if (action === "add") {
-        this.reactions.push(
+        this.reactions.pushObject(
           ChatMessageReaction.create({
             count: 1,
             emoji,
@@ -374,6 +306,20 @@ export default class ChatMessage {
     const cookFunction = await generateCookFunction(this.#markdownOptions);
     ChatMessage.cookFunction = (raw) => {
       return transformAutolinks(cookFunction(raw));
+    };
+  }
+
+  get #markdownOptions() {
+    const site = getOwnerWithFallback(this).lookup("service:site");
+    return {
+      featuresOverride:
+        site.markdown_additional_options?.chat?.limited_pretty_text_features,
+      markdownItRules:
+        site.markdown_additional_options?.chat
+          ?.limited_pretty_text_markdown_rules,
+      hashtagTypesInPriorityOrder:
+        site.hashtag_configurations?.["chat-composer"],
+      hashtagIcons: site.hashtag_icons,
     };
   }
 

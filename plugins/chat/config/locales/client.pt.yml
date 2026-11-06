@@ -16,11 +16,6 @@ pt:
           actions:
             chat_auto_remove_membership: "Assinaturas removidas automaticamente dos canais"
     chat:
-      edit_category:
-        channel: "Canal"
-        description: "Descrição"
-        actions: "Ações"
-        settings: "Configurações"
       deleted_chat_username: eliminado
       dates:
         yesterday: "Ontem"
@@ -32,9 +27,6 @@ pt:
       cancel: "Cancelar"
       cancel_reply: "Cancelar resposta"
       chat_channels: "Canais"
-      pinned_bar:
-        title: "Fixado"
-      pinned: "Fixado"
       browse_all_channels: "Navegar todos os canais"
       move_to_channel:
         title: "Mover mensagens para o canal"
@@ -49,7 +41,6 @@ pt:
         delete_channel: "Apagar canal"
         join_channel: "Aderir ao canal"
         leave_channel: "Sair do canal"
-        notification_settings_context: "Notificações"
         join: "Entrar"
         leave: "Sair"
         save_label:
@@ -69,7 +60,7 @@ pt:
         title: "Apagar canal"
       channels_list_popup:
         browse: "Navegar canais"
-        create: "Novo canal..."
+        create: "Novo canal"
       close: "Fechar"
       remove: "Remover"
       collapse: "Colapsar gaveta de Chat"
@@ -79,6 +70,9 @@ pt:
       edited: "editado"
       muted: "silenciado"
       joined: "juntou-se"
+      empty_state:
+        direct_message_cta: "Iniciar um Chat pessoal"
+        direct_message: "Você também pode iniciar um Chat pessoal com um ou mais utilizadores."
       email_frequency:
         never: "Nunca"
       header_indicator_preference:
@@ -87,6 +81,8 @@ pt:
       join: "Entrar"
       last_visit: "última visita"
       no_public_channels_cta: "Navegar canais"
+      only_chat_push_notifications:
+        title: "Enviar notificações push apenas para chat"
       reply: "Responder"
       edit: "Editar"
       copy_link: "Copiar link"
@@ -94,6 +90,7 @@ pt:
       retry_staged_message:
         title: "Erro de rede"
         action: "Enviar novamente?"
+      unreliable_network: "A rede não é confiável. Enviar mensagens e salvar rascunhos poderá não funcionar"
       bookmark_message: "Adicionar Marcador"
       bookmark_message_edit: "Editar Favorito"
       restore: "Restaurar mensagem apagada"
@@ -106,6 +103,8 @@ pt:
         title: "Som de notificação de Chat na área de trabalho"
       sounds:
         none: "Nenhuma"
+        bell: "Sino"
+      exit: "retroceder"
       channel_status:
         archive_failed_no_topic: "O canal de arquivo falhou. %{completed}/%{total} mensagens foram arquivadas, o tópico de destino não foi criado. Clica Tentar de novo para tentar completar o arquivo."
         closed: "Fechado"
@@ -116,13 +115,9 @@ pt:
         filter_all: Tudo
         filter_open: Abrir
         filter_closed: Fechado
-        filter_joined_all: "Todos"
-        filter_joined_joined: "Juntou-se"
       chat_message_separator:
         today: Hoje
         yesterday: Ontem
-      search_view:
-        filter_placeholder: Pesquisar mensagens
       about_view:
         title: Título
         name: Nome
@@ -132,28 +127,23 @@ pt:
         tabs:
           members: Membros
           settings: Configurações
-          search: Procurar
         remove_member: "Remover"
       new_message_modal:
         no_items: "Sem itens"
         filter: "Filtrar"
       channel_edit_name_slug_modal:
         input_placeholder: Adicionar um nome
+        slug: Slug do canal (opcional)
       direct_message_creator:
         title: Nova Mensagem
         prefix: "Para:"
-      channel:
-        preview_card:
-          log_in: "Efetuar login"
       create_channel:
-        description: "Descrição"
+        slug: "Slug do canal (opcional)"
         title: "Novo canal"
         type: "Tipo"
         types:
           category: "Categoria"
           topic: "Tópico"
-      reviewable:
-        message_in_channel: "Canal"
       composer:
         italic_text: "texto em itálico"
         bold_text: "texto em negrito"
@@ -177,21 +167,8 @@ pt:
         category_label: "Categoria"
         history_label: "Histórico"
         members_label: "Membros"
-      search:
-        short_title: Procurar
-        no_results: "Não foi encontrado nenhum resultado"
-        sort:
-          relevance: "Relevância"
-          latest: "Mais Recente"
-      direct_messages:
-        leave: "Sair do canal"
-        close: "Fechar canal"
       channel_list:
         title: "Canais"
-        options:
-          filter: "Filtrar"
-        filter:
-          mentions: "Menções"
       incoming_webhooks:
         back: "Retroceder"
         description: "Descrição"
@@ -253,21 +230,3 @@ pt:
       types:
         reviewable_chat_message:
           title: "Mensagem sinalizada em conversa"
-    discourse_workflows:
-      chat_message_created:
-        channel_id: "Canal"
-      send_chat_message:
-        targets:
-          channel: "Canal"
-        channel_id: "Canal"
-        message: "Mensagem"
-        actor_username: "Remetente"
-      chat_approval:
-        message: "Mensagem"
-        buttons: "Botões"
-        value: "Valor"
-        style: "Estilo"
-        style_default: "Predefinição"
-        style_primary: "Principal"
-        icon: "Ícone"
-        channel_id: "Canal"

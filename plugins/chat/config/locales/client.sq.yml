@@ -40,11 +40,6 @@ sq:
       chat_channels_count: "Kanalet e bisedës"
       chat_users_count: "Përdoruesit e bisedës"
     chat:
-      edit_category:
-        tab_title: "Biseda"
-        description: "Përshkrimi"
-        actions: "Veprimet"
-        settings: "Rregullimet"
       text_copied: Teksti u kopjua në memo
       link_copied: Linku u kopjua në memo
       back_to_forum: "Forumi"
@@ -57,13 +52,9 @@ sq:
       bot: "bot"
       create: "Krijo"
       cancel: "Anulo"
-      pinned_bar:
-        title: "E përzgjedhur"
-      pinned: "E përzgjedhur"
       channel_settings:
         edit: "Redakto"
         add: "Shto"
-        notification_settings_context: "Njoftimet"
       close: "Mbyll"
       remove: "Hiq"
       delete: "Fshij"
@@ -82,19 +73,16 @@ sq:
       save: "Ruaj"
       sounds:
         none: "Asnjë"
+      exit: "kthehu mbrapa"
       channel_status:
         open: "Fillo"
       browse:
         back: "Kthehu mbrapa"
         filter_all: Të Gjithë
         filter_open: Fillo
-        filter_joined_all: "Të gjitha"
-        filter_joined_joined: "Anëtarësuar"
       chat_message_separator:
         today: Sot
         yesterday: Dje
-      search_view:
-        filter_placeholder: Kërko mesazhet
       about_view:
         title: Titulli
         name: Emri
@@ -104,18 +92,13 @@ sq:
         tabs:
           members: Anëtarë
           settings: Rregullimet
-          search: Kërko
         remove_member: "Hiq"
       new_message_modal:
         filter: "Filtro"
       direct_message_creator:
         title: Mesazh i ri
         prefix: "Për:"
-      channel:
-        preview_card:
-          log_in: "Identifikohu"
       create_channel:
-        description: "Përshkrimi"
         type: "Lloji"
         types:
           category: "Kategori"
@@ -137,17 +120,6 @@ sq:
         category_label: "Kategori"
         history_label: "Historia"
         members_label: "Anëtarë"
-      search:
-        short_title: Kërko
-        no_results: "Nuk u gjet asnjë rezultat"
-        sort:
-          relevance: "Rëndësia"
-          latest: "Më të fundit"
-      channel_list:
-        options:
-          filter: "Filtro"
-        filter:
-          mentions: "Përmendje"
       incoming_webhooks:
         back: "Kthehu mbrapa"
         description: "Përshkrimi"
@@ -195,14 +167,3 @@ sq:
           fields:
             message:
               label: Mesazh
-    discourse_workflows:
-      nodes:
-        "action:send_chat_message": "Dërgoi një kanal mesazhi."
-      send_chat_message:
-        message: "Mesazh"
-      chat_approval:
-        message: "Mesazh"
-        value: "Vlera"
-        style_default: "Paracaktuar"
-        style_primary: "Kryesor"
-        icon: "Ikonë"

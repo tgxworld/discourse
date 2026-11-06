@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "Anonymous" do
+RSpec.describe "Anonymous", type: :system do
   fab!(:topic)
 
   before { chat_system_bootstrap }

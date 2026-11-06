@@ -30,7 +30,6 @@ RSpec.describe EditDirectoryColumnsController do
     describe "#update" do
       describe "when user is an admin or moderator" do
         before { sign_in(admin) }
-
         describe "user saves a new configuration" do
           it "logs the new information using StaffActionLogger" do
             expect { put edit_directory_columns_path(params: payload) }.to change {
@@ -57,7 +56,6 @@ RSpec.describe EditDirectoryColumnsController do
 
     describe "when user is not an admin or moderator" do
       before { sign_in(user) }
-
       describe "user saves a new configuration" do
         it "does not allow saving" do
           put edit_directory_columns_path(params: payload)

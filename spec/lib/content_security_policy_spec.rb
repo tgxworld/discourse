@@ -2,6 +2,18 @@
 RSpec.describe ContentSecurityPolicy do
   after { DiscoursePluginRegistry.reset! }
 
+  describe "report-uri" do
+    it "is enabled by SiteSetting" do
+      SiteSetting.content_security_policy_collect_reports = true
+      report_uri = parse(policy)["report-uri"].first
+      expect(report_uri).to eq("http://test.localhost/csp_reports")
+
+      SiteSetting.content_security_policy_collect_reports = false
+      report_uri = parse(policy)["report-uri"]
+      expect(report_uri).to eq(nil)
+    end
+  end
+
   describe "base-uri" do
     it "is set to self" do
       base_uri = parse(policy)["base-uri"]
@@ -26,11 +38,6 @@ RSpec.describe ContentSecurityPolicy do
       SiteSetting.force_https = true
       expect(parse(policy)["upgrade-insecure-requests"]).to eq([])
     end
-
-    it "is omitted from a report-only policy since browsers ignore it there" do
-      SiteSetting.force_https = true
-      expect(parse(policy(report_only: true))["upgrade-insecure-requests"]).to eq(nil)
-    end
   end
 
   describe "strict-dynamic script-src and worker-src" do
@@ -39,53 +46,21 @@ RSpec.describe ContentSecurityPolicy do
       expect(script_srcs).to include("'strict-dynamic'")
     end
 
-    it "allows wasm compilation" do
+    it "does not set worker-src" do
+      worker_src = parse(policy)["worker-src"]
+      expect(worker_src).to eq(nil)
+    end
+
+    it 'includes "report-sample" when report collection is enabled' do
+      SiteSetting.content_security_policy_collect_reports = true
       script_srcs = parse(policy)["script-src"]
-      expect(script_srcs).to include("'wasm-unsafe-eval'")
-    end
-
-    it "sets worker-src to self and blob:" do
-      worker_src = parse(policy)["worker-src"]
-      expect(worker_src).to contain_exactly("'self'", "blob:")
-    end
-
-    it "includes the CDN asset host in worker-src so the worker chunk can be imported" do
-      set_cdn_url "https://cdn.example.com"
-      worker_src = parse(policy)["worker-src"]
-      expect(worker_src).to contain_exactly("'self'", "blob:", "https://cdn.example.com/assets/")
-    end
-
-    it "includes the s3 asset CDN host in worker-src" do
-      global_setting :s3_bucket, "test_bucket"
-      global_setting :s3_region, "ap-australia"
-      global_setting :s3_access_key_id, "123"
-      global_setting :s3_secret_access_key, "123"
-      global_setting :s3_cdn_url, "https://s3cdn.example.com"
-
-      worker_src = parse(policy)["worker-src"]
-      expect(worker_src).to contain_exactly("'self'", "blob:", "https://s3cdn.example.com/assets/")
+      expect(script_srcs).to include("'report-sample'")
     end
   end
 
   describe "manifest-src" do
     it "is set to self" do
       expect(parse(policy)["manifest-src"]).to eq(["'self'"])
-    end
-  end
-
-  describe "report-uri" do
-    it "is not included when content_security_policy_report_uri is blank" do
-      SiteSetting.content_security_policy_report_uri = ""
-
-      expect(parse(policy)["report-uri"]).to eq(nil)
-      expect(parse(policy)["script-src"]).to_not include("'report-sample'")
-    end
-
-    it "points to the configured endpoint and enables report-sample when set" do
-      SiteSetting.content_security_policy_report_uri = "https://csp.example.com/report"
-
-      expect(parse(policy)["report-uri"]).to eq(["https://csp.example.com/report"])
-      expect(parse(policy)["script-src"]).to include("'report-sample'")
     end
   end
 
@@ -132,8 +107,7 @@ RSpec.describe ContentSecurityPolicy do
 
     it "can extend frame_ancestors" do
       SiteSetting.content_security_policy_frame_ancestors = true
-      plugin =
-        plugin_class.new(nil, "#{Rails.root.join("spec/fixtures/plugins/csp_extension/plugin.rb")}")
+      plugin = plugin_class.new(nil, "#{Rails.root}/spec/fixtures/plugins/csp_extension/plugin.rb")
 
       plugin.activate!
       Discourse.plugins << plugin
@@ -166,7 +140,7 @@ RSpec.describe ContentSecurityPolicy do
       .to_h
   end
 
-  def policy(theme_id = nil, path_info: "/", report_only: false)
-    ContentSecurityPolicy.policy(theme_id, path_info: path_info, report_only: report_only)
+  def policy(theme_id = nil, path_info: "/")
+    ContentSecurityPolicy.policy(theme_id, path_info: path_info)
   end
 end

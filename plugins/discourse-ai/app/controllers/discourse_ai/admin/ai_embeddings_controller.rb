@@ -3,7 +3,7 @@
 module DiscourseAi
   module Admin
     class AiEmbeddingsController < ::Admin::AdminController
-      requires_plugin PLUGIN_NAME
+      requires_plugin ::DiscourseAi::PLUGIN_NAME
 
       def index
         embedding_defs = EmbeddingDefinition.all.order(:display_name)
@@ -24,12 +24,6 @@ module DiscourseAi
                        { id: tn, name: tn.split("::").last }
                      },
                    presets: EmbeddingDefinition.presets,
-                   ai_secrets:
-                     ActiveModel::ArraySerializer.new(
-                       AiSecret.all.order(:name),
-                       each_serializer: AiSecretSerializer,
-                       root: false,
-                     ).as_json,
                  },
                }
       end
@@ -113,9 +107,8 @@ module DiscourseAi
         DiscourseAi::Embeddings::Vector.new(embedding_def).vector_from("this is a test")
 
         render json: { success: true }
-      rescue DiscourseAi::Inference::EmbeddingInferenceError,
-             DiscourseAi::Embeddings::ProviderPausedError => error
-        render json: { success: false, error: error.message }
+      rescue Net::HTTPBadResponse => e
+        render json: { success: false, error: e.message }
       end
 
       private
@@ -130,7 +123,6 @@ module DiscourseAi
             :provider,
             :url,
             :api_key,
-            :ai_secret_id,
             :tokenizer_class,
             :embed_prompt,
             :search_prompt,
@@ -143,7 +135,7 @@ module DiscourseAi
             params.dig(:ai_embedding, :provider_params)&.slice(*extra_field_names.keys)
 
           if received_prov_params.present?
-            permitted[:provider_params] = received_prov_params.permit(*extra_field_names.keys)
+            permitted[:provider_params] = received_prov_params.permit!
           end
         end
 

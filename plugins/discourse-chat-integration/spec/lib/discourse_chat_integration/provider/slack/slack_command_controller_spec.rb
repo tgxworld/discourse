@@ -11,7 +11,7 @@ describe "Slack Command Controller", type: :request do
   end
 
   describe "with plugin disabled" do
-    it "returns a 404 response" do
+    it "should return a 404" do
       post "/chat-integration/slack/command.json"
       expect(response.status).to eq(404)
     end
@@ -23,7 +23,7 @@ describe "Slack Command Controller", type: :request do
       SiteSetting.chat_integration_slack_enabled = false
     end
 
-    it "returns a 404 response" do
+    it "should return a 404" do
       post "/chat-integration/slack/command.json"
       expect(response.status).to eq(404)
     end
@@ -38,7 +38,7 @@ describe "Slack Command Controller", type: :request do
     end
 
     describe "when forum is private" do
-      it "does not redirect to the login page" do
+      it "should not redirect to login page" do
         SiteSetting.login_required = true
         token = "sometoken"
         SiteSetting.chat_integration_slack_incoming_webhook_token = token
@@ -50,14 +50,14 @@ describe "Slack Command Controller", type: :request do
     end
 
     describe "when the token is invalid" do
-      it "returns an invalid-token error" do
+      it "should raise the right error" do
         post "/chat-integration/slack/command.json", params: { text: "help" }
         expect(response.status).to eq(400)
       end
     end
 
     describe "backwards compatibility with discourse-slack-official" do
-      it "accepts the legacy webhook token" do
+      it "should return the right response" do
         token = "secret sauce"
         SiteSetting.chat_integration_slack_incoming_webhook_token = token
 
@@ -69,7 +69,7 @@ describe "Slack Command Controller", type: :request do
     end
 
     describe "when incoming webhook token has not been set" do
-      it "returns a missing-token error" do
+      it "should raise the right error" do
         post "/chat-integration/slack/command.json", params: { text: "help", token: "some token" }
 
         expect(response.status).to eq(403)
@@ -85,7 +85,7 @@ describe "Slack Command Controller", type: :request do
       before { SiteSetting.chat_integration_slack_incoming_webhook_token = token }
 
       describe "add new rule" do
-        it "adds a new Slack rule" do
+        it "should add a new rule correctly" do
           post "/chat-integration/slack/command.json",
                params: {
                  text: "watch #{category.slug}",

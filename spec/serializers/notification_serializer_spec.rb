@@ -14,21 +14,6 @@ RSpec.describe NotificationSerializer do
     it "does not include external_id when sso is disabled" do
       expect(json[:notification].key?(:external_id)).to eq(false)
     end
-
-    it "removes name fields from notification data when names are disabled" do
-      SiteSetting.enable_names = false
-      notification.update!(
-        data: {
-          display_name: "Display Name",
-          name: "Name",
-          name2: "Second Name",
-          original_name: "Original Name",
-          safe_key: "safe value",
-        }.to_json,
-      )
-
-      expect(json[:notification][:data]).to eq("safe_key" => "safe value")
-    end
   end
 
   describe "#sso_enabled" do
@@ -41,36 +26,11 @@ RSpec.describe NotificationSerializer do
     let(:serializer) { NotificationSerializer.new(notification) }
     let(:json) { serializer.as_json }
 
-    it "includes the external ID" do
+    it "should include the external_id" do
       SiteSetting.discourse_connect_url = "http://example.com/discourse_sso"
       SiteSetting.discourse_connect_secret = "12345678910"
       SiteSetting.enable_discourse_connect = true
       expect(json[:notification][:external_id]).to eq("12345")
-    end
-  end
-
-  describe "localizations" do
-    fab!(:topic) { Fabricate(:topic, locale: "ja") }
-    fab!(:user)
-
-    before { I18n.locale = "ja" }
-
-    it "returns the locale if there is a topic" do
-      SiteSetting.content_localization_enabled = true
-
-      notification = Fabricate(:notification, user:, topic:)
-      serializer = NotificationSerializer.new(notification)
-      json = serializer.as_json
-      expect(json[:notification][:locale]).to eq("ja")
-    end
-
-    it "skips locale if there is no topic" do
-      SiteSetting.content_localization_enabled = true
-
-      notification = Fabricate(:notification, user:)
-      serializer = NotificationSerializer.new(notification)
-      json = serializer.as_json
-      expect(json[:notification][:locale]).to eq(nil)
     end
   end
 end

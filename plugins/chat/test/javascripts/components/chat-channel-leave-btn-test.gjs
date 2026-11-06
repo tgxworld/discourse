@@ -8,10 +8,12 @@ import { i18n } from "discourse-i18n";
 import ChatChannelLeaveBtn from "discourse/plugins/chat/discourse/components/chat-channel-leave-btn";
 import ChatFabricators from "discourse/plugins/chat/discourse/lib/fabricators";
 
-module("Component | ChatChannelLeaveBtn", function (hooks) {
+module("Discourse Chat | Component | chat-channel-leave-btn", function (hooks) {
   setupRenderingTest(hooks);
 
   test("accepts an optional onLeaveChannel callback", async function (assert) {
+    const self = this;
+
     this.foo = 1;
     this.onLeaveChannel = () => (this.foo = 2);
     this.channel = new ChatFabricators(getOwner(this)).directMessageChannel();
@@ -19,8 +21,8 @@ module("Component | ChatChannelLeaveBtn", function (hooks) {
     await render(
       <template>
         <ChatChannelLeaveBtn
-          @channel={{this.channel}}
-          @onLeaveChannel={{this.onLeaveChannel}}
+          @channel={{self.channel}}
+          @onLeaveChannel={{self.onLeaveChannel}}
         />
       </template>
     );
@@ -35,10 +37,12 @@ module("Component | ChatChannelLeaveBtn", function (hooks) {
   });
 
   test("has a specific title for direct message channel", async function (assert) {
+    const self = this;
+
     this.channel = new ChatFabricators(getOwner(this)).directMessageChannel();
 
     await render(
-      <template><ChatChannelLeaveBtn @channel={{this.channel}} /></template>
+      <template><ChatChannelLeaveBtn @channel={{self.channel}} /></template>
     );
 
     assert
@@ -47,10 +51,12 @@ module("Component | ChatChannelLeaveBtn", function (hooks) {
   });
 
   test("has a specific title for message channel", async function (assert) {
+    const self = this;
+
     this.channel = new ChatFabricators(getOwner(this)).channel();
 
     await render(
-      <template><ChatChannelLeaveBtn @channel={{this.channel}} /></template>
+      <template><ChatChannelLeaveBtn @channel={{self.channel}} /></template>
     );
 
     assert
@@ -59,11 +65,13 @@ module("Component | ChatChannelLeaveBtn", function (hooks) {
   });
 
   test("is not visible on mobile", async function (assert) {
+    const self = this;
+
     forceMobile();
     this.channel = new ChatFabricators(getOwner(this)).channel();
 
     await render(
-      <template><ChatChannelLeaveBtn @channel={{this.channel}} /></template>
+      <template><ChatChannelLeaveBtn @channel={{self.channel}} /></template>
     );
 
     assert.dom(".chat-channel-leave-btn").doesNotExist();

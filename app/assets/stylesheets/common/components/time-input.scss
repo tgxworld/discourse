@@ -2,7 +2,8 @@
   display: inline-flex;
 
   .combo-box {
-    min-width: 7em;
+    width: 65px;
+    min-width: auto;
 
     &:not(.has-selection) {
       .select-kit-selected-name .name {
@@ -37,10 +38,6 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-
-      small {
-        display: none;
-      }
     }
   }
 }

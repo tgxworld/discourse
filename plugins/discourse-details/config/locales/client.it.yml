@@ -5,14 +5,9 @@
 # https://translate.discourse.org/
 
 it:
-  admin_js:
-    admin:
-      site_settings:
-        categories:
-          discourse_details: "Dettagli di Discourse"
   js:
     details:
-      title: Nascondi dettagli
+      title: Nascondi Dettagli
     composer:
       details_title: Riepilogo
       details_text: "Questo testo verrà nascosto"

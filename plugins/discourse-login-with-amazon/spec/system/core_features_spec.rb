@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "Core features" do
+RSpec.describe "Core features", type: :system do
   before do
     SiteSetting.login_with_amazon_client_id = "somekey"
     SiteSetting.login_with_amazon_client_secret = "somesecretkey"

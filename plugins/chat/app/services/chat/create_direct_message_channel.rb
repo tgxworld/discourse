@@ -30,6 +30,7 @@ module Chat
       attribute :target_usernames, :array
       attribute :target_groups, :array
       attribute :upsert, :boolean, default: false
+      attribute :icon_upload_id, :integer
 
       validate :target_presence
 
@@ -49,7 +50,7 @@ module Chat
     model :direct_message, :fetch_or_create_direct_message
     model :channel, :fetch_or_create_channel
     step :set_optional_params
-    step :create_memberships
+    step :update_memberships
     step :recompute_users_count
 
     private
@@ -64,22 +65,10 @@ module Chat
     end
 
     def fetch_target_users(guardian:, params:)
-      target_groups =
-        if params.target_groups.present?
-          Group
-            .where(name: params.target_groups)
-            .visible_groups(guardian.user)
-            .members_visible_groups(guardian.user)
-            .pluck(:name)
-        end
-
-      users =
-        ::Chat::UsersFromUsernamesAndGroupsQuery.call(
-          usernames: [*params.target_usernames, guardian.user.username],
-          groups: target_groups,
-        )
-      return if users.none? { |u| u.id == guardian.user.id }
-      users
+      ::Chat::UsersFromUsernamesAndGroupsQuery.call(
+        usernames: [*params.target_usernames, guardian.user.username],
+        groups: params.target_groups,
+      )
     end
 
     def fetch_user_comm_screener(target_users:, guardian:)
@@ -107,11 +96,12 @@ module Chat
     end
 
     def set_optional_params(channel:, params:)
-      optional_params = params.slice(:name).reject { |_, value| value.nil? || value == "" }
+      optional_params =
+        params.slice(:name, :icon_upload_id).reject { |_, value| value.nil? || value == "" }
       channel.update!(optional_params) if !optional_params.empty?
     end
 
-    def create_memberships(channel:, target_users:, guardian:)
+    def update_memberships(channel:, target_users:)
       always_level = ::Chat::UserChatChannelMembership::NOTIFICATION_LEVELS[:always]
 
       memberships =
@@ -120,14 +110,14 @@ module Chat
             user_id: user.id,
             chat_channel_id: channel.id,
             muted: false,
-            following: user.id == guardian.user.id,
+            following: false,
             notification_level: always_level,
             created_at: Time.zone.now,
             updated_at: Time.zone.now,
           }
         end
 
-      ::Chat::UserChatChannelMembership.insert_all(
+      ::Chat::UserChatChannelMembership.upsert_all(
         memberships,
         unique_by: %i[user_id chat_channel_id],
       )

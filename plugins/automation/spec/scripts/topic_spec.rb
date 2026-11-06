@@ -3,7 +3,6 @@
 describe "Topic" do
   let!(:raw) { "this is me testing a new topic by automation" }
   let!(:title) { "This is a new topic created by automation" }
-
   fab!(:category)
   fab!(:tag1, :tag)
   fab!(:tag2, :tag)
@@ -174,7 +173,7 @@ describe "Topic" do
 
       after { Rails.logger.stop_broadcasting_to(fake_logger) }
 
-      it "logs an error" do
+      it "logs a warning" do
         expect { UserUpdater.new(user, user).update(location: "Japan") }.to change {
           Topic.count
         }.by(1)
@@ -182,7 +181,7 @@ describe "Topic" do
           Topic.count
         }
 
-        expect(Rails.logger.errors.first).to match(/This title has already been used/)
+        expect(Rails.logger.warnings.first).to match(/Title has already been used/)
       end
     end
   end

@@ -6,13 +6,12 @@ describe PostVoting::TopicViewSerializerExtension do
   fab!(:answer) { Fabricate(:post, topic: topic, reply_to_post_number: nil) }
   fab!(:comment) { Fabricate(:post_voting_comment, post: answer) }
   fab!(:user)
-
-  let(:guardian) { Guardian.new(user) }
+  fab!(:guardian) { Guardian.new(user) }
   let(:topic_view) { TopicView.new(topic, user) }
 
   before { SiteSetting.post_voting_enabled = true }
 
-  it "returns the topic's post-voting values" do
+  it "should return correct values" do
     PostVoting::VoteManager.vote(topic_post, user)
     PostVoting::VoteManager.vote(answer, user)
     PostVoting::VoteManager.vote(answer, Fabricate(:user))
@@ -44,7 +43,7 @@ describe PostVoting::TopicViewSerializerExtension do
     expect(posts.last[:comments_count]).to eq(1)
   end
 
-  it "omits dependent_attrs when the plugin is disabled" do
+  it "should not include dependent_attrs when plugin is disabled" do
     SiteSetting.post_voting_enabled = false
 
     payload = TopicViewSerializer.new(topic_view, scope: guardian, root: false).as_json

@@ -56,9 +56,7 @@
   }
 
   &__checkbox[aria-checked="true"] + .d-toggle-switch__checkbox-slider::before {
-    left: calc(
-      var(--toggle-switch-width) - var(--toggle-switch-height) * 0.875
-    );
+    left: calc(var(--toggle-switch-width) - 22px);
   }
 
   &__checkbox[disabled] + .d-toggle-switch__checkbox-slider {
@@ -82,13 +80,11 @@
     transition: background 0.25s;
 
     .d-icon {
-      width: calc(var(--toggle-switch-height) * 0.54) !important;
-      height: calc(var(--toggle-switch-height) * 0.54) !important;
-      color: var(--secondary) !important;
+      font-size: var(--font-down-1);
+      color: var(--secondary);
+      left: 7px;
+      top: 6px;
       position: absolute;
-      top: 50%;
-      left: calc(var(--toggle-switch-height) * 0.291);
-      transform: translateY(-50%);
     }
   }
 

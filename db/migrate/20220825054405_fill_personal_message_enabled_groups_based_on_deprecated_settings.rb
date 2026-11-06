@@ -2,8 +2,6 @@
 
 class FillPersonalMessageEnabledGroupsBasedOnDeprecatedSettings < ActiveRecord::Migration[7.0]
   def up
-    return if Migration::Helpers.new_site?
-
     enable_personal_messages_raw =
       DB.query_single(
         "SELECT value FROM site_settings WHERE name = 'enable_personal_messages'",
@@ -15,7 +13,8 @@ class FillPersonalMessageEnabledGroupsBasedOnDeprecatedSettings < ActiveRecord::
       DB.query_single(
         "SELECT value FROM site_settings WHERE name = 'min_trust_to_send_messages'",
       ).first
-    min_trust_to_send_messages = (min_trust_to_send_messages_raw.presence || 1).to_i
+    min_trust_to_send_messages =
+      (min_trust_to_send_messages_raw.blank? ? 1 : min_trust_to_send_messages_raw).to_i
 
     # default to TL1, Group::AUTO_GROUPS[:trust_level_1] is 11
     personal_message_enabled_groups = "11"

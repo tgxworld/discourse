@@ -96,7 +96,7 @@
 
       .username {
         color: var(--primary-high-or-secondary-low);
-        overflow-wrap: break-word;
+        word-wrap: break-word;
         font-weight: bold;
       }
 
@@ -204,8 +204,6 @@
     }
 
     .timeline-controls {
-      display: flex;
-      gap: var(--space-2);
       margin-bottom: var(--space-4);
     }
 
@@ -242,15 +240,7 @@
       margin-left: 0.5em;
       border-left: 1px solid var(--topic-timeline-border-color);
       position: relative;
-      max-width: 100%;
       transform: translateZ(0);
-
-      // The padding is a sibling of the scroller, so the drag state is read from
-      // the parent the two share. Easing during a drag leaves the timeline
-      // trailing the pointer for the length of the transition.
-      &.--dragging .timeline-padding {
-        transition: none;
-      }
     }
 
     .timeline-padding {
@@ -262,15 +252,22 @@
       // the scrollarea's vertical track and thus it
       // enables taps on the track to work
       margin-left: -1em;
+
+      .widget-dragging & {
+        transition: none;
+      }
+
+      .dragging & {
+        transition: none;
+      }
     }
 
     .timeline-handle {
       border-radius: 0.8em;
       width: 0.35em;
-      background-color: var(--topic-timeline-handle-color);
+      background-color: var(--topic-timeline-border-color);
       height: 100%;
       float: left;
-      flex-shrink: 0;
       z-index: z("base") + 1;
       outline: 1px solid transparent;
       margin-left: 0.5px;
@@ -287,8 +284,7 @@
 
     .timeline-ago {
       color: var(--primary-med-or-secondary-med);
-      max-width: 100%;
-      white-space: nowrap;
+      max-width: 4.6em;
       overflow: hidden;
       text-overflow: ellipsis;
     }
@@ -299,15 +295,16 @@
       cursor: ns-resize;
       display: flex;
       align-items: center;
+
+      .back-button {
+        margin-top: var(--space-4);
+      }
     }
 
     .timeline-replies {
-      display: flex;
-      flex-wrap: wrap;
-      height: 1lh;
       overflow: hidden;
+      overflow-wrap: break-word;
       font-weight: bold;
-      white-space: pre;
     }
 
     .timeline-last-read {

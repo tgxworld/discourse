@@ -7,14 +7,14 @@ class PostActionsController < ApplicationController
   before_action :fetch_post_action_type_id_from_params
 
   def create
-    raise Discourse::NotFound unless guardian.can_see?(@post)
+    raise Discourse::NotFound if @post.blank?
 
     creator =
       PostActionCreator.new(
         current_user,
         @post,
         @post_action_type_id,
-        is_warning: ActiveModel::Type::Boolean.new.cast(params[:is_warning]),
+        is_warning: params[:is_warning],
         message: params[:message],
         take_action: params[:take_action] == "true",
         flag_topic: params[:flag_topic] == "true",
@@ -48,11 +48,7 @@ class PostActionsController < ApplicationController
     if result.failed?
       render_json_error(result)
     else
-      if !guardian.can_see_post?(result.post)
-        head :no_content
-      else
-        render_post_json(result.post, add_raw: false)
-      end
+      render_post_json(result.post, add_raw: false)
     end
   end
 
@@ -66,13 +62,11 @@ class PostActionsController < ApplicationController
 
     post_id =
       if flag_topic
-        topic = Topic.find_by(id: params[:id])
-        raise Discourse::NotFound unless guardian.can_see_topic?(topic)
-
-        post = topic.posts.first
-        raise Discourse::NotFound if post.blank?
-
-        post.id
+        begin
+          Topic.find(params[:id]).posts.first.id
+        rescue StandardError
+          raise Discourse::NotFound
+        end
       else
         params[:id]
       end

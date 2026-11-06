@@ -2,15 +2,13 @@
 
 class TopicListSerializer < ApplicationSerializer
   attributes :can_create_topic,
-             :filter,
              :more_topics_url,
              :for_period,
              :per_page,
              :top_tags,
              :tags,
              :shared_drafts,
-             :filter_option_info,
-             :filter_new_topic_ids
+             :filter_option_info
 
   has_many :topics, serializer: TopicListItemSerializer, embed: :objects
   has_many :shared_drafts, serializer: TopicListItemSerializer, embed: :objects
@@ -28,10 +26,6 @@ class TopicListSerializer < ApplicationSerializer
 
   def include_shared_drafts?
     object.shared_drafts.present?
-  end
-
-  def include_filter_new_topic_ids?
-    !object.filter_new_topic_ids.nil?
   end
 
   def include_filter_option_info?

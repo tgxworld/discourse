@@ -14,7 +14,6 @@ class Auth::AuthProvider
       frame_height
       frame_width
       icon
-      icon_setting
       pretty_name
       pretty_name_setting
       title

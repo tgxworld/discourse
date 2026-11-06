@@ -1,23 +1,24 @@
-import Component from "@glimmer/component";
-import { tracked } from "@glimmer/tracking";
+/* eslint-disable ember/no-classic-components */
+import Component from "@ember/component";
 import { hash } from "@ember/helper";
-import { action, get, set } from "@ember/object";
+import { action } from "@ember/object";
 import { service } from "@ember/service";
+import { tagName } from "@ember-decorators/component";
+import { or } from "truth-helpers";
+import ConditionalLoadingSpinner from "discourse/components/conditional-loading-spinner";
+import DButton from "discourse/components/d-button";
+import LoadMore from "discourse/components/load-more";
+import avatar from "discourse/helpers/avatar";
+import icon from "discourse/helpers/d-icon";
+import number from "discourse/helpers/number";
 import { ajax } from "discourse/lib/ajax";
 import { popupAjaxError } from "discourse/lib/ajax-error";
-import getURL from "discourse/lib/get-url";
-import { resettableTracked } from "discourse/lib/tracked-tools";
-import PeriodChooser from "discourse/select-kit/components/period-chooser";
-import DButton from "discourse/ui-kit/d-button";
-import DConditionalLoadingSpinner from "discourse/ui-kit/d-conditional-loading-spinner";
-import DLoadMore from "discourse/ui-kit/d-load-more";
-import dAvatar from "discourse/ui-kit/helpers/d-avatar";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
-import dNumber from "discourse/ui-kit/helpers/d-number";
+import discourseComputed from "discourse/lib/decorators";
 import { i18n } from "discourse-i18n";
-import fullnumber from "../helpers/fullnumber.js";
-import GamificationLeaderboardRow from "./gamification-leaderboard-row.gjs";
-import LeaderboardInfo from "./modal/leaderboard-info.gjs";
+import PeriodChooser from "select-kit/components/period-chooser";
+import fullnumber from "../helpers/fullnumber";
+import GamificationLeaderboardRow from "./gamification-leaderboard-row";
+import LeaderboardInfo from "./modal/leaderboard-info";
 
 export const LEADERBOARD_PERIODS = [
   "all_time",
@@ -46,34 +47,43 @@ function periodString(periodValue) {
   }
 }
 
+@tagName("")
 export default class GamificationLeaderboard extends Component {
-  @service currentUser;
-  @service modal;
   @service router;
-  @service site;
-  @service siteSettings;
+  @service modal;
 
-  @tracked loading = false;
-  @resettableTracked
-  period = periodString(this.args.model.leaderboard.default_period);
-
+  eyelineSelector = ".user";
   page = 1;
+  loading = false;
   canLoadMore = true;
+  period = "all";
 
-  get isNotReady() {
-    return get(this.args.model, "reason") !== undefined;
+  init() {
+    super.init(...arguments);
+    const default_leaderboard_period = periodString(
+      this.model.leaderboard.default_period
+    );
+    this.set("period", default_leaderboard_period);
   }
 
-  get currentUserRanking() {
-    return get(this.args.model, "personal") || null;
+  @discourseComputed("model.reason")
+  isNotReady(reason) {
+    return reason !== undefined;
   }
 
-  get winners() {
-    return get(this.args.model, "users")?.slice(0, 3);
+  @discourseComputed("model.users")
+  currentUserRanking() {
+    const user = this.model.personal;
+    return user || null;
   }
 
-  get ranking() {
-    const users = get(this.args.model, "users");
+  @discourseComputed("model.users")
+  winners(users) {
+    return users.slice(0, 3);
+  }
+
+  @discourseComputed("model.users.[]")
+  ranking(users) {
     users.forEach((user) => {
       if (user.id === this.currentUser?.id) {
         user.isCurrentUser = "true";
@@ -93,39 +103,38 @@ export default class GamificationLeaderboard extends Component {
       return;
     }
 
-    this.loading = true;
-    const model = this.args.model;
+    this.set("loading", true);
 
     return ajax(
-      `/leaderboard/${model.leaderboard.id}?page=${this.page}&period=${this.period}`
+      `/leaderboard/${this.model.leaderboard.id}?page=${this.page}&period=${this.period}`
     )
       .then((result) => {
         if (result.users.length === 0) {
-          this.canLoadMore = false;
+          this.set("canLoadMore", false);
         }
-        this.page += 1;
-        set(model, "users", model.users.concat(result.users));
+        this.set("page", (this.page += 1));
+        this.set("model.users", this.model.users.concat(result.users));
       })
-      .finally(() => (this.loading = false))
+      .finally(() => this.set("loading", false))
       .catch(popupAjaxError);
   }
 
   @action
   changePeriod(period) {
-    this.period = period;
-    const model = this.args.model;
-
-    return ajax(`/leaderboard/${model.leaderboard.id}?period=${this.period}`)
+    this.set("period", period);
+    return ajax(
+      `/leaderboard/${this.model.leaderboard.id}?period=${this.period}`
+    )
       .then((result) => {
         if (result.users.length === 0) {
-          this.canLoadMore = false;
-          set(model, "reason", result.reason);
+          this.set("canLoadMore", false);
+          this.set("model.reason", result.reason);
         }
-        this.page = 1;
-        set(model, "users", result.users);
-        set(model, "personal", result.personal);
+        this.set("page", 1);
+        this.set("model.users", result.users);
+        this.set("model.personal", result.personal);
       })
-      .finally(() => (this.loading = false))
+      .finally(() => this.set("loading", false))
       .catch(popupAjaxError);
   }
 
@@ -137,10 +146,10 @@ export default class GamificationLeaderboard extends Component {
   <template>
     <div class="leaderboard">
       <div class="page__header">
-        <h1 class="page__title">{{@model.leaderboard.name}}</h1>
+        <h1 class="page__title">{{this.model.leaderboard.name}}</h1>
         <DButton
-          class="-ghost"
           @action={{this.showLeaderboardInfo}}
+          class="-ghost"
           @icon="circle-info"
           @label={{unless this.site.mobileView "gamification.leaderboard.info"}}
         />
@@ -148,18 +157,17 @@ export default class GamificationLeaderboard extends Component {
 
       <div class="leaderboard__controls">
         <PeriodChooser
-          class="leaderboard__period-chooser"
+          @period={{this.period}}
           @action={{this.changePeriod}}
           @fullDay={{false}}
-          @options={{hash disabled=@model.leaderboard.period_filter_disabled}}
-          @period={{this.period}}
+          @options={{hash
+            disabled=this.model.leaderboard.period_filter_disabled
+          }}
+          class="leaderboard__period-chooser"
         />
         {{#if this.currentUser.staff}}
-          <a
-            class="leaderboard__settings"
-            href={{getURL "/admin/plugins/gamification"}}
-          >
-            {{dIcon "gear"}}
+          <a href="/admin/plugins/gamification" class="leaderboard__settings">
+            {{icon "gear"}}
             {{unless
               this.site.mobileView
               (i18n "gamification.leaderboard.link_to_settings")
@@ -170,12 +178,12 @@ export default class GamificationLeaderboard extends Component {
 
       {{#if this.isNotReady}}
         <div class="leaderboard__not-ready">
-          <p>{{@model.reason}}</p>
+          <p>{{this.model.reason}}</p>
           <DButton
-            class="btn-primary refresh"
-            @action={{this.refresh}}
             @icon="arrows-rotate"
             @label="gamification.leaderboard.refresh"
+            @action={{this.refresh}}
+            class="btn-primary refresh"
           />
         </div>
       {{else}}
@@ -183,13 +191,13 @@ export default class GamificationLeaderboard extends Component {
           <div class="podium">
             {{#each this.winners as |winner|}}
               <div class="winner -position{{winner.position}}">
-                <div class="winner__crown">{{dIcon "crown"}}</div>
+                <div class="winner__crown">{{icon "crown"}}</div>
                 <div
                   class="winner__avatar clickable"
-                  data-user-card={{winner.username}}
                   role="button"
+                  data-user-card={{winner.username}}
                 >
-                  {{dAvatar winner imageSize="huge"}}
+                  {{avatar winner imageSize="huge"}}
                   <div class="winner__rank">
                     <span>{{winner.position}}</span>
                   </div>
@@ -212,7 +220,7 @@ export default class GamificationLeaderboard extends Component {
         <div class="ranking">
           <div class="ranking-col-names">
             <span>{{i18n "gamification.leaderboard.rank"}}</span>
-            <span>{{dIcon "award"}}{{i18n "gamification.score"}}</span>
+            <span>{{icon "award"}}{{i18n "gamification.score"}}</span>
           </div>
           <div class="ranking-col-names__sticky-border"></div>
           {{#if this.currentUserRanking.user}}
@@ -221,7 +229,7 @@ export default class GamificationLeaderboard extends Component {
               <div class="user__name">{{i18n "gamification.you"}}</div>
               <div class="user__score">
                 {{#if this.site.mobileView}}
-                  {{dNumber this.currentUserRanking.user.total_score}}
+                  {{number this.currentUserRanking.user.total_score}}
                 {{else}}
                   {{fullnumber this.currentUserRanking.user.total_score}}
                 {{/if}}
@@ -229,12 +237,12 @@ export default class GamificationLeaderboard extends Component {
             </div>
           {{/if}}
 
-          <DLoadMore @action={{this.loadMore}}>
+          <LoadMore @action={{this.loadMore}}>
             {{#each this.ranking as |rank index|}}
-              <GamificationLeaderboardRow @index={{index}} @rank={{rank}} />
+              <GamificationLeaderboardRow @rank={{rank}} @index={{index}} />
             {{/each}}
-          </DLoadMore>
-          <DConditionalLoadingSpinner @condition={{this.loading}} />
+          </LoadMore>
+          <ConditionalLoadingSpinner @condition={{this.loading}} />
         </div>
       {{/if}}
     </div>

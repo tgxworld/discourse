@@ -17,16 +17,11 @@ class CategoryBadgeSerializer < ApplicationSerializer
   end
 
   def name
-    return I18n.t("uncategorized_category_name") if object.uncategorized?
-
-    translated =
-      if ContentLocalization.show_translated_category?(object, scope)
-        object.get_localization&.name
-      else
-        object.name
-      end
-
-    translated || object.name
+    if object.uncategorized?
+      I18n.t("uncategorized_category_name", locale: SiteSetting.default_locale)
+    else
+      object.name
+    end
   end
 
   def description_text

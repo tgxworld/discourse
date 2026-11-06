@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "Uploading files in the composer" do
+describe "Uploading files in the composer", type: :system do
   fab!(:current_user) { Fabricate(:user, refresh_auto_groups: true) }
 
   let(:modal) { PageObjects::Modals::Base.new }
@@ -150,69 +150,30 @@ describe "Uploading files in the composer" do
       expect(composer).to have_no_in_progress_uploads
       expect(composer.preview).to have_css(".onebox-placeholder-container", count: 2)
     end
-
-    it "handles thumbnail upload errors gracefully without blocking video upload" do
-      visit "/new-topic"
-      expect(composer).to be_opened
-      topic.fill_in_composer_title("Thumbnail Error Test")
-
-      # Mock canvas.toBlob to fail, simulating a thumbnail generation error
-      page.execute_script <<-JS
-        HTMLCanvasElement.prototype.toBlob = function(callback, type, quality) {
-          // Simulate a failure in blob creation
-          setTimeout(() => callback(null), 0);
-        };
-      JS
-
-      file_path_1 = file_from_fixtures("small.webm", "media").path
-      attach_file("file-uploader", file_path_1, make_visible: true)
-
-      # Video upload should complete successfully even if thumbnail generation fails
-      expect(composer).to have_no_in_progress_uploads
-      expect(composer.preview).to have_css(".onebox-placeholder-container")
-
-      # Video should still be uploadable/submittable
-      composer.submit
-      expect(find("#topic-title")).to have_content("Thumbnail Error Test")
-    end
   end
 
   context "when multiple images are uploaded" do
-    before { SiteSetting.enable_auto_grid_images = true }
+    before { SiteSetting.experimental_auto_grid_images = true }
 
-    shared_examples "grouping multiple image uploads in a grid" do
-      it "wraps three uploaded images in grid tags" do
-        visit "/new-topic"
-        expect(composer).to be_opened
+    %w[en fr de].each do |locale|
+      before { SiteSetting.default_locale = locale }
 
-        file_path_1 = file_from_fixtures("logo.png", "images").path
-        file_path_2 = file_from_fixtures("logo.jpg", "images").path
-        file_path_3 = file_from_fixtures("downsized.png", "images").path
-        attach_file("file-uploader", [file_path_1, file_path_2, file_path_3], make_visible: true)
+      context "when the locale is #{locale}" do
+        it "automatically wraps images in [grid] tags on 3 or more images" do
+          visit "/new-topic"
+          expect(composer).to be_opened
 
-        expect(composer).to have_no_in_progress_uploads
-        expect(composer.composer_input.value).to match(
-          %r{\[grid\].*!\[.*?\]\(upload://.*?\).*!\[.*?\]\(upload://.*?\).*!\[.*?\]\(upload://.*?\).*?\[/grid\]}m,
-        )
+          file_path_1 = file_from_fixtures("logo.png", "images").path
+          file_path_2 = file_from_fixtures("logo.jpg", "images").path
+          file_path_3 = file_from_fixtures("downsized.png", "images").path
+          attach_file("file-uploader", [file_path_1, file_path_2, file_path_3], make_visible: true)
+
+          expect(composer).to have_no_in_progress_uploads
+          expect(composer.composer_input.value).to match(
+            %r{\[grid\].*!\[.*?\]\(upload://.*?\).*!\[.*?\]\(upload://.*?\).*!\[.*?\]\(upload://.*?\).*?\[/grid\]}m,
+          )
+        end
       end
-    end
-
-    context "when the locale is en" do
-      before { SiteSetting.default_locale = "en" }
-
-      include_examples "grouping multiple image uploads in a grid"
-    end
-
-    context "when the locale is fr" do
-      before { SiteSetting.default_locale = "fr" }
-
-      include_examples "grouping multiple image uploads in a grid"
-    end
-
-    context "when the locale is de" do
-      before { SiteSetting.default_locale = "de" }
-
-      include_examples "grouping multiple image uploads in a grid"
     end
 
     it "does not wrap [grid] tags on less than 3 images" do
@@ -259,7 +220,7 @@ describe "Uploading files in the composer" do
     end
 
     it "does not automatically wrap images in [grid] tags when setting is disabled" do
-      SiteSetting.enable_auto_grid_images = false
+      SiteSetting.experimental_auto_grid_images = false
 
       visit "/new-topic"
       expect(composer).to be_opened

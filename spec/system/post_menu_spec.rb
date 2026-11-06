@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "Post menu" do
+describe "Post menu", type: :system do
   fab!(:admin) { Fabricate(:admin, refresh_auto_groups: true) }
   fab!(:user) { Fabricate(:user, refresh_auto_groups: true) }
   fab!(:topic, reload: true)
@@ -134,36 +134,15 @@ describe "Post menu" do
       topic_page.click_post_action_button(post, :admin)
       expect(topic_page).to have_post_admin_menu
     end
-
-    describe "with change_post_ownership_allowed_groups" do
-      fab!(:allowed_group, :group)
-      fab!(:allowed_group_user) { Fabricate(:user, groups: [allowed_group]) }
-
-      before { SiteSetting.change_post_ownership_allowed_groups = "#{allowed_group.id}" }
-
-      it "displays the admin button when the group is allowed" do
-        sign_in(allowed_group_user)
-
-        topic_page.visit_topic(post.topic)
-
-        expect(topic_page).to have_post_action_button(post, :admin)
-        expect(topic_page).to have_post_action_button(post2, :admin)
-      end
-
-      it "does not display the admin button when the group is not allowed" do
-        SiteSetting.change_post_ownership_allowed_groups = ""
-        sign_in(allowed_group_user)
-
-        topic_page.visit_topic(post.topic)
-
-        expect(topic_page).to have_no_post_action_button(post, :admin)
-        expect(topic_page).to have_no_post_action_button(post2, :admin)
-      end
-    end
   end
 
   describe "bookmark" do
     before { SiteSetting.post_menu_hidden_items = "" }
+
+    it "does not display the bookmark button when the user is anonymous" do
+      topic_page.visit_topic(post.topic)
+      expect(topic_page).to have_no_post_action_button(post, :bookmark)
+    end
 
     it "works as expected" do
       sign_in(user)
@@ -195,20 +174,15 @@ describe "Post menu" do
     end
   end
 
-  describe "action visibility" do
+  describe "delete / recover" do
     before { SiteSetting.post_menu_hidden_items = "" }
 
-    it "shows post action buttons according to the user's permissions" do
+    it "displays the delete button only when the user can delete the post" do
       # do not display the edit button when unlogged
       topic_page.visit_topic(post.topic)
 
       expect(topic_page).to have_no_post_action_button(post, :delete)
       expect(topic_page).to have_no_post_action_button(post2, :delete)
-
-      # do not display the edit button when unlogged
-      expect(topic_page).to have_no_post_action_button(post, :flag)
-      expect(topic_page).to have_no_post_action_button(post2, :flag)
-      expect(topic_page).to have_no_post_action_button(post, :bookmark)
 
       # display the delete button only for the post that `user` can delete
       sign_in(user)
@@ -218,10 +192,6 @@ describe "Post menu" do
       expect(topic_page).to have_no_post_action_button(post, :delete)
       expect(topic_page).to have_post_action_button(post2, :delete)
 
-      # display the flag button only for the post that `user` can flag
-      expect(topic_page).to have_post_action_button(post, :flag)
-      expect(topic_page).to have_post_action_button(post2, :flag)
-
       # display the delete button for the all the posts because an admin is logged
       sign_in(admin)
 
@@ -229,15 +199,7 @@ describe "Post menu" do
 
       expect(topic_page).to have_post_action_button(post, :delete)
       expect(topic_page).to have_post_action_button(post2, :delete)
-
-      # display the flag button for the all the posts because an admin is logged
-      expect(topic_page).to have_post_action_button(post, :flag)
-      expect(topic_page).to have_post_action_button(post2, :flag)
     end
-  end
-
-  describe "delete / recover" do
-    before { SiteSetting.post_menu_hidden_items = "" }
 
     it "displays the recover button only when the user can recover the post" do
       PostDestroyer.new(user, post2).destroy
@@ -343,20 +305,6 @@ describe "Post menu" do
       topic_page.click_post_action_button(post2, :recover)
       expect(topic_page).to have_no_deleted_post(post2)
     end
-
-    it "allows regular users to recover their own deleted topic" do
-      user_topic = Fabricate(:topic, user: user)
-      user_first_post = Fabricate(:post, topic: user_topic, user: user, post_number: 1)
-      PostDestroyer.new(user, user_first_post).destroy
-
-      sign_in(user)
-
-      topic_page.visit_topic(user_topic)
-
-      expect(topic_page).to have_post_action_button(user_first_post, :recover)
-      topic_page.click_post_action_button(user_first_post, :recover)
-      expect(topic_page).to have_no_deleted_post(user_first_post)
-    end
   end
 
   describe "edit" do
@@ -426,6 +374,30 @@ describe "Post menu" do
   describe "flag" do
     before { SiteSetting.post_menu_hidden_items = "" }
 
+    it "displays the flag button only when the user can flag the post" do
+      # do not display the edit button when unlogged
+      topic_page.visit_topic(post.topic)
+
+      expect(topic_page).to have_no_post_action_button(post, :flag)
+      expect(topic_page).to have_no_post_action_button(post2, :flag)
+
+      # display the flag button only for the post that `user` can flag
+      sign_in(user)
+
+      topic_page.visit_topic(post.topic)
+
+      expect(topic_page).to have_post_action_button(post, :flag)
+      expect(topic_page).to have_post_action_button(post2, :flag)
+
+      # display the flag button for the all the posts because an admin is logged
+      sign_in(admin)
+
+      topic_page.visit_topic(post.topic)
+
+      expect(topic_page).to have_post_action_button(post, :flag)
+      expect(topic_page).to have_post_action_button(post2, :flag)
+    end
+
     it "works as expected" do
       sign_in(user)
 
@@ -455,7 +427,7 @@ describe "Post menu" do
       topic_page.click_post_action_button(unliked_post, :like)
 
       # we need this because the find_post_action_button will target the like button on or off
-      try_until_success(reason: "Relies on Ember debounce") do
+      try_until_success do
         like_button = topic_page.find_post_action_button(unliked_post, :like)
         expect(like_button[:class].split("\s")).to include("has-like")
       end
@@ -467,7 +439,7 @@ describe "Post menu" do
       topic_page.click_post_action_button(unliked_post, :like)
 
       # we need this because the find_post_action_button will target the like button on or off
-      try_until_success(reason: "Relies on Ember debounce") do
+      try_until_success do
         like_button = topic_page.find_post_action_button(unliked_post, :like)
         expect(like_button[:class].split("\s")).to include("like")
       end
@@ -501,25 +473,21 @@ describe "Post menu" do
       expect(topic_page).to have_no_post_action_button(post2, :like_count)
     end
 
-    it "shows the users who liked when clicking on the like count" do
+    it "toggles the users who liked when clicking on the like count" do
       PostActionCreator.like(user, post)
       PostActionCreator.like(admin, post)
 
       topic_page.visit_topic(post.topic)
 
-      # show users who liked on
+      expect(topic_page).to have_no_who_liked_on_post(post)
+
+      # toggle users who liked on
       topic_page.click_post_action_button(post, :like_count)
       expect(topic_page).to have_who_liked_on_post(post, count: 2)
-    end
 
-    it "does not allow silenced users to like posts" do
-      user.update!(silenced_till: 1.year.from_now)
-
-      sign_in(user)
-
-      topic_page.visit_topic(post.topic)
-
-      expect(topic_page).to have_no_post_action_button(post, :like)
+      # toggle users who liked off
+      topic_page.click_post_action_button(post, :like_count)
+      expect(topic_page).to have_no_who_liked_on_post(post)
     end
   end
 
@@ -546,7 +514,7 @@ describe "Post menu" do
       # don't show when the post has reads = 0
       expect(topic_page).to have_no_post_action_button(pm_post2, :read)
 
-      # don't show on regular posts
+      # dont't show on regular posts
       topic_page.visit_topic(post.topic)
       expect(topic_page).to have_no_post_action_button(post, :read)
       expect(topic_page).to have_no_post_action_button(post2, :read)

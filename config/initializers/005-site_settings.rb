@@ -16,11 +16,15 @@ end
 
 Rails.application.config.to_prepare do
   RailsMultisite::ConnectionManagement.safe_each_connection do
-    SiteSetting.refresh!
+    begin
+      SiteSetting.refresh!
 
-    # Check for circular dependencies in site settings.
-    SiteSetting.type_supervisor.dependencies.order
-  rescue ActiveRecord::StatementInvalid
-    # This will happen when migrating a new database
+      unless String === SiteSetting.push_api_secret_key &&
+               SiteSetting.push_api_secret_key.length == 32
+        SiteSetting.push_api_secret_key = SecureRandom.hex
+      end
+    rescue ActiveRecord::StatementInvalid
+      # This will happen when migrating a new database
+    end
   end
 end

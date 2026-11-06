@@ -13,41 +13,86 @@ enabled_site_setting :patreon_enabled
 
 register_asset "stylesheets/patreon.scss"
 
-register_svg_icon "fab-patreon"
 register_svg_icon "patreon-new"
 
-module ::Patreon
-  PLUGIN_NAME = "discourse-patreon"
-end
-
-require_relative "lib/discourse_patreon/engine"
+# Site setting validators must be loaded before initialize
+require_relative "lib/validators/patreon_login_enabled_validator"
 
 after_initialize do
   require_dependency "admin_constraint"
 
-  require_relative "lib/api_version/v1"
-  require_relative "lib/api_version/v2"
-  require_relative "lib/api"
-  require_relative "app/controllers/patreon/patreon_admin_controller"
-  require_relative "app/controllers/patreon/patreon_webhook_controller"
+  module ::Patreon
+    PLUGIN_NAME = "discourse-patreon".freeze
+    USER_DETAIL_FIELDS = %w[id amount_cents rewards declined_since].freeze
+
+    class Engine < ::Rails::Engine
+      engine_name PLUGIN_NAME
+      isolate_namespace Patreon
+    end
+
+    def self.store
+      @store ||= PluginStore.new(PLUGIN_NAME)
+    end
+
+    def self.get(key)
+      store.get(key)
+    end
+
+    def self.set(key, value)
+      store.set(key, value)
+    end
+
+    def self.show_donation_prompt_to_user?(user)
+      return false unless SiteSetting.patreon_donation_prompt_enabled?
+
+      filters = get("filters") || {}
+      filters = filters.keys.map(&:to_i)
+
+      (user.visible_groups.pluck(:id) & filters).size <= 0
+    end
+
+    class Reward
+      def self.all
+        Patreon.get("rewards") || {}
+      end
+    end
+
+    class RewardUser
+      def self.all
+        Patreon.get("reward-users") || {}
+      end
+    end
+  end
+
+  require_relative "app/controllers/patreon_admin_controller"
+  require_relative "app/controllers/patreon_webhook_controller"
   require_relative "app/jobs/regular/sync_patron_groups"
   require_relative "app/jobs/scheduled/patreon_sync_patrons_to_groups"
   require_relative "app/jobs/scheduled/patreon_update_tokens"
   require_relative "app/services/problem_check/access_token_invalid"
-  require_relative "app/services/problem_check/patreon_api_v1_deprecated"
+  require_relative "lib/api"
   require_relative "lib/seed"
   require_relative "lib/campaign"
   require_relative "lib/pledge"
   require_relative "lib/patron"
   require_relative "lib/tokens"
 
-  Discourse::Application.routes.prepend { mount Patreon::Engine, at: "/patreon" }
+  Patreon::Engine.routes.draw do
+    get "/rewards" => "patreon_admin#rewards", :constraints => AdminConstraint.new
+    get "/list" => "patreon_admin#list", :constraints => AdminConstraint.new
+    post "/list" => "patreon_admin#edit", :constraints => AdminConstraint.new
+    delete "/list" => "patreon_admin#delete", :constraints => AdminConstraint.new
+    post "/sync_groups" => "patreon_admin#sync_groups", :constraints => AdminConstraint.new
+    post "/update_data" => "patreon_admin#update_data", :constraints => AdminConstraint.new
+    post "/webhook" => "patreon_webhook#index"
+  end
 
-  add_admin_route "patreon.title", "discourse-patreon", use_new_show_route: true
+  Discourse::Application.routes.prepend { mount ::Patreon::Engine, at: "/patreon" }
+
+  add_admin_route "patreon.title", "patreon"
 
   Discourse::Application.routes.append do
-    get "/admin/plugins/discourse-patreon/filters" => "admin/plugins#index",
-        :constraints => AdminConstraint.new
+    get "/admin/plugins/patreon" => "admin/plugins#index", :constraints => AdminConstraint.new
     get "/admin/plugins/patreon/list" => "patreon/patreon_admin#list",
         :constraints => AdminConstraint.new
     get "/u/:username/patreon_email" => "patreon/patreon_admin#email",
@@ -57,36 +102,42 @@ after_initialize do
   end
 
   on(:user_created) do |user|
-    filters = PluginStore.get(Patreon::PLUGIN_NAME, "filters")
+    filters = PluginStore.get(::Patreon::PLUGIN_NAME, "filters")
     patreon_id = Patreon::Patron.all.key(user.email)
 
     if filters.present? && patreon_id.present?
       begin
+        reward_id =
+          Patreon::RewardUser.all.except("0").detect { |_k, v| v.include? patreon_id }&.first
+
+        group_ids = filters.select { |_k, v| v.include?(reward_id) || v.include?("0") }.keys
+
+        Group.where(id: group_ids).each { |group| group.add user }
+
         Patreon::Patron.update_local_user(user, patreon_id, true)
-        Patreon::Patron.sync_groups_by(patreon_id: patreon_id)
       rescue => e
         Rails.logger.warn(
-          "Patreon group membership callback failed for new user #{id} with error: #{e}.\n\n #{e.backtrace.join("\n")}",
+          "Patreon group membership callback failed for new user #{self.id} with error: #{e}.\n\n #{e.backtrace.join("\n")}",
         )
       end
     end
   end
 
-  Patreon::USER_DETAIL_FIELDS.each do |attribute|
+  ::Patreon::USER_DETAIL_FIELDS.each do |attribute|
     add_to_serializer(
       :admin_detailed_user,
-      :"patreon_#{attribute}",
+      "patreon_#{attribute}".to_sym,
       include_condition: -> do
-        Patreon::Patron.attr(attribute, object).present? &&
+        ::Patreon::Patron.attr(attribute, object).present? &&
           (attribute != "amount_cents" || scope.is_admin?)
       end,
-    ) { Patreon::Patron.attr(attribute, object) }
+    ) { ::Patreon::Patron.attr(attribute, object) }
   end
 
   add_to_serializer(
     :admin_detailed_user,
     :patreon_email_exists,
-    include_condition: -> { Patreon::Patron.attr("email", object).present? },
+    include_condition: -> { ::Patreon::Patron.attr("email", object).present? },
   ) { true }
 
   add_to_serializer(:current_user, :show_donation_prompt?) do
@@ -94,7 +145,6 @@ after_initialize do
   end
 
   register_problem_check ProblemCheck::AccessTokenInvalid
-  register_problem_check ProblemCheck::PatreonApiV1Deprecated
 end
 
 # Authentication with Patreon
@@ -104,8 +154,7 @@ class ::OmniAuth::Strategies::Patreon < ::OmniAuth::Strategies::OAuth2
   option :client_options,
          site: "https://www.patreon.com",
          authorize_url: "https://www.patreon.com/oauth2/authorize",
-         token_url: "https://api.patreon.com/oauth2/token",
-         auth_scheme: :request_body
+         token_url: "https://api.patreon.com/oauth2/token"
 
   option :authorize_params, response_type: "code"
 
@@ -134,7 +183,7 @@ class ::OmniAuth::Strategies::Patreon < ::OmniAuth::Strategies::OAuth2
         response =
           client.request(
             :get,
-            Patreon::ApiVersion.current.oauth_identity_url,
+            "https://api.patreon.com/oauth2/api/current_user",
             headers: {
               "Authorization" => "Bearer #{access_token.token}",
             },
@@ -159,7 +208,6 @@ class Auth::PatreonAuthenticator < Auth::ManagedAuthenticator
                       setup:
                         lambda { |env|
                           strategy = env["omniauth.strategy"]
-                          adapter = Patreon::ApiVersion.current
                           strategy.options[:client_id] = SiteSetting.patreon_client_id
                           strategy.options[:client_secret] = SiteSetting.patreon_client_secret
                           strategy.options[
@@ -168,8 +216,6 @@ class Auth::PatreonAuthenticator < Auth::ManagedAuthenticator
                           strategy.options[
                             :provider_ignores_state
                           ] = SiteSetting.patreon_login_ignore_state
-                          strategy.options[:client_options][:token_url] = adapter.oauth_token_url
-                          strategy.options[:authorize_params] = adapter.oauth_authorize_params
                         }
   end
 
@@ -186,12 +232,8 @@ class Auth::PatreonAuthenticator < Auth::ManagedAuthenticator
     result
   end
 
-  def enable_setting
-    :patreon_login_enabled
-  end
-
-  def required_settings
-    %i[patreon_client_id patreon_client_secret patreon_creator_discourse_username]
+  def enabled?
+    SiteSetting.patreon_login_enabled
   end
 
   def primary_email_verified?(auth_token)

@@ -22,6 +22,10 @@
     background: transparent;
     outline-offset: -2px;
   }
+
+  .btn.--active {
+    background: var(--d-selected);
+  }
 }
 
 .topic-list-layout-table-ai {
@@ -57,10 +61,8 @@
 
   .mobile-view & {
     .topic-list-item .excerpt {
-      display: block;
-      margin-top: 0.5em;
-      margin-bottom: 0;
-      font-size: var(--font-down-1);
+      margin-top: -0.25em;
+      margin-bottom: 0.25em;
     }
 
     .topic-item-stats .num.activity {

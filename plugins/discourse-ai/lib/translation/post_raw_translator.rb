@@ -5,8 +5,8 @@ module DiscourseAi
     class PostRawTranslator < BaseTranslator
       private
 
-      def agent_setting
-        SiteSetting.ai_translation_post_raw_translator_agent
+      def persona_setting
+        SiteSetting.ai_translation_post_raw_translator_persona
       end
     end
   end

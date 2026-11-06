@@ -3,39 +3,18 @@
 module PageObjects
   module Pages
     class Review < PageObjects::Pages::Base
+      POST_BODY_TOGGLE_SELECTOR = ".post-body__toggle-btn"
+      POST_BODY_COLLAPSED_SELECTOR = ".post-body.is-collapsed"
       REVIEWABLE_ACTION_DROPDOWN = ".reviewable-action-dropdown"
-
-      def has_no_standalone_classification?
-        has_no_css?(".review-item__classify, .dsa-classification")
-      end
 
       def visit_reviewable(reviewable)
         page.visit("/review/#{reviewable.id}")
         self
       end
 
-      # Reaching a reviewable through the user menu keeps the app running, which
-      # is the only way to exercise the state a reviewable item carries over from
-      # the previously displayed one. `visit_reviewable` always starts afresh.
-      def visit_reviewable_from_user_menu(reviewable)
-        PageObjects::Components::UserMenu.new.open.click_review_queue_tab.click_reviewable(
-          reviewable,
-        )
-        reviewable_by_id(reviewable.id)
-        self
-      end
-
-      def select_bundled_action(reviewable, value, bundle_index: nil)
+      def select_bundled_action(reviewable, value)
         within(reviewable_by_id(reviewable.id)) do
-          dropdown =
-            if bundle_index
-              PageObjects::Components::SelectKit.new(
-                "#{REVIEWABLE_ACTION_DROPDOWN}:nth-of-type(#{bundle_index})",
-              )
-            else
-              reviewable_action_dropdown
-            end
-          dropdown.select_row_by_value(value)
+          reviewable_action_dropdown.select_row_by_value(value)
         end
       end
 
@@ -45,11 +24,28 @@ module PageObjects
         end
       end
 
-      # Pass confirm: false for reviewables that require a rejection reason, as
-      # those open a modal instead of the confirmation dialog.
-      def delete_user_from_reviewable(reviewable, action, confirm: true)
-        select_bundled_action(reviewable, action, bundle_index: 1)
-        PageObjects::Components::Dialog.new.click_danger if confirm
+      def reviewable_by_id(id)
+        find(".reviewable-item[data-reviewable-id=\"#{id}\"]")
+      end
+
+      def click_post_body_toggle
+        find(POST_BODY_TOGGLE_SELECTOR).click
+      end
+
+      def has_post_body_toggle?
+        page.has_css?(POST_BODY_TOGGLE_SELECTOR)
+      end
+
+      def has_no_post_body_toggle?
+        page.has_no_css?(POST_BODY_TOGGLE_SELECTOR)
+      end
+
+      def has_post_body_collapsed?
+        page.has_css?(POST_BODY_COLLAPSED_SELECTOR)
+      end
+
+      def has_no_post_body_collapsed?
+        page.has_no_css?(POST_BODY_COLLAPSED_SELECTOR)
       end
 
       def has_reviewable_action_dropdown?
@@ -60,18 +56,12 @@ module PageObjects
         page.has_no_css?(REVIEWABLE_ACTION_DROPDOWN)
       end
 
-      def has_no_reviewable_actions?(reviewable)
-        within(reviewable_by_id(reviewable.id)) do
-          page.has_no_css?(".reviewable-action, #{REVIEWABLE_ACTION_DROPDOWN}")
-        end
+      def has_reviewable_with_pending_status?(reviewable)
+        within(reviewable_by_id(reviewable.id)) { page.has_css?(".status .pending") }
       end
 
-      def has_help_resources?
-        has_css?(".review-item__resources", text: I18n.t("js.review.need_help"))
-      end
-
-      def has_reviewable_items?(count:)
-        page.has_css?(".review-item", count: count)
+      def has_reviewable_with_rejected_status?(reviewable)
+        within(reviewable_by_id(reviewable.id)) { page.has_css?(".status .rejected") }
       end
 
       def has_reviewable_with_rejection_reason?(reviewable, rejection_reason)
@@ -82,11 +72,15 @@ module PageObjects
       end
 
       def has_scrub_button?(reviewable)
-        within(reviewable_by_id(reviewable.id)) { page.has_css?(".user-scrub") }
+        within(reviewable_by_id(reviewable.id)) { page.has_css?(".scrub-rejected-user button") }
       end
 
-      def click_scrub_user_button
-        find(".user-scrub").click
+      def has_no_scrub_button?(reviewable)
+        within(reviewable_by_id(reviewable.id)) { page.has_no_css?(".scrub-rejected-user button") }
+      end
+
+      def click_scrub_button(reviewable)
+        within(reviewable_by_id(reviewable.id)) { find(".scrub-rejected-user button").click }
       end
 
       def has_reviewable_with_scrubbed_by?(reviewable, scrubbed_by)
@@ -152,18 +146,6 @@ module PageObjects
         find(".reviewable-claimed-topic .unclaim").click
       end
 
-      def has_context_question?(reviewable, text)
-        within(reviewable_by_id(reviewable.id)) do
-          page.has_css?(".review-item__aside-title", text: text)
-        end
-      end
-
-      def has_no_context_question?(reviewable, text)
-        within(reviewable_by_id(reviewable.id)) do
-          page.has_no_css?(".review-item__aside-title", text: text)
-        end
-      end
-
       def flag_reason_component
         PageObjects::Components::Review::FlagReason.new
       end
@@ -172,128 +154,7 @@ module PageObjects
         PageObjects::Components::Review::TopicLink.new
       end
 
-      def has_history_items?(count:)
-        page.has_css?(".timeline-event", count: count)
-      end
-
-      def has_note?(content)
-        page.has_css?(".timeline-event__description", text: content, normalize_ws: true)
-      end
-
-      def has_no_note?(content)
-        page.has_no_css?(".timeline-event__description", text: content, normalize_ws: true)
-      end
-
-      def has_claimed_history_item?(user)
-        page.has_css?(".timeline-event__icon .d-icon-user-plus") && page.has_text?("Claimed by")
-      end
-
-      def has_unclaimed_history_item?(user)
-        page.has_css?(".timeline-event__icon .d-icon-user-xmark") && page.has_text?("Unclaimed by")
-      end
-
-      def has_created_at_history_item?
-        page.has_css?(".timeline-event__icon .d-icon-pen-to-square") &&
-          page.has_text?("Post created by")
-      end
-
-      def click_timeline_tab
-        find(".action-list li.timeline").click
-      end
-
-      def click_insights_tab
-        find(".action-list li.insights").click
-      end
-
-      def has_reviewable_with_status?(reviewable, status)
-        within(reviewable_by_id(reviewable.id)) do
-          page.has_css?(".review-item__status.--#{status}")
-        end
-      end
-
-      def has_reviewable_with_approved_status?(reviewable)
-        within(reviewable_by_id(reviewable.id)) { page.has_css?(".review-item__status.--approved") }
-      end
-
-      def has_reviewable_with_rejected_status?(reviewable)
-        within(reviewable_by_id(reviewable.id)) { page.has_css?(".review-item__status.--rejected") }
-      end
-
-      def has_rejected_item_in_timeline?(reviewable)
-        within(reviewable_by_id(reviewable.id)) { page.has_text?("Rejected by") }
-      end
-
-      def has_reviewable_with_pending_status?(reviewable)
-        within(reviewable_by_id(reviewable.id)) { page.has_css?(".review-item__status.--pending") }
-      end
-
-      def has_reviewable_with_ignored_status?(reviewable)
-        within(reviewable_by_id(reviewable.id)) { page.has_css?(".review-item__status.--ignored") }
-      end
-
-      def has_approved_item_in_timeline?(reviewable)
-        within(reviewable_by_id(reviewable.id)) { page.has_text?("Approved by") }
-      end
-
-      def has_reviewables?(reviewables)
-        reviewable_ids = reviewables.map(&:id)
-        page.has_css?(".review-item", count: reviewables.size) &&
-          reviewable_ids.all? { |id| page.has_css?(".review-item[data-reviewable-id='#{id}']") }
-      end
-
-      def click_approve_user_button
-        find(".user-approve-user").click
-      end
-
-      def fill_post_content(content)
-        find(".d-editor-input").fill_in(with: content)
-      end
-
-      def save_post_edit
-        find(".reviewable-action.save-edit").click
-      end
-
-      def has_ip_lookup_info?
-        page.has_css?(".reviewable-ip-lookup")
-      end
-
-      def has_no_ip_lookup_info?
-        page.has_no_css?(".reviewable-ip-lookup")
-      end
-
-      def has_ip_location?(location)
-        page.has_text?(location)
-      end
-
-      def has_ip_hostname?(hostname)
-        page.has_text?(hostname)
-      end
-
-      def has_ip_lookup_modal?
-        page.has_css?(".ip-lookup-other-accounts-modal")
-      end
-
-      def has_account_in_modal?(username)
-        within(".ip-lookup-other-accounts-modal") { page.has_text?(username) }
-      end
-
-      def has_other_accounts_link?(count:)
-        page.has_button?(I18n.t("js.ip_lookup.other_accounts_with_ip", count: count))
-      end
-
-      def click_other_accounts_link
-        find(".ip-lookup-other-accounts-link").click
-      end
-
-      def click_edit_post_button
-        find(".reviewable-action.edit").click
-      end
-
       private
-
-      def reviewable_by_id(id)
-        find(".review-item[data-reviewable-id=\"#{id}\"]")
-      end
 
       def reviewable_action_dropdown
         @reviewable_action_dropdown ||=

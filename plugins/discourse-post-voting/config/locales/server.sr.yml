@@ -11,3 +11,5 @@ sr:
         actions:
           agree_and_suspend:
             title: "Suspenduj Korisnika"
+          disagree:
+            title: "Odbaci"

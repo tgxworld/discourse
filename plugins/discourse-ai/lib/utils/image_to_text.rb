@@ -5,11 +5,10 @@ class DiscourseAi::Utils::ImageToText
   MAX_IMAGE_SIZE = 10.megabytes
 
   class Reader
-    def initialize(uploads:, llm_model:, user:, execution_context: nil)
+    def initialize(uploads:, llm_model:, user:)
       @uploads = uploads
       @llm_model = llm_model
       @user = user
-      @execution_context = execution_context
       @buffer = +""
 
       @to_process = uploads.dup
@@ -27,12 +26,7 @@ class DiscourseAi::Utils::ImageToText
 
       upload = @to_process.shift
       extractor =
-        DiscourseAi::Utils::ImageToText.new(
-          upload: upload,
-          llm_model: @llm_model,
-          user: @user,
-          execution_context: @execution_context,
-        )
+        DiscourseAi::Utils::ImageToText.new(upload: upload, llm_model: @llm_model, user: @user)
       extractor.extract_text do |chunk, error|
         if error
           Discourse.warn_exception(
@@ -50,10 +44,10 @@ class DiscourseAi::Utils::ImageToText
     end
   end
 
-  def self.as_fake_file(uploads:, llm_model:, user:, execution_context: nil)
+  def self.as_fake_file(uploads:, llm_model:, user:)
     # given our implementation for extracting text expect a file, return a simple object that can simulate read(size)
     # and stream content
-    Reader.new(uploads: uploads, llm_model: llm_model, user: user, execution_context:)
+    Reader.new(uploads: uploads, llm_model: llm_model, user: user)
   end
 
   def self.tesseract_installed?
@@ -70,14 +64,13 @@ class DiscourseAi::Utils::ImageToText
     end
   end
 
-  attr_reader :upload, :llm_model, :user, :execution_context
+  attr_reader :upload, :llm_model, :user
 
-  def initialize(upload:, llm_model:, user:, guidance_text: nil, execution_context: nil)
+  def initialize(upload:, llm_model:, user:, guidance_text: nil)
     @upload = upload
     @llm_model = llm_model
     @user = user
     @guidance_text = guidance_text
-    @execution_context = execution_context
   end
 
   def extract_text(retries: 3)
@@ -146,8 +139,8 @@ class DiscourseAi::Utils::ImageToText
       ]
     end
     prompt = DiscourseAi::Completions::Prompt.new(system_message, messages: messages)
-    result = llm.generate(prompt, user: Discourse.system_user, execution_context:)
-    extract_chunks(DiscourseAi::Completions::Llm.text_from_response(result))
+    result = llm.generate(prompt, user: Discourse.system_user)
+    extract_chunks(result)
   end
 
   def extract_text_with_tesseract(page)
@@ -157,7 +150,7 @@ class DiscourseAi::Utils::ImageToText
       if page.local?
         Discourse.store.path_for(page)
       else
-        Discourse.store.download(page, max_file_size_kb: MAX_IMAGE_SIZE)
+        Discourse.store.download_safe(page, max_file_size_kb: MAX_IMAGE_SIZE)&.path
       end
 
     return "" if !upload_path || !File.exist?(upload_path)

@@ -1,211 +1,101 @@
 import Component from "@glimmer/component";
-import { tracked } from "@glimmer/tracking";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
-import DMenu from "discourse/float-kit/components/d-menu";
-import DTooltip from "discourse/float-kit/components/d-tooltip";
-import { deferAnonymousAction } from "discourse/lib/anonymous-action";
-import getURL from "discourse/lib/get-url";
-import { NotificationLevels } from "discourse/lib/notification-levels";
+import DButton from "discourse/components/d-button";
 import { applyBehaviorTransformer } from "discourse/lib/transformer";
-import DButton from "discourse/ui-kit/d-button";
-import DDropdownMenu from "discourse/ui-kit/d-dropdown-menu";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { i18n } from "discourse-i18n";
 
-export default class VoteButton extends Component {
+export default class VoteBox extends Component {
+  @service siteSettings;
   @service currentUser;
 
-  @tracked hasVoted = false;
-  @tracked hasSeenSuccessMenu = false;
-
-  get topic() {
-    return this.args.topic;
+  get wrapperClasses() {
+    const classes = [];
+    const { topic } = this.args;
+    if (topic.closed) {
+      classes.push("voting-closed");
+    } else {
+      if (!topic.user_voted) {
+        classes.push("nonvote");
+      } else {
+        if (this.currentUser && this.currentUser.votes_exceeded) {
+          classes.push("vote-limited nonvote");
+        } else {
+          classes.push("vote");
+        }
+      }
+    }
+    if (this.siteSettings.topic_voting_show_who_voted) {
+      classes.push("show-pointer");
+    }
+    return classes.join(" ");
   }
 
-  get buttonIcon() {
-    return this.topic.user_voted ? "vote-up-filled" : "vote-up";
-  }
+  get buttonContent() {
+    const { topic } = this.args;
+    if (this.currentUser) {
+      if (topic.closed) {
+        return i18n("topic_voting.voting_closed_title");
+      }
 
-  get isWatching() {
-    return (
-      this.topic.details?.notification_level === NotificationLevels.WATCHING
-    );
-  }
+      if (topic.user_voted) {
+        return i18n("topic_voting.voted_title");
+      }
 
-  get limitsEnabled() {
-    return this.currentUser?.vote_limit != null;
-  }
+      if (this.currentUser.votes_exceeded) {
+        return i18n("topic_voting.voting_limit");
+      }
 
-  get showVotedMenu() {
-    return this.hasVoted && !this.hasSeenSuccessMenu;
-  }
-
-  get showVotedActions() {
-    return this.showVotedMenu || this.topic.user_voted;
-  }
-
-  get buttonClasses() {
-    if (this.currentUser?.vote_limit === 0) {
-      return "btn-default btn-small voting-wrapper__button";
+      return i18n("topic_voting.vote_title");
     }
 
-    return this.topic.user_voted
-      ? "btn-success btn-small voting-wrapper__button"
-      : "btn-default btn-small voting-wrapper__button";
-  }
+    if (topic.vote_count) {
+      return i18n("topic_voting.anonymous_button", {
+        count: topic.vote_count,
+      });
+    }
 
-  get ariaLabel() {
-    if (this.topic.closed) {
-      return i18n("topic_voting.voting_closed_description");
-    }
-    if (this.currentUser?.vote_limit === 0) {
-      return i18n("topic_voting.locked_description");
-    }
-    return this.topic.user_voted
-      ? i18n("topic_voting.remove_vote")
-      : i18n("topic_voting.vote_title");
+    return i18n("topic_voting.anonymous_button", { count: 1 });
   }
 
   @action
-  onShowMenu() {
-    if (!this.topic.user_voted) {
-      this.hasVoted = false;
-      this.hasSeenSuccessMenu = false;
-    }
-
-    applyBehaviorTransformer("topic-vote-button-click", async () => {
+  click() {
+    applyBehaviorTransformer("topic-vote-button-click", () => {
       if (!this.currentUser) {
-        if (this.topic.archived || this.topic.closed) {
-          return;
-        }
-        return deferAnonymousAction(this, "vote_topic", {
-          topic_id: this.topic.id,
-        });
+        return this.args.showLogin();
       }
 
-      if (this.currentUser.vote_limit === 0) {
-        return;
-      }
+      const { topic } = this.args;
 
       if (
-        !this.topic.closed &&
-        !this.topic.user_voted &&
+        !topic.closed &&
+        !topic.user_voted &&
         !this.currentUser.votes_exceeded
       ) {
         this.args.addVote();
-        this.hasVoted = true;
+      }
+
+      if (topic.user_voted || this.currentUser.votes_exceeded) {
+        this.args.showVoteOptions();
       }
     });
   }
 
-  @action
-  removeVote() {
-    this.args.removeVote();
-    this.hasVoted = false;
-    this.hasSeenSuccessMenu = false;
-    this.dMenu.close();
-  }
-
-  @action
-  async toggleWatching() {
-    const newLevel = this.isWatching
-      ? NotificationLevels.REGULAR
-      : NotificationLevels.WATCHING;
-    await this.topic.details.updateNotifications(newLevel);
-  }
-
-  @action
-  onRegisterApi(api) {
-    this.dMenu = api;
-  }
-
-  @action
-  onCloseMenu() {
-    if (this.hasVoted && !this.hasSeenSuccessMenu) {
-      this.hasSeenSuccessMenu = true;
-    }
-  }
-
   <template>
-    {{#if this.topic.closed}}
-      <DTooltip @identifier="vote-closed-tooltip" @placement="right">
-        <:trigger>
-          <DButton
-            class={{this.buttonClasses}}
-            @disabled={{true}}
-            @icon={{this.buttonIcon}}
-            @translatedAriaLabel={{this.ariaLabel}}
-          />
-        </:trigger>
-        <:content>
-          {{i18n "topic_voting.voting_closed_description"}}
-        </:content>
-      </DTooltip>
-    {{else if this.currentUser}}
-      <DMenu
-        class={{this.buttonClasses}}
-        @ariaLabel={{this.ariaLabel}}
-        @icon={{this.buttonIcon}}
-        @identifier="topic-voting-menu"
-        @onClose={{this.onCloseMenu}}
-        @onRegisterApi={{this.onRegisterApi}}
-        @onShow={{this.onShowMenu}}
-        @placement="right"
-        @title={{this.ariaLabel}}
-      >
-        <:content>
-          <DDropdownMenu as |dropdown|>
-            {{#if (eq this.currentUser.vote_limit 0)}}
-              <dropdown.item class="topic-voting-menu__title --locked">
-                {{dIcon "lock"}}
-                <span>{{i18n "topic_voting.locked_description"}}</span>
-              </dropdown.item>
-            {{else}}
-              {{#if this.limitsEnabled}}
-                <dropdown.item class="topic-voting-menu__votes-left">
-                  <DButton
-                    class="btn-transparent see-votes topic-voting-menu__row-btn"
-                    @href={{getURL "/my/activity/votes"}}
-                    @icon="check-to-slot"
-                    @translatedLabel={{i18n
-                      "topic_voting.see_votes"
-                      count=this.currentUser.votes_left
-                      max=this.currentUser.vote_limit
-                    }}
-                  />
-                </dropdown.item>
-              {{/if}}
-              {{#if this.showVotedActions}}
-                <dropdown.item class="topic-voting-menu__row">
-                  <DButton
-                    class="btn-transparent remove-vote topic-voting-menu__row-btn"
-                    @action={{this.removeVote}}
-                    @icon="arrow-rotate-left"
-                    @translatedLabel={{i18n "topic_voting.remove_vote"}}
-                  />
-                </dropdown.item>
-                <dropdown.item class="topic-voting-menu__watch-toggle">
-                  <DButton
-                    class="btn-transparent topic-voting-menu__row-btn"
-                    @action={{this.toggleWatching}}
-                    @icon={{if this.isWatching "toggle-on" "toggle-off"}}
-                    @translatedLabel={{i18n "topic_voting.watch_topic"}}
-                  />
-                </dropdown.item>
-              {{/if}}
-            {{/if}}
-          </DDropdownMenu>
-        </:content>
-      </DMenu>
-    {{else}}
+    <div class={{this.wrapperClasses}}>
       <DButton
-        class={{this.buttonClasses}}
-        @action={{this.onShowMenu}}
-        @icon={{this.buttonIcon}}
-        @translatedAriaLabel={{this.ariaLabel}}
-        @translatedTitle={{this.ariaLabel}}
+        @translatedTitle={{if
+          this.currentUser
+          (i18n
+            "topic_voting.votes_left_button_title"
+            count=this.currentUser.votes_left
+          )
+          ""
+        }}
+        @translatedLabel={{this.buttonContent}}
+        class="btn-primary vote-button"
+        @action={{this.click}}
       />
-    {{/if}}
+    </div>
   </template>
 }

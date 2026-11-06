@@ -1,4 +1,3 @@
-/* eslint-disable ember/routes-segments-snake-case */
 export default {
   resource: "user",
   path: "users/:username",

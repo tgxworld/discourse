@@ -6,26 +6,20 @@
 
 ur:
   js:
-    discourse_ai:
-      features:
-        data_explorer:
-          name: "ڈیٹا ایکسپلورر"
     errors:
       explorer:
         no_semicolons: "کمانڈ سے semicolons ہٹا دیں۔"
         dirty: "چلانے سے پہلے آپ کا کمانڈ کو محفوظ کرنا لازمی ہے۔"
-    data_explorer:
-      admin_dashboard_card:
-        no_results: "کوئی نتائج نہیں"
     explorer:
-      view_query: "مشاهده"
       or: "یا"
-      admins_only: "ڈیٹا ایکسپلورر صرف منتظمین کو دستیاب ہے۔"
+      admins_only: "ڈیٹا ایکسپلورر صرف ایڈمنوں کو دستیاب ہے۔"
       title: "ڈیٹا ایکسپلورر"
+      create: "نیا بنائیں"
       create_placeholder: "ڈیٹا کمانڈ کا نام..."
       description_placeholder: "یہاں تفصیل درج کریں"
-      ai:
-        generate: "تخلیق کریں"
+      import:
+        label: "درآمد"
+        modal: "ڈیٹا کمانڈ درآمد کریں"
       help:
         label: "مدد"
       schema:
@@ -37,32 +31,30 @@ ur:
           yes: "ہاں"
           no: "نہیں"
           null_: "خالی"
+      export: "برآمد"
       save: "تبدیلیاں محفوظ کریں"
+      saverun: "تبدیلیاں محفوظ کریں اور چلائیں"
       run: "چلائیں"
+      undo: "تبدیلیاں منسوخ کریں"
+      edit: "ترمیم کریں"
       delete: "مٹائیں"
-      chart:
-        form:
-          bar: "بار"
+      recover: "ڈیٹا کمانڈ کا حذف کرنا منسوخ کریں"
+      download_json: "JSON"
+      download_csv: "CSV"
+      others_dirty: "ایک ڈیٹا کمانڈ کی غیرمحفوظ کردہ تبدیلیاں موجود ہیں جو آپ کے یہاں سے جانے کے بعد کھو جائیں گی۔"
       result_count:
         one: "%{count} نتیجہ۔"
         other: "%{count} نتائج۔"
-      name: "نام"
+      query_name: "ڈیٹا کمانڈ"
       query_groups: "گروپس"
-      query_tags: "ٹیگز"
       report_name: "رپورٹ"
       query_description: "تفصیل"
       query_time: "چلا آخری دفعہ"
       query_user: "نے بنایا"
+      explain_label: "ڈیٹا کمانڈ پلَین شامل کریں؟"
+      save_params: "ڈیفالٹس سَیٹ کریں"
       reset_params: "رِی سَیٹ"
-      no_search_results: "معذرت، ہمیں آپ کے متن سے ملتے ہوے کوئی نتائج نہیں ملے۔"
+      search_placeholder: "تلاش کریں..."
+      no_search_results: "معذرت، ہمیں آپ کے متن سے ملتے ہوے کوئی نتائج نہ مل سکے۔"
     group:
       reports: "رپورٹیں"
-    discourse_workflows:
-      nodes:
-        "action:sql": "ڈیٹا ایکسپلورر"
-      sql:
-        query_id: "ڈیٹا کمانڈ"
-        param_value: "وَیلِیو"
-        output:
-          results: "نتائج"
-          no_results: "کوئی نتائج نہیں"

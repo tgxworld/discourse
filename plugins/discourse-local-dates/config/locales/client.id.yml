@@ -17,7 +17,8 @@ id:
       create:
         form:
           insert: Masukkan
-          save: Simpan
+          advanced_mode: Mode lanjutan
+          simple_mode: Mode sederhana
           timezones_title: Zona waktu yang ditampilkan
           invalid_date: Tanggal tidak valid, pastikan tanggal dan waktu sudah benar
           date_title: Tanggal

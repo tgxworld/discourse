@@ -38,7 +38,7 @@ class UserCardSerializer < BasicUserSerializer
     attrs.each do |attr|
       method_name = "include_#{attr}?"
       define_method(method_name) do
-        return false unless include_profile_details?
+        return false if scope.restrict_user_fields?(object)
         public_send(attr).present?
       end
     end
@@ -95,8 +95,7 @@ class UserCardSerializer < BasicUserSerializer
   end
 
   def include_email?
-    (object.id && object.id == scope.user.try(:id)) ||
-      (object.staged? && scope.can_check_emails?(object))
+    (object.id && object.id == scope.user.try(:id)) || (scope.is_staff? && object.staged?)
   end
 
   alias_method :include_secondary_emails?, :include_email?
@@ -175,7 +174,7 @@ class UserCardSerializer < BasicUserSerializer
   end
 
   def include_user_fields?
-    include_profile_details? && user_fields.present?
+    user_fields.present?
   end
 
   def custom_fields
@@ -201,7 +200,7 @@ class UserCardSerializer < BasicUserSerializer
   end
 
   def recent_time_read
-    object.recent_time_read
+    time = object.recent_time_read
   end
 
   def primary_group_name
@@ -224,10 +223,6 @@ class UserCardSerializer < BasicUserSerializer
     object.flair_group&.flair_color
   end
 
-  def include_featured_topic?
-    scope.can_see_topic?(object.user_profile.featured_topic)
-  end
-
   def featured_topic
     BasicTopicSerializer.new(object.user_profile.featured_topic, scope: scope, root: false).as_json
   end
@@ -245,10 +240,6 @@ class UserCardSerializer < BasicUserSerializer
   end
 
   private
-
-  def include_profile_details?
-    scope.public_can_see_profiles? && !scope.restrict_user_fields?(object)
-  end
 
   def custom_field_keys
     # Can be extended by other serializers

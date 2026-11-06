@@ -1,12 +1,25 @@
+import BreadCrumbs from "discourse/components/bread-crumbs";
+import CreateTopicButton from "discourse/components/create-topic-button";
+import NavigationBar from "discourse/components/navigation-bar";
+import CategoriesAdminDropdown from "select-kit/components/categories-admin-dropdown";
 import StyleguideExample from "discourse/plugins/styleguide/discourse/components/styleguide-example";
-import NavigationExample from "../../examples/organisms/navigation.gjs";
-import navigationSource from "../../examples/organisms/navigation?source=file";
 
-export default <template>
-  <StyleguideExample @code={{navigationSource}} @title="navigation">
-    <NavigationExample
-      @categories={{@dummy.categories}}
-      @navItems={{@dummy.navItems}}
-    />
+const Navigation = <template>
+  <StyleguideExample @title="navigation">
+    <div class="list-controls">
+      <div class="container">
+        <section class="navigation-container">
+          <BreadCrumbs @categories={{@dummy.categories}} />
+          <NavigationBar @navItems={{@dummy.navItems}} @filterMode="latest" />
+
+          <div class="navigation-controls">
+            <CategoriesAdminDropdown />
+            <CreateTopicButton @canCreateTopic={{true}} />
+          </div>
+        </section>
+      </div>
+    </div>
   </StyleguideExample>
-</template>
+</template>;
+
+export default Navigation;

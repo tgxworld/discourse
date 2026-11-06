@@ -4,7 +4,7 @@ require "stylesheet/importer"
 
 module Stylesheet
   class Compiler
-    ASSET_ROOT = "#{Rails.root.join("app/assets/stylesheets")}" unless defined?(ASSET_ROOT)
+    ASSET_ROOT = "#{Rails.root}/app/assets/stylesheets" unless defined?(ASSET_ROOT)
 
     def self.compile_asset(asset, options = {})
       importer = Importer.new(options)
@@ -34,7 +34,7 @@ module Stylesheet
         file += "@import \"#{asset}\";\n"
 
         case asset.to_s
-        when *Importer::FONT_TARGETS
+        when "embed", "publish"
           file += importer.font
         when "wizard"
           file += importer.wizard_fonts
@@ -54,8 +54,14 @@ module Stylesheet
       load_paths = [ASSET_ROOT]
       load_paths += options[:load_paths] if options[:load_paths]
 
-      silence_deprecations = %w[color-functions import global-builtin if-function]
+      silence_deprecations = %w[color-functions import global-builtin]
       fatal_deprecations = []
+
+      if options[:strict_deprecations]
+        fatal_deprecations << "mixed-decls"
+      else
+        silence_deprecations << "mixed-decls"
+      end
 
       engine =
         SassC::Engine.new(
@@ -76,7 +82,11 @@ module Stylesheet
       source_map.force_encoding("UTF-8")
 
       result, source_map =
-        AssetProcessor.new.post_css(css: result, map: source_map, source_map_file: source_map_file)
+        DiscourseJsProcessor::Transpiler.new.post_css(
+          css: result,
+          map: source_map,
+          source_map_file: source_map_file,
+        )
 
       if options[:rtl]
         require "rtlcss"

@@ -2,7 +2,7 @@
 
 class EmailTemplatesFinder
   def self.list
-    path = Rails.root.join("config/locales/server.en.yml").to_s
+    path = File.join(Rails.root, "config", "locales", "server.en.yml")
     yaml = YAML.load_file(path, aliases: true)
     new(yaml).list
   end

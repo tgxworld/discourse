@@ -4,7 +4,7 @@ module Chat
   module Blocks
     module Elements
       class ButtonSerializer < ApplicationSerializer
-        attributes :action_id, :type, :text, :style, :icon
+        attributes :action_id, :type, :text, :style
 
         def action_id
           object["action_id"]
@@ -16,10 +16,6 @@ module Chat
 
         def style
           object["style"]
-        end
-
-        def icon
-          object["icon"]
         end
 
         def text

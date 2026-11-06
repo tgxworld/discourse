@@ -1,12 +1,10 @@
+@import "box-view";
 @import "buttons";
 @import "chat";
 @import "categories-view";
 @import "color-choice";
-@import "compatibility";
 @import "composer";
 @import "composer-peek-mode";
-@import "experimental-screen";
-@import "discourse-events";
 @import "header";
 @import "hiddenstuff";
 @import "login";
@@ -19,10 +17,4 @@
 @import "sidebar-new-topic-button";
 @import "topic";
 @import "topic-cards";
-@import "topic-voting";
-@import "high-context-cards";
 @import "variables";
-
-:root {
-  --d-nav-pill-border-radius: 0;
-}

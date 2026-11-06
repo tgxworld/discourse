@@ -32,18 +32,18 @@ module HasUrl
 
       if data.blank?
         result = nil
-        result ||= find_by(url: uri.path)
+        result ||= self.find_by(url: uri.path)
         return result
       end
 
       result = nil
 
-      if name == "Upload"
+      if self.name == "Upload"
         sha1 = data[2]
-        result = find_by(sha1: sha1) if sha1&.length == Upload::SHA1_LENGTH
+        result = self.find_by(sha1: sha1) if sha1&.length == Upload::SHA1_LENGTH
       end
 
-      result || find_by("url LIKE ?", "%#{sanitize_sql_like(data[1])}")
+      result || self.find_by("url LIKE ?", "%#{data[1]}")
     end
 
     def get_from_urls(upload_urls)
@@ -64,11 +64,11 @@ module HasUrl
 
         if data = extract_url(uri.path).presence
           urls << data[1]
-          sha1s << data[2] if name == "Upload"
+          sha1s << data[2] if self.name == "Upload"
         end
       end
 
-      where(url: urls).or(where(sha1: sha1s))
+      self.where(url: urls).or(self.where(sha1: sha1s))
     end
   end
 end

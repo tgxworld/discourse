@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../mixins/github_body"
-require_relative "../mixins/github_api"
+require_relative "../mixins/github_auth_header"
 
 module Onebox
   module Engine
@@ -10,7 +10,7 @@ module Onebox
       include LayoutSupport
       include JSON
       include Onebox::Mixins::GithubBody
-      include Onebox::Mixins::GithubApi
+      include Onebox::Mixins::GithubAuthHeader
 
       matches_domain("github.com", "www.github.com")
       always_https
@@ -21,20 +21,6 @@ module Onebox
 
       def url
         "https://api.github.com/repos/#{match[:org]}/#{match[:repository]}/commits/#{match[:sha]}"
-      end
-
-      def inline_data
-        return unless github_token?
-
-        result = raw
-        message = result["commit"]["message"].split("\n").first
-        {
-          title:
-            "#{message} - #{match[:org]}/#{match[:repository]}@#{result["sha"][0...7]} - GitHub",
-        }
-      rescue StandardError => e
-        Rails.logger.warn("Inline GitHub commit onebox error for #{@url}: #{e.message}")
-        nil
       end
 
       private
@@ -52,7 +38,7 @@ module Onebox
       end
 
       def data
-        result = raw.clone
+        result = raw(github_auth_header(match[:org])).clone
 
         lines = result["commit"]["message"].split("\n")
         result["title"] = lines.first
@@ -64,16 +50,9 @@ module Onebox
         result["committed_at_time"] = committed_at.strftime("%T")
 
         result["link"] = link
-        result["layout_class"] = "github-onebox"
-        result["repository"] = "#{match[:org]}/#{match[:repository]}"
         ulink = URI(link)
         result["domain"] = "#{ulink.host}/#{ulink.path.split("/")[1]}/#{ulink.path.split("/")[2]}"
-        result["i18n"] = {
-          committed: I18n.t("onebox.github.committed"),
-          header: {
-            commit: I18n.t("onebox.github.header.commit"),
-          },
-        }
+        result["i18n"] = { committed: I18n.t("onebox.github.committed") }
 
         result
       end

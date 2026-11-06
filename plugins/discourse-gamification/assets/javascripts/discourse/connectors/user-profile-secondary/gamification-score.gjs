@@ -1,5 +1,5 @@
 import { i18n } from "discourse-i18n";
-import GamificationScore from "../../components/gamification-score.gjs";
+import GamificationScore from "../../components/gamification-score";
 
 const GamificationScoreConnector = <template>
   {{#if @model.gamification_score}}

@@ -4,27 +4,17 @@ class SiteSetting < ActiveRecord::Base
   VALID_AREAS = %w[
     about
     analytics
-    login
-    authenticators
-    discourseconnect
-    oauth2
-    oidc
-    saml
     badges
-    categories
     categories_and_tags
     email
     embedding
     emojis
-    experimental
     flags
     fonts
-    gifs
     group_permissions
     interface
     legal
     localization
-    mcp
     navigation
     notifications
     permalinks
@@ -55,6 +45,7 @@ class SiteSetting < ActiveRecord::Base
     default_other_external_links_in_new_tab
     default_other_enable_quoting
     default_other_enable_smart_lists
+    default_other_enable_defer
     default_other_dynamic_favicon
     default_other_like_notification_frequency
     default_other_skip_new_user_tips
@@ -76,7 +67,6 @@ class SiteSetting < ActiveRecord::Base
     default_sidebar_link_to_filtered_list
     default_sidebar_show_count_of_new_items
     default_composition_mode
-    default_watched_precedence_over_muted
   ]
 
   extend GlobalPath
@@ -84,29 +74,21 @@ class SiteSetting < ActiveRecord::Base
 
   has_many :upload_references, as: :target, dependent: :destroy
 
-  validates :name, presence: true
-  validates :data_type, presence: true
+  validates_presence_of :name
+  validates_presence_of :data_type
 
   after_save do
     if saved_change_to_value?
-      if data_type == SiteSettings::TypeSupervisor.types[:upload]
-        UploadReference.ensure_exist!(upload_ids: [value], target: self)
-      elsif data_type == SiteSettings::TypeSupervisor.types[:uploaded_image_list]
-        upload_ids = value.split("|").compact.uniq
-        UploadReference.ensure_exist!(upload_ids: upload_ids, target: self)
-      elsif data_type == SiteSettings::TypeSupervisor.types[:objects] && value.present?
-        upload_ids =
-          SchemaSettingsObjectValidator.upload_ids(
-            schema: SiteSetting.type_supervisor.type_hash(name.to_sym)[:schema],
-            objects: JSON.parse(value),
-          )
-
+      if self.data_type == SiteSettings::TypeSupervisor.types[:upload]
+        UploadReference.ensure_exist!(upload_ids: [self.value], target: self)
+      elsif self.data_type == SiteSettings::TypeSupervisor.types[:uploaded_image_list]
+        upload_ids = self.value.split("|").compact.uniq
         UploadReference.ensure_exist!(upload_ids: upload_ids, target: self)
       end
     end
   end
 
-  load_settings(Rails.root.join("config/site_settings.yml").to_s)
+  load_settings(File.join(Rails.root, "config", "site_settings.yml"))
 
   if Rails.env.test?
     SAMPLE_TEST_PLUGIN =
@@ -117,70 +99,22 @@ class SiteSetting < ActiveRecord::Base
     Discourse.plugins_by_name[SAMPLE_TEST_PLUGIN.name] = SAMPLE_TEST_PLUGIN
 
     load_settings(
-      Rails.root.join("spec/support/sample_plugin_site_settings.yml").to_s,
+      File.join(Rails.root, "spec", "support", "sample_plugin_site_settings.yml"),
       plugin: SAMPLE_TEST_PLUGIN.name,
     )
   end
 
   if GlobalSetting.load_plugins?
-    allowed_plugins = GlobalSetting.plugins_to_load
-    plugin_allowed = ->(name) { allowed_plugins.nil? || allowed_plugins.include?(name) }
-
-    Dir[Rails.root.join("plugins/*/config/settings.yml").to_s].each do |file|
-      plugin_name = file.split("/")[-3]
-      load_settings(file, plugin: plugin_name) if plugin_allowed.call(plugin_name)
-    end
-
-    # Sometimes plugins need to define their own fake site settings for testing
-    if Rails.env.test?
-      Dir[
-        Rails.root.join("plugins/*/spec/support/dummy_plugin_site_settings.yml").to_s
-      ].each do |file|
-        plugin_name = file.split("/")[-4]
-        load_settings(file, plugin: plugin_name) if plugin_allowed.call(plugin_name)
-      end
+    Dir[File.join(Rails.root, "plugins", "*", "config", "settings.yml")].each do |file|
+      load_settings(file, plugin: file.split("/")[-3])
     end
   end
 
   setup_deprecated_methods
   client_settings << :available_locales
 
-  SEEDED_CATEGORY_SETTINGS = %i[
-    general_category_id
-    meta_category_id
-    staff_category_id
-    uncategorized_category_id
-  ]
-
-  def self.ensure_consistency!
-    current.each do |name, value|
-      next if !dangling_category?(name, value)
-
-      reason = I18n.t("staff_action_logs.site_setting.missing_category_reset", category_id: value)
-      set_and_log(name, defaults[name], Discourse.system_user, reason)
-      if name.to_sym == :uncategorized_category_id
-        set_and_log(:allow_uncategorized_topics, false, Discourse.system_user, reason)
-      end
-    end
-  end
-
-  def self.dangling_category?(name, value)
-    type = type_supervisor.get_type(name)
-    return false if type != :category && !SEEDED_CATEGORY_SETTINGS.include?(name.to_sym)
-
-    value.to_i > 0 && !Category.exists?(value.to_i)
-  end
-  private_class_method :dangling_category?
-
   def self.available_locales
     LocaleSiteSetting.values.to_json
-  end
-
-  def self.content_localization_locales
-    locales = SiteSetting.content_localization_supported_locales.split("|")
-    default_locale = SiteSetting.default_locale
-    locales << default_locale if default_locale.present? && !locales.include?(default_locale)
-    locales
   end
 
   client_settings << :available_content_localization_locales
@@ -188,8 +122,13 @@ class SiteSetting < ActiveRecord::Base
   def self.available_content_localization_locales
     return [] if !SiteSetting.content_localization_enabled?
 
-    locales = content_localization_locales
-    LocaleSiteSetting.values.select { |locale| locales.include?(locale[:value]) }
+    supported_locales = SiteSetting.content_localization_supported_locales.split("|")
+    default_locale = SiteSetting.default_locale
+    if default_locale.present? && !supported_locales.include?(default_locale)
+      supported_locales << default_locale
+    end
+
+    LocaleSiteSetting.values.select { |locale| supported_locales.include?(locale[:value]) }
   end
 
   def self.topic_title_length
@@ -217,13 +156,7 @@ class SiteSetting < ActiveRecord::Base
   end
 
   def self.homepage
-    configured = default_homepage.presence
-
-    if configured && HomepageSiteSetting.choices.include?(configured)
-      configured
-    else
-      top_menu_items[0].name
-    end
+    top_menu_items[0].name
   end
 
   def self.anonymous_menu_items
@@ -231,13 +164,6 @@ class SiteSetting < ActiveRecord::Base
   end
 
   def self.anonymous_homepage
-    return homepage if anonymous_menu_items.include?(homepage)
-    if DiscoursePluginRegistry.homepage_options.any? { |option|
-         option[:id] == homepage && option[:anonymous]
-       }
-      return homepage
-    end
-
     top_menu_items
       .map { |item| item.name }
       .select { |item| anonymous_menu_items.include?(item) }
@@ -271,54 +197,29 @@ class SiteSetting < ActiveRecord::Base
     current_db = RailsMultisite::ConnectionManagement.current_db
 
     @blocked_attachment_content_types_regex ||= {}
-    @blocked_attachment_content_types_regex[current_db] ||= Regexp.union(
-      SiteSetting.blocked_attachment_content_types.split("|"),
-    )
+    @blocked_attachment_content_types_regex[current_db] ||= begin
+      Regexp.union(SiteSetting.blocked_attachment_content_types.split("|"))
+    end
   end
 
   def self.blocked_attachment_filenames_regex
     current_db = RailsMultisite::ConnectionManagement.current_db
 
     @blocked_attachment_filenames_regex ||= {}
-    @blocked_attachment_filenames_regex[current_db] ||= Regexp.union(
-      SiteSetting.blocked_attachment_filenames.split("|"),
-    )
+    @blocked_attachment_filenames_regex[current_db] ||= begin
+      Regexp.union(SiteSetting.blocked_attachment_filenames.split("|"))
+    end
   end
 
   def self.allowed_unicode_username_characters_regex
     current_db = RailsMultisite::ConnectionManagement.current_db
 
     @allowed_unicode_username_regex ||= {}
-    @allowed_unicode_username_regex[
-      current_db
-    ] ||= if SiteSetting.allowed_unicode_username_characters.present?
-      Regexp.new(SiteSetting.allowed_unicode_username_characters)
+    @allowed_unicode_username_regex[current_db] ||= begin
+      if SiteSetting.allowed_unicode_username_characters.present?
+        Regexp.new(SiteSetting.allowed_unicode_username_characters)
+      end
     end
-  end
-
-  def self.history_for(setting_name)
-    UserHistory.where(
-      action: UserHistory.actions[:change_site_setting],
-      subject: setting_name,
-    ).order(created_at: :desc)
-  end
-
-  class ImageQuality
-    def self.png_to_jpg_quality
-      SiteSetting.png_to_jpg_quality.nonzero? || SiteSetting.image_quality
-    end
-
-    def self.recompress_original_jpg_quality
-      SiteSetting.recompress_original_jpg_quality.nonzero? || SiteSetting.image_quality
-    end
-
-    def self.image_preview_jpg_quality
-      SiteSetting.image_preview_jpg_quality.nonzero? || SiteSetting.image_quality
-    end
-  end
-
-  def self.ImageQuality
-    SiteSetting::ImageQuality
   end
 
   # helpers for getting s3 settings that fallback to global
@@ -358,8 +259,8 @@ class SiteSetting < ActiveRecord::Base
     end
 
     def self.s3_base_url
-      path = s3_upload_bucket.split("/", 2)[1]
-      "#{absolute_base_url}#{path ? "/" + path : ""}"
+      path = self.s3_upload_bucket.split("/", 2)[1]
+      "#{self.absolute_base_url}#{path ? "/" + path : ""}"
     end
 
     def self.absolute_base_url
@@ -426,7 +327,7 @@ class SiteSetting < ActiveRecord::Base
         return SiteIconManager.public_send("#{setting_name}_url")
       end
 
-      upload = public_send(setting_name)
+      upload = self.public_send(setting_name)
       upload ? full_cdn_url(upload.url) : ""
     end
   end
@@ -452,8 +353,8 @@ end
 # Table name: site_settings
 #
 #  id         :integer          not null, primary key
-#  data_type  :integer          not null
 #  name       :string           not null
+#  data_type  :integer          not null
 #  value      :text
 #  created_at :datetime         not null
 #  updated_at :datetime         not null

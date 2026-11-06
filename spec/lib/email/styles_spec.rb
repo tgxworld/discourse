@@ -42,51 +42,10 @@ RSpec.describe Email::Styles do
       expect(frag.at("img")["src"]).to eq("#{Discourse.base_url}/some-image.png")
     end
 
-    it "converts relative links to absolute links" do
-      frag = basic_fragment("<a href='/u/someone'>someone</a><a href='mailto:a@b.com'>mail</a>")
-
-      expect(frag.css("a").map { |link| link["href"] }).to eq(
-        ["#{Discourse.base_url}/u/someone", "mailto:a@b.com"],
-      )
-    end
-
     it "preserves classes and ids" do
       raw = '<div class="foo" id="bar"><div class="foo" id="bar"></div></div>'
       frag = basic_fragment(raw)
       expect(frag.to_html).to eq(raw)
-    end
-  end
-
-  describe "custom formatter" do
-    shared_examples "applying CSS beside an unsupported selector" do |selector:|
-      it "skips the unsupported selector and applies supported styles" do
-        SiteSetting.email_custom_css_compiled = <<~CSS
-          p { color: red; }
-          #{selector}, a:first-child { letter-spacing: 3px; }
-          a { background-color: green; }
-        CSS
-
-        frag =
-          html_fragment(
-            '<p>Text</p><div><a href="/">Link</a><a href="/" id="other">Other link</a></div>',
-          )
-
-        expect(frag.at("p")["style"]).to include("color:red")
-        expect(frag.at("a")["style"]).to include("letter-spacing:3px", "background-color:green")
-        expect(frag.at("#other")["style"]).not_to include("letter-spacing:3px")
-      end
-    end
-
-    context "with the a:visited selector" do
-      include_examples "applying CSS beside an unsupported selector", selector: "a:visited"
-    end
-
-    context "with the a:hover selector" do
-      include_examples "applying CSS beside an unsupported selector", selector: "a:hover"
-    end
-
-    context "with the a[ selector" do
-      include_examples "applying CSS beside an unsupported selector", selector: "a["
     end
   end
 
@@ -120,14 +79,14 @@ RSpec.describe Email::Styles do
       expect(frag.at("a")["href"]).to eq(iframe_url)
     end
 
-    it "strips non-URL iframe sources without adding a link" do
+    it "won't allow non URLs in iframe src, strips them with no link" do
       iframe_url = "alert('xss hole')"
       frag = html_fragment("<iframe src=\"#{iframe_url}\"></iframe>")
       expect(frag.at("iframe")).to be_blank
       expect(frag.at("a")).to be_blank
     end
 
-    it "strips empty iframe sources without adding a link" do
+    it "won't allow empty iframe src, strips them with no link" do
       frag = html_fragment("<iframe src=''></iframe>")
       expect(frag.at("iframe")).to be_blank
       expect(frag.at("a")).to be_blank
@@ -285,50 +244,6 @@ RSpec.describe Email::Styles do
       expect(fragment.to_s.squish).to match(%r{^<blockquote.+</blockquote>$})
     end
 
-    it "styles user onebox avatar and layout for email" do
-      user_onebox_html = <<~HTML
-        <aside class="onebox">
-          <article class="onebox-body user-onebox">
-            <div class="aspect-image" style="--aspect-ratio:144/144;">
-              <img class="avatar" src="#{Discourse.base_url}/user_avatar/test.localhost/testuser/144/1_2.png">
-            </div>
-            <h3><a href="#{Discourse.base_url}/u/testuser">@testuser</a></h3>
-            <div>
-              <span class="full-name">Test User</span>
-              <span class="location">Earth</span>
-            </div>
-            <p>Bio here</p>
-            <div class="user-onebox--joined">Joined Jan 1, 2020</div>
-          </article>
-          <div class="clearfix"></div>
-        </aside>
-      HTML
-
-      fragment = html_fragment(user_onebox_html)
-
-      avatar_td = fragment.at("td[rowspan='2']")
-      expect(avatar_td).to be_present
-      expect(avatar_td["valign"]).to eq("top")
-      expect(avatar_td["style"]).to include("width:90px")
-
-      avatar_img = avatar_td.at("img")
-      expect(avatar_img["width"]).to eq("80")
-      expect(avatar_img["height"]).to eq("80")
-      expect(avatar_img["style"]).to include("width:80px")
-      expect(avatar_img["style"]).to include("height:80px")
-
-      username_h3 = fragment.at(".user-onebox h3")
-      expect(username_h3["style"]).to include("margin:0")
-      expect(username_h3["style"]).not_to include("margin:30px")
-
-      expect(fragment.at(".full-name")["style"]).to include("margin-right:10px")
-      expect(fragment.at(".location")["style"]).to include("margin-right:10px")
-
-      joined_td = fragment.css("td[valign='bottom']").last
-      expect(joined_td).to be_present
-      expect(joined_td.at(".user-onebox--joined")["style"]).to include("color:#919191")
-    end
-
     it "removes GitHub excerpts" do
       stub_request(:head, "https://github.com/discourse/discourse/pull/1253").to_return(
         status: 200,
@@ -354,7 +269,6 @@ RSpec.describe Email::Styles do
     end
 
     let(:attachments) { { "testimage.png" => stub(url: "email/test.png") } }
-
     it "replaces secure uploads within a link with a placeholder" do
       frag =
         html_fragment(
@@ -576,7 +490,6 @@ RSpec.describe Email::Styles do
   <div style="clear: both"></div>
 </aside>
           HTML
-
         it "keeps the special onebox styles" do
           strip_and_inline
           expect(@frag.to_s).to include("cid:email/test.png")

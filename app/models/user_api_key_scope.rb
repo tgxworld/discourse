@@ -56,11 +56,11 @@ end
 # Table name: user_api_key_scopes
 #
 #  id                 :bigint           not null, primary key
-#  allowed_parameters :jsonb
+#  user_api_key_id    :integer          not null
 #  name               :string           not null
 #  created_at         :datetime         not null
 #  updated_at         :datetime         not null
-#  user_api_key_id    :integer          not null
+#  allowed_parameters :jsonb
 #
 # Indexes
 #

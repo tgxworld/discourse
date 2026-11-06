@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "mysql2"
-require_relative "base"
+require File.expand_path(File.dirname(__FILE__) + "/base.rb")
 
 class ImportScripts::Drupal < ImportScripts::Base
   DRUPAL_DB = ENV["DRUPAL_DB"] || "newsite3"
@@ -219,7 +219,7 @@ class ImportScripts::Drupal < ImportScripts::Base
           }
           if row["pid"]
             parent = topic_lookup_from_imported_post_id("cid:#{row["pid"]}")
-            h[:reply_to_post_number] = parent[:post_number] if parent && parent[:post_number] > 1
+            h[:reply_to_post_number] = parent[:post_number] if parent && parent[:post_number] > (1)
           end
           h
         else

@@ -22,7 +22,7 @@ RSpec.describe RateLimiter do
       rate_limiter.performed!
     end
 
-    it "is disabled" do
+    it "should be disabled" do
       expect(RateLimiter.disabled?).to eq(true)
     end
 
@@ -108,7 +108,7 @@ RSpec.describe RateLimiter do
     end
 
     context "when never done" do
-      it "allows performing immediately" do
+      it "should perform right away" do
         expect(rate_limiter.can_perform?).to eq(true)
       end
 
@@ -128,7 +128,7 @@ RSpec.describe RateLimiter do
     end
 
     context "when max is less than or equal to zero" do
-      it "rejects nonpositive and missing limits" do
+      it "should raise the right error" do
         [-1, 0, nil].each do |max|
           expect do RateLimiter.new(user, "a", max, 60).performed! end.to raise_error(
             RateLimiter::LimitExceeded,

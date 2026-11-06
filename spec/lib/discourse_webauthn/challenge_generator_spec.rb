@@ -10,13 +10,13 @@ RSpec.describe DiscourseWebauthn::ChallengeGenerator do
   describe "ChallengeSession" do
     describe "#commit_to_session" do
       let(:user) { Fabricate(:user) }
-      let(:server_session) { ServerSession.new("some-prefix") }
-      let(:generated_session) { DiscourseWebauthn::ChallengeGenerator.generate }
 
       it "stores the challenge in the provided session object" do
-        generated_session.commit_to_session(server_session, user)
+        secure_session = SecureSession.new("some-prefix")
+        generated_session = DiscourseWebauthn::ChallengeGenerator.generate
+        generated_session.commit_to_session(secure_session, user)
 
-        expect(server_session["staged-webauthn-challenge-#{user&.id}"]).to eq(
+        expect(secure_session["staged-webauthn-challenge-#{user&.id}"]).to eq(
           generated_session.challenge,
         )
       end

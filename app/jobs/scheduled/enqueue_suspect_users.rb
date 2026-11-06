@@ -13,10 +13,8 @@ module Jobs
           .distinct
           .activated
           .human_users
-          .not_suspended
           .where(approved: false)
           .joins(:user_profile, :user_stat)
-          .includes(:user_profile, :uploaded_avatar)
           .where("users.created_at <= ? AND users.created_at >= ?", 1.day.ago, 6.months.ago)
           .where("LENGTH(COALESCE(user_profiles.bio_raw, user_profiles.website, '')) > 0")
           .where(
@@ -38,12 +36,20 @@ module Jobs
           .limit(10)
 
       users.each do |user|
+        user_profile = user.user_profile
+
         reviewable =
           ReviewableUser.needs_review!(
             target: user,
             created_by: Discourse.system_user,
             reviewable_by_moderator: true,
-            payload: ReviewableUser.payload_for(user),
+            payload: {
+              username: user.username,
+              name: user.name,
+              email: user.email,
+              bio: user_profile.bio_raw,
+              website: user_profile.website,
+            },
           )
 
         if reviewable.created_new

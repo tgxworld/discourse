@@ -3,34 +3,32 @@ import { bind } from "discourse/lib/decorators";
 import { NotificationLevels } from "discourse/lib/notification-levels";
 import { i18n } from "discourse-i18n";
 import { CHANNEL_STATUSES } from "discourse/plugins/chat/discourse/models/chat-channel";
-import ChatChannelArchive from "../models/chat-channel-archive.js";
+import ChatChannelArchive from "../models/chat-channel-archive";
 
 export default class ChatSubscriptionsManager extends Service {
+  @service store;
   @service chatChannelsManager;
+  @service chatTrackingStateManager;
   @service currentUser;
   @service appEvents;
   @service chat;
   @service dialog;
-  @service messageBus;
   @service router;
 
   _channelSubscriptions = new Set();
 
-  startChannelSubscription(channel, { readOnly = false } = {}) {
+  startChannelSubscription(channel) {
     if (
-      (!readOnly && channel.currentUserMembership?.muted) ||
+      channel.currentUserMembership.muted ||
       this._channelSubscriptions.has(channel.id)
     ) {
       return;
     }
 
     this._channelSubscriptions.add(channel.id);
+    this._startChannelMentionsSubscription(channel);
 
-    if (this.currentUser && !readOnly) {
-      this._startChannelMentionsSubscription(channel);
-    }
-
-    if (this.currentUser && !readOnly && !channel.isDirectMessageChannel) {
+    if (!channel.isDirectMessageChannel) {
       this._startKickFromChannelSubscription(channel);
     }
 
@@ -60,7 +58,6 @@ export default class ChatSubscriptionsManager extends Service {
     this._startNewChannelSubscription(messageBusIds.new_channel);
     this._startChannelArchiveStatusSubscription(messageBusIds.archive_status);
     this._startUserTrackingStateSubscription(messageBusIds.user_tracking_state);
-    this._startUserHasThreadsSubscription(messageBusIds.user_has_threads);
     this._startChannelsEditsSubscription(messageBusIds.channel_edits);
     this._startChannelsStatusChangesSubscription(messageBusIds.channel_status);
     this._startChannelsMetadataChangesSubscription(
@@ -72,7 +69,6 @@ export default class ChatSubscriptionsManager extends Service {
     this._stopNewChannelSubscription();
     this._stopChannelArchiveStatusSubscription();
     this._stopUserTrackingStateSubscription();
-    this._stopUserHasThreadsSubscription();
     this._stopChannelsEditsSubscription();
     this._stopChannelsStatusChangesSubscription();
     this._stopChannelsMetadataChangesSubscription();
@@ -83,7 +79,7 @@ export default class ChatSubscriptionsManager extends Service {
   }
 
   _startChannelArchiveStatusSubscription(lastId) {
-    if (this.currentUser?.admin) {
+    if (this.currentUser.admin) {
       this.messageBus.subscribe(
         "/chat/channel-archive-status",
         this._onChannelArchiveStatusUpdate,
@@ -93,7 +89,7 @@ export default class ChatSubscriptionsManager extends Service {
   }
 
   _stopChannelArchiveStatusSubscription() {
-    if (this.currentUser?.admin) {
+    if (this.currentUser.admin) {
       this.messageBus.unsubscribe(
         "/chat/channel-archive-status",
         this._onChannelArchiveStatusUpdate
@@ -192,11 +188,6 @@ export default class ChatSubscriptionsManager extends Service {
   _onNewChannelMessage(busData) {
     this.chatChannelsManager.find(busData.channel_id).then((channel) => {
       channel.lastMessage = busData.message;
-
-      if (!this.currentUser) {
-        return;
-      }
-
       const user = busData.message.user;
       if (user.id === this.currentUser.id) {
         // User sent message, update tracking state to no unread
@@ -240,16 +231,10 @@ export default class ChatSubscriptionsManager extends Service {
         return;
       }
 
-      channel.lastMessage = busData.message;
-
       channel.threadsManager
         .find(busData.channel_id, busData.thread_id)
         .then((thread) => {
           thread.lastMessageId = busData.message.id;
-
-          if (!this.currentUser) {
-            return;
-          }
 
           if (busData.message.user.id === this.currentUser.id) {
             // Thread should no longer be considered unread.
@@ -343,36 +328,6 @@ export default class ChatSubscriptionsManager extends Service {
     );
   }
 
-  _startUserHasThreadsSubscription(lastId) {
-    if (!this.currentUser) {
-      return;
-    }
-
-    this.messageBus.subscribe(
-      `/chat/user-has-threads/${this.currentUser.id}`,
-      this._onUserHasThreads,
-      lastId
-    );
-  }
-
-  _stopUserHasThreadsSubscription() {
-    if (!this.currentUser) {
-      return;
-    }
-
-    this.messageBus.unsubscribe(
-      `/chat/user-has-threads/${this.currentUser.id}`,
-      this._onUserHasThreads
-    );
-  }
-
-  @bind
-  _onUserHasThreads(busData) {
-    if (busData.has_threads) {
-      this.chatChannelsManager.userHasThreads = true;
-    }
-  }
-
   @bind
   _onBulkUserTrackingStateUpdate(busData) {
     Object.keys(busData).forEach((channelId) => {
@@ -449,28 +404,20 @@ export default class ChatSubscriptionsManager extends Service {
 
   @bind
   _onNewChannelSubscription(data) {
-    const channel = this.chatChannelsManager.store(data.channel);
+    this.chatChannelsManager.find(data.channel.id).then((channel) => {
+      // we need to refresh here to have correct last message ids
+      channel.meta = data.channel.meta;
+      channel.currentUserMembership = data.channel.current_user_membership;
 
-    // we need to refresh here to have correct last message ids
-    channel.meta = data.channel.meta;
-    channel.currentUserMembership = data.channel.current_user_membership;
-
-    if (!this.currentUser) {
-      if (channel.isCategoryChannel) {
-        this.startChannelSubscription(channel, { readOnly: true });
+      if (
+        channel.isDirectMessageChannel &&
+        !channel.currentUserMembership.following
+      ) {
+        channel.tracking.unreadCount = 1;
       }
 
-      return;
-    }
-
-    if (
-      channel.isDirectMessageChannel &&
-      !channel.currentUserMembership.following
-    ) {
-      channel.tracking.unreadCount = 1;
-    }
-
-    this.chatChannelsManager.follow(channel);
+      this.chatChannelsManager.follow(channel);
+    });
   }
 
   _startChannelsMetadataChangesSubscription(lastId) {

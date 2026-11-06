@@ -1,11 +1,12 @@
-import Component from "@glimmer/component";
-import { tracked } from "@glimmer/tracking";
+/* eslint-disable ember/no-classic-components */
+import Component from "@ember/component";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
-import { service } from "@ember/service";
-import { trustHTML } from "@ember/template";
+import { htmlSafe } from "@ember/template";
+import { classNames, tagName } from "@ember-decorators/component";
+import $ from "jquery";
+import icon from "discourse/helpers/d-icon";
 import cookie from "discourse/lib/cookie";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { i18n } from "discourse-i18n";
 
 let numTopicsOpened = 0;
@@ -14,23 +15,27 @@ export function incrementTopicsOpened() {
   numTopicsOpened++;
 }
 
+@tagName("div")
+@classNames("topic-above-footer-buttons-outlet", "patreon")
 export default class Patreon extends Component {
   static shouldRender(_args, context) {
     return context.currentUser;
   }
 
-  @service currentUser;
-  @service siteSettings;
-
-  @tracked
-  showDonationPrompt =
-    this.siteSettings.patreon_enabled &&
-    this.siteSettings.patreon_donation_prompt_enabled &&
-    this.siteSettings.patreon_donation_prompt_campaign_url !== "" &&
-    this.currentUser.show_donation_prompt &&
-    cookie(cookieName) !== "t" &&
-    numTopicsOpened >
-      this.siteSettings.patreon_donation_prompt_show_after_topics;
+  init() {
+    super.init(...arguments);
+    this.didInsertElement = function () {
+      const showDonationPrompt =
+        this.siteSettings.patreon_enabled &&
+        this.siteSettings.patreon_donation_prompt_enabled &&
+        this.siteSettings.patreon_donation_prompt_campaign_url !== "" &&
+        this.currentUser.show_donation_prompt &&
+        cookie(cookieName) !== "t" &&
+        numTopicsOpened >
+          this.siteSettings.patreon_donation_prompt_show_after_topics;
+      this.set("showDonationPrompt", showDonationPrompt);
+    };
+  }
 
   @action
   close() {
@@ -39,25 +44,23 @@ export default class Patreon extends Component {
     cookie(cookieName, "t", {
       expires,
     });
-    this.showDonationPrompt = false;
+    $(this.element).fadeOut(700);
   }
 
   <template>
-    <div class="topic-above-footer-buttons-outlet patreon" ...attributes>
-      {{#if this.showDonationPrompt}}
-        <div class="patreon-donation-prompt">
-          <span class="close" role="button" {{on "click" this.close}}>
-            {{dIcon "xmark"}}
-          </span>
+    {{#if this.showDonationPrompt}}
+      <div class="patreon-donation-prompt">
+        <span {{on "click" this.close}} role="button" class="close">
+          {{icon "xmark"}}
+        </span>
 
-          {{trustHTML
-            (i18n
-              "patreon.donation_prompt.body"
-              campaignUrl=this.siteSettings.patreon_donation_prompt_campaign_url
-            )
-          }}
-        </div>
-      {{/if}}
-    </div>
+        {{htmlSafe
+          (i18n
+            "patreon.donation_prompt.body"
+            campaignUrl=this.siteSettings.patreon_donation_prompt_campaign_url
+          )
+        }}
+      </div>
+    {{/if}}
   </template>
 }

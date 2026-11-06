@@ -6,7 +6,14 @@ class UserBookmarkListSerializer < ApplicationSerializer
   has_many :categories, serializer: CategoryBadgeSerializer, embed: :objects
 
   def bookmarks
-    object.bookmarks.map { |bm| bm.registered_bookmarkable.serializer.new(bm, scope:, root: false) }
+    object.bookmarks.map do |bm|
+      bm.registered_bookmarkable.serializer.new(
+        bm,
+        **object.bookmark_serializer_opts,
+        scope: scope,
+        root: false,
+      )
+    end
   end
 
   def include_more_bookmarks_url?

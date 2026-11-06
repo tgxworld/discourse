@@ -23,7 +23,7 @@ RSpec.describe TopicPublisher do
         op.reload
       end
 
-      it "publishes the topic" do
+      it "will publish the topic properly" do
         published_at = 1.hour.from_now.change(usec: 0)
         freeze_time(published_at) do
           TopicPublisher.new(topic, moderator, shared_draft.category_id).publish!
@@ -54,7 +54,7 @@ RSpec.describe TopicPublisher do
         end
       end
 
-      it "notifies users watching the tag" do
+      it "will notify users watching tag" do
         Jobs.run_immediately!
 
         TagUser.create!(

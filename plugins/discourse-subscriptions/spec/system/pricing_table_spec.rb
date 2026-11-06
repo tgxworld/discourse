@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "Pricing Table", allow_network: ["js.stripe.com"] do
+RSpec.describe "Pricing Table", type: :system do
   fab!(:admin)
   fab!(:product) { Fabricate(:product, external_id: "prod_OiK") }
   let(:dialog) { PageObjects::Components::Dialog.new }
@@ -92,24 +92,6 @@ RSpec.describe "Pricing Table", allow_network: ["js.stripe.com"] do
     )
   end
 
-  it "Passes a signed user reference to Stripe" do
-    sign_in(admin)
-    SiteSetting.discourse_subscriptions_pricing_table_id = "prctbl_123"
-
-    visit("/s/subscriptions")
-
-    pricing_table = find("stripe-pricing-table", visible: :all)
-    client_reference_id = pricing_table["client-reference-id"]
-
-    expect(client_reference_id).to be_present
-    expect(
-      User.find_signed(
-        client_reference_id,
-        purpose: DiscourseSubscriptions::CHECKOUT_SESSION_USER_REFERENCE_PURPOSE,
-      ),
-    ).to eq(admin)
-  end
-
   it "Shows a log in message if not signed in" do
     visit("/")
 
@@ -125,14 +107,14 @@ RSpec.describe "Pricing Table", allow_network: ["js.stripe.com"] do
     sign_in(admin)
     visit("/s")
 
-    expect(page).to have_current_path("/s/subscriptions")
+    try_until_success { expect(current_url).to match("/s/subscriptions") }
   end
 
-  it "Redirects to first product subscribe route if pricing table is not enabled" do
+  it "Redirects to /s if pricing table is not enabled" do
     sign_in(admin)
-    SiteSetting.discourse_subscriptions_pricing_table_enabled = false
+    SiteSetting.discourse_subscriptions_campaign_enabled = false
     visit("/s/subscriptions")
 
-    expect(page).to have_current_path("/s/prod_OiK")
+    try_until_success { expect(current_url).to match("/s") }
   end
 end

@@ -1,8 +1,8 @@
 import Component from "@glimmer/component";
 import { service } from "@ember/service";
-import { trustHTML } from "@ember/template";
+import { htmlSafe } from "@ember/template";
+import icon from "discourse/helpers/d-icon";
 import getURL from "discourse/lib/get-url";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
 import I18n, { i18n } from "discourse-i18n";
 
 export default class ChatMentionWarnings extends Component {
@@ -87,7 +87,7 @@ export default class ChatMentionWarnings extends Component {
     }
 
     if (this.currentUser.admin) {
-      return trustHTML(
+      return htmlSafe(
         i18n("chat.mention_warning.too_many_mentions_admin", {
           count: this.siteSettings.max_mentions_per_chat_message,
           siteSettingUrl: getURL(
@@ -96,7 +96,7 @@ export default class ChatMentionWarnings extends Component {
         })
       );
     } else {
-      return trustHTML(
+      return htmlSafe(
         i18n("chat.mention_warning.too_many_mentions", {
           count: this.siteSettings.max_mentions_per_chat_message,
         })
@@ -132,7 +132,7 @@ export default class ChatMentionWarnings extends Component {
       return;
     }
 
-    return trustHTML(
+    return htmlSafe(
       I18n.messageFormat("chat.mention_warning.groups.too_many_members_MF", {
         groupCount: this.overMembersLimitMentionsCount,
         isAdmin: this.currentUser.admin,
@@ -151,7 +151,7 @@ export default class ChatMentionWarnings extends Component {
     {{#if this.show}}
       <div class="chat-mention-warnings">
         <div class="chat-mention-warning__icon">
-          {{dIcon "triangle-exclamation"}}
+          {{icon "triangle-exclamation"}}
         </div>
         <div class="chat-mention-warning__text">
           <div class="chat-mention-warning__header">

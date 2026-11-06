@@ -16,5 +16,3 @@ sl:
         title: Zapri temo
       append_last_checked_by:
         button_text: Končano
-      set_topic_timer:
-        title: "Nastavi opomnik teme"

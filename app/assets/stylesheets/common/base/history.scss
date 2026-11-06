@@ -1,7 +1,7 @@
 @use "lib/viewport";
 
 // styles that apply to the popup that appears when you show the edit history of a post
-.d-modal.history-modal {
+.modal.history-modal {
   .d-modal__footer {
     justify-content: space-between;
   }
@@ -71,15 +71,6 @@
     gap: 0.25em;
   }
 
-  .revision-details__unlisted {
-    color: var(--primary-medium);
-
-    .fk-d-tooltip__trigger-container {
-      align-items: center;
-      gap: 0.25em;
-    }
-  }
-
   .revision__title,
   .revision__locale,
   .body-diff,
@@ -111,8 +102,9 @@
   }
 
   pre code {
-    overflow-wrap: anywhere; // prevent long strings from breaking modal width
+    word-wrap: anywhere; // prevent long strings from breaking modal width
     min-width: 0;
+    overflow: auto;
     flex: 0 1 auto;
   }
 
@@ -131,14 +123,6 @@
     .diff-del {
       width: fit-content;
     }
-  }
-
-  .revision__hidden-notice {
-    display: flex;
-    align-items: center;
-    gap: 0.5em;
-    padding: 1em 0;
-    color: var(--primary-medium);
   }
 
   &:not(.--mode-inline) {
@@ -161,7 +145,7 @@
     border-spacing: 0;
 
     td {
-      overflow-wrap: anywhere;
+      word-wrap: anywhere;
       white-space: pre-wrap;
       flex: 0 1 50%;
     }
@@ -191,7 +175,7 @@
   }
 
   #revisions {
-    overflow-wrap: break-word;
+    word-wrap: break-word;
 
     table {
       margin-top: 10px;
@@ -241,7 +225,6 @@
     @include viewport.until(md) {
       width: 100%;
       flex: 1 1 100%;
-      flex-wrap: wrap;
 
       button {
         font-size: var(--font-down-1);
@@ -256,8 +239,8 @@
   }
 
   ins,
-  del,
   .diff-ins,
+  del,
   .diff-del {
     color: var(--primary);
 
@@ -272,11 +255,6 @@
 
     a {
       text-decoration: none;
-    }
-
-    > .title,
-    > blockquote {
-      background: transparent;
     }
   }
 
@@ -335,13 +313,15 @@
   }
 
   .hidden-revision-previous .row {
-    .--previous {
+    div:nth-of-type(1),
+    td:nth-of-type(1) {
       opacity: 0.5;
     }
   }
 
   .hidden-revision-current .row {
-    .--current {
+    div:nth-of-type(2),
+    td:nth-of-type(2) {
       opacity: 0.5;
     }
   }

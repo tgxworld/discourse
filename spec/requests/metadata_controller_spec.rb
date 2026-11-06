@@ -33,29 +33,10 @@ RSpec.describe MetadataController do
       get "/manifest.webmanifest"
       expect(response.status).to eq(200)
       manifest = JSON.parse(response.body)
-      share_target = manifest["share_target"]
-      expect(share_target).to be_present
-      expect(share_target["action"]).to end_with("/share-target")
-      expect(share_target["method"]).to eq("POST")
-      expect(share_target["enctype"]).to eq("multipart/form-data")
-      expect(share_target["params"]["title"]).to eq("title")
-      expect(share_target["params"]["text"]).to eq("text")
-      expect(share_target["params"]["url"]).to eq("url")
-      expect(share_target["params"]["files"].first["name"]).to eq("files")
-    end
-
-    it "derives the share target accepted files from authorized_extensions" do
-      SiteSetting.authorized_extensions = "png|pdf"
-      get "/manifest.webmanifest"
-      accept = JSON.parse(response.body)["share_target"]["params"]["files"].first["accept"]
-      expect(accept).to contain_exactly(".png", ".pdf")
-    end
-
-    it "accepts any file type when all extensions are authorized" do
-      SiteSetting.authorized_extensions = "*"
-      get "/manifest.webmanifest"
-      accept = JSON.parse(response.body)["share_target"]["params"]["files"].first["accept"]
-      expect(accept).to eq(["*/*"])
+      expect(manifest["share_target"]).to be_present
+      expect(manifest["share_target"]["params"]["title"]).to eq("title")
+      expect(manifest["share_target"]["params"]["text"]).to eq("body")
+      expect(manifest["share_target"]["params"]["url"]).to eq("title")
     end
 
     it "can guess mime types" do
@@ -78,21 +59,6 @@ RSpec.describe MetadataController do
       expect(response.status).to eq(200)
       manifest = JSON.parse(response.body)
       expect(manifest["icons"].first["type"]).to eq("image/png")
-    end
-
-    it "returns a manifest without icons when the configured icon is an ICO image" do
-      ico =
-        UploadCreator.new(
-          file_from_fixtures("smallest.ico", "images"),
-          "smallest.ico",
-          for_site_setting: true,
-        ).create_for(Discourse.system_user.id)
-      SiteSetting.manifest_icon = ico
-
-      get "/manifest.webmanifest"
-
-      expect(response.status).to eq(200)
-      expect(JSON.parse(response.body)["icons"]).to be_empty
     end
 
     it "defaults to display standalone for Android" do
@@ -237,56 +203,6 @@ RSpec.describe MetadataController do
 
       get "/apple-app-site-association.json"
       expect(response.status).to eq(404)
-    end
-  end
-
-  describe "#discourse_id_challenge" do
-    context "when challenge token is present in Redis" do
-      let(:token) { SecureRandom.hex(16) }
-
-      before { Discourse.redis.setex("discourse_id_challenge_token", 600, token) }
-      after { Discourse.redis.del("discourse_id_challenge_token") }
-
-      it "returns the challenge token and domain" do
-        get "/.well-known/discourse-id-challenge"
-
-        expect(response.status).to eq(200)
-        expect(response.media_type).to eq("application/json")
-        expect(response.headers["Cache-Control"]).to eq("max-age=300, private")
-
-        json = response.parsed_body
-        expect(json["token"]).to eq(token)
-        expect(json["domain"]).to eq(Discourse.current_hostname)
-        expect(json).to_not have_key("path")
-      end
-
-      context "when using subfolder" do
-        before { set_subfolder "/f" }
-
-        it "also returns the path" do
-          get "/.well-known/discourse-id-challenge"
-
-          expect(response.status).to eq(200)
-          expect(response.media_type).to eq("application/json")
-          expect(response.headers["Cache-Control"]).to eq("max-age=300, private")
-
-          json = response.parsed_body
-          expect(json["token"]).to eq(token)
-          expect(json["domain"]).to eq(Discourse.current_hostname)
-          expect(json["path"]).to eq(Discourse.base_path)
-        end
-      end
-    end
-
-    context "when no challenge token is present" do
-      before { Discourse.redis.del("discourse_id_challenge_token") }
-
-      it "returns 404" do
-        get "/.well-known/discourse-id-challenge"
-
-        expect(response.status).to eq(404)
-        expect(response["Cache-Control"]).to eq("no-cache, no-store")
-      end
     end
   end
 end

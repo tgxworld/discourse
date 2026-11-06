@@ -3,8 +3,7 @@ import { i18n } from "discourse-i18n";
 
 const DATA_PREFIX = "data-poll-";
 const DEFAULT_POLL = { name: "poll", status: "open" };
-const DEFAULT_MAXIMUM_OPTIONS = 20;
-export const ALLOWED_ATTRIBUTES = [
+const ALLOWED_ATTRIBUTES = [
   "chartType",
   "close",
   "groups",
@@ -17,33 +16,16 @@ export const ALLOWED_ATTRIBUTES = [
   "status",
   "step",
   "type",
-  "dynamic",
 ];
 
-function addNumberListItems(state, pollTokens, min, max, step, maximumOptions) {
+function addNumberListItems(state, pollTokens, min, max, step) {
   pollTokens.push(new state.Token("bullet_list_open", "ul", 1));
 
-  const maximumGeneratedOptions = maximumOptions + 1;
-
-  for (
-    let i = min, count = 0;
-    i <= max && count < maximumGeneratedOptions;
-    i += step, count++
-  ) {
+  for (let i = min; i <= max; i += step) {
     pollTokens.push(new state.Token("list_item_open", "li", 1));
 
-    // hidden paragraphs leave the rendered output untouched while giving
-    // parsers with stricter list item content the block they require
-    let token = new state.Token("paragraph_open", "p", 1);
-    token.hidden = true;
-    pollTokens.push(token);
-
-    token = new state.Token("text", "", 0);
+    let token = new state.Token("text", "", 0);
     token.content = String(i);
-    pollTokens.push(token);
-
-    token = new state.Token("paragraph_close", "p", -1);
-    token.hidden = true;
     pollTokens.push(token);
 
     pollTokens.push(new state.Token("list_item_close", "li", -1));
@@ -161,21 +143,13 @@ const rule = {
       let min = parseInt(attrs.min, 10);
       let max = parseInt(attrs.max, 10);
       let step = parseInt(attrs.step, 10);
-      let maximumOptions = parseInt(
-        state.md.options.discourse.pollMaximumOptions,
-        10
-      );
-
-      if (isNaN(maximumOptions) || maximumOptions < 1) {
-        maximumOptions = DEFAULT_MAXIMUM_OPTIONS;
-      }
 
       if (isNaN(min)) {
         min = 1;
       }
 
       if (isNaN(max)) {
-        max = maximumOptions;
+        max = state.md.options.discourse.pollMaximumOptions;
       }
 
       if (isNaN(step) || step < 1) {
@@ -186,7 +160,7 @@ const rule = {
         state.tokens.splice(openTokenIndex, 1);
         return;
       } else if (min <= max) {
-        addNumberListItems(state, pollTokens, min, max, step, maximumOptions);
+        addNumberListItems(state, pollTokens, min, max, step);
       }
     }
 
@@ -365,9 +339,9 @@ function md51(s) {
   s = s.substring(i - 64);
   let tail = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   for (i = 0; i < s.length; i++) {
-    tail[i >> 2] |= s.charCodeAt(i) << ((i % 4) << 3);
+    tail[i >> 2] |= s.charCodeAt(i) << (i % 4 << 3);
   }
-  tail[i >> 2] |= 0x80 << ((i % 4) << 3);
+  tail[i >> 2] |= 0x80 << (i % 4 << 3);
   if (i > 55) {
     md5cycle(state, tail);
     for (i = 0; i < 16; i++) {

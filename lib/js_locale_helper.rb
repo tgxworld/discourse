@@ -2,7 +2,7 @@
 
 module JsLocaleHelper
   def self.plugin_client_files(locale_str)
-    files = Dir["#{Rails.root.join("plugins/*/config/locales/client*.#{locale_str}.yml")}"]
+    files = Dir["#{Rails.root}/plugins/*/config/locales/client*.#{locale_str}.yml"]
     I18n::Backend::DiscourseI18n.sort_locale_files(files)
   end
 
@@ -14,7 +14,7 @@ module JsLocaleHelper
   end
 
   def self.plugin_translations(locale_str)
-    @plugin_translations ||= ActiveSupport::HashWithIndifferentAccess.new
+    @plugin_translations ||= HashWithIndifferentAccess.new
 
     @plugin_translations[locale_str] ||= begin
       translations = {}
@@ -30,12 +30,12 @@ module JsLocaleHelper
   end
 
   def self.load_translations(locale)
-    @loaded_translations ||= ActiveSupport::HashWithIndifferentAccess.new
+    @loaded_translations ||= HashWithIndifferentAccess.new
     @loaded_translations[locale] ||= begin
       locale_str = locale.to_s
 
       # load default translations
-      yml_file = "#{Rails.root.join("config/locales/client.#{locale_str}.yml")}"
+      yml_file = "#{Rails.root}/config/locales/client.#{locale_str}.yml"
       if File.exist?(yml_file)
         translations = YAML.load_file(yml_file)
       else
@@ -117,13 +117,6 @@ module JsLocaleHelper
     @loaded_merges = nil
   end
 
-  if Rails.env.test?
-    def self.set_translations(locale, translations)
-      @loaded_translations ||= ActiveSupport::HashWithIndifferentAccess.new
-      @loaded_translations[locale] = translations
-    end
-  end
-
   def self.translations_for(locale_str, no_fallback: false)
     clear_cache! if Rails.env.development?
 
@@ -146,32 +139,29 @@ module JsLocaleHelper
 
     message_formats =
       I18n.fallbacks[locale]
-        .each_with_object(ActiveSupport::HashWithIndifferentAccess.new) do |l, hash|
+        .each_with_object(HashWithIndifferentAccess.new) do |l, hash|
           translations = translations_for(l, no_fallback: true)
           hash[l] = remove_message_formats!(translations, l).merge(
             TranslationOverride
               .mf_locales(l)
               .pluck(:translation_key, :value)
               .to_h
-              .transform_keys { it.sub(/^[a-z_]*js\./, "") },
+              .transform_keys { _1.sub(/^[a-z_]*js\./, "") },
           )
         end
         .compact_blank
     js_message_formats = message_formats.transform_keys(&:dasherize)
     compiled = MessageFormat.compile(js_message_formats.keys, js_message_formats, strict: false)
-
-    # convert to exported function instead of module
-    result =
-      compiled.gsub(/import ({.*}) from (.*);\n/, "const \\1 = messageFormatModules[\\2];\n").sub(
-        "export default",
-        "return",
-      )
-
+    transpiled = DiscourseJsProcessor.transpile(<<~JS, "", "discourse-mf")
+      import Messages from '@messageformat/runtime/messages';
+      #{compiled.sub("export default", "const msgData =")};
+      const messages = new Messages(msgData, "#{locale.to_s.dasherize}");
+      messages.defaultLocale = "en";
+      globalThis.I18n._mfMessages = messages;
+    JS
     <<~JS
-      const localeData = window._discourse_locale_data ??= {};
-      localeData.messageFormatData = function (messageFormatModules) {
-      #{result.indent(2)}
-      }
+      #{transpiled}
+      require("discourse-mf");
     JS
   rescue => e
     js_locale = locale.to_s.dasherize
@@ -187,11 +177,7 @@ module JsLocaleHelper
         )
       end
     <<~JS
-      const localeData = window._discourse_locale_data ??= {};
-      localeData.messageFormatData = function () {
-        console.error("Failed to compile message formats for #{locale}. Some translation strings will be missing.");
-        return {};
-      }
+      console.error("Failed to compile message formats for #{locale}. Some translation strings will be missing.");
     JS
   end
 
@@ -202,30 +188,27 @@ module JsLocaleHelper
 
     remove_message_formats!(translations, locale)
     result = +<<~JS
-      const localeData = window._discourse_locale_data ??= {};
+      require("discourse/loader-shims");
+      require("discourse-i18n");
     JS
 
     translations.keys.each do |l|
       translations[l].keys.each { |k| translations[l].delete(k) unless k == "js" }
     end
 
-    result << "localeData.translations = #{translations.to_json};\n"
-    result << "localeData.locale = '#{locale_str}';\n"
+    # I18n
+    result << "I18n.translations = #{translations.to_json};\n"
+    result << "I18n.locale = '#{locale_str}';\n"
     if fallback_locale_str && fallback_locale_str != "en"
-      result << "localeData.fallbackLocale = '#{fallback_locale_str}';\n"
+      result << "I18n.fallbackLocale = '#{fallback_locale_str}';\n"
     end
 
     result << <<~JS
-      localeData.configureMoment = function() {
-        if(!globalThis.moment){
-          throw new Error("globalThis.moment not defined. Failed to initialize locales.")
-        }
-        #{moment_locale(locale_str)}
-        #{moment_ascii_digits}
-        #{moment_locale(locale_str, timezone_names: true)}
-        #{moment_formats}
-      }
+      require("discourse/lib/load-moment");
     JS
+    result << moment_locale(locale_str)
+    result << moment_locale(locale_str, timezone_names: true)
+    result << moment_formats
 
     result
   end
@@ -248,10 +231,7 @@ module JsLocaleHelper
       fallback_overrides.slice!(*fallback_overrides.keys - main_overrides.keys)
     end
 
-    <<~JS
-      const localeData = window._discourse_locale_data ??= {};
-      localeData.overrides = #{all_overrides.compact_blank.to_json};
-    JS
+    "I18n._overrides = #{all_overrides.compact_blank.to_json};"
   end
 
   def self.output_extra_locales(bundle, locale)
@@ -265,21 +245,28 @@ module JsLocaleHelper
       end
     end
 
-    <<~JS
-      const localeData = window._discourse_locale_data ??= {};
-      localeData.extra ??= {};
-      localeData.extra[#{bundle.to_json}] = #{translations.to_json};
-    JS
+    return "" if translations.blank?
+
+    output = +"if (!I18n.extras) { I18n.extras = {}; }"
+    locales.each do |l|
+      translations_json = translations[l].to_json
+      output << <<~JS
+        if (!I18n.extras["#{l}"]) { I18n.extras["#{l}"] = {}; }
+        Object.assign(I18n.extras["#{l}"], #{translations_json});
+      JS
+    end
+
+    output
   end
 
   MOMENT_LOCALE_MAPPING = { "hy" => "hy-am", "ug" => "ug-cn" }
 
   def self.find_moment_locale(locale_chain, timezone_names: false)
     if timezone_names
-      path = "#{VendoredAssets.path("moment-timezone-names/locales")}"
+      path = "#{Rails.root}/node_modules/@discourse/moment-timezone-names-translations/locales"
       type = :moment_js_timezones
     else
-      path = "#{VendoredAssets.path("moment/locale")}"
+      path = "#{Rails.root}/app/assets/javascripts/discourse/node_modules/moment/locale"
       type = :moment_js
     end
 
@@ -328,16 +315,6 @@ module JsLocaleHelper
   def self.moment_format_function(name)
     format = I18n.t("dates.#{name}")
     "moment.fn.#{name.camelize(:lower)} = function(){ return this.format('#{format}'); };\n"
-  end
-
-  # Some locales format dates with native-script digits, which breaks dates
-  # sent in URLs, request params and input values.
-  def self.moment_ascii_digits
-    <<~JS
-      if (moment.localeData().postformat("0") !== "0") {
-        moment.updateLocale(moment.locale(), { postformat: (string) => string });
-      }
-    JS
   end
 
   def self.moment_locale(locale, timezone_names: false)

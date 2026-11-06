@@ -27,7 +27,6 @@ module BulkImport
   class UploadsImporter
     class DownloadFailedError < StandardError
     end
-
     class UploadSizeExceededError < DownloadFailedError
     end
 
@@ -46,6 +45,9 @@ module BulkImport
     end
 
     def run
+      # disable logging for EXIFR which is used by ImageOptim
+      EXIFR.logger = Logger.new(nil)
+
       if @settings[:fix_missing]
         @source_db = create_connection(@settings[:output_db_path])
 
@@ -215,15 +217,17 @@ module BulkImport
                 error_message = nil
                 upload =
                   copy_to_tempfile(path) do |file|
-                    UploadCreator.new(
-                      file,
-                      metadata.original_filename,
-                      type: row["type"],
-                      origin: metadata.origin_url,
-                    ).create_for(Discourse::SYSTEM_USER_ID)
-                  rescue StandardError => e
-                    error_message = e.message
-                    nil
+                    begin
+                      UploadCreator.new(
+                        file,
+                        metadata.original_filename,
+                        type: row["type"],
+                        origin: metadata.origin_url,
+                      ).create_for(Discourse::SYSTEM_USER_ID)
+                    rescue StandardError => e
+                      error_message = e.message
+                      nil
+                    end
                   end
 
                 if (upload_okay = upload.present? && upload.persisted? && upload.errors.blank?)
@@ -429,9 +433,7 @@ module BulkImport
       (Etc.nprocessors * @settings[:thread_count_factor] * 2).to_i.times do |index|
         consumer_threads << Thread.new do
           Thread.current.name = "worker-#{index}"
-          fake_upload =
-            OpenStruct.new(url: "", secure?: SiteSetting.secure_uploads, optimized_images: [])
-          external_store = store.external?
+          fake_upload = OpenStruct.new(url: "")
           while (row = queue.pop)
             begin
               upload = JSON.parse(row["upload"])
@@ -439,14 +441,13 @@ module BulkImport
               path = add_multisite_prefix(store.get_path_for_upload(fake_upload))
 
               file_exists =
-                if external_store
+                if store.external?
                   store.object_from_path(path).exists?
                 else
                   File.exist?(File.join(store.public_dir, path))
                 end
 
               if file_exists
-                store.update_upload_access_control(fake_upload) if external_store
                 status_queue << { id: row["id"], upload_id: upload["id"], status: :ok }
               else
                 status_queue << { id: row["id"], upload_id: upload["id"], status: :missing }
@@ -485,10 +486,10 @@ module BulkImport
 
       init_threads << Thread.new do
         sql = <<~SQL
-          SELECT upload_ids
-            FROM posts
-           WHERE upload_ids IS NOT NULL
-        SQL
+        SELECT upload_ids
+          FROM posts
+         WHERE upload_ids IS NOT NULL
+      SQL
         query(sql, @source_db).tap do |result_set|
           result_set.each do |row|
             JSON.parse(row["upload_ids"]).each { |id| post_upload_ids << id }
@@ -499,10 +500,10 @@ module BulkImport
 
       init_threads << Thread.new do
         sql = <<~SQL
-          SELECT avatar_upload_id
-            FROM users
-           WHERE avatar_upload_id IS NOT NULL
-        SQL
+        SELECT avatar_upload_id
+          FROM users
+         WHERE avatar_upload_id IS NOT NULL
+      SQL
         query(sql, @source_db).tap do |result_set|
           result_set.each { |row| avatar_upload_ids << row["avatar_upload_id"] }
           result_set.close
@@ -764,18 +765,16 @@ module BulkImport
       SiteSetting.authorized_extensions = settings[:authorized_extensions]
       SiteSetting.max_attachment_size_kb = settings[:max_attachment_size_kb]
       SiteSetting.max_image_size_kb = settings[:max_image_size_kb]
-      SiteSetting.max_image_megapixels = settings[:max_image_megapixels]
-      SiteSetting.secure_uploads = settings[:secure_uploads]
-      SiteSetting.s3_enable_access_control_tags = settings[:s3_enable_access_control_tags]
 
       if settings[:multisite]
+        # rubocop:disable Discourse/NoDirectMultisiteManipulation
         Rails.configuration.multisite = true
+        # rubocop:enable Discourse/NoDirectMultisiteManipulation
 
         RailsMultisite::ConnectionManagement.class_eval do
           def self.current_db_override=(value)
             @current_db_override = value
           end
-
           def self.current_db
             @current_db_override
           end

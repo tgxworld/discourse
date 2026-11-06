@@ -24,20 +24,6 @@ files:
     destination_path: error_pages/503.html
     label: core
 
-  - source_path: plugins/blog/config/locales/client.en.yml
-    destination_path: plugins/blog/client.yml
-    label: blog
-  - source_path: plugins/blog/config/locales/server.en.yml
-    destination_path: plugins/blog/server.yml
-    label: blog
-
-  - source_path: plugins/boards/config/locales/client.en.yml
-    destination_path: plugins/boards/client.yml
-    label: boards
-  - source_path: plugins/boards/config/locales/server.en.yml
-    destination_path: plugins/boards/server.yml
-    label: boards
-
   - source_path: plugins/chat/config/locales/client.en.yml
     destination_path: plugins/chat/client.yml
     label: chat
@@ -94,13 +80,13 @@ files:
     destination_path: plugins/spoiler-alert/server.yml
     label: spoiler-alert
 
+  - source_path: plugins/checklist/config/locales/client.en.yml
+    destination_path: plugins/checklist/client.yml
+    label: checklist
   - source_path: plugins/checklist/config/locales/server.en.yml
     destination_path: plugins/checklist/server.yml
     label: checklist
 
-  - source_path: plugins/footnote/config/locales/client.en.yml
-    destination_path: plugins/footnote/client.yml
-    label: footnote
   - source_path: plugins/footnote/config/locales/server.en.yml
     destination_path: plugins/footnote/server.yml
     label: footnote
@@ -194,9 +180,6 @@ files:
     destination_path: plugins/rss-polling/server.yml
     label: rss-polling
 
-  - source_path: plugins/discourse-math/config/locales/client.en.yml
-    destination_path: plugins/math/client.yml
-    label: math
   - source_path: plugins/discourse-math/config/locales/server.en.yml
     destination_path: plugins/math/server.yml
     label: math
@@ -243,12 +226,12 @@ files:
     destination_path: plugins/subscriptions/server.yml
     label: subscriptions
 
-  - source_path: plugins/discourse-captcha/config/locales/client.en.yml
-    destination_path: plugins/captcha/client.yml
-    label: captcha
-  - source_path: plugins/discourse-captcha/config/locales/server.en.yml
-    destination_path: plugins/captcha/server.yml
-    label: captcha
+  - source_path: plugins/discourse-hcaptcha/config/locales/client.en.yml
+    destination_path: plugins/hcaptcha/client.yml
+    label: hcaptcha
+  - source_path: plugins/discourse-hcaptcha/config/locales/server.en.yml
+    destination_path: plugins/hcaptcha/server.yml
+    label: hcaptcha
 
   - source_path: plugins/discourse-gamification/config/locales/client.en.yml
     destination_path: plugins/gamification/client.yml
@@ -257,10 +240,10 @@ files:
     destination_path: plugins/gamification/server.yml
     label: gamification
 
-  - source_path: plugins/discourse-events/config/locales/client.en.yml
+  - source_path: plugins/discourse-calendar/config/locales/client.en.yml
     destination_path: plugins/calendar/client.yml
     label: calendar
-  - source_path: plugins/discourse-events/config/locales/server.en.yml
+  - source_path: plugins/discourse-calendar/config/locales/server.en.yml
     destination_path: plugins/calendar/server.yml
     label: calendar
 
@@ -319,17 +302,3 @@ files:
   - source_path: plugins/discourse-ai/config/locales/server.en.yml
     destination_path: plugins/ai/server.yml
     label: ai
-
-  - source_path: plugins/discourse-cakeday/config/locales/client.en.yml
-    destination_path: plugins/cakeday/client.yml
-    label: cakeday
-  - source_path: plugins/discourse-cakeday/config/locales/server.en.yml
-    destination_path: plugins/cakeday/server.yml
-    label: cakeday
-
-  - source_path: plugins/discourse-rewind/config/locales/client.en.yml
-    destination_path: plugins/rewind/client.yml
-    label: rewind
-  - source_path: plugins/discourse-rewind/config/locales/server.en.yml
-    destination_path: plugins/rewind/server.yml
-    label: rewind

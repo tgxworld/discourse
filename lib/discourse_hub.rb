@@ -3,16 +3,6 @@
 module DiscourseHub
   STATS_FETCHED_AT_KEY = "stats_fetched_at"
 
-  class Error < StandardError
-    attr_reader :status, :body
-
-    def initialize(rel_url, status, body)
-      @status = status
-      @body = body
-      super("Discourse Hub (#{rel_url}) returned status #{status}")
-    end
-  end
-
   def self.version_check_payload
     default_payload = { installed_version: Discourse::VERSION::STRING }.merge!(
       Discourse.git_branch == "unknown" && !Rails.env.test? ? {} : { branch: Discourse.git_branch },
@@ -49,42 +39,42 @@ module DiscourseHub
     end
   end
 
-  def self.get(rel_url, params = {}, raise_on_error: false)
-    singular_action :get, rel_url, params, raise_on_error: raise_on_error
+  def self.get(rel_url, params = {})
+    singular_action :get, rel_url, params
   end
 
-  def self.post(rel_url, params = {}, raise_on_error: false)
-    collection_action :post, rel_url, params, raise_on_error: raise_on_error
+  def self.post(rel_url, params = {})
+    collection_action :post, rel_url, params
   end
 
-  def self.put(rel_url, params = {}, raise_on_error: false)
-    collection_action :put, rel_url, params, raise_on_error: raise_on_error
+  def self.put(rel_url, params = {})
+    collection_action :put, rel_url, params
   end
 
-  def self.delete(rel_url, params = {}, raise_on_error: false)
-    singular_action :delete, rel_url, params, raise_on_error: raise_on_error
+  def self.delete(rel_url, params = {})
+    singular_action :delete, rel_url, params
   end
 
-  def self.singular_action(action, rel_url, params = {}, raise_on_error: false)
+  def self.singular_action(action, rel_url, params = {})
     connect_opts = connect_opts(params)
 
-    response =
+    JSON.parse(
       Excon.public_send(
         action,
         "#{hub_base_url}#{rel_url}",
-        { headers: { "Referer" => referer, "Accept" => accepts.join(", ") }, query: params }.merge(
-          connect_opts,
-        ),
-      )
-
-    if raise_on_error && response.status != 200
-      raise Error.new(rel_url, response.status, parse_body(response.body))
-    end
-
-    JSON.parse(response.body)
+        {
+          headers: {
+            "Referer" => referer,
+            "Accept" => accepts.join(", "),
+          },
+          query: params,
+          omit_default_port: true,
+        }.merge(connect_opts),
+      ).body,
+    )
   end
 
-  def self.collection_action(action, rel_url, params = {}, raise_on_error: false)
+  def self.collection_action(action, rel_url, params = {})
     connect_opts = connect_opts(params)
 
     response =
@@ -98,6 +88,7 @@ module DiscourseHub
             "Accept" => accepts.join(", "),
             "Content-Type" => "application/json",
           },
+          omit_default_port: true,
         }.merge(connect_opts),
       )
 
@@ -105,18 +96,11 @@ module DiscourseHub
       Rails.logger.warn(response_status_log_message(rel_url, status))
     end
 
-    body = parse_body(response.body)
-
-    raise Error.new(rel_url, status, body) if raise_on_error && status != 200
-
-    body
-  end
-
-  def self.parse_body(raw)
-    JSON.parse(raw)
-  rescue JSON::ParserError
-    Rails.logger.error(response_body_log_message(raw))
-    nil
+    begin
+      JSON.parse(response.body)
+    rescue JSON::ParserError
+      Rails.logger.error(response_body_log_message(response.body))
+    end
   end
 
   def self.response_status_log_message(rel_url, status)

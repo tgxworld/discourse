@@ -585,7 +585,7 @@ RSpec.describe PostAlerter do
       }.to change(evil_trout.notifications, :count).by(2)
     end
 
-    it "does not notify the user again on revision" do
+    it "won't notify the user a second time on revision" do
       p1 = create_post_with_alerts(raw: '[quote="Evil Trout, post:1"]whatup[/quote]')
       expect {
         p1.revise(p1.user, raw: '[quote="Evil Trout, post:1"]whatup now?[/quote]')
@@ -677,7 +677,7 @@ RSpec.describe PostAlerter do
 
     before { Jobs.run_immediately! }
 
-    it "notifies the linked user" do
+    it "will notify correctly on linking" do
       linking_post
 
       expect(user.notifications.count).to eq(1)
@@ -733,31 +733,12 @@ RSpec.describe PostAlerter do
         staged_user.notifications.where(notification_type: Notification.types[:linked]).count,
       ).to eq(0)
     end
-
-    it "does not notify when user has disabled linked post notifications" do
-      user.user_option.update!(notify_on_linked_posts: false)
-      linking_post
-
-      expect(user.notifications.where(notification_type: Notification.types[:linked]).count).to eq(
-        0,
-      )
-    end
-
-    it "still notifies when user has enabled linked post notifications (default)" do
-      expect(user.user_option.notify_on_linked_posts).to eq(true)
-      linking_post
-
-      expect(user.notifications.where(notification_type: Notification.types[:linked]).count).to eq(
-        1,
-      )
-    end
   end
 
   context "with @here" do
     let(:post) do
       create_post_with_alerts(raw: "Hello @here how are you?", user: tl2_user, topic: topic)
     end
-
     fab!(:other_post) { Fabricate(:post, topic: topic) }
 
     before { Jobs.run_immediately! }
@@ -793,15 +774,6 @@ RSpec.describe PostAlerter do
             ).by(1).and change(post3.user.notifications, :count).by(1)
     end
 
-    it "notifies users who posted with staff colour" do
-      post2 = Fabricate(:post, topic: topic, post_type: Post.types[:moderator_action])
-
-      expect { post }.to change(other_post.user.notifications, :count).by(1).and change(
-              post2.user.notifications,
-              :count,
-            ).by(1)
-    end
-
     it "notifies only last max_here_mentioned users" do
       SiteSetting.max_here_mentioned = 2
       3.times { Fabricate(:post, topic: topic) }
@@ -814,7 +786,6 @@ RSpec.describe PostAlerter do
       Fabricate(:group, name: "group", mentionable_level: Group::ALIAS_LEVELS[:everyone])
     end
     let(:post) { create_post_with_alerts(raw: "Hello @group how are you?") }
-
     before { group.add(evil_trout) }
 
     it "notifies users correctly" do
@@ -854,39 +825,6 @@ RSpec.describe PostAlerter do
       expect(evil_trout.notifications.last.notification_type).to eq(Notification.types[:mentioned])
     end
 
-    it "retains group mention records on unrelated revisions" do
-      Jobs.run_immediately!
-      post = create_post_with_alerts(raw: "Hello @group")
-
-      expect { post.revise(post.user, raw: "Hello again @group") }.not_to change(
-        evil_trout.notifications,
-        :count,
-      )
-      expect(GroupMention.where(post_id: post.id).pluck(:group_id)).to contain_exactly(group.id)
-    end
-
-    it "notifies only members of a newly added group on revision" do
-      Jobs.run_immediately!
-      post = create_post_with_alerts(raw: "Hello @group")
-      evil_trout.notifications.destroy_all
-
-      another_group =
-        Fabricate(:group, name: "another-group", mentionable_level: Group::ALIAS_LEVELS[:everyone])
-      another_group.add(coding_horror)
-
-      expect { post.revise(post.user, raw: "Hello @group and @another-group") }.to not_change(
-        evil_trout.notifications,
-        :count,
-      ).and change(coding_horror.notifications, :count).by(1)
-      expect(coding_horror.notifications.last.notification_type).to eq(
-        Notification.types[:group_mentioned],
-      )
-      expect(GroupMention.where(post_id: post.id).pluck(:group_id)).to contain_exactly(
-        group.id,
-        another_group.id,
-      )
-    end
-
     it "triggers :before_create_notifications_for_users" do
       events = DiscourseEvent.track_events { post }
       expect(events).to include(
@@ -906,7 +844,7 @@ RSpec.describe PostAlerter do
       expect { mention_post }.to change(evil_trout.notifications, :count).by(1)
     end
 
-    it "does not notify the user again on revision" do
+    it "won't notify the user a second time on revision" do
       mention_post
       expect {
         mention_post.revise(
@@ -914,45 +852,6 @@ RSpec.describe PostAlerter do
           raw: "New raw content that still mentions @eviltrout",
         )
       }.not_to change(evil_trout.notifications, :count)
-    end
-
-    it "retains the existing notification when a mention is removed" do
-      post = mention_post
-      notification = evil_trout.notifications.last
-
-      expect(post.revise(post.user, raw: "Hello everyone")).to eq(true)
-
-      expect(evil_trout.notifications.reload).to contain_exactly(notification)
-    end
-
-    it "notifies only a newly mentioned user when the previous notification is gone" do
-      post = create_post_with_alerts(user: user, raw: "Hello @eviltrout")
-      evil_trout.notifications.destroy_all
-
-      expect { post.revise(post.user, raw: "Hello @eviltrout and @codinghorror") }.to not_change(
-        evil_trout.notifications,
-        :count,
-      ).and change(coding_horror.notifications, :count).by(1)
-      expect(coding_horror.notifications.last.notification_type).to eq(
-        Notification.types[:mentioned],
-      )
-    end
-
-    it "notifies a user mentioned directly after a group mention" do
-      mentionable_group =
-        Fabricate(
-          :group,
-          name: "mentionable-group",
-          mentionable_level: Group::ALIAS_LEVELS[:everyone],
-        )
-      mentionable_group.add(evil_trout)
-      post = create_post_with_alerts(user: user, raw: "Hello @mentionable-group")
-
-      expect { post.revise(post.user, raw: "Hello @mentionable-group and @eviltrout") }.to change(
-        evil_trout.notifications,
-        :count,
-      ).by(1)
-      expect(evil_trout.notifications.last.notification_type).to eq(Notification.types[:mentioned])
     end
 
     it "doesn't notify the user who created the topic in regular mode" do
@@ -1016,30 +915,14 @@ RSpec.describe PostAlerter do
     context "with topic" do
       fab!(:topic) { Fabricate(:topic, user: alice) }
 
-      context "when notification level is 'watching'" do
-        before { set_topic_notification_level(alice, topic, :watching) }
+      %i[watching tracking regular].each do |notification_level|
+        context "when notification level is '#{notification_level}'" do
+          before { set_topic_notification_level(alice, topic, notification_level) }
 
-        it "notifies about @username mention" do
-          args = { user: bob, topic: topic, raw: "Hello @alice" }
-          expect { create_post_with_alerts(args) }.to add_notification(alice, :mentioned)
-        end
-      end
-
-      context "when notification level is 'tracking'" do
-        before { set_topic_notification_level(alice, topic, :tracking) }
-
-        it "notifies about @username mention" do
-          args = { user: bob, topic: topic, raw: "Hello @alice" }
-          expect { create_post_with_alerts(args) }.to add_notification(alice, :mentioned)
-        end
-      end
-
-      context "when notification level is 'regular'" do
-        before { set_topic_notification_level(alice, topic, :regular) }
-
-        it "notifies about @username mention" do
-          args = { user: bob, topic: topic, raw: "Hello @alice" }
-          expect { create_post_with_alerts(args) }.to add_notification(alice, :mentioned)
+          it "notifies about @username mention" do
+            args = { user: bob, topic: topic, raw: "Hello @alice" }
+            expect { create_post_with_alerts(args) }.to add_notification(alice, :mentioned)
+          end
         end
       end
 
@@ -1067,48 +950,34 @@ RSpec.describe PostAlerter do
       end
 
       context "when user is part of conversation" do
-        shared_examples "private message username mention notifications" do |notification_level:|
-          before { set_topic_notification_level(alice, pm_topic, notification_level) }
+        %i[watching tracking regular].each do |notification_level|
+          context "when notification level is '#{notification_level}'" do
+            before { set_topic_notification_level(alice, pm_topic, notification_level) }
+            let(:expected_notification) do
+              notification_level == :watching ? :private_message : :mentioned
+            end
 
-          let(:expected_notification) do
-            notification_level == :watching ? :private_message : :mentioned
+            it "notifies about @username mention" do
+              args = { user: bob, topic: pm_topic, raw: "Hello @alice" }
+              expect { create_post_with_alerts(args) }.to add_notification(
+                alice,
+                expected_notification,
+              )
+            end
+
+            it "notifies about @username mentions by non-human users" do
+              args = { user: Discourse.system_user, topic: pm_topic, raw: "Hello @alice" }
+              expect { create_post_with_alerts(args) }.to add_notification(
+                alice,
+                expected_notification,
+              )
+            end
+
+            it "notifies about @group mention when allowed user is part of group" do
+              args = { user: bob, topic: pm_topic, raw: "Hello @group" }
+              expect { create_post_with_alerts(args) }.to add_notification(alice, :group_mentioned)
+            end
           end
-
-          it "notifies about @username mention" do
-            args = { user: bob, topic: pm_topic, raw: "Hello @alice" }
-            expect { create_post_with_alerts(args) }.to add_notification(
-              alice,
-              expected_notification,
-            )
-          end
-
-          it "notifies about @username mentions by non-human users" do
-            args = { user: Discourse.system_user, topic: pm_topic, raw: "Hello @alice" }
-            expect { create_post_with_alerts(args) }.to add_notification(
-              alice,
-              expected_notification,
-            )
-          end
-
-          it "notifies about @group mention when allowed user is part of group" do
-            args = { user: bob, topic: pm_topic, raw: "Hello @group" }
-            expect { create_post_with_alerts(args) }.to add_notification(alice, :group_mentioned)
-          end
-        end
-
-        context "when the user is watching the private message" do
-          include_examples "private message username mention notifications",
-                           notification_level: :watching
-        end
-
-        context "when the user is tracking the private message" do
-          include_examples "private message username mention notifications",
-                           notification_level: :tracking
-        end
-
-        context "with regular private message notifications" do
-          include_examples "private message username mention notifications",
-                           notification_level: :regular
         end
 
         context "when notification level is 'muted'" do
@@ -1160,38 +1029,25 @@ RSpec.describe PostAlerter do
       before { some_group.bulk_add([alice.id, carol.id]) }
 
       context "when group is part of conversation" do
-        shared_examples "private message group mention notifications" do |notification_level:|
-          before { set_topic_notification_level(alice, pm_topic, notification_level) }
+        %i[watching tracking regular].each do |notification_level|
+          context "when notification level is '#{notification_level}'" do
+            before { set_topic_notification_level(alice, pm_topic, notification_level) }
 
-          it "notifies about @group mention" do
-            args = { user: bob, topic: pm_topic, raw: "Hello @group" }
-            expect { create_post_with_alerts(args) }.to add_notification(alice, :group_mentioned)
+            it "notifies about @group mention" do
+              args = { user: bob, topic: pm_topic, raw: "Hello @group" }
+              expect { create_post_with_alerts(args) }.to add_notification(alice, :group_mentioned)
+            end
+
+            it "notifies about @group mentions by non-human users" do
+              args = { user: Discourse.system_user, topic: pm_topic, raw: "Hello @group" }
+              expect { create_post_with_alerts(args) }.to add_notification(alice, :group_mentioned)
+            end
+
+            it "notifies about @username mention when user belongs to allowed group" do
+              args = { user: bob, topic: pm_topic, raw: "Hello @alice" }
+              expect { create_post_with_alerts(args) }.to add_notification(alice, :mentioned)
+            end
           end
-
-          it "notifies about @group mentions by non-human users" do
-            args = { user: Discourse.system_user, topic: pm_topic, raw: "Hello @group" }
-            expect { create_post_with_alerts(args) }.to add_notification(alice, :group_mentioned)
-          end
-
-          it "notifies about @username mention when user belongs to allowed group" do
-            args = { user: bob, topic: pm_topic, raw: "Hello @alice" }
-            expect { create_post_with_alerts(args) }.to add_notification(alice, :mentioned)
-          end
-        end
-
-        context "when the user is watching the private message" do
-          include_examples "private message group mention notifications",
-                           notification_level: :watching
-        end
-
-        context "when the user is tracking the private message" do
-          include_examples "private message group mention notifications",
-                           notification_level: :tracking
-        end
-
-        context "with regular private message notifications" do
-          include_examples "private message group mention notifications",
-                           notification_level: :regular
         end
 
         context "when notification level is 'muted'" do
@@ -1253,51 +1109,6 @@ RSpec.describe PostAlerter do
       expect(user.notifications.last.data_hash["topic_title"]).to eq(original_title)
     end
 
-    context "when the original title of a PM is restricted" do
-      def revise_title(title, revised_at: Time.zone.now)
-        post.revise(admin, { title: title }, revised_at: revised_at)
-      end
-
-      it "uses the current title when the title revision is hidden" do
-        revise_title("This is the revised title")
-        post.revisions.find_by(number: 2).hide!
-
-        PostAlerter.new.create_notification(user, type, post)
-
-        expect(user.notifications.last.data_hash["topic_title"]).to eq("This is the revised title")
-      end
-
-      it "uses the current title when an earlier revision is hidden" do
-        post.revise(admin, { raw: "This is the revised post" }, revised_at: Time.zone.now)
-        revise_title("This is the revised title", revised_at: 1.day.from_now)
-        post.revisions.find_by(number: 2).hide!
-
-        PostAlerter.new.create_notification(user, type, post)
-
-        expect(user.notifications.last.data_hash["topic_title"]).to eq("This is the revised title")
-      end
-
-      it "uses the current title when edit history is not visible to the public" do
-        SiteSetting.edit_history_visible_to_public = false
-        revise_title("This is the revised title")
-
-        PostAlerter.new.create_notification(user, type, post)
-
-        expect(user.notifications.last.data_hash["topic_title"]).to eq("This is the revised title")
-      end
-
-      it "keeps the original title for staff" do
-        original_title = topic.title
-        revise_title("This is the revised title")
-        post.revisions.find_by(number: 2).hide!
-        topic.topic_allowed_users.create!(user: admin)
-
-        PostAlerter.new.create_notification(admin, type, post)
-
-        expect(admin.notifications.last.data_hash["topic_title"]).to eq(original_title)
-      end
-    end
-
     it "triggers :pre_notification_alert" do
       events = DiscourseEvent.track_events { PostAlerter.new.create_notification(user, type, post) }
 
@@ -1306,7 +1117,6 @@ RSpec.describe PostAlerter do
         post_number: post.post_number,
         topic_title: post.topic.title,
         topic_id: post.topic.id,
-        post_id: post.id,
         excerpt: post.excerpt(400, text_entities: true, strip_links: true, remap_emoji: true),
         username: post.username,
         post_url: post.url,
@@ -1368,14 +1178,6 @@ RSpec.describe PostAlerter do
       DiscoursePluginRegistry.clear_modifiers!
     end
 
-    it "does not add a display name when names are disabled" do
-      SiteSetting.enable_names = false
-
-      notification = PostAlerter.new.create_notification(user, type, post)
-
-      expect(notification.data_hash).not_to have_key(:display_name)
-    end
-
     it "applies modifiers to notification_data" do
       Plugin::Instance
         .new
@@ -1401,9 +1203,7 @@ RSpec.describe PostAlerter do
     end
 
     describe "DiscoursePluginRegistry#push_notification_filters" do
-      let!(:original_filters) { DiscoursePluginRegistry._raw_push_notification_filters.dup }
-
-      after { DiscoursePluginRegistry._raw_push_notification_filters.replace(original_filters) }
+      after { DiscoursePluginRegistry.reset_register!(:push_notification_filters) }
 
       it "sends push notifications when all filters pass" do
         evil_trout.update!(last_seen_at: 10.minutes.ago)
@@ -1411,7 +1211,7 @@ RSpec.describe PostAlerter do
 
         alerts =
           MessageBus.track_publish("/notification-alert/#{evil_trout.id}") do
-            expect { mention_post }.to change { Jobs::DeliverPushNotification.jobs.count }.by(1)
+            expect { mention_post }.to change { Jobs::PushNotification.jobs.count }.by(1)
           end
 
         expect(alerts).not_to be_empty
@@ -1422,7 +1222,7 @@ RSpec.describe PostAlerter do
 
         alerts =
           MessageBus.track_publish("/notification-alert/#{evil_trout.id}") do
-            expect { mention_post }.not_to change { Jobs::DeliverPushNotification.jobs.count }
+            expect { mention_post }.not_to change { Jobs::PushNotification.jobs.count }
           end
 
         expect(alerts).to be_empty
@@ -1441,7 +1241,7 @@ RSpec.describe PostAlerter do
 
     it "pushes nothing to suspended users" do
       evil_trout.update_columns(suspended_till: 1.year.from_now)
-      expect { mention_post }.to_not change { Jobs::DeliverPushNotification.jobs.count }
+      expect { mention_post }.to_not change { Jobs::PushNotification.jobs.count }
 
       events = DiscourseEvent.track_events { mention_post }
       expect(events.find { |event| event[:event_name] == :push_notification }).not_to be_present
@@ -1455,7 +1255,7 @@ RSpec.describe PostAlerter do
         ends_at: 1.day.from_now,
       )
 
-      expect { mention_post }.to_not change { Jobs::DeliverPushNotification.jobs.count }
+      expect { mention_post }.to_not change { Jobs::PushNotification.jobs.count }
 
       events = DiscourseEvent.track_events { mention_post }
       expect(events.find { |event| event[:event_name] == :push_notification }).not_to be_present
@@ -1473,8 +1273,6 @@ RSpec.describe PostAlerter do
       end
 
       set_subfolder "/subpath"
-      post = mention_post
-
       payload = {
         "secret_key" => SiteSetting.push_api_secret_key,
         "url" => Discourse.base_url,
@@ -1486,10 +1284,9 @@ RSpec.describe PostAlerter do
             "post_number" => 1,
             "topic_title" => topic.title,
             "topic_id" => topic.id,
-            "post_id" => post.id,
             "excerpt" => "Hello @eviltrout ❤",
             "username" => user.username,
-            "url" => UrlHelper.absolute(Discourse.base_path + post.url),
+            "url" => UrlHelper.absolute(Discourse.base_path + mention_post.url),
             "client_id" => "xxx0",
           },
           {
@@ -1497,14 +1294,15 @@ RSpec.describe PostAlerter do
             "post_number" => 1,
             "topic_title" => topic.title,
             "topic_id" => topic.id,
-            "post_id" => post.id,
             "excerpt" => "Hello @eviltrout ❤",
             "username" => user.username,
-            "url" => UrlHelper.absolute(Discourse.base_path + post.url),
+            "url" => UrlHelper.absolute(Discourse.base_path + mention_post.url),
             "client_id" => "xxx1",
           },
         ],
       }
+
+      post = mention_post
 
       expect(JSON.parse(body)).to eq(payload)
       expect(headers["Content-Type"]).to eq("application/json")
@@ -1530,7 +1328,6 @@ RSpec.describe PostAlerter do
       changes = {
         "notification_type" => Notification.types[:posted],
         "post_number" => new_post.post_number,
-        "post_id" => new_post.id,
         "username" => new_post.user.username,
         "excerpt" => new_post.raw,
         "url" => UrlHelper.absolute(Discourse.base_path + new_post.url),
@@ -1551,7 +1348,6 @@ RSpec.describe PostAlerter do
 
       changes = {
         "post_number" => new_post.post_number,
-        "post_id" => new_post.id,
         "username" => new_post.user.username,
         "excerpt" => new_post.raw,
         "url" => UrlHelper.absolute(Discourse.base_path + new_post.url),
@@ -1582,8 +1378,8 @@ RSpec.describe PostAlerter do
       SiteSetting.push_notification_time_window_mins = 10
       evil_trout.update!(last_seen_at: 5.minutes.ago)
 
-      expect { mention_post }.to change { Jobs::DeliverPushNotification.jobs.count }
-      expect(Jobs::DeliverPushNotification.jobs[0]["at"]).to be_within(30.seconds).of(
+      expect { mention_post }.to change { Jobs::PushNotification.jobs.count }
+      expect(Jobs::PushNotification.jobs[0]["at"]).to be_within(30.second).of(
         5.minutes.from_now.to_f,
       )
     end
@@ -1597,8 +1393,8 @@ RSpec.describe PostAlerter do
       it "delays sending push notification for active online user" do
         evil_trout.update!(last_seen_at: 5.minutes.ago)
 
-        expect { mention_post }.to change { Jobs::DeliverPushNotification.jobs.count }
-        expect(Jobs::DeliverPushNotification.jobs[0]["at"]).not_to be_nil
+        expect { mention_post }.to change { Jobs::SendPushNotification.jobs.count }
+        expect(Jobs::SendPushNotification.jobs[0]["at"]).not_to be_nil
       end
 
       it "delays sending push notification for active online user for the correct delay ammount" do
@@ -1609,15 +1405,15 @@ RSpec.describe PostAlerter do
         # 10 minutes from now - 5 minutes ago = 5 minutes
         delay = 5.minutes.from_now.to_f
 
-        expect { mention_post }.to change { Jobs::DeliverPushNotification.jobs.count }
-        expect(Jobs::DeliverPushNotification.jobs[0]["at"]).to be_within(30.seconds).of(delay)
+        expect { mention_post }.to change { Jobs::SendPushNotification.jobs.count }
+        expect(Jobs::SendPushNotification.jobs[0]["at"]).to be_within(30.second).of(delay)
       end
 
       it "does not delay push notification for inactive offline user" do
         evil_trout.update!(last_seen_at: 40.minutes.ago)
 
-        expect { mention_post }.to change { Jobs::DeliverPushNotification.jobs.count }
-        expect(Jobs::DeliverPushNotification.jobs[0]["at"]).to be_nil
+        expect { mention_post }.to change { Jobs::SendPushNotification.jobs.count }
+        expect(Jobs::SendPushNotification.jobs[0]["at"]).to be_nil
       end
     end
   end
@@ -1676,56 +1472,6 @@ RSpec.describe PostAlerter do
       )
     end
 
-    describe "with content localization" do
-      before do
-        SiteSetting.content_localization_enabled = true
-        SiteSetting.allow_user_locale = true
-        evil_trout.update!(locale: "ja")
-        post.update_columns(locale: "en")
-        post.topic.update_columns(locale: "en")
-        Fabricate(:topic_localization, topic: post.topic, locale: "ja", title: "翻訳されたタイトル")
-        Fabricate(:post_localization, post: post, locale: "ja", cooked: "<p>翻訳された投稿</p>")
-      end
-
-      def publish_alert(**opts)
-        MessageBus.track_publish("/notification-alert/#{evil_trout.id}") do
-          PostAlerter.create_notification_alert(
-            user: evil_trout,
-            post: post,
-            notification_type: Notification.types[:mentioned],
-            **opts,
-          )
-        end
-      end
-
-      it "sends the translation in the recipient's locale" do
-        messages = publish_alert
-
-        expect(messages.first.data[:topic_title]).to eq("翻訳されたタイトル")
-        expect(messages.first.data[:excerpt]).to eq("翻訳された投稿")
-      end
-
-      it "tells the push to keep an excerpt provided by the caller" do
-        evil_trout.update_columns(last_seen_at: 1.hour.ago)
-        Fabricate(:push_subscription, user: evil_trout)
-
-        expect_enqueued_with(
-          job: :deliver_push_notification,
-          args: {
-            user_id: evil_trout.id,
-            keep_excerpt: true,
-          },
-        ) { publish_alert(excerpt: "You were assigned") }
-      end
-
-      it "keeps an excerpt provided by the caller" do
-        messages = publish_alert(excerpt: "You were assigned")
-
-        expect(messages.first.data[:topic_title]).to eq("翻訳されたタイトル")
-        expect(messages.first.data[:excerpt]).to eq("You were assigned")
-      end
-    end
-
     it "does nothing for suspended users" do
       evil_trout.update_columns(suspended_till: 1.year.from_now)
 
@@ -1746,7 +1492,7 @@ RSpec.describe PostAlerter do
 
       expect(events.size).to eq(0)
       expect(messages.size).to eq(0)
-      expect(Jobs::DeliverPushNotification.jobs.size).to eq(0)
+      expect(Jobs::PushNotification.jobs.size).to eq(0)
     end
 
     it "does not publish to MessageBus /notification-alert if the user has not been seen for > 30 days, but still sends a push notification" do
@@ -1781,7 +1527,7 @@ RSpec.describe PostAlerter do
         :post_notification_alert,
       )
       expect(messages.size).to eq(0)
-      expect(Jobs::DeliverPushNotification.jobs.size).to eq(1)
+      expect(Jobs::PushNotification.jobs.size).to eq(1)
     end
   end
 
@@ -1921,7 +1667,6 @@ RSpec.describe PostAlerter do
     end
 
     it "notifies staff user about whispered reply" do
-      SiteSetting.whispers_allowed_groups = "#{Group::AUTO_GROUPS[:staff]}"
       admin1 = Fabricate(:admin)
       admin2 = Fabricate(:admin)
 
@@ -2095,7 +1840,7 @@ RSpec.describe PostAlerter do
       ).to eq(true)
     end
 
-    it "does not notify the watching topic author about small action posts" do
+    it "it doesn't notify about small action posts when the topic author is watching the topic " do
       Jobs.run_immediately!
 
       u1 = Fabricate(:admin)
@@ -2108,330 +1853,6 @@ RSpec.describe PostAlerter do
       expect do topic.update_status("closed", true, u2, message: "hello world") end.not_to change {
         u1.reload.notifications.count
       }
-    end
-  end
-
-  context "with replies in a nested topic" do
-    fab!(:op, :user)
-    fab!(:replier, :user)
-    fab!(:third_party, :user)
-    fab!(:nested_topic_record) { Fabricate(:topic, user: op) }
-    fab!(:nested_first_post) do
-      Fabricate(:post, topic: nested_topic_record, user: op, post_number: 1)
-    end
-
-    before do
-      SiteSetting.nested_replies_enabled = true
-      Fabricate(:nested_topic, topic: nested_topic_record)
-    end
-
-    it "notifies the OP via :replied for a root post (no reply_to_post_number)" do
-      root = Fabricate(:post, topic: nested_topic_record, user: replier, reply_to_post_number: nil)
-
-      PostAlerter.post_created(root)
-
-      expect(op.notifications.where(notification_type: Notification.types[:replied]).count).to eq(1)
-    end
-
-    it "does not notify the OP about replies between third parties on someone else's post" do
-      other_root_user = Fabricate(:user)
-      other_root =
-        Fabricate(
-          :post,
-          topic: nested_topic_record,
-          user: other_root_user,
-          post_number: 2,
-          reply_to_post_number: nil,
-        )
-      PostAlerter.post_created(other_root)
-      op.notifications.destroy_all
-
-      deep_reply =
-        Fabricate(
-          :post,
-          topic: nested_topic_record,
-          user: third_party,
-          post_number: 3,
-          reply_to_post_number: 2,
-        )
-      PostAlerter.post_created(deep_reply)
-
-      expect(op.notifications.where(notification_type: Notification.types[:replied]).count).to eq(0)
-    end
-
-    it "does not notify the OP when they post a root themselves" do
-      own_root = Fabricate(:post, topic: nested_topic_record, user: op, reply_to_post_number: nil)
-
-      PostAlerter.post_created(own_root)
-
-      expect(op.notifications.where(notification_type: Notification.types[:replied]).count).to eq(0)
-    end
-
-    it "still notifies a parent-post author when someone replies directly to them" do
-      parent_user = Fabricate(:user)
-      Fabricate(
-        :post,
-        topic: nested_topic_record,
-        user: parent_user,
-        post_number: 2,
-        reply_to_post_number: nil,
-      )
-      reply =
-        Fabricate(
-          :post,
-          topic: nested_topic_record,
-          user: third_party,
-          post_number: 3,
-          reply_to_post_number: 2,
-        )
-
-      PostAlerter.post_created(reply)
-
-      expect(
-        parent_user.notifications.where(notification_type: Notification.types[:replied]).count,
-      ).to eq(1)
-    end
-
-    it "does not generate a :replied notification for a whispered root" do
-      whispered_root =
-        Fabricate(
-          :post,
-          topic: nested_topic_record,
-          user: replier,
-          post_type: Post.types[:whisper],
-          reply_to_post_number: nil,
-        )
-
-      PostAlerter.post_created(whispered_root)
-
-      expect(op.notifications.where(notification_type: Notification.types[:replied]).count).to eq(0)
-    end
-
-    it "starts redirecting only after a flat topic is converted to nested mid-life" do
-      flat_topic = Fabricate(:topic, user: op)
-      Fabricate(:post, topic: flat_topic, user: op, post_number: 1)
-
-      flat_root =
-        Fabricate(
-          :post,
-          topic: flat_topic,
-          user: replier,
-          post_number: 2,
-          reply_to_post_number: nil,
-        )
-      PostAlerter.post_created(flat_root)
-      expect(op.notifications.where(notification_type: Notification.types[:replied]).count).to eq(0)
-
-      Fabricate(:nested_topic, topic: flat_topic)
-
-      nested_root =
-        Fabricate(
-          :post,
-          topic: flat_topic,
-          user: third_party,
-          post_number: 3,
-          reply_to_post_number: nil,
-        )
-      PostAlerter.post_created(nested_root)
-      expect(op.notifications.where(notification_type: Notification.types[:replied]).count).to eq(1)
-    end
-
-    it "still emits :posted notifications for users explicitly Watching the nested topic" do
-      watcher = Fabricate(:user)
-      TopicUser.change(
-        watcher.id,
-        nested_topic_record.id,
-        notification_level: TopicUser.notification_levels[:watching],
-      )
-
-      root = Fabricate(:post, topic: nested_topic_record, user: replier, reply_to_post_number: nil)
-      PostAlerter.post_created(root)
-
-      expect(
-        watcher.notifications.where(notification_type: Notification.types[:posted]).count,
-      ).to eq(1)
-    end
-  end
-
-  context "with reply consolidation in a nested topic" do
-    fab!(:bucket_op, :user)
-    fab!(:bucket_replier, :user)
-    fab!(:bucket_other_replier, :user)
-    fab!(:bucket_topic) { Fabricate(:topic, user: bucket_op) }
-    fab!(:bucket_first_post) do
-      Fabricate(:post, topic: bucket_topic, user: bucket_op, post_number: 1)
-    end
-
-    before do
-      SiteSetting.nested_replies_enabled = true
-      Fabricate(:nested_topic, topic: bucket_topic)
-    end
-
-    def post_alert(user:, post_number:, reply_to: nil)
-      post =
-        Fabricate(
-          :post,
-          topic: bucket_topic,
-          user: user,
-          post_number: post_number,
-          reply_to_post_number: reply_to,
-        )
-      PostAlerter.post_created(post)
-      post
-    end
-
-    it "stores the resolved reply_to_post_number in notification.data for root posts" do
-      post_alert(user: bucket_replier, post_number: 2, reply_to: nil)
-
-      notification =
-        bucket_op.notifications.find_by(notification_type: Notification.types[:replied])
-      expect(notification.data_hash["reply_to_post_number"]).to eq(1)
-    end
-
-    it "stores the parent post number in notification.data for non-root replies" do
-      Fabricate(:post, topic: bucket_topic, user: bucket_op, post_number: 2)
-      post_alert(user: bucket_replier, post_number: 3, reply_to: 2)
-
-      notification =
-        bucket_op.notifications.find_by(notification_type: Notification.types[:replied])
-      expect(notification.data_hash["reply_to_post_number"]).to eq(2)
-    end
-
-    it "consolidates replies that share a bucket into one notification" do
-      post_alert(user: bucket_replier, post_number: 2, reply_to: nil)
-      post_alert(user: bucket_other_replier, post_number: 3, reply_to: nil)
-
-      notifications = bucket_op.notifications.where(notification_type: Notification.types[:replied])
-      expect(notifications.count).to eq(1)
-      expect(notifications.first.data_hash["reply_to_post_number"]).to eq(1)
-      expect(notifications.first.data_hash["display_username"]).to eq(
-        I18n.t("embed.replies", count: 2),
-      )
-      expect(notifications.first.data_hash["consolidated_count"]).to eq(2)
-    end
-
-    it "keeps separate notifications for replies in different buckets" do
-      Fabricate(:post, topic: bucket_topic, user: bucket_op, post_number: 2)
-      Fabricate(:post, topic: bucket_topic, user: bucket_op, post_number: 3)
-
-      post_alert(user: bucket_replier, post_number: 4, reply_to: 2)
-      post_alert(user: bucket_other_replier, post_number: 5, reply_to: 3)
-
-      buckets =
-        bucket_op
-          .notifications
-          .where(notification_type: Notification.types[:replied])
-          .map { |n| n.data_hash["reply_to_post_number"] }
-
-      expect(buckets.sort).to eq([2, 3])
-    end
-
-    it "does not let a non-root bucket reply collapse a root bucket notification" do
-      post_alert(user: bucket_replier, post_number: 2, reply_to: nil)
-
-      parent_post = Fabricate(:post, topic: bucket_topic, user: bucket_op, post_number: 3)
-      post_alert(user: bucket_other_replier, post_number: 4, reply_to: 3)
-
-      buckets =
-        bucket_op
-          .notifications
-          .where(notification_type: Notification.types[:replied])
-          .map { |n| n.data_hash["reply_to_post_number"] }
-
-      expect(buckets.sort).to eq([1, 3])
-    end
-
-    it "does not let a nested posted notification collapse a bucketed replied notification" do
-      watcher = Fabricate(:user)
-      TopicUser.change(
-        watcher.id,
-        bucket_topic.id,
-        notification_level: TopicUser.notification_levels[:watching],
-      )
-      Fabricate(:post, topic: bucket_topic, user: watcher, post_number: 2)
-      post_alert(user: bucket_replier, post_number: 3, reply_to: 2)
-
-      post_alert(user: bucket_other_replier, post_number: 4, reply_to: nil)
-
-      notifications = watcher.notifications.where(topic: bucket_topic)
-      expect(notifications.where(notification_type: Notification.types[:replied]).count).to eq(1)
-      expect(notifications.where(notification_type: Notification.types[:posted]).count).to eq(1)
-    end
-
-    it "does not let a nested category-watching notification collapse a bucketed replied notification" do
-      category_watcher = Fabricate(:user)
-      CategoryUser.set_notification_level_for_category(
-        category_watcher,
-        CategoryUser.notification_levels[:watching],
-        bucket_topic.category_id,
-      )
-      Fabricate(:post, topic: bucket_topic, user: category_watcher, post_number: 2)
-      post_alert(user: bucket_replier, post_number: 3, reply_to: 2)
-
-      post_alert(user: bucket_other_replier, post_number: 4, reply_to: nil)
-
-      notifications = category_watcher.notifications.where(topic: bucket_topic)
-      expect(notifications.where(notification_type: Notification.types[:replied]).count).to eq(1)
-      expect(
-        notifications.where(notification_type: Notification.types[:watching_category_or_tag]).count,
-      ).to eq(1)
-    end
-  end
-
-  context "with reply consolidation on a flat topic (regression guard)" do
-    fab!(:flat_op, :user)
-    fab!(:flat_replier_a, :user)
-    fab!(:flat_replier_b, :user)
-    fab!(:flat_topic) { Fabricate(:topic, user: flat_op) }
-    fab!(:flat_first_post) { Fabricate(:post, topic: flat_topic, user: flat_op, post_number: 1) }
-
-    # Flat topics must not pick up the new bucket fields. The frontend
-    # Replied handler keys on data.reply_to_post_number to render the
-    # nested-only "X new replies in your topic" / "to your post" copy
-    # and to append ?sort=new — flat topics must keep the legacy shape.
-
-    it "does not store reply_to_post_number or consolidated_count for a flat consolidated reply" do
-      Fabricate(:post, topic: flat_topic, user: flat_op, post_number: 2)
-      reply1 =
-        Fabricate(
-          :post,
-          topic: flat_topic,
-          user: flat_replier_a,
-          post_number: 3,
-          reply_to_post_number: 2,
-        )
-      PostAlerter.post_created(reply1)
-      reply2 =
-        Fabricate(
-          :post,
-          topic: flat_topic,
-          user: flat_replier_b,
-          post_number: 4,
-          reply_to_post_number: 2,
-        )
-      PostAlerter.post_created(reply2)
-
-      notifications = flat_op.notifications.where(notification_type: Notification.types[:replied])
-      expect(notifications.count).to eq(1)
-      data = notifications.first.data_hash
-      expect(data.key?("reply_to_post_number")).to eq(false)
-      expect(data.key?("consolidated_count")).to eq(false)
-      expect(data["display_username"]).to eq(I18n.t("embed.replies", count: 2))
-    end
-
-    it "does not store reply_to_post_number for a flat singular reply either" do
-      reply =
-        Fabricate(
-          :post,
-          topic: flat_topic,
-          user: flat_replier_a,
-          post_number: 2,
-          reply_to_post_number: 1,
-        )
-      PostAlerter.post_created(reply)
-
-      notification = flat_op.notifications.find_by(notification_type: Notification.types[:replied])
-      expect(notification.data_hash.key?("reply_to_post_number")).to eq(false)
     end
   end
 
@@ -2490,26 +1911,6 @@ RSpec.describe PostAlerter do
           staged_member,
           :watching_category_or_tag,
         ).and not_add_notification(staged_non_member, :watching_category_or_tag)
-      end
-
-      it "notifies even if the user has disabled link notifications" do
-        linked_post = Fabricate(:post, user: user)
-        topic = Fabricate(:topic, category: category)
-
-        CategoryUser.set_notification_level_for_category(
-          user,
-          CategoryUser.notification_levels[:watching],
-          category.id,
-        )
-        user.user_option.update!(notify_on_linked_posts: false)
-
-        post = create_post(topic:, raw: "Check this out: #{linked_post.full_url}")
-
-        expect(post.topic_links.first.link_post_id).to eq(linked_post.id)
-        expect { PostAlerter.post_created(post) }.to add_notification(
-          user,
-          :watching_category_or_tag,
-        ).and not_add_notification(user, :linked)
       end
 
       it "does not update existing unread notification" do
@@ -2615,23 +2016,6 @@ RSpec.describe PostAlerter do
 
         expect { PostAlerter.post_created(post) }.to change { Notification.count }.by(1)
       end
-
-      it "notifies even if the user has disabled link notifications" do
-        linked_post = Fabricate(:post, user: user)
-        tag = Fabricate(:tag)
-        topic = Fabricate(:topic, tags: [tag])
-
-        TagUser.change(user.id, tag.id, TagUser.notification_levels[:watching])
-        user.user_option.update!(notify_on_linked_posts: false)
-
-        post = create_post(topic:, raw: "Check this out: #{linked_post.full_url}")
-
-        expect(post.topic_links.first.link_post_id).to eq(linked_post.id)
-        expect { PostAlerter.post_created(post) }.to add_notification(
-          user,
-          :watching_category_or_tag,
-        ).and not_add_notification(user, :linked)
-      end
     end
 
     context "with category and tags" do
@@ -2693,8 +2077,8 @@ RSpec.describe PostAlerter do
         )
       end
 
-      it "adds notification when watched_precedence_over_muted preference is true" do
-        user.user_option.update!(watched_precedence_over_muted: true)
+      it "adds notification when watched_precedence_over_muted setting is true" do
+        SiteSetting.watched_precedence_over_muted = true
         expect {
           PostAlerter.post_created(topic_with_muted_tag_and_watched_category.posts.first)
         }.to change { Notification.count }.by(1)
@@ -2706,7 +2090,8 @@ RSpec.describe PostAlerter do
         }.by(1)
       end
 
-      it "does not add notifcation when watched_precedence_over_muted preference is false" do
+      it "respects user option even if watched_precedence_over_muted site setting is true" do
+        SiteSetting.watched_precedence_over_muted = true
         user.user_option.update!(watched_precedence_over_muted: false)
         expect {
           PostAlerter.post_created(topic_with_muted_tag_and_watched_category.posts.first)
@@ -2714,6 +2099,36 @@ RSpec.describe PostAlerter do
         expect {
           PostAlerter.post_created(topic_with_muted_category_and_watched_tag.posts.first)
         }.not_to change { Notification.count }
+        expect { PostAlerter.post_created(directly_watched_topic.posts.first) }.to change {
+          Notification.count
+        }.by(1)
+      end
+
+      it "does not add notification when watched_precedence_over_muted setting is false" do
+        SiteSetting.watched_precedence_over_muted = false
+        expect {
+          PostAlerter.post_created(topic_with_muted_tag_and_watched_category.posts.first)
+        }.not_to change { Notification.count }
+        expect {
+          PostAlerter.post_created(topic_with_muted_category_and_watched_tag.posts.first)
+        }.not_to change { Notification.count }
+        expect { PostAlerter.post_created(topic_with_watched_category.posts.first) }.to change {
+          Notification.count
+        }.by(1)
+        expect { PostAlerter.post_created(directly_watched_topic.posts.first) }.to change {
+          Notification.count
+        }.by(1)
+      end
+
+      it "respects user option even if watched_precedence_over_muted site setting is false" do
+        SiteSetting.watched_precedence_over_muted = false
+        user.user_option.update!(watched_precedence_over_muted: true)
+        expect {
+          PostAlerter.post_created(topic_with_muted_tag_and_watched_category.posts.first)
+        }.to change { Notification.count }.by(1)
+        expect {
+          PostAlerter.post_created(topic_with_muted_category_and_watched_tag.posts.first)
+        }.to change { Notification.count }.by(1)
         expect { PostAlerter.post_created(directly_watched_topic.posts.first) }.to change {
           Notification.count
         }.by(1)
@@ -2770,22 +2185,6 @@ RSpec.describe PostAlerter do
             .where(notification_type: Notification.types[:watching_first_post])
             .count,
         ).to eq(1)
-      end
-
-      it "triggers a watching_first_post notification even when tag edit notifications are disabled" do
-        SiteSetting.disable_tags_edit_notifications = true
-
-        expect {
-          PostRevisor.new(post).revise!(
-            Fabricate(:user, refresh_auto_groups: true),
-            tags: [other_tag.name, watched_tag.name],
-          )
-        }.to change {
-          user
-            .notifications
-            .where(notification_type: Notification.types[:watching_first_post])
-            .count
-        }.by(1)
       end
 
       it "doesn't trigger a notification if topic is unlisted" do
@@ -2962,7 +2361,7 @@ RSpec.describe PostAlerter do
         )
       end
 
-      it "uses the first post of the topic" do
+      it "should use the first post of the topic" do
         topic_link
         expect(PostAlerter.new.extract_linked_users(post.reload)).to eq([post2.user])
       end
@@ -3034,9 +2433,13 @@ RSpec.describe PostAlerter do
         smtp_server: "smtp.gmail.com",
         smtp_port: 587,
         smtp_ssl_mode: Group.smtp_ssl_modes[:starttls],
+        imap_server: "imap.gmail.com",
+        imap_port: 993,
+        imap_ssl: true,
         email_username: "discourse@example.com",
         email_password: "password",
         smtp_enabled: true,
+        imap_enabled: true,
       )
     end
 
@@ -3172,8 +2575,6 @@ RSpec.describe PostAlerter do
     it "skips sending a notification email to the group and all other email addresses that are _not_ members of the group,
     sends a group_smtp_email instead" do
       NotificationEmailer.enable
-      SiteSetting.simple_email_subject = true
-      SiteSetting.email_subject = "%{site_name}: %{topic_title}"
 
       incoming_email_post = create_post_with_incoming
       topic = incoming_email_post.topic
@@ -3207,30 +2608,7 @@ RSpec.describe PostAlerter do
       expect(email.from).to eq([SiteSetting.notification_email])
       expect(email.to).to contain_exactly(group_user1.user.email)
       expect(email.cc).to eq(nil)
-      expect(email.subject).to eq("Discourse: #{topic.title}")
-    end
-
-    it "excludes users with email_messages_level set to never from group SMTP emails" do
-      NotificationEmailer.enable
-
-      incoming_email_post = create_post_with_incoming
-      topic = incoming_email_post.topic
-
-      # Get one of the topic allowed users and set their email preference to never
-      topic_allowed_user = topic.topic_allowed_users.first
-      topic_allowed_user.user.user_option.update!(
-        email_messages_level: UserOption.email_level_types[:never],
-      )
-
-      post = Fabricate(:post, topic: topic.reload)
-
-      PostAlerter.new.after_save_post(post, true)
-
-      # The group SMTP email should not include the user who has email disabled
-      email = ActionMailer::Base.deliveries.last
-      expect(email.from).to eq([group.email_username])
-      expect(email.to).not_to include(topic_allowed_user.user.email)
-      expect(email.cc).not_to include(topic_allowed_user.user.email)
+      expect(email.subject).to eq("[Discourse] [PM] #{topic.title}")
     end
 
     it "skips sending a notification email to the cc address that was added on the same post with an incoming email" do

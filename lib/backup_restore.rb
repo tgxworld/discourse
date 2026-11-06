@@ -10,7 +10,7 @@ module BackupRestore
 
   def self.backup!(user_id, opts = {})
     if opts[:fork] == false
-      BackupRestore::Creator.new(user_id, opts).run
+      BackupRestore::Backuper.new(user_id, opts).run
     else
       spawn_process!(:backup, user_id, opts)
     end
@@ -65,7 +65,7 @@ module BackupRestore
     MessageBus.backlog(LOGS_CHANNEL, id).map { |m| m.data }
   end
 
-  def self.current_database_version
+  def self.current_version
     ActiveRecord::Migrator.current_version
   end
 
@@ -190,7 +190,7 @@ module BackupRestore
   end
 
   def self.spawn_process!(type, user_id, opts)
-    script = Rails.root.join("script/spawn_backup_restore.rb").to_s
+    script = File.join(Rails.root, "script", "spawn_backup_restore.rb")
     command = ["bundle", "exec", "ruby", script, type, user_id, opts.to_json].map(&:to_s)
 
     pid = spawn({ "RAILS_DB" => RailsMultisite::ConnectionManagement.current_db }, *command)

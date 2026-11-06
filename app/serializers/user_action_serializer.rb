@@ -35,10 +35,6 @@ class UserActionSerializer < ApplicationSerializer
              :closed,
              :archived
 
-  def title
-    ContentLocalization.translated_topic_title(source_topic, scope) || object.title
-  end
-
   def avatar_template
     User.avatar_template(object.username, object.uploaded_avatar_id)
   end
@@ -101,15 +97,5 @@ class UserActionSerializer < ApplicationSerializer
 
   def action_code_path
     object.action_code_path
-  end
-
-  private
-
-  def source_topic
-    @options[:localized_topics].to_h[object.topic_id]
-  end
-
-  def excerpt_source_post
-    @options[:localized_posts].to_h[object.cooked_post_id]
   end
 end

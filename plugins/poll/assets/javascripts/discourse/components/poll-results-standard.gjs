@@ -1,10 +1,9 @@
 import Component from "@glimmer/component";
 import { concat } from "@ember/helper";
-import { trustHTML } from "@ember/template";
+import { htmlSafe } from "@ember/template";
 import { i18n } from "discourse-i18n";
 import evenRound from "discourse/plugins/poll/lib/even-round";
-import decoratePollOption from "../modifiers/decorate-poll-option.js";
-import PollVoters from "./poll-voters.gjs";
+import PollVoters from "./poll-voters";
 
 export default class PollResultsStandardComponent extends Component {
   orderOptions = (options) => {
@@ -93,30 +92,27 @@ export default class PollResultsStandardComponent extends Component {
                     }}</span>
                 {{/if}}
               {{/unless}}
-              <span
-                class="option-text"
-                {{decoratePollOption option.html}}
-              ></span>
+              <span class="option-text">{{htmlSafe option.html}}</span>
             </p>
             {{#unless @isRankedChoice}}
               <div class="bar-back">
                 <div
                   class="bar"
-                  style={{trustHTML (concat "width:" option.percentage "%")}}
+                  style={{htmlSafe (concat "width:" option.percentage "%")}}
                 />
               </div>
             {{/unless}}
             {{#if @isPublic}}
               <PollVoters
-                @fetchVoters={{@fetchVoters}}
-                @isRankedChoice={{@isRankedChoice}}
-                @loading={{option.loading}}
+                @postId={{@postId}}
+                @pollType={{@pollType}}
                 @optionId={{option.id}}
                 @pollName={{@pollName}}
-                @pollType={{@pollType}}
-                @postId={{@postId}}
+                @isRankedChoice={{@isRankedChoice}}
                 @totalVotes={{option.votes}}
                 @voters={{option.voters}}
+                @fetchVoters={{@fetchVoters}}
+                @loading={{option.loading}}
               />
             {{/if}}
           </div>

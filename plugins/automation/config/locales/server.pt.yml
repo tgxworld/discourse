@@ -16,5 +16,3 @@ pt:
         title: Fechar Tópico
       append_last_checked_by:
         button_text: Concluído
-      set_topic_timer:
-        title: "Definir Temporizador de Tópico"

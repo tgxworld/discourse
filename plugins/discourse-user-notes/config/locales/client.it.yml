@@ -7,5 +7,9 @@
 it:
   js:
     user_notes:
-      title: "Note utente"
+      title: "Note Utente"
+      attach: "Aggiungi nota utente"
+      remove: "Rimuovi Nota Utente"
+      show: "Note utente (%{count})"
       delete_confirm: "Sei sicuro di voler cancellare questa nota utente?"
+      show_post: "Mostra messaggio"

@@ -4,4 +4,6 @@ Oj::Rails.set_encoder()
 Oj::Rails.set_decoder()
 Oj::Rails.optimize()
 Oj.default_options = Oj.default_options.merge(mode: :compat)
-MultiJSON.use(:oj)
+
+# Not sure why it's not using this by default!
+MultiJson.engine = :oj

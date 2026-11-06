@@ -3,8 +3,6 @@
 module DiscourseAi
   module AiHelper
     class ChatThreadTitler
-      FEATURE_NAME = "chat_thread_titles"
-
       def initialize(thread)
         @thread = thread
       end
@@ -13,59 +11,47 @@ module DiscourseAi
         content = thread_content(@thread)
         return nil if content.blank?
 
-        result = call_llm(content)
-        return nil if result.blank?
+        suggested_title = call_llm(content)
+        return nil if suggested_title.blank?
 
-        cleanup(result)
+        cleanup(suggested_title)
       end
 
-      private
-
       def call_llm(thread_content)
-        ai_agent = AiAgent.find_by_id_from_cache(SiteSetting.ai_helper_chat_thread_title_agent)
-        return nil if ai_agent.blank?
+        return nil if SiteSetting.ai_default_llm_model.blank?
 
-        agent_klass = ai_agent.class_instance
-        llm_model = Assistant.find_ai_helper_model(FEATURE_NAME, agent_klass)
-        return nil if llm_model.blank?
+        chat = "<input>\n#{thread_content}\n</input>"
 
-        agent = agent_klass.new
-        user = Discourse.system_user
-
-        bot = DiscourseAi::Agents::Bot.as(user, agent: agent, model: llm_model)
-
-        context =
-          DiscourseAi::Agents::BotContext.new(
-            user: user,
-            skip_show_thinking: true,
-            feature_name: FEATURE_NAME,
-            messages: [{ type: :user, content: thread_content }],
+        prompt =
+          DiscourseAi::Completions::Prompt.new(
+            <<~TEXT.strip,
+            I want you to act as a title generator for chat between users. I will provide you with the chat transcription,
+            and you will generate a single attention-grabbing title. Please keep the title concise and under 15 words
+            and ensure that the meaning is maintained. The title will utilize the same language type of the chat.
+            I want you to only reply the suggested title and nothing else, do not write explanations.
+            You will find the chat between <input></input> XML tags. Return the suggested title between <title> tags.
+          TEXT
+            messages: [{ type: :user, content: chat, id: "User" }],
           )
 
-        result = +""
-        bot.reply(context) do |partial, _, type|
-          if type == :structured_output
-            partial.read_buffered_property_chunk(:title) { |title| result << title }
-          elsif type.blank?
-            result << partial
-          end
-        end
-
-        result.presence
+        DiscourseAi::Completions::Llm.proxy(SiteSetting.ai_default_llm_model).generate(
+          prompt,
+          user: Discourse.system_user,
+          stop_sequences: ["</input>"],
+          feature_name: "chat_thread_title",
+        )
       end
 
       def cleanup(title)
-        title
-          .to_s
-          .strip
+        (Nokogiri::HTML5.fragment(title).at("title")&.text || title)
           .split("\n")
           .first
-          .to_s
-          .then { it.match?(/^(["']).*\1$/) ? it[1..-2] : it }
+          .then { _1.match?(/^("|')(.*)("|')$/) ? _1[1..-2] : _1 }
           .truncate(100, separator: " ")
       end
 
       def thread_content(thread)
+        # TODO: Replace me by a proper API call
         thread
           .chat_messages
           .joins(:user)

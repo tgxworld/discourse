@@ -28,34 +28,7 @@ RSpec.describe Migration::ColumnDropper do
     end
   end
 
-  describe ".mark_readonly schema lookup" do
-    it "only checks the public schema for default values" do
-      DB.exec <<~SQL
-        CREATE TABLE test_public_schema (id INTEGER, col TEXT);
-        CREATE SCHEMA other_schema;
-        CREATE TABLE other_schema.test_public_schema (id INTEGER, col TEXT DEFAULT 'has_default');
-      SQL
-
-      # Stub to reverse query results, simulating a database where non-public
-      # schemas come first (e.g., due to backup/restore OID ordering).
-      # Without the table_schema='public' fix, this causes mark_readonly to
-      # incorrectly see a default value from the other schema.
-      original_method = DB.method(:query_single)
-      allow(DB).to receive(:query_single) do |*args, **kwargs|
-        results = original_method.call(*args, **kwargs)
-        results.reverse
-      end
-
-      expect { described_class.mark_readonly("test_public_schema", "col") }.not_to raise_error
-
-      described_class.drop_readonly("test_public_schema", "col")
-    ensure
-      DB.exec "DROP SCHEMA IF EXISTS other_schema CASCADE"
-      DB.exec "DROP TABLE IF EXISTS test_public_schema CASCADE"
-    end
-  end
-
-  describe ".mark_readonly enforcement" do
+  describe ".mark_readonly" do
     let(:table_name) { "table_with_readonly_column" }
 
     before do
@@ -78,7 +51,7 @@ RSpec.describe Migration::ColumnDropper do
       SQL
     end
 
-    it "allows the read-only column to be dropped" do
+    it "should be droppable" do
       Migration::ColumnDropper.execute_drop(table_name, ["email"])
 
       expect(has_trigger?(Migration::BaseDropper.readonly_trigger_name(table_name, "email"))).to eq(
@@ -88,20 +61,22 @@ RSpec.describe Migration::ColumnDropper do
       expect(has_column?(table_name, "email")).to eq(false)
     end
 
-    it "prevents updates to the read-only column" do
-      DB.exec <<~SQL
+    it "should prevent updates to the readonly column" do
+      begin
+        DB.exec <<~SQL
         UPDATE #{table_name}
         SET email = 'testing@email.com'
         WHERE topic_id = 1;
         SQL
-    rescue PG::RaiseException => e
-      [
-        "Discourse: email in #{table_name} is readonly",
-        "discourse_functions.raise_table_with_readonly_column_email_readonly()",
-      ].each { |message| expect(e.message).to include(message) }
+      rescue PG::RaiseException => e
+        [
+          "Discourse: email in #{table_name} is readonly",
+          "discourse_functions.raise_table_with_readonly_column_email_readonly()",
+        ].each { |message| expect(e.message).to include(message) }
+      end
     end
 
-    it "allows updates to other columns" do
+    it "should allow updates to the other columns" do
       DB.exec <<~SQL
       UPDATE #{table_name}
       SET topic_id = 2
@@ -112,7 +87,7 @@ RSpec.describe Migration::ColumnDropper do
               "something@email.com"
     end
 
-    it "prevents insertions into the read-only column" do
+    it "should prevent insertions to the readonly column" do
       expect do ActiveRecord::Base.connection.raw_connection.exec <<~SQL end.to raise_error(
         INSERT INTO #{table_name} (topic_id, email)
         VALUES (2, 'something@email.com');
@@ -122,7 +97,7 @@ RSpec.describe Migration::ColumnDropper do
       )
     end
 
-    it "allows insertions into other columns" do
+    it "should allow insertions to the other columns" do
       DB.exec <<~SQL
       INSERT INTO #{table_name} (topic_id)
       VALUES (2);

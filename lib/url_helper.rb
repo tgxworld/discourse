@@ -78,7 +78,7 @@ class UrlHelper
   end
 
   def self.absolute_without_cdn(url)
-    absolute(url, nil)
+    self.absolute(url, nil)
   end
 
   def self.schemaless(url)
@@ -86,16 +86,14 @@ class UrlHelper
   end
 
   def self.secure_proxy_without_cdn(url)
-    absolute(Upload.secure_uploads_url_from_upload_url(url), nil)
+    self.absolute(Upload.secure_uploads_url_from_upload_url(url), nil)
   end
 
   def self.normalized_encode(uri)
     url = uri.to_s
 
     if url.length > MAX_URL_LENGTH
-      raise ArgumentError.new(
-              "URL is too long (#{url.length} characters): #{url.truncate(MAX_URL_LENGTH)}",
-            )
+      raise ArgumentError.new("URL starting with #{url[0..100]} is too long")
     end
 
     # Ideally we will jump straight to `Addressable::URI.normalized_encode`. However,

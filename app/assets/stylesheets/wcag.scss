@@ -12,12 +12,21 @@
 
 html.discourse-no-touch {
   .btn-default {
-    --d-button-default-icon-color: var(--primary-medium);
-    --d-button-default-icon-color--hover: var(--secondary);
+    .d-icon {
+      color: var(--primary-medium);
+    }
+
+    &:hover,
+    &.btn-hover,
+    &:focus {
+      .d-icon {
+        color: var(--secondary);
+      }
+    }
   }
 
-  .btn-primary {
-    --d-button-primary-icon-color: var(--secondary);
+  .btn-primary .d-icon {
+    color: var(--secondary);
   }
 
   .btn-icon.ok,
@@ -28,6 +37,7 @@ html.discourse-no-touch {
     }
   }
 
+  .btn-flat.delete.d-hover,
   .btn-flat.delete:hover {
     background: var(--danger);
   }
@@ -42,6 +52,12 @@ html {
   .nav-pills > li > a:not(.active):hover {
     background: var(--tertiary-low);
     color: var(--primary);
+  }
+
+  // Composer
+  #reply-control .reply-to .reply-details .d-icon {
+    opacity: 1;
+    color: var(--primary-low-mid);
   }
 
   .d-editor-button-bar {
@@ -160,6 +176,13 @@ html {
     color: var(--primary-medium);
   }
 
+  blockquote {
+    a,
+    a:visited {
+      color: var(--tertiary);
+    }
+  }
+
   .meta .d-icon + .filename,
   .meta .informations {
     color: var(--secondary);
@@ -176,6 +199,15 @@ html {
   a[data-clicks]::before,
   a[data-clicks]::after {
     color: var(--primary-high);
+  }
+
+  // Post controls
+  .topic-admin-menu,
+  .timeline-controls {
+    .btn .d-icon {
+      // admin wrenches
+      color: var(--primary-medium);
+    }
   }
 
   nav.post-controls {
@@ -221,15 +253,18 @@ html {
     color: var(--primary);
   }
 
-  .user-main .flags {
+  .user-main .flagged-posts {
     color: dark-light-choose($primary, $secondary);
   }
 
-  .uploaded-file-preview .expand-overlay .file-uploader-lightbox-btn .d-icon {
+  .uploaded-image-preview
+    .image-upload-controls
+    .image-uploader-lightbox-btn
+    .d-icon {
     color: var(--primary);
   }
 
-  .settings .setting .setting-value .uploaded-file-preview {
+  .settings .setting .setting-value .uploaded-image-preview {
     background-color: var(--primary-very-low);
   }
 
@@ -267,8 +302,23 @@ html {
     background: var(--primary-very-low);
   }
 
+  // Dashboard
+  .user-metrics .table-cell.user-basic .label,
+  .user-metrics .table-cell.user-member .label,
+  .user-metrics .table-cell.user-leader .label {
+    color: dark-light-choose($primary, $secondary);
+  }
+
   .admin-contents.admin-plugins td.version .commit-hash {
     color: var(--primary-medium);
+  }
+
+  // Search
+  .search-container
+    .search-filters
+    details.search-advanced-additional-options
+    > summary {
+    color: var(--highlight-high);
   }
 
   .chat-notices__notice,
@@ -306,43 +356,4 @@ html {
   .sidebar-section-link-suffix.icon.unread
   svg {
   color: var(--tertiary);
-}
-
-// Modernize Foundation Theme specific WCAG overrides
-html.discourse-no-touch :where(.uc-modernize-foundation-theme) {
-  .btn-default {
-    .d-icon {
-      color: var(--d-button-default-icon-color);
-    }
-
-    &:hover,
-    &.btn-hover,
-    &:focus {
-      .d-icon {
-        color: var(--d-button-default-icon-color);
-      }
-    }
-  }
-
-  // Composer button bar icons should match the modernize theme
-  .d-editor-button-bar .btn-icon.btn-default .d-icon {
-    color: var(--d-button-default-icon-color);
-
-    &:hover {
-      color: var(--d-button-default-icon-color);
-    }
-  }
-}
-
-html :where(.uc-modernize-foundation-theme) {
-  // Header icons with modernize theme colors
-  .d-header-icons .d-icon,
-  .header-sidebar-toggle button .d-icon {
-    color: var(--d-sidebar-link-icon-color);
-  }
-
-  // Topic list header consistency
-  table th {
-    color: var(--d-topic-list-header-text-color);
-  }
 }

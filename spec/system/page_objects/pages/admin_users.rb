@@ -21,10 +21,6 @@ module PageObjects
         def has_no_bulk_select_checkbox?
           element.has_no_css?(".directory-table__cell-bulk-select")
         end
-
-        def username
-          element.find("a[href^='/admin/users']")
-        end
       end
 
       def visit
@@ -35,16 +31,8 @@ module PageObjects
         find(".btn.bulk-select")
       end
 
-      def bulk_select_all_button
-        find(".btn.bulk-select-all")
-      end
-
-      def bulk_clear_all_button
-        find(".btn.bulk-clear-all")
-      end
-
       def search_input
-        find(".d-filter-controls__input")
+        find(".admin-users-list__search input")
       end
 
       def user_row(id)

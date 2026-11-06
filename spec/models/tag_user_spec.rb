@@ -189,7 +189,6 @@ RSpec.describe TagUser do
     fab!(:user) { Fabricate(:user, refresh_auto_groups: true) }
     fab!(:watched_tag, :tag)
     let(:muted_tag) { Fabricate(:tag) }
-
     fab!(:tracked_tag, :tag)
 
     context "with some tag notification settings" do
@@ -231,7 +230,7 @@ RSpec.describe TagUser do
       end
 
       it "sets notification level to the highest one if there are multiple tags" do
-        user.user_option.update!(watched_precedence_over_muted: true)
+        SiteSetting.watched_precedence_over_muted = true
 
         TagUser.create!(
           user: user,
@@ -339,66 +338,6 @@ RSpec.describe TagUser do
         expect(topic.tags.length).to eq(2)
       end
 
-      it "does not override user's manual topic notification level changes when auto_track runs" do
-        tracked_tag = Fabricate(:tag)
-        other_tag = Fabricate(:tag)
-        post = create_post(tags: [tracked_tag.name])
-
-        TopicUser.change(user.id, post.topic_id, total_msecs_viewed: 1)
-        TagUser.change(user.id, tracked_tag.id, tracking)
-
-        tu = TopicUser.get(post.topic, user)
-        expect(tu.notification_level).to eq tracking
-
-        # user manually sets topic to regular
-        TopicUser.change(
-          user.id,
-          post.topic_id,
-          notification_level: TopicUser.notification_levels[:regular],
-        )
-        tu = TopicUser.get(post.topic, user)
-        expect(tu.notification_level).to eq regular
-        expect(tu.notifications_reason_id).to eq TopicUser.notification_reasons[:user_changed]
-
-        # changing another tag triggers auto_track/auto_watch for the user
-        TagUser.change(user.id, other_tag.id, watching)
-
-        tu = TopicUser.get(post.topic, user)
-        expect(tu.notification_level).to eq regular
-      end
-
-      it "does not override user's manual topic notification level changes when auto_watch runs" do
-        post = create_post(tags: [watched_tag.name])
-        other_tag = Fabricate(:tag)
-
-        TopicUser.change(user.id, post.topic_id, total_msecs_viewed: 1)
-        TagUser.create!(
-          user: user,
-          tag: watched_tag,
-          notification_level: TagUser.notification_levels[:watching],
-        )
-        TagUser.auto_watch(user_id: user.id)
-
-        tu = TopicUser.get(post.topic, user)
-        expect(tu.notification_level).to eq watching
-
-        # user manually sets topic to tracking
-        TopicUser.change(
-          user.id,
-          post.topic_id,
-          notification_level: TopicUser.notification_levels[:tracking],
-        )
-        tu = TopicUser.get(post.topic, user)
-        expect(tu.notification_level).to eq tracking
-        expect(tu.notifications_reason_id).to eq TopicUser.notification_reasons[:user_changed]
-
-        # changing another tag triggers auto_track/auto_watch for the user
-        TagUser.change(user.id, other_tag.id, watching)
-
-        tu = TopicUser.get(post.topic, user)
-        expect(tu.notification_level).to eq tracking
-      end
-
       it "is destroyed when a user is deleted" do
         TagUser.create!(
           user: user,
@@ -419,26 +358,23 @@ RSpec.describe TagUser do
 
     context "for anon" do
       let(:user) { nil }
-
       before do
         SiteSetting.default_tags_watching = tag1.name
         SiteSetting.default_tags_tracking = tag2.name
         SiteSetting.default_tags_watching_first_post = tag3.name
         SiteSetting.default_tags_muted = tag4.name
       end
-
       it "every tag from the default_tags_* site settings get overridden to watching_first_post, except for muted" do
         levels = TagUser.notification_levels_for(user)
-        expect(levels[tag1.id][:level]).to eq(TagUser.notification_levels[:regular])
-        expect(levels[tag2.id][:level]).to eq(TagUser.notification_levels[:regular])
-        expect(levels[tag3.id][:level]).to eq(TagUser.notification_levels[:regular])
-        expect(levels[tag4.id][:level]).to eq(TagUser.notification_levels[:muted])
+        expect(levels[tag1.name]).to eq(TagUser.notification_levels[:regular])
+        expect(levels[tag2.name]).to eq(TagUser.notification_levels[:regular])
+        expect(levels[tag3.name]).to eq(TagUser.notification_levels[:regular])
+        expect(levels[tag4.name]).to eq(TagUser.notification_levels[:muted])
       end
     end
 
     context "for a user" do
       let(:user) { Fabricate(:user) }
-
       before do
         TagUser.create(
           user: user,
@@ -466,11 +402,11 @@ RSpec.describe TagUser do
       include tags the user is not tracking at all" do
         tag5 = Fabricate(:tag)
         levels = TagUser.notification_levels_for(user)
-        expect(levels[tag1.id][:level]).to eq(TagUser.notification_levels[:watching])
-        expect(levels[tag2.id][:level]).to eq(TagUser.notification_levels[:tracking])
-        expect(levels[tag3.id][:level]).to eq(TagUser.notification_levels[:watching_first_post])
-        expect(levels[tag4.id][:level]).to eq(TagUser.notification_levels[:muted])
-        expect(levels.key?(tag5.id)).to eq(false)
+        expect(levels[tag1.name]).to eq(TagUser.notification_levels[:watching])
+        expect(levels[tag2.name]).to eq(TagUser.notification_levels[:tracking])
+        expect(levels[tag3.name]).to eq(TagUser.notification_levels[:watching_first_post])
+        expect(levels[tag4.name]).to eq(TagUser.notification_levels[:muted])
+        expect(levels.key?(tag5.name)).to eq(false)
       end
 
       it "does not show a tag is tracked if the user does not belong to the tag group with permissions" do
@@ -478,7 +414,7 @@ RSpec.describe TagUser do
         tag_group = Fabricate(:tag_group, tags: [tag2], permissions: { group.name => 1 })
 
         expect(TagUser.notification_levels_for(user).keys).to match_array(
-          [tag1.id, tag3.id, tag4.id],
+          [tag1.name, tag3.name, tag4.name],
         )
       end
     end

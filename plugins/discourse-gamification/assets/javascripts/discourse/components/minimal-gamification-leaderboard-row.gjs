@@ -1,33 +1,34 @@
 import Component from "@glimmer/component";
 import { service } from "@ember/service";
-import dAvatar from "discourse/ui-kit/helpers/d-avatar";
-import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
-import dNumber from "discourse/ui-kit/helpers/d-number";
+import { or } from "truth-helpers";
+import avatar from "discourse/helpers/avatar";
+import concatClass from "discourse/helpers/concat-class";
+import icon from "discourse/helpers/d-icon";
+import number from "discourse/helpers/number";
 import { i18n } from "discourse-i18n";
-import sum from "../helpers/sum.js";
+import sum from "../helpers/sum";
 
 export default class MinimalGamificationLeaderboardRow extends Component {
   @service siteSettings;
 
   <template>
     <div
-      class={{dConcatClass "user" (if @rank.isCurrentUser "user-highlight")}}
       id="leaderboard-user-{{@rank.id}}"
+      class={{concatClass "user" (if @rank.isCurrentUser "user-highlight")}}
     >
-      <div class={{dConcatClass "user__rank" (if @rank.topRanked "-winner")}}>
+      <div class={{concatClass "user__rank" (if @rank.topRanked "-winner")}}>
         {{#if @rank.topRanked}}
-          {{dIcon "crown"}}
+          {{icon "crown"}}
         {{else}}
           {{sum @index 1}}
         {{/if}}
       </div>
       <div
-        class="user__avatar clickable"
-        data-user-card={{@rank.username}}
         role="button"
+        data-user-card={{@rank.username}}
+        class="user__avatar clickable"
       >
-        {{dAvatar @rank imageSize="small"}}
+        {{avatar @rank imageSize="small"}}
 
         {{#if @rank.isCurrentUser}}
           <span class="user__name">{{i18n "gamification.you"}}</span>
@@ -43,7 +44,7 @@ export default class MinimalGamificationLeaderboardRow extends Component {
       </div>
 
       <div class="user__score">
-        {{dNumber @rank.total_score}}
+        {{number @rank.total_score}}
       </div>
     </div>
   </template>

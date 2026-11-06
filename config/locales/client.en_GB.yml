@@ -26,9 +26,6 @@ en_GB:
       tiny:
         date_month: "D MMM"
         date_year: "MMM YYYY"
-    design_wizard:
-      homepage:
-        categories: "Categories"
     review:
       types:
         reviewable_flagged_post:
@@ -38,10 +35,12 @@ en_GB:
         reviewable_post:
           title: "Post"
           noun: "post"
-        reviewable_ai_post:
-          noun: "post"
     groups:
       manage:
+        email:
+          status: "Synchronised %{old_emails} / %{total_emails} emails via IMAP."
+          mailboxes:
+            synchronized: "Synchronised Mailbox"
         categories:
           title: Categories
       flair_bg_color: "Avatar Flair Background Colour"
@@ -75,6 +74,7 @@ en_GB:
       logout_disabled: "Logout is disabled whilst the site is in read only mode."
     composer:
       italic_text: "emphasised text"
+      collapse: "minimise the composer panel"
     search:
       categories: "Categories"
       type:
@@ -82,7 +82,6 @@ en_GB:
       advanced:
         in_category:
           label: Categorised
-    header_panel: "Header"
     topic:
       automatically_add_to_groups: "This invitation also includes access to these groups:"
     post:
@@ -106,15 +105,9 @@ en_GB:
       categories:
         title: "Categories"
     keyboard_shortcuts_help:
-      description_header: "Description"
-      jump_to:
-        categories: "Categories"
       navigation:
         title: "Navigation"
     tagging:
-      description: "Description"
-      localization:
-        description: "Description"
       manage_groups_description: "Define groups to organise tags"
     sidebar:
       sections:
@@ -132,8 +125,6 @@ en_GB:
           header_description: "Customise the template in which all html emails are rendered, and style using CSS"
       dashboard:
         exception_error: Sorry, an error occurred whilst executing the query
-        reports_section:
-          no_data: "No data to display"
       flags:
         description: "Description"
       api:
@@ -155,6 +146,9 @@ en_GB:
         color_palettes:
           colors:
             title: "Colours"
+      backups:
+        upload:
+          error: "There has been an error whilst uploading '%{filename}': %{message}"
       customize:
         title: "Customise"
         color: "Colour"
@@ -162,7 +156,9 @@ en_GB:
           customize_desc: "Customise:"
           long_title: "Amend colours, CSS and HTML contents of your site"
           color_scheme: "Colour Palette"
-          color_scheme_select: "Select colours to be used by theme."
+          color_scheme_select: "Select colours to be used by theme"
+          colors: "Colours"
+          colors_title: "Colours"
           color_definitions:
             text: "Colour Definitions"
             title: "Enter custom colour definitions (advanced users only)"
@@ -212,3 +208,7 @@ en_GB:
       reseed:
         modal:
           categories: "Categories"
+  wizard_js:
+    wizard:
+      top_menu_items:
+        categories: "Categories"

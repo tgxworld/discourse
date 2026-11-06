@@ -12,41 +12,6 @@ RSpec.describe GroupUser do
 
       expect do group_user.destroy! end.to change { group.reload.user_count }.from(1).to(0)
     end
-
-    it "grants group title to user without one" do
-      group.update!(title: "Cool Group")
-
-      Fabricate(:group_user, group: group, user: user)
-
-      expect(user.reload.title).to eq("Cool Group")
-    end
-
-    it "does not overwrite an existing title" do
-      user.update!(title: "Existing Title")
-      group.update!(title: "Cool Group")
-
-      Fabricate(:group_user, group: group, user: user)
-
-      expect(user.reload.title).to eq("Existing Title")
-    end
-
-    it "sets primary_group_id and flair_group_id for a primary group" do
-      group.update!(primary_group: true)
-
-      Fabricate(:group_user, group: group, user: user)
-
-      user.reload
-      expect(user.primary_group_id).to eq(group.id)
-      expect(user.flair_group_id).to eq(group.id)
-    end
-
-    it "grants trust level when group has grant_trust_level" do
-      group.update!(grant_trust_level: 3)
-
-      Fabricate(:group_user, group: group, user: user)
-
-      expect(user.reload.trust_level).to eq(3)
-    end
   end
 
   it "correctly sets notification level" do
@@ -90,9 +55,7 @@ RSpec.describe GroupUser do
     end
 
     it "doesn't change anything with no configured defaults" do
-      expect { Fabricate(:group_user, group: group, user: user) }.to_not change {
-        CategoryUser.count
-      }
+      expect { group.add(user) }.to_not change { CategoryUser.count }
     end
 
     it "adds new category notifications" do
@@ -102,11 +65,7 @@ RSpec.describe GroupUser do
       group.watching_category_ids = [category4.id]
       group.watching_first_post_category_ids = [category5.id]
       group.save!
-
-      expect { Fabricate(:group_user, group: group, user: user) }.to change {
-        CategoryUser.count
-      }.by(5)
-
+      expect { group.add(user) }.to change { CategoryUser.count }.by(5)
       h = CategoryUser.notification_levels_for(user)
       expect(h[category1.id]).to eq(levels[:muted])
       expect(h[category2.id]).to eq(levels[:regular])
@@ -139,9 +98,7 @@ RSpec.describe GroupUser do
       group.regular_category_ids = [category1.id]
       group.watching_first_post_category_ids = [category2.id, category3.id, category4.id]
       group.save!
-
-      Fabricate(:group_user, group: group, user: user)
-
+      group.add(user)
       h = CategoryUser.notification_levels_for(user)
       expect(h[category1.id]).to eq(levels[:regular])
       expect(h[category2.id]).to eq(levels[:watching_first_post])
@@ -168,9 +125,7 @@ RSpec.describe GroupUser do
       group.muted_category_ids = [category3.id]
       group.tracking_category_ids = [category4.id]
       group.save!
-
-      Fabricate(:group_user, group: group, user: user)
-
+      group.add(user)
       h = CategoryUser.notification_levels_for(user)
       expect(h[category1.id]).to eq(levels[:tracking])
       expect(h[category2.id]).to eq(levels[:watching])
@@ -194,7 +149,7 @@ RSpec.describe GroupUser do
     end
 
     it "doesn't change anything with no configured defaults" do
-      expect { Fabricate(:group_user, group: group, user: user) }.to_not change { TagUser.count }
+      expect { group.add(user) }.to_not change { TagUser.count }
     end
 
     it "adds new tag notifications" do
@@ -204,9 +159,7 @@ RSpec.describe GroupUser do
       group.watching_tags = [tag4.name]
       group.watching_first_post_tags = [tag5.name]
       group.save!
-
-      expect { Fabricate(:group_user, group: group, user: user) }.to change { TagUser.count }.by(5)
-
+      expect { group.add(user) }.to change { TagUser.count }.by(5)
       expect(TagUser.lookup(user, :muted).pluck(:tag_id)).to eq([tag1.id])
       expect(TagUser.lookup(user, :regular).pluck(:tag_id)).to eq([tag2.id])
       expect(TagUser.lookup(user, :tracking).pluck(:tag_id)).to eq([tag3.id])
@@ -222,9 +175,7 @@ RSpec.describe GroupUser do
       group.regular_tags = [tag1.name]
       group.watching_first_post_tags = [tag2.name, tag3.name, tag4.name]
       group.save!
-
-      Fabricate(:group_user, group: group, user: user)
-
+      group.add(user)
       expect(TagUser.lookup(user, :muted).pluck(:tag_id)).to be_empty
       expect(TagUser.lookup(user, :regular).pluck(:tag_id)).to eq([tag1.id])
       expect(TagUser.lookup(user, :tracking).pluck(:tag_id)).to be_empty
@@ -242,9 +193,7 @@ RSpec.describe GroupUser do
       group.muted_tags = [tag3.name]
       group.tracking_tags = [tag2.name]
       group.save!
-
-      Fabricate(:group_user, group: group, user: user)
-
+      group.add(user)
       expect(TagUser.lookup(user, :muted).pluck(:tag_id)).to eq([tag3.id])
       expect(TagUser.lookup(user, :tracking).pluck(:tag_id)).to eq([tag1.id])
       expect(TagUser.lookup(user, :watching).pluck(:tag_id)).to eq([tag2.id])
@@ -327,9 +276,11 @@ RSpec.describe GroupUser do
   describe "#destroy!" do
     fab!(:group)
 
-    it "removes `primary_group_id`, `flair_group_id` on user model" do
+    it "removes `primary_group_id`, `flair_group_id` and exec `match_primary_group_changes` method on user model" do
       user = Fabricate(:user, primary_group: group, flair_group: group)
       group_user = Fabricate(:group_user, group: group, user: user)
+
+      user.expects(:match_primary_group_changes).once
       group_user.destroy!
 
       user.reload
@@ -365,28 +316,6 @@ RSpec.describe GroupUser do
       )
     end
 
-    it "restores title from another group when removed from title group" do
-      other_group = Fabricate(:group, title: "Other Title")
-      Fabricate(:group_user, group: other_group, user: user)
-      group.update!(title: "Main Title")
-      group_user = Fabricate(:group_user, group: group, user: user)
-      user.update!(title: "Main Title")
-
-      group_user.destroy!
-
-      expect(user.reload.title).to eq("Other Title")
-    end
-
-    it "clears title when no other titled group exists" do
-      group.update!(title: "Only Title")
-      group_user = Fabricate(:group_user, group: group, user: user)
-      user.update!(title: "Only Title")
-
-      group_user.destroy!
-
-      expect(user.reload.title).to be_nil
-    end
-
     it "protects user trust level if all requirements are met" do
       Promotion.stubs(:tl2_met?).returns(true)
 
@@ -407,142 +336,6 @@ RSpec.describe GroupUser do
         },
       ) { group_user.destroy! }
       expect(user.reload.trust_level).to eq(2)
-    end
-  end
-
-  it "skips trust level changes when grant_trust_level = 0" do
-    group = Fabricate(:group)
-    group.update!(grant_trust_level: 0)
-
-    user = Fabricate(:user)
-    user.change_trust_level!(1)
-    expect(user.trust_level).to eq(1)
-
-    group.add(user)
-    expect(user.reload.trust_level).to eq(1)
-
-    group_user = GroupUser.find_by(group: group, user: user)
-    Promotion.expects(:recalculate).never
-    group_user.destroy!
-  end
-
-  describe ".bulk_set_category_notifications" do
-    fab!(:group)
-    fab!(:user1, :user)
-    fab!(:user2, :user)
-    fab!(:category1, :category)
-    fab!(:category2, :category)
-
-    it "does nothing when group has no category notification defaults" do
-      expect { GroupUser.bulk_set_category_notifications(group, [user1.id]) }.not_to change {
-        CategoryUser.count
-      }
-    end
-
-    it "sets category notifications for multiple users" do
-      group.watching_category_ids = [category1.id]
-      group.tracking_category_ids = [category2.id]
-      group.save!
-
-      GroupUser.bulk_set_category_notifications(group, [user1.id, user2.id])
-
-      expect(
-        CategoryUser.where(user_id: user1.id, category_id: category1.id).first.notification_level,
-      ).to eq(CategoryUser.notification_levels[:watching])
-      expect(
-        CategoryUser.where(user_id: user1.id, category_id: category2.id).first.notification_level,
-      ).to eq(CategoryUser.notification_levels[:tracking])
-      expect(
-        CategoryUser.where(user_id: user2.id, category_id: category1.id).first.notification_level,
-      ).to eq(CategoryUser.notification_levels[:watching])
-      expect(
-        CategoryUser.where(user_id: user2.id, category_id: category2.id).first.notification_level,
-      ).to eq(CategoryUser.notification_levels[:tracking])
-    end
-
-    it "keeps the semantically higher notification level on conflict" do
-      CategoryUser.create!(
-        user_id: user1.id,
-        category_id: category1.id,
-        notification_level: CategoryUser.notification_levels[:watching],
-      )
-      CategoryUser.create!(
-        user_id: user2.id,
-        category_id: category1.id,
-        notification_level: CategoryUser.notification_levels[:watching],
-      )
-
-      group.tracking_category_ids = [category1.id]
-      group.save!
-
-      GroupUser.bulk_set_category_notifications(group, [user1.id, user2.id])
-
-      expect(
-        CategoryUser.where(user_id: user1.id, category_id: category1.id).first.notification_level,
-      ).to eq(CategoryUser.notification_levels[:watching])
-      expect(
-        CategoryUser.where(user_id: user2.id, category_id: category1.id).first.notification_level,
-      ).to eq(CategoryUser.notification_levels[:watching])
-    end
-  end
-
-  describe ".bulk_set_tag_notifications" do
-    fab!(:group)
-    fab!(:user1, :user)
-    fab!(:user2, :user)
-    fab!(:tag1, :tag)
-    fab!(:tag2, :tag)
-
-    it "does nothing when group has no tag notification defaults" do
-      expect { GroupUser.bulk_set_tag_notifications(group, [user1.id]) }.not_to change {
-        TagUser.count
-      }
-    end
-
-    it "sets tag notifications for multiple users" do
-      group.watching_tags = [tag1.name]
-      group.tracking_tags = [tag2.name]
-      group.save!
-
-      GroupUser.bulk_set_tag_notifications(group, [user1.id, user2.id])
-
-      expect(TagUser.where(user_id: user1.id, tag_id: tag1.id).first.notification_level).to eq(
-        TagUser.notification_levels[:watching],
-      )
-      expect(TagUser.where(user_id: user1.id, tag_id: tag2.id).first.notification_level).to eq(
-        TagUser.notification_levels[:tracking],
-      )
-      expect(TagUser.where(user_id: user2.id, tag_id: tag1.id).first.notification_level).to eq(
-        TagUser.notification_levels[:watching],
-      )
-      expect(TagUser.where(user_id: user2.id, tag_id: tag2.id).first.notification_level).to eq(
-        TagUser.notification_levels[:tracking],
-      )
-    end
-
-    it "keeps the semantically higher notification level on conflict" do
-      TagUser.create!(
-        user_id: user1.id,
-        tag_id: tag1.id,
-        notification_level: TagUser.notification_levels[:watching],
-      )
-      TagUser.create!(
-        user_id: user2.id,
-        tag_id: tag1.id,
-        notification_level: TagUser.notification_levels[:watching],
-      )
-
-      group.tracking_tags = [tag1.name]
-      group.save!
-
-      GroupUser.bulk_set_tag_notifications(group, [user1.id, user2.id])
-
-      expect(TagUser.where(user_id: user1.id, tag_id: tag1.id).first.notification_level).to eq(
-        TagUser.notification_levels[:watching],
-      )
-      expect(TagUser.where(user_id: user2.id, tag_id: tag1.id).first.notification_level).to eq(
-        TagUser.notification_levels[:watching],
-      )
     end
   end
 end

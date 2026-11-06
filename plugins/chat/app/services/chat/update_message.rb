@@ -28,14 +28,11 @@ module Chat
 
     params do
       attribute :message_id, :string
-      attribute :channel_id, :integer
       attribute :message, :string
       attribute :upload_ids, :array
 
       validates :message_id, presence: true
-      validates :channel_id, presence: true
       validates :message, presence: true, if: -> { upload_ids.blank? }
-      validates :message, length: { maximum: -> { SiteSetting.chat_maximum_message_length } }
 
       after_validation do
         next if message.blank?
@@ -52,9 +49,8 @@ module Chat
     model :uploads, optional: true
     step :enforce_membership
     model :membership
-    policy :can_edit_message
-    policy :channel_allows_message_modification,
-           class_name: Chat::Channel::Policy::MessageModification
+    policy :can_modify_channel_message
+    policy :can_modify_message
 
     transaction do
       step :modify_message
@@ -64,8 +60,6 @@ module Chat
       step :publish
     end
 
-    step :index_message
-
     private
 
     def enforce_membership(guardian:, message:)
@@ -73,23 +67,21 @@ module Chat
     end
 
     def fetch_message(params:)
-      ::Chat::Message
-        .includes(
-          :chat_mentions,
-          :bookmarks,
-          :chat_webhook_event,
-          :revisions,
-          reactions: [:user],
-          thread: [:channel, last_message: [:user]],
-          chat_channel: [
-            :last_message,
-            :chat_channel_archive,
-            chatable: [:topic_only_relative_url, direct_message_users: [user: :user_option]],
-          ],
-          user: :user_status,
-        )
-        .includes(uploads: { optimized_videos: :optimized_upload })
-        .find_by(id: params.message_id, chat_channel_id: params.channel_id)
+      ::Chat::Message.includes(
+        :chat_mentions,
+        :bookmarks,
+        :chat_webhook_event,
+        :uploads,
+        :revisions,
+        reactions: [:user],
+        thread: [:channel, last_message: [:user]],
+        chat_channel: [
+          :last_message,
+          :chat_channel_archive,
+          chatable: [:topic_only_relative_url, direct_message_users: [user: :user_option]],
+        ],
+        user: :user_status,
+      ).find_by(id: params.message_id)
     end
 
     def fetch_membership(guardian:, message:)
@@ -98,15 +90,15 @@ module Chat
 
     def fetch_uploads(params:, guardian:)
       return if !SiteSetting.chat_allow_uploads
-      Upload
-        .where(id: params.upload_ids)
-        .joins(:user_uploads)
-        .where(user_uploads: { user: guardian.user })
+      guardian.user.uploads.where(id: params.upload_ids)
     end
 
-    def can_edit_message(guardian:, message:)
-      guardian.can_post_in_chatable?(message.chat_channel.chatable) &&
-        guardian.can_edit_chat?(message)
+    def can_modify_channel_message(guardian:, message:)
+      guardian.can_modify_channel_message?(message.chat_channel)
+    end
+
+    def can_modify_message(guardian:, message:)
+      guardian.can_edit_chat?(message)
     end
 
     def modify_message(params:, message:, guardian:, uploads:)
@@ -187,12 +179,6 @@ module Chat
 
       if message.thread.present?
         ::Chat::Publisher.publish_thread_original_message_metadata!(message.thread)
-      end
-    end
-
-    def index_message(message:)
-      Scheduler::Defer.later "Index chat message for search" do
-        SearchIndexer.index(message)
       end
     end
   end

@@ -6,17 +6,7 @@
 }
 
 .featured-topic.selected,
-.topic-post.selected,
-.nested-view__op-article[data-keyboard-selected],
-.nested-post[data-keyboard-selected]
-  > .nested-post__main
-  > .nested-post__article,
-.nested-post[data-keyboard-selected]
-  > .nested-post__main
-  > .nested-post__collapsed-bar,
-.nested-post[data-keyboard-selected]
-  > .nested-post__main
-  > .nested-post__placeholder {
+.topic-post.selected {
   box-shadow: -3px 0 0 var(--d-nav-color--active);
 }
 
@@ -26,8 +16,6 @@
 .topic-post,
 .post-stream--cloaked,
 .latest-topic-list-item.selected,
-.nested-view__op-article[data-keyboard-selected],
-.nested-post[data-keyboard-selected],
 .search-results .fps-result.selected {
   &:focus-visible {
     outline: none;
@@ -42,7 +30,7 @@
   background-color: inherit;
 }
 
-.keyboard-shortcuts-modal.d-modal.--max {
+.keyboard-shortcuts-modal.d-modal.-max {
   .d-modal__container {
     max-width: 70vw;
   }
@@ -55,7 +43,6 @@
     font-size: var(--font-0);
     background-color: var(--primary-very-low);
     padding: 0.5rem 1rem;
-    margin: 0;
   }
 }
 
@@ -81,37 +68,53 @@
     outline: none;
   }
 
+  kbd:first-child {
+    margin-left: 0;
+  }
+
   @for $i from 1 through 25 {
     .span-#{$i} {
       grid-row-end: span $i;
     }
   }
 
-  table {
-    border-collapse: collapse;
-    width: 100%;
-  }
+  ul {
+    list-style: none;
+    margin: 0;
 
-  tbody tr {
-    border-bottom: 1px solid var(--content-border-color);
-  }
+    li {
+      align-items: center;
+      display: flex;
+      flex-wrap: nowrap;
+      flex-direction: row-reverse;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--content-border-color);
+      padding: 0.25rem 1rem;
+    }
 
-  td {
-    padding: 0.25rem 1rem;
-    vertical-align: middle;
-  }
+    span {
+      border-radius: 3px;
+      display: inline-flex;
+      margin: 0 6px;
+      padding: 2px 1px 4px;
+    }
 
-  .shortcut-description {
-    width: 100%;
-  }
+    span:first-child {
+      margin-right: 0;
+    }
 
-  .shortcut-key {
-    text-align: right;
-    white-space: nowrap;
+    span:last-child {
+      margin-left: auto;
+    }
 
     .delimiter-newline {
-      display: block;
+      display: revert;
       text-align: right;
+    }
+
+    kbd {
+      font-family: var(--d-font-family--monospace);
+      font-weight: bold;
     }
   }
 }

@@ -7,41 +7,19 @@ module Chat
     # NOTE: this should always be > than `DIRECT_MESSAGE_CHANNELS_LIMIT` in `chat-channel-manager.js`
     MAX_DM_CHANNEL_RESULTS = 75
 
-    # Match quality constants for search ranking (lower is better)
-    MATCH_QUALITY_EXACT = 1
-    MATCH_QUALITY_PREFIX = 2
-    MATCH_QUALITY_PARTIAL = 3
-
-    DEFAULT_MATCH_QUALITY_SELECT = "chat_channels.*, #{MATCH_QUALITY_PARTIAL} AS match_quality"
-
     def self.structured(guardian, include_threads: false)
-      memberships = guardian.user ? Chat::ChannelMembershipManager.all_for_user(guardian.user) : []
-
+      memberships = Chat::ChannelMembershipManager.all_for_user(guardian.user)
       public_channels = secured_public_channels(guardian, status: :open, following: true)
-      direct_message_channels = []
-
-      if guardian.user
-        direct_message_channels = secured_direct_message_channels(guardian.user.id, guardian)
-
-        if public_channels.size == MAX_PUBLIC_CHANNEL_RESULTS
-          public_channels |= secured_starred_public_channels(guardian)
-        end
-
-        if direct_message_channels.size == MAX_DM_CHANNEL_RESULTS
-          direct_message_channels |=
-            secured_starred_direct_message_channels(guardian.user.id, guardian)
-        end
-      end
-
+      direct_message_channels = secured_direct_message_channels(guardian.user.id, guardian)
       {
-        public_channels:,
-        direct_message_channels:,
-        memberships:,
+        public_channels: public_channels,
+        direct_message_channels: direct_message_channels,
+        memberships: memberships,
         tracking:
           tracking_state(
             public_channels.map(&:id) + direct_message_channels.map(&:id),
             guardian,
-            include_threads:,
+            include_threads: include_threads,
           ),
       }
     end
@@ -52,32 +30,26 @@ module Chat
       return DB.query_single(allowed_channel_ids_sql) if !following
 
       DB.query_single(<<~SQL, user_id: guardian.user.id)
-        SELECT chat_channel_id
-        FROM user_chat_channel_memberships
-        WHERE user_chat_channel_memberships.user_id = :user_id
-        AND user_chat_channel_memberships.chat_channel_id IN (#{allowed_channel_ids_sql})
-      SQL
+      SELECT chat_channel_id
+      FROM user_chat_channel_memberships
+      WHERE user_chat_channel_memberships.user_id = :user_id
+      AND user_chat_channel_memberships.chat_channel_id IN (
+        #{allowed_channel_ids_sql}
+      )
+    SQL
     end
 
     def self.generate_allowed_channel_ids_sql(guardian, exclude_dm_channels: false)
-      category_scope =
-        if guardian.anonymous? && Chat.anonymous_public_channel_access_allowed?
-          Category.secured(guardian)
-        else
-          Category.post_create_allowed(guardian)
-        end
-
       category_channel_sql =
-        category_scope
+        Category
+          .post_create_allowed(guardian)
           .joins(
             "INNER JOIN chat_channels ON chat_channels.chatable_id = categories.id AND chat_channels.chatable_type = 'Category'",
           )
           .select("chat_channels.id")
           .to_sql
-
       dm_channel_sql = ""
-
-      if !exclude_dm_channels && guardian.user
+      if !exclude_dm_channels
         dm_channel_sql = <<~SQL
       UNION
 
@@ -97,10 +69,10 @@ module Chat
       end
 
       <<~SQL
-        -- secured category chat channels
-        #{category_channel_sql}
-        #{dm_channel_sql}
-      SQL
+      -- secured category chat channels
+      #{category_channel_sql}
+      #{dm_channel_sql}
+    SQL
     end
 
     def self.secured_public_channel_slug_lookup(guardian, slugs)
@@ -110,7 +82,7 @@ module Chat
         .with_categories
         .where(chatable_type: Chat::Channel.public_channel_chatable_types)
         .where("chat_channels.id IN (#{allowed_channel_ids})")
-        .where("chat_channels.slug IN (:slugs)", slugs:)
+        .where("chat_channels.slug IN (:slugs)", slugs: slugs)
     end
 
     def self.secured_public_channel_search(guardian, options = {})
@@ -120,7 +92,7 @@ module Chat
 
       channels =
         Chat::Channel.includes(
-          last_message: [:uploads],
+          :last_message,
           chatable: %i[
             topic_only_relative_url
             uploaded_background
@@ -131,10 +103,6 @@ module Chat
         )
       channels = channels.includes(:chat_channel_archive) if options[:include_archives]
 
-      extra_includes =
-        DiscoursePluginRegistry.apply_modifier(:chat_channel_fetcher_public_includes, [])
-      channels = channels.includes(*extra_includes) if extra_includes.present?
-
       channels =
         channels
           .with_categories
@@ -143,84 +111,29 @@ module Chat
 
       channels = channels.where(status: options[:status]) if options[:status].present?
 
-      if options[:chatable_id].present? &&
-           Chat::Channel.public_channel_chatable_types.include?(options[:chatable_type])
-        filter_chatable = options[:chatable_type].constantize&.find_by_id(options[:chatable_id])
-        if filter_chatable.present? && guardian.can_see_chatable?(filter_chatable)
-          chatable_ids =
-            if options[:include_subcategories] && options[:chatable_type] == "Category"
-              Category.subcategory_ids(options[:chatable_id].to_i)
-            else
-              [options[:chatable_id]]
-            end
-
-          channels =
-            channels.where(chatable_id: chatable_ids, chatable_type: options[:chatable_type])
-        end
-      end
-
       if options[:filter].present?
-        filter_term = options[:filter].downcase
-        like_term = Chat::Channel.sanitize_sql_like(filter_term)
+        category_filter =
+          (options[:filter_on_category_name] ? "OR categories.name ILIKE :filter" : "")
 
-        if options.key?(:match_filter_on_starts_with)
-          filter_sql = options[:match_filter_on_starts_with] ? "#{like_term}%" : "%#{like_term}%"
-          category_filter =
-            (options[:filter_on_category_name] ? "OR categories.name ILIKE :filter" : "")
-
-          channels =
-            channels.where(
-              "chat_channels.name ILIKE :filter OR chat_channels.slug ILIKE :filter #{category_filter}",
-              filter: filter_sql,
-            )
-
-          channels = channels.select(DEFAULT_MATCH_QUALITY_SELECT)
-          channels = channels.order("chat_channels.name ASC, categories.name ASC")
+        sql =
+          "chat_channels.name ILIKE :filter OR chat_channels.slug ILIKE :filter #{category_filter}"
+        if options[:match_filter_on_starts_with]
+          filter_sql = "#{options[:filter].downcase}%"
         else
-          escaped_exact = Chat::Channel.connection.quote(filter_term)
-          escaped_prefix = Chat::Channel.connection.quote("#{like_term}%")
-          category_filter =
-            (options[:filter_on_category_name] ? "OR categories.name ILIKE :partial" : "")
-
-          channels =
-            channels.where(
-              <<~SQL,
-                LOWER(chat_channels.name) = :exact
-                OR LOWER(chat_channels.name) LIKE :prefix
-                OR LOWER(chat_channels.name) LIKE :partial
-                OR LOWER(chat_channels.slug) = :exact
-                OR LOWER(chat_channels.slug) LIKE :prefix
-                OR LOWER(chat_channels.slug) LIKE :partial
-                #{category_filter}
-              SQL
-              exact: filter_term,
-              prefix: "#{like_term}%",
-              partial: "%#{like_term}%",
-            )
-
-          select_sql = <<~SQL
-            chat_channels.*,
-            CASE
-              WHEN LOWER(chat_channels.name) = #{escaped_exact} OR LOWER(chat_channels.slug) = #{escaped_exact} THEN #{MATCH_QUALITY_EXACT}
-              WHEN LOWER(chat_channels.name) LIKE #{escaped_prefix} OR LOWER(chat_channels.slug) LIKE #{escaped_prefix} THEN #{MATCH_QUALITY_PREFIX}
-              ELSE #{MATCH_QUALITY_PARTIAL}
-            END AS match_quality
-          SQL
-
-          channels = channels.select(select_sql)
-          channels =
-            channels.order("match_quality ASC, chat_channels.name ASC, categories.name ASC")
+          filter_sql = "%#{options[:filter].downcase}%"
         end
-      else
-        channels = channels.select(DEFAULT_MATCH_QUALITY_SELECT)
-        channels = channels.order("LOWER(chat_channels.name) ASC")
+
+        channels =
+          channels.where(sql, filter: filter_sql).order(
+            "chat_channels.name ASC, categories.name ASC",
+          )
       end
 
       if options.key?(:slugs)
         channels = channels.where("chat_channels.slug IN (:slugs)", slugs: options[:slugs])
       end
 
-      if options.key?(:following) && guardian.user
+      if options.key?(:following)
         if options[:following]
           channels =
             channels.joins(:user_chat_channel_memberships).where(
@@ -229,10 +142,6 @@ module Chat
                 following: true,
               },
             )
-
-          if options[:starred]
-            channels = channels.where(user_chat_channel_memberships: { starred: true })
-          end
         else
           channels =
             channels.where(
@@ -251,10 +160,6 @@ module Chat
       channels.limit(options[:limit]).offset(options[:offset])
     end
 
-    def self.secured_starred_public_channels(guardian)
-      secured_public_channels(guardian, status: :open, following: true, starred: true)
-    end
-
     def self.secured_public_channels(guardian, options = { following: true })
       channels =
         secured_public_channel_search(
@@ -262,7 +167,6 @@ module Chat
           options.merge(include_archives: true, filter_on_category_name: true),
         )
 
-      channels = channels.includes(:pinned_messages) if SiteSetting.chat_pinned_messages
       channels = channels.to_a
       preload_custom_fields_for(channels)
       channels
@@ -281,10 +185,6 @@ module Chat
       secured_direct_message_channels_search(user_id, guardian, following: true)
     end
 
-    def self.secured_starred_direct_message_channels(user_id, guardian)
-      secured_direct_message_channels_search(user_id, guardian, following: true, starred: true)
-    end
-
     def self.secured_direct_message_channels_search(user_id, guardian, options = {})
       scoped_channels =
         Chat::Channel
@@ -294,13 +194,14 @@ module Chat
           .joins(
             "INNER JOIN direct_message_users ON direct_message_users.direct_message_channel_id = direct_message_channels.id",
           )
-          .where("direct_message_users.user_id = :user_id", user_id:)
+          .where("direct_message_users.user_id = :user_id", user_id: user_id)
 
       query =
         Chat::Channel
           .strict_loading
           .where(id: scoped_channels)
           .includes(
+            :icon_upload,
             last_message: [:uploads],
             chatable: [{ direct_message_users: [user: %i[user_option group_users]] }, :users],
           )
@@ -309,63 +210,35 @@ module Chat
           )
 
       query = query.includes(chatable: [{ users: :user_status }]) if SiteSetting.enable_user_status
-      query = query.includes(:pinned_messages) if SiteSetting.chat_pinned_messages
 
       if options[:filter]
-        filter_term = options[:filter].downcase
-        like_term = Chat::Channel.sanitize_sql_like(filter_term)
-        escaped_exact = Chat::Channel.connection.quote(filter_term)
-        escaped_prefix = Chat::Channel.connection.quote("#{like_term}%")
+        if options[:match_filter_on_starts_with]
+          filter_sql = "#{options[:filter].downcase}%"
+        else
+          filter_sql = "%#{options[:filter].downcase}%"
+        end
 
         query =
           query.joins(user_chat_channel_memberships: :user).where(
-            <<~SQL,
-              users.username_lower = :exact
-              OR users.username_lower LIKE :prefix
-              OR users.username_lower LIKE :partial
-              OR LOWER(chat_channels.name) LIKE :partial
-              OR LOWER(chat_channels.slug) LIKE :partial
-            SQL
-            exact: filter_term,
-            prefix: "#{like_term}%",
-            partial: "%#{like_term}%",
+            "chat_channels.name ILIKE :filter OR chat_channels.slug ILIKE :filter OR users.username ILIKE :filter",
+            filter: filter_sql,
           )
-
-        # MIN() gives us the best match among all participants
-        # If ANY participant is an exact match, match_quality = MATCH_QUALITY_EXACT
-        select_sql = <<~SQL
-          chat_channels.*,
-          MIN(
-            CASE
-              WHEN users.username_lower = #{escaped_exact} THEN #{MATCH_QUALITY_EXACT}
-              WHEN users.username_lower LIKE #{escaped_prefix} THEN #{MATCH_QUALITY_PREFIX}
-              ELSE #{MATCH_QUALITY_PARTIAL}
-            END
-          ) AS match_quality
-        SQL
-
-        query = query.select(select_sql)
-      else
-        query = query.select(DEFAULT_MATCH_QUALITY_SELECT)
       end
 
       if options.key?(:following)
-        following_params = { user_id: }
+        following_params = { user_id: user_id }
         following_params[:following] = options[:following] if options[:following].present?
-        following_params[:starred] = true if options[:starred]
         query =
           query.joins(:user_chat_channel_memberships).where(
             user_chat_channel_memberships: following_params,
           )
       end
 
-      query = query.limit(MAX_DM_CHANNEL_RESULTS).group("chat_channels.id", "last_message.id")
-
-      if options[:filter]
-        query = query.order("match_quality ASC, last_message.created_at DESC NULLS LAST")
-      else
-        query = query.order("last_message.created_at DESC NULLS LAST")
-      end
+      query =
+        query
+          .limit(MAX_DM_CHANNEL_RESULTS)
+          .order("last_message.created_at DESC NULLS LAST")
+          .group("chat_channels.id", "last_message.id")
 
       channels = query.to_a
 
@@ -373,17 +246,12 @@ module Chat
         User.allowed_user_custom_fields(guardian) +
           UserField.all.pluck(:id).map { |fid| "#{User::USER_FIELD_PREFIX}#{fid}" }
 
-      User.preload_custom_fields(
-        channels.flat_map { it.chatable.direct_message_users.map(&:user).compact },
-        preload_fields,
-      )
+      User.preload_custom_fields(channels.flat_map { _1.chatable.users }, preload_fields)
 
       channels
     end
 
     def self.tracking_state(channel_ids, guardian, include_threads: false)
-      return Chat::TrackingStateReport.new if guardian.anonymous?
-
       Chat::TrackingState.call(
         guardian:,
         params: {
@@ -419,7 +287,6 @@ module Chat
 
       raise Discourse::NotFound if chat_channel.blank?
       raise Discourse::InvalidAccess if !guardian.can_join_chat_channel?(chat_channel)
-
       chat_channel
     end
   end

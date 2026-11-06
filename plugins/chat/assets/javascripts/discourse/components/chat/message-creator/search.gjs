@@ -4,36 +4,40 @@ import { fn } from "@ember/helper";
 import { action } from "@ember/object";
 import didInsert from "@ember/render-modifiers/modifiers/did-insert";
 import { service } from "@ember/service";
+import DButton from "discourse/components/d-button";
 import { popupAjaxError } from "discourse/lib/ajax-error";
 import discourseDebounce from "discourse/lib/debounce";
 import { INPUT_DELAY } from "discourse/lib/environment";
-import DButton from "discourse/ui-kit/d-button";
 import { i18n } from "discourse-i18n";
-import { MODES } from "./constants.js";
-import ChatablesLoader from "./lib/chatables-loader.js";
-import List from "./list.gjs";
-import ListHandler from "./list-handler.gjs";
-import SearchInput from "./search-input.gjs";
+import { MODES } from "./constants";
+import ChatablesLoader from "./lib/chatables-loader";
+import List from "./list";
+import ListHandler from "./list-handler";
+import SearchInput from "./search-input";
 
 export default class ChatMessageCreatorSearch extends Component {
   @service chat;
-  @service chatGuardian;
   @service router;
 
   @tracked chatables = [];
   @tracked highlightedChatable;
   @tracked term;
+  @tracked loading = false;
 
   get items() {
     const items = [];
 
-    if (!this.term?.length && this.chatGuardian.canUseGroupChat()) {
+    if (this.loading) {
+      return items;
+    }
+
+    if (!this.term?.length) {
       items.push({
         identifier: "new-group",
         type: "list-action",
         label: i18n("chat.new_message_modal.new_group_chat"),
         enabled: true,
-        icon: "user-group",
+        icon: "users",
         id: "new-group-chat",
       });
     }
@@ -135,8 +139,8 @@ export default class ChatMessageCreatorSearch extends Component {
 
   <template>
     <ListHandler
-      @highlightedItem={{this.highlightedChatable}}
       @items={{this.items}}
+      @highlightedItem={{this.highlightedChatable}}
       @onHighlight={{this.highlightChatable}}
       @onSelect={{this.selectChatable}}
       @onShifSelect={{this.prefillAddMembers}}
@@ -151,16 +155,16 @@ export default class ChatMessageCreatorSearch extends Component {
 
             <DButton
               class="btn-flat chat-message-creator__search-input__cancel-button"
-              @action={{@close}}
               @icon="xmark"
+              @action={{@close}}
             />
           </div>
 
           <List
-            @highlightedItem={{this.highlightedChatable}}
             @items={{this.items}}
-            @onHighlight={{this.highlightChatable}}
+            @highlightedItem={{this.highlightedChatable}}
             @onSelect={{this.selectChatable}}
+            @onHighlight={{this.highlightChatable}}
             @onShiftSelect={{this.prefillAddMembers}}
           />
         </div>

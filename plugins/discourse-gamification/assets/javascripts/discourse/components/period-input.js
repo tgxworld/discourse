@@ -1,11 +1,11 @@
 import { computed } from "@ember/object";
 import { classNames } from "@ember-decorators/component";
-import ComboBoxComponent from "discourse/select-kit/components/combo-box";
+import { i18n } from "discourse-i18n";
+import ComboBoxComponent from "select-kit/components/combo-box";
 import {
   pluginApiIdentifiers,
   selectKitOptions,
-} from "discourse/select-kit/components/select-kit";
-import { i18n } from "discourse-i18n";
+} from "select-kit/components/select-kit";
 import { LEADERBOARD_PERIODS } from "discourse/plugins/discourse-gamification/discourse/components/gamification-leaderboard";
 
 @selectKitOptions({

@@ -131,13 +131,7 @@ module BackupRestore
 
     def remap(from, to)
       log "Remapping '#{from}' to '#{to}'"
-      DbHelper.remap(
-        from,
-        to,
-        verbose: true,
-        excluded_tables: ["backup_metadata"],
-        skip_max_length_violations: true,
-      )
+      DbHelper.remap(from, to, verbose: true, excluded_tables: ["backup_metadata"])
     end
 
     def remap_s3(old_s3_base_url, uploads_folder)
@@ -149,7 +143,6 @@ module BackupRestore
           uploads_folder,
           verbose: true,
           excluded_tables: ["backup_metadata"],
-          skip_max_length_violations: true,
         )
       else
         remap(old_s3_base_url, uploads_folder)
@@ -162,7 +155,7 @@ module BackupRestore
       SiteIconManager.ensure_optimized!
 
       User
-        .where.not(uploaded_avatar_id: nil)
+        .where("uploaded_avatar_id IS NOT NULL")
         .find_each do |user|
           Jobs.enqueue(:create_avatar_thumbnails, upload_id: user.uploaded_avatar_id)
         end

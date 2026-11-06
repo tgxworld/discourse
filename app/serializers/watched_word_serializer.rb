@@ -11,7 +11,7 @@ class WatchedWordSerializer < ApplicationSerializer
              :html
 
   def regexp
-    WordWatcher.word_to_regexp(word)
+    WordWatcher.word_to_regexp(word, engine: :js)
   end
 
   def action

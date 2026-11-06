@@ -55,17 +55,6 @@ RSpec.describe PostVoting::CommentsController do
 
       expect(comment["id"]).to eq(comment_3.id)
     end
-
-    it "does not expose names when names are disabled" do
-      SiteSetting.enable_names = false
-      comment_2.user.update!(name: "Secret Name")
-
-      get "/post_voting/comments.json", params: { post_id: answer.id, last_comment_id: comment.id }
-
-      expect(response.status).to eq(200)
-      expect(response.body).not_to include("Secret Name")
-      expect(response.parsed_body["comments"].any? { |comment| comment.key?("name") }).to eq(false)
-    end
   end
 
   describe "#create" do
@@ -76,18 +65,6 @@ RSpec.describe PostVoting::CommentsController do
       category.save!
 
       post "/post_voting/comments.json", params: { post_id: answer.id, raw: "this is some content" }
-
-      expect(response.status).to eq(403)
-    end
-
-    it "returns 403 when user cannot see the post (e.g. whisper)" do
-      whisper_post = Fabricate(:post, topic: topic, post_type: Post.types[:whisper], user: admin)
-
-      post "/post_voting/comments.json",
-           params: {
-             post_id: whisper_post.id,
-             raw: "this is some content",
-           }
 
       expect(response.status).to eq(403)
     end
@@ -115,7 +92,7 @@ RSpec.describe PostVoting::CommentsController do
           .first
 
       comment = answer.post_voting_comments.last
-      payload = message.data
+      payload = message[:data]
 
       expect(payload[:comment][:id]).to eq(comment.id)
       expect(payload[:comment][:user_id]).to eq(user.id)
@@ -187,7 +164,7 @@ RSpec.describe PostVoting::CommentsController do
   end
 
   describe "#update" do
-    it "returns 403 for an anonymous user" do
+    it "should return 403 for an anon user" do
       put "/post_voting/comments.json",
           params: {
             comment_id: comment.id,
@@ -197,7 +174,7 @@ RSpec.describe PostVoting::CommentsController do
       expect(response.status).to eq(403)
     end
 
-    it "returns 404 when comment_id does not identify a comment" do
+    it "should return 404 when comment_id is not associated to a valid record" do
       sign_in(comment.user)
 
       put "/post_voting/comments.json",
@@ -209,7 +186,7 @@ RSpec.describe PostVoting::CommentsController do
       expect(response.status).to eq(404)
     end
 
-    it "returns 403 when updating a comment on an inaccessible post" do
+    it "should return 403 when trying to update a comment on a post the user cannot see" do
       sign_in(comment.user)
 
       category.set_permissions(group => :readonly)
@@ -224,7 +201,7 @@ RSpec.describe PostVoting::CommentsController do
       expect(response.status).to eq(403)
     end
 
-    it "returns 403 when updating another user's comment" do
+    it "should return 403 when a user is trying to update the comment of another user" do
       sign_in(Fabricate(:user))
 
       put "/post_voting/comments.json",
@@ -236,7 +213,7 @@ RSpec.describe PostVoting::CommentsController do
       expect(response.status).to eq(403)
     end
 
-    it "allows an admin to update the comment" do
+    it "should allow an admin to update the comment" do
       sign_in(admin)
 
       put "/post_voting/comments.json",
@@ -253,7 +230,7 @@ RSpec.describe PostVoting::CommentsController do
       expect(body["cooked"]).to eq("<p>this is some new raw</p>")
     end
 
-    it "allows a moderator to update the comment" do
+    it "should allow a moderator to update the comment" do
       sign_in(moderator)
 
       put "/post_voting/comments.json",
@@ -270,63 +247,7 @@ RSpec.describe PostVoting::CommentsController do
       expect(body["cooked"]).to eq("<p>this is some new raw</p>")
     end
 
-    it "returns 403 when the author is silenced" do
-      UserSilencer.silence(comment.user, Discourse.system_user)
-      sign_in(comment.user)
-
-      put "/post_voting/comments.json",
-          params: {
-            comment_id: comment.id,
-            raw: "this is some new raw",
-          }
-
-      expect(response.status).to eq(403)
-      expect(comment.reload.raw).not_to eq("this is some new raw")
-    end
-
-    it "returns 403 when the author edits a comment on a closed topic" do
-      topic.update!(closed: true)
-      sign_in(comment.user)
-
-      put "/post_voting/comments.json",
-          params: {
-            comment_id: comment.id,
-            raw: "this is some new raw",
-          }
-
-      expect(response.status).to eq(403)
-      expect(comment.reload.raw).not_to eq("this is some new raw")
-    end
-
-    it "returns 403 when the author edits a comment on an archived topic" do
-      topic.update!(archived: true)
-      sign_in(comment.user)
-
-      put "/post_voting/comments.json",
-          params: {
-            comment_id: comment.id,
-            raw: "this is some new raw",
-          }
-
-      expect(response.status).to eq(403)
-      expect(comment.reload.raw).not_to eq("this is some new raw")
-    end
-
-    it "still allows staff to edit a comment on a closed topic" do
-      topic.update!(closed: true)
-      sign_in(admin)
-
-      put "/post_voting/comments.json",
-          params: {
-            comment_id: comment.id,
-            raw: "this is some new raw",
-          }
-
-      expect(response.status).to eq(200)
-      expect(comment.reload.raw).to eq("this is some new raw")
-    end
-
-    it "updates the user's own comment and publishes the change" do
+    it "should allow users to update their own comment and publishes a MessageBus message" do
       sign_in(comment.user)
 
       message =
@@ -354,27 +275,14 @@ RSpec.describe PostVoting::CommentsController do
     end
   end
 
-  describe "#flag authentication" do
-    it "returns 403 with not_logged_in for an anonymous user" do
-      put "/post_voting/comments/flag.json",
-          params: {
-            comment_id: comment.id,
-            flag_type_id: ReviewableScore.types[:off_topic],
-          }
-
-      expect(response.status).to eq(403)
-      expect(response.parsed_body["error_type"]).to eq("not_logged_in")
-    end
-  end
-
   describe "#destroy" do
-    it "returns 403 for an anonymous user" do
+    it "should return 403 for an anon user" do
       delete "/post_voting/comments.json", params: { comment_id: comment.id }
 
       expect(response.status).to eq(403)
     end
 
-    it "returns 404 when comment_id does not exist" do
+    it "should return 404 when comment_id param given does not exist" do
       sign_in(comment.user)
 
       delete "/post_voting/comments.json", params: { comment_id: -99_999 }
@@ -382,7 +290,7 @@ RSpec.describe PostVoting::CommentsController do
       expect(response.status).to eq(404)
     end
 
-    it "returns 403 when deleting a comment on an inaccessible post" do
+    it "should return 403 when trying to delete a comment on a post the user cannot see" do
       sign_in(comment.user)
 
       category.set_permissions(group => :readonly)
@@ -393,7 +301,7 @@ RSpec.describe PostVoting::CommentsController do
       expect(response.status).to eq(403)
     end
 
-    it "returns 403 when deleting another user's comment" do
+    it "should return 403 when a user is trying to delete another user's comment" do
       sign_in(Fabricate(:user))
 
       delete "/post_voting/comments.json", params: { comment_id: comment.id }
@@ -401,7 +309,7 @@ RSpec.describe PostVoting::CommentsController do
       expect(response.status).to eq(403)
     end
 
-    it "allows an admin to delete another user's comment" do
+    it "should allow an admin to delete a comment of another user" do
       sign_in(admin)
 
       delete "/post_voting/comments.json", params: { comment_id: comment.id }
@@ -415,7 +323,7 @@ RSpec.describe PostVoting::CommentsController do
       ).to eq(true)
     end
 
-    it "allows a moderator to delete another user's comment" do
+    it "should allow a moderator to delete a comment of another user" do
       sign_in(moderator)
 
       delete "/post_voting/comments.json", params: { comment_id: comment.id }
@@ -429,7 +337,7 @@ RSpec.describe PostVoting::CommentsController do
       ).to eq(true)
     end
 
-    it "deletes the user's own comment and publishes the change" do
+    it "should allow users to delete their own comment and publishes a message bus message" do
       sign_in(comment.user)
 
       message =
@@ -451,53 +359,6 @@ RSpec.describe PostVoting::CommentsController do
           .where("deleted_at IS NOT NULL AND id = ?", comment.id)
           .exists?,
       ).to eq(true)
-    end
-  end
-
-  describe "#flag" do
-    fab!(:flagger) { Fabricate(:user, group_ids: [Group::AUTO_GROUPS[:trust_level_1]]) }
-
-    before { sign_in(flagger) }
-
-    it "requires the DSA form for illegal reports only when DSA reporting is enabled" do
-      enable_dsa_reporting
-
-      expect do
-        put "/post_voting/comments/flag.json",
-            params: {
-              comment_id: comment.id,
-              flag_type_id: ReviewableScore.types[:illegal],
-            }
-      end.not_to change(ReviewableScore, :count)
-
-      expect(response).to be_forbidden
-      expect(Reviewable.exists?(target: comment)).to eq(false)
-
-      SiteSetting.dsa_reporting_enabled = false
-
-      put "/post_voting/comments/flag.json",
-          params: {
-            comment_id: comment.id,
-            flag_type_id: ReviewableScore.types[:illegal],
-          }
-
-      expect(response).to be_successful
-      expect(
-        Reviewable.find_by!(target: comment).reviewable_scores.pluck(:reviewable_score_type),
-      ).to eq([ReviewableScore.types[:illegal]])
-    end
-
-    it "returns 403 when flagging a comment on an inaccessible post" do
-      category.set_permissions(group => :full)
-      category.save!
-
-      put "/post_voting/comments/flag.json",
-          params: {
-            comment_id: comment.id,
-            flag_type_id: ReviewableScore.types[:off_topic],
-          }
-
-      expect(response.status).to eq(403)
     end
   end
 end

@@ -25,6 +25,12 @@ DiscourseAutomation::Scriptable.add(DiscourseAutomation::Scripts::SUSPEND_USER_B
     suspend_until = context["suspend_until"].presence || fields.dig("suspend_until", "value")
     reason = context["reason"].presence || fields.dig("reason", "value")
 
-    UserSuspender.new(target, suspended_till: suspend_until, reason:, by_user: actor).suspend
+    User.transaction do
+      target.suspended_till = suspend_until
+      target.suspended_at = DateTime.now
+      target.save!
+
+      StaffActionLogger.new(actor).log_user_suspend(target, reason)
+    end
   end
 end

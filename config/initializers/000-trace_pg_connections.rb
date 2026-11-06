@@ -23,7 +23,7 @@ if ENV["TRACE_PG_CONNECTIONS"]
         super(*args).tap do
           next if ENV["TRACE_PG_CONNECTIONS"] == "SIDEKIQ" && !Sidekiq.server?
           FileUtils.mkdir_p(TRACE_DIR)
-          @trace_filename = "#{TRACE_DIR}/#{Process.pid}_#{object_id}.txt"
+          @trace_filename = "#{TRACE_DIR}/#{Process.pid}_#{self.object_id}.txt"
           trace File.new(@trace_filename, "w")
         end
         @access_log_mutex = Mutex.new
@@ -52,9 +52,9 @@ if ENV["TRACE_PG_CONNECTIONS"]
             #{Thread.current&.backtrace&.join("\n")}
           TEXT
 
-            if ENV["ON_PG_CLASH"] == "debugger"
-              require "debug"
-              debugger # rubocop:disable Lint/Debugger
+            if ENV["ON_PG_CLASH"] == "byebug"
+              require "byebug"
+              byebug # rubocop:disable Lint/Debugger
             end
           end
           @accessor_thread = Thread.current
@@ -80,7 +80,7 @@ if ENV["TRACE_PG_CONNECTIONS"]
     ]
 
     LOG_ACCESS_METHODS.each do |method|
-      new_method = :"#{method}_without_logging"
+      new_method = "#{method}_without_logging".to_sym
       alias_method new_method, method
 
       define_method(method) { |*args, &blk| log_access { send(new_method, *args, &blk) } }

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-RSpec.describe "Summarize a topic " do
-  fab!(:current_user, :user)
+RSpec.describe "Summarize a topic ", type: :system do
+  fab!(:current_user) { Fabricate(:user) }
   fab!(:group)
   fab!(:topic)
   fab!(:post) do
@@ -18,14 +18,7 @@ RSpec.describe "Summarize a topic " do
   let(:topic_page) { PageObjects::Pages::Topic.new }
   let(:summary_box) { PageObjects::Components::AiSummaryTrigger.new }
 
-  fab!(:ai_summary) do
-    Fabricate(
-      :ai_summary,
-      target: topic,
-      locale: SiteSetting.default_locale,
-      summarized_text: "This is a summary",
-    )
-  end
+  fab!(:ai_summary) { Fabricate(:ai_summary, target: topic, summarized_text: "This is a summary") }
 
   before do
     enable_current_plugin
@@ -33,7 +26,7 @@ RSpec.describe "Summarize a topic " do
     group.add(current_user)
 
     assign_fake_provider_to(:ai_default_llm_model)
-    assign_agent_to(:ai_summarization_agent, [group.id])
+    assign_persona_to(:ai_summarization_persona, [group.id])
     SiteSetting.ai_summarization_enabled = true
 
     sign_in(current_user)

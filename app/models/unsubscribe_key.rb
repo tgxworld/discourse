@@ -59,12 +59,12 @@ end
 # Table name: unsubscribe_keys
 #
 #  key                  :string(64)       not null, primary key
-#  unsubscribe_key_type :string
+#  user_id              :integer          not null
 #  created_at           :datetime         not null
 #  updated_at           :datetime         not null
-#  post_id              :integer
+#  unsubscribe_key_type :string
 #  topic_id             :integer
-#  user_id              :integer          not null
+#  post_id              :integer
 #
 # Indexes
 #

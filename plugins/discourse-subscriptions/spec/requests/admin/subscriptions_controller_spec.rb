@@ -35,21 +35,18 @@ RSpec.describe DiscourseSubscriptions::Admin::SubscriptionsController do
   context "when authenticated" do
     let(:admin) { Fabricate(:admin) }
 
-    before do
-      SiteSetting.discourse_subscriptions_secret_key = "secret-key"
-      sign_in(admin)
-    end
+    before { sign_in(admin) }
 
     describe "index" do
-      before { SiteSetting.discourse_subscriptions_public_key = "public-key" }
+      before do
+        SiteSetting.discourse_subscriptions_public_key = "public-key"
+        SiteSetting.discourse_subscriptions_secret_key = "secret-key"
+      end
 
       it "gets the subscriptions and products" do
         ::Stripe::Subscription
           .expects(:list)
-          .with(
-            { expand: ["data.plan.product"], limit: 10, starting_after: nil, status: "all" },
-            DiscourseSubscriptions::Stripe.request_opts,
-          )
+          .with(expand: ["data.plan.product"], limit: 10, starting_after: nil, status: "all")
           .returns(has_more: false, data: [{ id: "sub_12345" }, { id: "sub_nope" }])
         get "/s/admin/subscriptions.json"
         subscriptions = response.parsed_body["data"][0]["id"]
@@ -61,10 +58,7 @@ RSpec.describe DiscourseSubscriptions::Admin::SubscriptionsController do
       it "handles starting at a different point in the set" do
         ::Stripe::Subscription
           .expects(:list)
-          .with(
-            { expand: ["data.plan.product"], limit: 10, starting_after: "sub_nope", status: "all" },
-            DiscourseSubscriptions::Stripe.request_opts,
-          )
+          .with(expand: ["data.plan.product"], limit: 10, starting_after: "sub_nope", status: "all")
           .returns(has_more: false, data: [{ id: "sub_77777" }, { id: "sub_yepnoep" }])
         get "/s/admin/subscriptions.json", params: { last_record: "sub_nope" }
         subscriptions = response.parsed_body["data"][0]["id"]
@@ -82,7 +76,7 @@ RSpec.describe DiscourseSubscriptions::Admin::SubscriptionsController do
       it "deletes a customer" do
         ::Stripe::Subscription
           .expects(:cancel)
-          .with("sub_12345", anything, DiscourseSubscriptions::Stripe.request_opts)
+          .with("sub_12345")
           .returns(plan: { product: "pr_34578" }, customer: "c_123")
 
         # We don't want to delete the customer record. The webhook hook will update the status instead.
@@ -94,7 +88,7 @@ RSpec.describe DiscourseSubscriptions::Admin::SubscriptionsController do
       it "removes the user from the group" do
         ::Stripe::Subscription
           .expects(:cancel)
-          .with("sub_12345", anything, DiscourseSubscriptions::Stripe.request_opts)
+          .with("sub_12345")
           .returns(
             plan: {
               product: "pr_34578",
@@ -113,7 +107,7 @@ RSpec.describe DiscourseSubscriptions::Admin::SubscriptionsController do
       it "does not remove the user from the group" do
         ::Stripe::Subscription
           .expects(:cancel)
-          .with("sub_12345", anything, DiscourseSubscriptions::Stripe.request_opts)
+          .with("sub_12345")
           .returns(
             plan: {
               product: "pr_34578",
@@ -129,37 +123,17 @@ RSpec.describe DiscourseSubscriptions::Admin::SubscriptionsController do
         }
       end
 
-      it "does not refund when refund param is the string 'false'" do
-        ::Stripe::Subscription
-          .expects(:cancel)
-          .with("sub_12345", anything, DiscourseSubscriptions::Stripe.request_opts)
-          .returns(plan: { product: "pr_34578" }, customer: "c_123")
-        ::Stripe::Subscription
-          .expects(:retrieve)
-          .with("sub_12345", DiscourseSubscriptions::Stripe.request_opts)
-          .never
-        ::Stripe::Refund.expects(:create).never
-
-        delete "/s/admin/subscriptions/sub_12345.json", params: { refund: "false" }
-      end
-
       it "refunds if params[:refund] present" do
         ::Stripe::Subscription
           .expects(:cancel)
-          .with("sub_12345", anything, DiscourseSubscriptions::Stripe.request_opts)
+          .with("sub_12345")
           .returns(plan: { product: "pr_34578" }, customer: "c_123")
         ::Stripe::Subscription
           .expects(:retrieve)
-          .with("sub_12345", DiscourseSubscriptions::Stripe.request_opts)
+          .with("sub_12345")
           .returns(latest_invoice: "in_123")
-        ::Stripe::Invoice
-          .expects(:retrieve)
-          .with("in_123", DiscourseSubscriptions::Stripe.request_opts)
-          .returns(payment_intent: "pi_123")
-        ::Stripe::Refund.expects(:create).with(
-          { payment_intent: "pi_123" },
-          DiscourseSubscriptions::Stripe.request_opts,
-        )
+        ::Stripe::Invoice.expects(:retrieve).with("in_123").returns(payment_intent: "pi_123")
+        ::Stripe::Refund.expects(:create).with({ payment_intent: "pi_123" })
 
         delete "/s/admin/subscriptions/sub_12345.json", params: { refund: true }
       end

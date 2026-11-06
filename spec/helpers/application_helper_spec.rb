@@ -2,91 +2,6 @@
 # frozen_string_literal: true
 
 RSpec.describe ApplicationHelper do
-  describe "#discourse_pageview_tracking_meta_tags" do
-    it "includes pageview tracking metadata" do
-      tags = helper.discourse_pageview_tracking_meta_tags
-
-      expect(tags).to include('name="discourse-track-view-session-id"')
-    end
-
-    it "omits tracking meta tags in development when request tracking is not enabled" do
-      original_track_requests = ENV.delete("TRACK_REQUESTS")
-      Rails.env.stubs(:development?).returns(true)
-
-      tags = helper.discourse_pageview_tracking_meta_tags
-
-      expect(tags).to be_blank
-    ensure
-      ENV["TRACK_REQUESTS"] = original_track_requests if original_track_requests
-    end
-  end
-
-  describe "generate_import_map" do
-    before do
-      EmberAssets.stubs(:import_map).returns(
-        { "js/chunk-stable11.digested" => "js/chunk-real1111.digested" },
-      )
-    end
-
-    def imports(plugin_assets = [])
-      JSON.parse(helper.generate_import_map(plugin_assets))["imports"]
-    end
-
-    it "maps stable chunk names to their hashed files" do
-      expect(imports).to eq(
-        { "/assets/js/chunk-stable11.digested.js" => "/assets/js/chunk-real1111.digested.js" },
-      )
-    end
-
-    it "applies the same subfolder and CDN prefix to both sides" do
-      set_cdn_url "https://awesome.com"
-      set_subfolder "/community"
-
-      expect(imports).to eq(
-        {
-          "https://awesome.com/community/assets/js/chunk-stable11.digested.js" =>
-            "https://awesome.com/community/assets/js/chunk-real1111.digested.js",
-        },
-      )
-    end
-
-    context "with s3 CDN" do
-      before do
-        global_setting :s3_bucket, "test_bucket"
-        global_setting :s3_region, "ap-australia"
-        global_setting :s3_access_key_id, "123"
-        global_setting :s3_secret_access_key, "123"
-        global_setting :s3_cdn_url, "https://s3cdn.com"
-      end
-
-      it "applies the brotli path mangling to both sides" do
-        helper.request.env["HTTP_ACCEPT_ENCODING"] = "br"
-
-        expect(imports).to eq(
-          {
-            "https://s3cdn.com/assets/br/chunk-stable11.digested.js" =>
-              "https://s3cdn.com/assets/br/chunk-real1111.digested.js",
-          },
-        )
-      end
-    end
-
-    it "keeps plugin entries alongside chunk entries" do
-      plugin = stub(directory_name: "my-plugin", name: "my-plugin")
-      plugin_assets = [
-        {
-          name: "js/plugins/my-plugin-abcdefgh.digested",
-          plugin: plugin,
-          importmap_name: "discourse/plugins/my-plugin",
-        },
-      ]
-      expect(imports(plugin_assets).keys).to contain_exactly(
-        "discourse/plugins/my-plugin",
-        "/assets/js/chunk-stable11.digested.js",
-      )
-    end
-  end
-
   describe "preload_script" do
     def script_tag(url, entrypoint, nonce)
       <<~HTML
@@ -142,17 +57,12 @@ RSpec.describe ApplicationHelper do
         global_setting :s3_access_key_id, "123"
         global_setting :s3_secret_access_key, "123"
         global_setting :s3_cdn_url, "https://s3cdn.com"
-
-        # Backend RSpec tests might be run without real manifest/assets
-        EmberAssets.stubs(:script_chunks).returns(
-          { "discourse" => ["js/discourse-20n62q6s.digested"] },
-        )
       end
 
       it "deals correctly with subfolder" do
         set_subfolder "/community"
-        expect(helper.preload_script("discourse")).to include(
-          %r{https://s3cdn.com/assets/js/discourse-\w{8}.digested.js},
+        expect(helper.preload_script("start-discourse")).to include(
+          %r{https://s3cdn.com/assets/start-discourse-\w{8}.js},
         )
       end
 
@@ -160,106 +70,77 @@ RSpec.describe ApplicationHelper do
         global_setting :s3_cdn_url, "https://s3cdn.com/s3_subpath"
         set_cdn_url "https://awesome.com"
         set_subfolder "/community"
-        expect(helper.preload_script("discourse")).to include(
-          %r{https://s3cdn.com/s3_subpath/assets/js/discourse-\w{8}.digested.js},
+        expect(helper.preload_script("start-discourse")).to include(
+          %r{https://s3cdn.com/s3_subpath/assets/start-discourse-\w{8}.js},
         )
       end
 
       it "returns magic brotli mangling for brotli requests" do
         helper.request.env["HTTP_ACCEPT_ENCODING"] = "br"
-        link = helper.preload_script("discourse")
+        link = helper.preload_script("start-discourse")
 
-        expect(link).to include(%r{https://s3cdn.com/assets/br/discourse-\w{8}.digested.js})
+        expect(link).to include(%r{https://s3cdn.com/assets/start-discourse-\w{8}.br.js})
       end
 
       it "gives s3 cdn if asset host is not set" do
-        link = helper.preload_script("discourse")
+        link = helper.preload_script("start-discourse")
 
-        expect(link).to include(%r{https://s3cdn.com/assets/js/discourse-\w{8}.digested.js})
+        expect(link).to include(%r{https://s3cdn.com/assets/start-discourse-\w{8}.js})
+      end
+
+      it "can fall back to gzip compression" do
+        helper.request.env["HTTP_ACCEPT_ENCODING"] = "gzip"
+        link = helper.preload_script("start-discourse")
+        expect(link).to include(%r{https://s3cdn.com/assets/start-discourse-\w{8}.gz.js})
       end
 
       it "gives s3 cdn even if asset host is set" do
         set_cdn_url "https://awesome.com"
-        link = helper.preload_script("discourse")
+        link = helper.preload_script("start-discourse")
 
-        expect(link).to include(%r{https://s3cdn.com/assets/js/discourse-\w{8}.digested.js})
+        expect(link).to include(%r{https://s3cdn.com/assets/start-discourse-\w{8}.js})
+      end
+
+      it "gives s3 cdn but without brotli/gzip extensions for theme tests assets" do
+        helper.request.env["HTTP_ACCEPT_ENCODING"] = "gzip, br"
+        link = helper.preload_script("discourse/tests/theme_qunit_ember_jquery")
+        expect(link).to include(
+          %r{https://s3cdn.com/assets/discourse/tests/theme_qunit_ember_jquery-\w{8}.js},
+        )
       end
 
       it "uses separate asset CDN if configured" do
         global_setting :s3_asset_cdn_url, "https://s3-asset-cdn.example.com"
-        expect(helper.preload_script("discourse")).to include(
-          %r{https://s3-asset-cdn.example.com/assets/js/discourse-\w{8}.digested.js},
+        expect(helper.preload_script("start-discourse")).to include(
+          %r{https://s3-asset-cdn.example.com/assets/start-discourse-\w{8}.js},
         )
       end
-    end
-
-    it "includes extra attrs when provided" do
-      result =
-        helper.preload_script(
-          "plugins/my-plugin",
-          attrs: {
-            "data-plugin-name": "my-plugin",
-            "data-preinstalled": "true",
-            "data-official": "true",
-          },
-        )
-      expect(result).to include('data-plugin-name="my-plugin"')
-      expect(result).to include('data-preinstalled="true"')
-      expect(result).to include('data-official="true"')
-    end
-
-    it "does not include extra attrs when none are provided" do
-      result = helper.preload_script("discourse")
-      expect(result).not_to include("data-plugin-name")
-      expect(result).not_to include("data-preinstalled")
-      expect(result).not_to include("data-official")
-    end
-
-    it "escapes attr values" do
-      result =
-        helper.preload_script("plugins/test", attrs: { "data-plugin-name": "<script>xss</script>" })
-      expect(result).not_to include("<script>xss</script>")
-      expect(result).to include("&lt;script&gt;xss&lt;/script&gt;")
-    end
-
-    it "renders preinstalled and official as false for non-preinstalled plugins" do
-      result =
-        helper.preload_script(
-          "plugins/my-plugin",
-          attrs: {
-            "data-plugin-name": "my-plugin",
-            "data-preinstalled": "false",
-            "data-official": "false",
-          },
-        )
-      expect(result).to include('data-preinstalled="false"')
-      expect(result).to include('data-official="false"')
     end
   end
 
   describe "add_resource_preload_list" do
     it "adds resources to the preload list" do
-      add_resource_preload_list("/assets/discourse.js", "script")
+      add_resource_preload_list("/assets/start-discourse.js", "script")
       add_resource_preload_list("/assets/discourse.css", "style")
 
       expect(controller.instance_variable_get(:@asset_preload_links).size).to eq(2)
     end
 
     it "adds resources to the preload list when preload_script is called" do
-      helper.preload_script("discourse")
+      helper.preload_script("start-discourse")
 
       expect(controller.instance_variable_get(:@asset_preload_links).size).to eq(1)
     end
 
     it "adds resources to the preload list when discourse_stylesheet_link_tag is called" do
-      helper.discourse_stylesheet_link_tag(:common)
+      helper.discourse_stylesheet_link_tag(:desktop)
 
       expect(controller.instance_variable_get(:@asset_preload_links).size).to eq(1)
     end
 
     it "adds resources as the correct type" do
-      helper.discourse_stylesheet_link_tag(:common)
-      helper.preload_script("discourse")
+      helper.discourse_stylesheet_link_tag(:desktop)
+      helper.preload_script("start-discourse")
 
       expect(controller.instance_variable_get(:@asset_preload_links)[0]).to match(/as="style"/)
       expect(controller.instance_variable_get(:@asset_preload_links)[1]).to match(/as="script"/)
@@ -270,7 +151,6 @@ RSpec.describe ApplicationHelper do
     it "encodes tags" do
       expect(helper.escape_unicode("<tag>")).to eq("\u003ctag>")
     end
-
     it "survives junk text" do
       expect(helper.escape_unicode("hello \xc3\x28 world")).to match(/hello.*world/)
     end
@@ -279,7 +159,7 @@ RSpec.describe ApplicationHelper do
   describe "render_sitelinks_search_tag" do
     context "for non-subfolder install" do
       context "when on homepage" do
-        it "returns the sitelinks search tag" do
+        it "will return sitelinks search tag" do
           helper.stubs(:current_page?).returns(false)
           helper.stubs(:current_page?).with("/").returns(true)
 
@@ -296,18 +176,9 @@ RSpec.describe ApplicationHelper do
           expect(sitelinks_search_tag["name"]).to eq(SiteSetting.title)
           expect(sitelinks_search_tag["url"]).to eq(Discourse.base_url)
         end
-
-        it "omits the sitelinks search tag when anonymous users cannot search" do
-          SiteSetting.allow_anonymous_search = false
-          helper.stubs(:current_page?).returns(false)
-          helper.stubs(:current_page?).with("/").returns(true)
-
-          expect(helper.render_sitelinks_search_tag).to be_nil
-        end
       end
-
       context "when not on homepage" do
-        it "omits the sitelinks search tag" do
+        it "will not return sitelinks search tag" do
           helper.stubs(:current_page?).returns(true)
           helper.stubs(:current_page?).with("/").returns(false)
           helper.stubs(:current_page?).with(Discourse.base_path).returns(false)
@@ -315,10 +186,9 @@ RSpec.describe ApplicationHelper do
         end
       end
     end
-
     context "for subfolder install" do
       context "when on homepage" do
-        it "returns the sitelinks search tag" do
+        it "will return sitelinks search tag" do
           Discourse.stubs(:base_path).returns("/subfolder-base-path/")
           helper.stubs(:current_page?).returns(false)
           helper.stubs(:current_page?).with(Discourse.base_path).returns(true)
@@ -326,9 +196,8 @@ RSpec.describe ApplicationHelper do
           expect(helper.render_sitelinks_search_tag).to include("subfolder-base-path")
         end
       end
-
       context "when not on homepage" do
-        it "omits the sitelinks search tag" do
+        it "will not return sitelinks search tag" do
           Discourse.stubs(:base_path).returns("/subfolder-base-path/")
           helper.stubs(:current_page?).returns(true)
           helper.stubs(:current_page?).with("/").returns(false)
@@ -346,17 +215,16 @@ RSpec.describe ApplicationHelper do
           Theme.create(
             name: "Dark",
             user_id: Discourse::SYSTEM_USER_ID,
-            color_scheme_id:
-              ColorScheme.find_by(base_scheme_id: ColorScheme::NAMES_TO_ID_MAP["Dark"]).id,
+            color_scheme_id: ColorScheme.find_by(base_scheme_id: "Dark").id,
           )
         helper.request.env[:resolved_theme_id] = dark_theme.id
       end
 
       context "when on desktop" do
-        before { helper.stubs(:mobile_device?).returns(false) }
+        before { session[:mobile_view] = "0" }
 
         context "when logo_dark is not set" do
-          it "returns site_logo_url" do
+          it "will return site_logo_url instead" do
             expect(helper.application_logo_url).to eq(SiteSetting.site_logo_url)
           end
         end
@@ -364,17 +232,17 @@ RSpec.describe ApplicationHelper do
         context "when logo_dark is set" do
           before { SiteSetting.logo_dark = Fabricate(:upload, url: "/images/logo-dark.png") }
 
-          it "returns site_logo_dark_url" do
+          it "will return site_logo_dark_url" do
             expect(helper.application_logo_url).to eq(SiteSetting.site_logo_dark_url)
           end
         end
       end
 
       context "when on mobile" do
-        before { helper.stubs(:mobile_device?).returns(true) }
+        before { session[:mobile_view] = "1" }
 
         context "when mobile_logo_dark is not set" do
-          it "returns site_mobile_logo_url" do
+          it "will return site_mobile_logo_url instead" do
             expect(helper.application_logo_url).to eq(SiteSetting.site_mobile_logo_url)
           end
         end
@@ -384,7 +252,7 @@ RSpec.describe ApplicationHelper do
             SiteSetting.mobile_logo_dark = Fabricate(:upload, url: "/images/mobile-logo-dark.png")
           end
 
-          it "returns site_mobile_logo_dark_url" do
+          it "will return site_mobile_logo_dark_url" do
             expect(helper.application_logo_url).to eq(SiteSetting.site_mobile_logo_dark_url)
           end
         end
@@ -395,7 +263,7 @@ RSpec.describe ApplicationHelper do
   describe "application_logo_dark_url" do
     context "when dark theme is not present" do
       context "when dark logo is not present" do
-        it "returns no dark logo URL" do
+        it "should return nothing" do
           expect(helper.application_logo_dark_url.present?).to eq(false)
         end
       end
@@ -407,13 +275,12 @@ RSpec.describe ApplicationHelper do
           Theme.create(
             name: "Dark",
             user_id: Discourse::SYSTEM_USER_ID,
-            color_scheme_id:
-              ColorScheme.find_by(base_scheme_id: ColorScheme::NAMES_TO_ID_MAP["Dark"]).id,
+            color_scheme_id: ColorScheme.find_by(base_scheme_id: "Dark").id,
           )
       end
 
       context "when dark logo is not present" do
-        it "returns no dark logo URL" do
+        it "should return nothing" do
           expect(helper.application_logo_dark_url.present?).to eq(false)
         end
       end
@@ -421,7 +288,7 @@ RSpec.describe ApplicationHelper do
       context "when dark logo is present" do
         before { SiteSetting.logo_dark = Fabricate(:upload, url: "/images/logo-dark.png") }
 
-        it "returns site_logo_dark_url" do
+        it "should return correct url" do
           expect(helper.application_logo_dark_url).to eq(SiteSetting.site_logo_dark_url)
         end
       end
@@ -433,89 +300,166 @@ RSpec.describe ApplicationHelper do
           Theme.create(
             name: "Dark",
             user_id: Discourse::SYSTEM_USER_ID,
-            color_scheme_id:
-              ColorScheme.find_by(base_scheme_id: ColorScheme::NAMES_TO_ID_MAP["Dark"]).id,
+            color_scheme_id: ColorScheme.find_by(base_scheme_id: "Dark").id,
           )
         helper.request.env[:resolved_theme_id] = dark_theme.id
         SiteSetting.logo_dark = Fabricate(:upload, url: "/images/logo-dark.png")
       end
 
-      it "returns no separate dark logo URL" do
+      it "should return nothing" do
         expect(helper.application_logo_url).to eq(SiteSetting.site_logo_dark_url)
         expect(helper.application_logo_dark_url.present?).to eq(false)
       end
     end
   end
 
-  describe "#mobile_device?" do
-    it "is false if user agent is not mobile" do
-      controller
-        .request
-        .stubs(:user_agent)
-        .returns(
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.87 Safari/537.36",
-        )
-      expect(helper.mobile_device?).to be_falsey
+  describe "#mobile_view?" do
+    context "when enable_mobile_theme is true" do
+      before { SiteSetting.enable_mobile_theme = true }
+
+      it "is true if mobile_view is '1' in the session" do
+        session[:mobile_view] = "1"
+        expect(helper.mobile_view?).to eq(true)
+      end
+
+      it "is false if mobile_view is '0' in the session" do
+        session[:mobile_view] = "0"
+        expect(helper.mobile_view?).to eq(false)
+      end
+
+      context "when mobile_view session is cleared" do
+        before { params[:mobile_view] = "auto" }
+
+        it "is false if user agent is not mobile" do
+          session[:mobile_view] = "1"
+          controller
+            .request
+            .stubs(:user_agent)
+            .returns(
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.87 Safari/537.36",
+            )
+          expect(helper.mobile_view?).to be_falsey
+        end
+
+        it "is true for iPhone" do
+          session[:mobile_view] = "0"
+          controller
+            .request
+            .stubs(:user_agent)
+            .returns(
+              "Mozilla/5.0 (iPhone; CPU iPhone OS 9_2_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13D15 Safari/601.1",
+            )
+          expect(helper.mobile_view?).to eq(true)
+        end
+      end
+
+      context "when mobile_view is not set" do
+        it "is false if user agent is not mobile" do
+          controller
+            .request
+            .stubs(:user_agent)
+            .returns(
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.87 Safari/537.36",
+            )
+          expect(helper.mobile_view?).to be_falsey
+        end
+
+        it "is true for iPhone" do
+          controller
+            .request
+            .stubs(:user_agent)
+            .returns(
+              "Mozilla/5.0 (iPhone; CPU iPhone OS 9_2_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13D15 Safari/601.1",
+            )
+          expect(helper.mobile_view?).to eq(true)
+        end
+
+        it "is true for Android Samsung Galaxy" do
+          controller
+            .request
+            .stubs(:user_agent)
+            .returns(
+              "Mozilla/5.0 (Linux; Android 5.0.2; SAMSUNG SM-G925F Build/LRX22G) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/4.0 Chrome/44.0.2403.133 Mobile Safari/537.36",
+            )
+          expect(helper.mobile_view?).to eq(true)
+        end
+
+        it "is true for Android Google Nexus 5X" do
+          controller
+            .request
+            .stubs(:user_agent)
+            .returns(
+              "Mozilla/5.0 (Linux; Android 6.0; Nexus 5X Build/MDB08I) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.43 Mobile Safari/537.36",
+            )
+          expect(helper.mobile_view?).to eq(true)
+        end
+
+        it "is false for iPad" do
+          controller
+            .request
+            .stubs(:user_agent)
+            .returns(
+              "Mozilla/5.0 (iPad; CPU OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B14 3 Safari/601.1",
+            )
+          expect(helper.mobile_view?).to eq(false)
+        end
+
+        it "is false for Nexus 10 tablet" do
+          controller
+            .request
+            .stubs(:user_agent)
+            .returns(
+              "Mozilla/5.0 (Linux; Android 5.1.1; Nexus 10 Build/LMY49G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.91 Safari/537.36",
+            )
+          expect(helper.mobile_view?).to be_falsey
+        end
+
+        it "is false for Nexus 7 tablet" do
+          controller
+            .request
+            .stubs(:user_agent)
+            .returns(
+              "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 7 Build/MMB29Q) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.91 Safari/537.36",
+            )
+          expect(helper.mobile_view?).to be_falsey
+        end
+      end
     end
 
-    it "is true for iPhone" do
-      controller
-        .request
-        .stubs(:user_agent)
-        .returns(
-          "Mozilla/5.0 (iPhone; CPU iPhone OS 9_2_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13D15 Safari/601.1",
-        )
-      expect(helper.mobile_device?).to eq(true)
-    end
+    context "when enable_mobile_theme is false" do
+      before { SiteSetting.enable_mobile_theme = false }
 
-    it "is true for Android Samsung Galaxy" do
-      controller
-        .request
-        .stubs(:user_agent)
-        .returns(
-          "Mozilla/5.0 (Linux; Android 5.0.2; SAMSUNG SM-G925F Build/LRX22G) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/4.0 Chrome/44.0.2403.133 Mobile Safari/537.36",
-        )
-      expect(helper.mobile_device?).to eq(true)
-    end
+      it "is false if mobile_view is '1' in the session" do
+        session[:mobile_view] = "1"
+        expect(helper.mobile_view?).to eq(false)
+      end
 
-    it "is true for Android Google Nexus 5X" do
-      controller
-        .request
-        .stubs(:user_agent)
-        .returns(
-          "Mozilla/5.0 (Linux; Android 6.0; Nexus 5X Build/MDB08I) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.43 Mobile Safari/537.36",
-        )
-      expect(helper.mobile_device?).to eq(true)
-    end
+      it "is false if mobile_view is '0' in the session" do
+        session[:mobile_view] = "0"
+        expect(helper.mobile_view?).to eq(false)
+      end
 
-    it "is false for iPad" do
-      controller
-        .request
-        .stubs(:user_agent)
-        .returns(
-          "Mozilla/5.0 (iPad; CPU OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B14 3 Safari/601.1",
-        )
-      expect(helper.mobile_device?).to eq(false)
-    end
+      context "when mobile_view is not set" do
+        it "is false if user agent is not mobile" do
+          controller
+            .request
+            .stubs(:user_agent)
+            .returns(
+              "Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/30.0.1599.17 Safari/537.36",
+            )
+          expect(helper.mobile_view?).to eq(false)
+        end
 
-    it "is false for Nexus 10 tablet" do
-      controller
-        .request
-        .stubs(:user_agent)
-        .returns(
-          "Mozilla/5.0 (Linux; Android 5.1.1; Nexus 10 Build/LMY49G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.91 Safari/537.36",
-        )
-      expect(helper.mobile_device?).to be_falsey
-    end
-
-    it "is false for Nexus 7 tablet" do
-      controller
-        .request
-        .stubs(:user_agent)
-        .returns(
-          "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 7 Build/MMB29Q) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.91 Safari/537.36",
-        )
-      expect(helper.mobile_device?).to be_falsey
+        it "is false for iPhone" do
+          controller
+            .request
+            .stubs(:user_agent)
+            .returns(
+              "Mozilla/5.0 (iPhone; U; ru; CPU iPhone OS 4_2_1 like Mac OS X; ru) AppleWebKit/533.17.9 (KHTML, like Gecko) Version/5.0.2 Mobile/8C148a Safari/6533.18.5",
+            )
+          expect(helper.mobile_view?).to eq(false)
+        end
+      end
     end
   end
 
@@ -609,11 +553,8 @@ RSpec.describe ApplicationHelper do
           login_method: nil,
         )
 
-      @application_layout_preloader.store_preloaded("test", %{["</script><script> \x80"]})
-      expect(helper.preloaded_json).to include(
-        %{"test":"[\\"\\u003c\\\\/script\\u003e\\u003cscript\\u003e \uFFFD\\"]"},
-      )
-      expect(helper.preloaded_json).not_to include("</script>")
+      @application_layout_preloader.store_preloaded("test", %{["< \x80"]})
+      expect(helper.preloaded_json).to include(%{"test":"[\\"\\u003c \uFFFD\\"]"})
     end
   end
 
@@ -644,16 +585,6 @@ RSpec.describe ApplicationHelper do
   end
 
   describe "crawlable_meta_data" do
-    it "escapes the description exactly once" do
-      result =
-        helper.crawlable_meta_data(description: %(Tom & O'Reilly "><script>alert(1)</script>))
-
-      expect(result).to include(
-        %(<meta property="og:description" content="Tom &amp; O&#39;Reilly &quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;" />),
-      )
-      expect(result).not_to include("<script>")
-    end
-
     it "Supports ASCII URLs with odd chars" do
       result =
         helper.crawlable_meta_data(
@@ -680,20 +611,20 @@ RSpec.describe ApplicationHelper do
 
         expect(helper.crawlable_meta_data).to include(SiteSetting.site_opengraph_image_url)
 
-        SiteSetting.opengraph_image = ""
+        SiteSetting.opengraph_image = nil
 
         expect(helper.crawlable_meta_data).to include(SiteSetting.site_x_summary_large_image_url)
 
-        SiteSetting.x_summary_large_image = ""
+        SiteSetting.x_summary_large_image = nil
 
         expect(helper.crawlable_meta_data).to include(SiteSetting.site_large_icon_url)
 
-        SiteSetting.large_icon = ""
-        SiteSetting.logo_small = ""
+        SiteSetting.large_icon = nil
+        SiteSetting.logo_small = nil
 
         expect(helper.crawlable_meta_data).to include(SiteSetting.site_logo_url)
 
-        SiteSetting.logo = ""
+        SiteSetting.logo = nil
 
         expect(helper.crawlable_meta_data).to include(
           Upload.find(SiteIconManager::SKETCH_LOGO_ID).url,
@@ -729,33 +660,6 @@ RSpec.describe ApplicationHelper do
         SiteSetting.logo = Fabricate(:upload, url: "/images/d-logo-sketch.svg")
 
         expect(helper.crawlable_meta_data).not_to include("twitter:image")
-      end
-    end
-
-    context "with opengraph image dimensions" do
-      it "includes og:image:width and og:image:height when provided" do
-        result =
-          helper.crawlable_meta_data(image: "some-image.png", image_width: 1024, image_height: 768)
-        expect(result).to include('<meta property="og:image:width" content="1024" />')
-        expect(result).to include('<meta property="og:image:height" content="768" />')
-      end
-
-      it "does not include og:image dimensions when not provided" do
-        result = helper.crawlable_meta_data(image: "some-image.png")
-        expect(result).not_to include("og:image:width")
-        expect(result).not_to include("og:image:height")
-      end
-    end
-
-    context "with opengraph image type" do
-      it "includes og:image:type when provided" do
-        result = helper.crawlable_meta_data(image: "some-image.png", image_type: "image/png")
-        expect(result).to include('<meta property="og:image:type" content="image/png" />')
-      end
-
-      it "does not include og:image:type when not provided" do
-        result = helper.crawlable_meta_data(image: "some-image.png")
-        expect(result).not_to include("og:image:type")
       end
     end
 
@@ -809,38 +713,6 @@ RSpec.describe ApplicationHelper do
         expect(result).to include(
           "<meta property=\"og:site_name\" content=\"#{SiteSetting.title}\" />",
         )
-      end
-    end
-
-    context "with reading time and likes" do
-      it "uses translated strings for reading time and likes" do
-        result = helper.crawlable_meta_data(read_time: 5, like_count: 10)
-
-        expect(result).to include(
-          "<meta name=\"twitter:label1\" value=\"#{I18n.t("reading_time")}\" />",
-        )
-        expect(result).to include(
-          "<meta name=\"twitter:data1\" value=\"#{I18n.t("reading_time_minutes", count: 5)}\" />",
-        )
-        expect(result).to include("<meta name=\"twitter:label2\" value=\"#{I18n.t("likes")}\" />")
-        expect(result).to include(
-          "<meta name=\"twitter:data2\" value=\"#{I18n.t("likes_count", count: 10)}\" />",
-        )
-      end
-
-      it "handles singular reading time correctly" do
-        result = helper.crawlable_meta_data(read_time: 1, like_count: 1)
-
-        expect(result).to include("1 min 🕑")
-        expect(result).not_to include("1 mins")
-      end
-
-      it "does not include twitter card labels when read_time or like_count is missing" do
-        result = helper.crawlable_meta_data(read_time: 5)
-        expect(result).not_to include("twitter:label1")
-
-        result = helper.crawlable_meta_data(like_count: 10)
-        expect(result).not_to include("twitter:label1")
       end
     end
   end
@@ -964,29 +836,13 @@ RSpec.describe ApplicationHelper do
 
     context "with custom light scheme" do
       before do
-        @new_cs = Fabricate(:color_scheme, name: "Flamboyant", user_selectable: true)
+        @new_cs = Fabricate(:color_scheme, name: "Flamboyant")
         user.user_option.color_scheme_id = @new_cs.id
         user.user_option.save!
         helper.request.env[Auth::DefaultCurrentUserProvider::CURRENT_USER_KEY] = user
       end
 
       it "returns color scheme from user option value" do
-        color_stylesheets = helper.discourse_color_scheme_stylesheets
-        expect(color_stylesheets).to include("color_definitions_flamboyant")
-      end
-
-      it "falls back to base scheme when the scheme is no longer user selectable" do
-        @new_cs.update!(user_selectable: false)
-
-        color_stylesheets = helper.discourse_color_scheme_stylesheets
-        expect(color_stylesheets).not_to include("color_definitions_flamboyant")
-        expect(color_stylesheets).to include("color_definitions_light-default")
-      end
-
-      it "keeps a non-user-selectable scheme that is the theme's own color scheme" do
-        @new_cs.update!(user_selectable: false)
-        Theme.find_default.update!(color_scheme_id: @new_cs.id)
-
         color_stylesheets = helper.discourse_color_scheme_stylesheets
         expect(color_stylesheets).to include("color_definitions_flamboyant")
       end
@@ -1006,7 +862,7 @@ RSpec.describe ApplicationHelper do
 
         color_stylesheets = helper.discourse_color_scheme_stylesheets
         expect(color_stylesheets).not_to include("color_definitions_flamboyant")
-        expect(color_stylesheets).to include("color_definitions_light-default")
+        expect(color_stylesheets).to include("color_definitions_base")
       end
     end
 
@@ -1015,7 +871,7 @@ RSpec.describe ApplicationHelper do
         user.user_option.interface_color_mode = UserOption::LIGHT_MODE
         user.user_option.save!
         helper.request.env[Auth::DefaultCurrentUserProvider::CURRENT_USER_KEY] = user
-        @new_cs = Fabricate(:color_scheme, name: "Custom Color Scheme", user_selectable: true)
+        @new_cs = Fabricate(:color_scheme, name: "Custom Color Scheme")
 
         Theme.find_default.update!(dark_color_scheme_id: ColorScheme.where(name: "Dark").pick(:id))
       end
@@ -1066,8 +922,7 @@ RSpec.describe ApplicationHelper do
         Theme.create(
           name: "Dark",
           user_id: Discourse::SYSTEM_USER_ID,
-          color_scheme_id:
-            ColorScheme.find_by(base_scheme_id: ColorScheme::NAMES_TO_ID_MAP["Dark"]).id,
+          color_scheme_id: ColorScheme.find_by(base_scheme_id: "Dark").id,
         )
       helper.request.env[:resolved_theme_id] = dark_theme.id
 
@@ -1096,13 +951,21 @@ RSpec.describe ApplicationHelper do
 
   describe "#discourse_theme_color_meta_tags" do
     before do
-      light = Fabricate(:color_scheme, user_selectable: true)
-      light.color_scheme_colors << ColorSchemeColor.new(name: "header_background", hex: "abcdef")
+      light = Fabricate(:color_scheme)
+      light.color_scheme_colors << ColorSchemeColor.new(
+        name: "header_background",
+        hex: "abcdef",
+        dark_hex: "fedcba",
+      )
       light.save!
       helper.request.cookies["color_scheme_id"] = light.id
 
-      dark = Fabricate(:color_scheme, user_selectable: true)
-      dark.color_scheme_colors << ColorSchemeColor.new(name: "header_background", hex: "defabc")
+      dark = Fabricate(:color_scheme)
+      dark.color_scheme_colors << ColorSchemeColor.new(
+        name: "header_background",
+        hex: "defabc",
+        dark_hex: "cbafed",
+      )
       dark.save!
       helper.request.cookies["dark_scheme_id"] = dark.id
     end
@@ -1122,6 +985,17 @@ RSpec.describe ApplicationHelper do
         <meta name="theme-color" media="all" content="#abcdef">
       HTML
     end
+
+    context "when use_overhauled_theme_color_palette setting is true" do
+      before { SiteSetting.use_overhauled_theme_color_palette = true }
+
+      it "renders a light and dark theme-color meta tag using the light and dark palettes of the same color scheme record" do
+        expect(helper.discourse_theme_color_meta_tags).to eq(<<~HTML)
+          <meta name="theme-color" media="(prefers-color-scheme: light)" content="#abcdef">
+          <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#fedcba">
+        HTML
+      end
+    end
   end
 
   describe "#discourse_color_scheme_meta_tag" do
@@ -1132,7 +1006,7 @@ RSpec.describe ApplicationHelper do
     it "renders a 'light' color-scheme if no dark scheme is set and the current scheme is light" do
       ColorSchemeRevisor.revise(
         color_scheme,
-        { colors: [{ name: "primary", hex: "333333" }, { name: "secondary", hex: "DDDDDD" }] },
+        colors: [{ name: "primary", hex: "333333" }, { name: "secondary", hex: "DDDDDD" }],
       )
 
       helper.request.cookies["color_scheme_id"] = color_scheme.id
@@ -1145,7 +1019,7 @@ RSpec.describe ApplicationHelper do
     it "renders a 'dark' color-scheme if no dark scheme is set and the default scheme is dark" do
       ColorSchemeRevisor.revise(
         color_scheme,
-        { colors: [{ name: "primary", hex: "F8F8F8" }, { name: "secondary", hex: "232323" }] },
+        colors: [{ name: "primary", hex: "F8F8F8" }, { name: "secondary", hex: "232323" }],
       )
       @scheme_id = color_scheme.id
 
@@ -1155,7 +1029,7 @@ RSpec.describe ApplicationHelper do
     end
 
     it "renders a 'light dark' color-scheme if a dark scheme is set" do
-      dark = Fabricate(:color_scheme, user_selectable: true)
+      dark = Fabricate(:color_scheme)
       dark.save!
       helper.request.cookies["dark_scheme_id"] = dark.id
 
@@ -1166,8 +1040,8 @@ RSpec.describe ApplicationHelper do
   end
 
   describe "#dark_scheme_id" do
-    fab!(:dark_scheme) { Fabricate(:color_scheme, user_selectable: true) }
-    fab!(:light_scheme) { Fabricate(:color_scheme, user_selectable: true) }
+    fab!(:dark_scheme, :color_scheme)
+    fab!(:light_scheme, :color_scheme)
 
     before do
       helper.request.cookies["color_scheme_id"] = light_scheme.id
@@ -1177,70 +1051,14 @@ RSpec.describe ApplicationHelper do
     it "returns the value set in the dark_scheme_id cookie" do
       expect(helper.dark_scheme_id).to eq(dark_scheme.id)
     end
-  end
 
-  describe "previewing palettes" do
-    fab!(:light_palette, :color_scheme)
-    fab!(:dark_palette, :color_scheme)
+    context "when use_overhauled_theme_color_palette is true" do
+      before { SiteSetting.use_overhauled_theme_color_palette = true }
 
-    before do
-      controller.params[:preview_color_scheme_id] = light_palette.id.to_s
-      controller.params[:preview_dark_color_scheme_id] = dark_palette.id.to_s
-    end
-
-    it "uses the palettes passed in the URL for staff" do
-      helper.stubs(:current_user).returns(Fabricate(:moderator))
-
-      expect(helper.scheme_id).to eq(light_palette.id)
-      expect(helper.dark_scheme_id).to eq(dark_palette.id)
-      expect(helper.discourse_color_scheme_stylesheets).to include(
-        %[class="light-scheme" data-scheme-id="#{light_palette.id}"],
-        %[class="dark-scheme" data-scheme-id="#{dark_palette.id}"],
-      )
-    end
-
-    it "ignores them for everyone else" do
-      helper.stubs(:current_user).returns(Fabricate(:user))
-
-      expect([helper.scheme_id, helper.dark_scheme_id]).not_to include(
-        light_palette.id,
-        dark_palette.id,
-      )
-    end
-  end
-
-  describe "#preview_font_style_tag" do
-    before do
-      SiteSetting.base_font = "inter"
-      controller.params[:preview_base_font] = "lora"
-      controller.params[:preview_heading_font] = "roboto"
-    end
-
-    it "defines the fonts passed in the URL for staff, leaving the site's fonts alone" do
-      helper.stubs(:current_user).returns(Fabricate(:moderator))
-
-      style = helper.preview_font_style_tag
-
-      expect(style).to include(
-        "font-family: 'Lora'",
-        "--font-family: Lora",
-        "--heading-font-family: Roboto",
-      )
-      expect(SiteSetting.base_font).to eq("inter")
-    end
-
-    it "ignores unknown fonts" do
-      helper.stubs(:current_user).returns(Fabricate(:moderator))
-      controller.params[:preview_base_font] = "</style><script>"
-      controller.params[:preview_heading_font] = nil
-
-      expect(helper.preview_font_style_tag).to be_nil
-    end
-
-    it "ignores them for everyone else" do
-      helper.stubs(:current_user).returns(Fabricate(:user))
-
-      expect(helper.preview_font_style_tag).to be_nil
+      it "returns the same value as #scheme_id" do
+        expect(helper.dark_scheme_id).to eq(helper.scheme_id)
+        expect(helper.scheme_id).to eq(light_scheme.id)
+      end
     end
   end
 
@@ -1411,115 +1229,6 @@ RSpec.describe ApplicationHelper do
         helper.request.cookies["forced_color_mode"] = nil
         expect(helper.forced_dark_mode?).to eq(false)
       end
-    end
-  end
-
-  describe "#crawler_topic_container_schema" do
-    fab!(:topic)
-
-    it "returns DiscussionForumPosting schema attributes by default" do
-      result = helper.crawler_topic_container_schema(topic)
-      expect(result).to include("itemscope")
-      expect(result).to include('itemtype="http://schema.org/DiscussionForumPosting"')
-    end
-  end
-
-  describe "#crawler_post_schema" do
-    fab!(:topic)
-    fab!(:first_post) { Fabricate(:post, topic: topic) }
-    fab!(:reply) { Fabricate(:post, topic: topic) }
-
-    it "returns empty string for the first post" do
-      expect(helper.crawler_post_schema(first_post, topic)).to eq("")
-    end
-
-    it "returns Comment schema attributes for reply posts" do
-      result = helper.crawler_post_schema(reply, topic)
-      expect(result).to include('itemprop="comment"')
-      expect(result).to include("itemscope")
-      expect(result).to include('itemtype="http://schema.org/Comment"')
-    end
-  end
-
-  describe "#shared_session_key" do
-    fab!(:user)
-
-    before { SiteSetting.long_polling_base_url = "https://mb.example.com/" }
-
-    context "when the request carries an auth token" do
-      let(:auth_token) { UserAuthToken.generate!(user_id: user.id) }
-
-      before do
-        helper.stubs(:current_user).returns(user)
-        helper.request.env[Auth::DefaultCurrentUserProvider::USER_TOKEN_KEY] = auth_token
-      end
-
-      it "binds the stored value to the auth token" do
-        key = helper.shared_session_key
-        expect(
-          Discourse.redis.get(Auth::DefaultCurrentUserProvider.shared_session_redis_key(key)),
-        ).to eq(auth_token.id.to_s)
-      end
-    end
-
-    context "when the auth token does not belong to the current user" do
-      fab!(:other_user, :user)
-
-      before do
-        helper.stubs(:current_user).returns(user)
-        helper.request.env[
-          Auth::DefaultCurrentUserProvider::USER_TOKEN_KEY
-        ] = UserAuthToken.generate!(user_id: other_user.id)
-      end
-
-      it "returns no shared session key" do
-        expect(helper.shared_session_key).to eq(nil)
-      end
-    end
-
-    context "when the auth token is impersonating the current user" do
-      fab!(:admin)
-
-      let(:auth_token) do
-        UserAuthToken
-          .generate!(user_id: admin.id)
-          .tap do |token|
-            token.update!(impersonated_user_id: user.id, impersonation_expires_at: 1.hour.from_now)
-          end
-      end
-
-      before do
-        helper.stubs(:current_user).returns(user)
-        helper.request.env[Auth::DefaultCurrentUserProvider::USER_TOKEN_KEY] = auth_token
-      end
-
-      it "binds the stored value to the impersonating token" do
-        key = helper.shared_session_key
-        expect(
-          Discourse.redis.get(Auth::DefaultCurrentUserProvider.shared_session_redis_key(key)),
-        ).to eq(auth_token.id.to_s)
-      end
-    end
-
-    context "when the request carries no auth token" do
-      before do
-        helper.stubs(:current_user).returns(user)
-        helper.request.env[Auth::DefaultCurrentUserProvider::USER_TOKEN_KEY] = nil
-      end
-
-      it "returns no shared session key" do
-        expect(helper.shared_session_key).to eq(nil)
-      end
-    end
-  end
-
-  describe "#can_sign_up?" do
-    it "returns false when the site is in read only mode" do
-      expect(helper.can_sign_up?).to eq(true)
-
-      helper.instance_variable_set(:@readonly_mode, true)
-
-      expect(helper.can_sign_up?).to eq(false)
     end
   end
 end

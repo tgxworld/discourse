@@ -5,14 +5,9 @@
 # https://translate.discourse.org/
 
 lt:
-  admin_js:
-    admin:
-      site_settings:
-        categories:
-          discourse_details: "Discourse detalės"
   js:
     details:
-      title: Slėpti informaciją
+      title: Paslėpti detales
     composer:
       details_title: Santrauka
       details_text: "Šis tekstas bus paslėptas"

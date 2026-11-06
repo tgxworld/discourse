@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "Changing email" do
+describe "Changing email", type: :system do
   fab!(:password) { "mysupersecurepassword" }
   fab!(:user) { Fabricate(:user, active: true, password: password) }
   let(:new_email) { "newemail@example.com" }
@@ -48,7 +48,9 @@ describe "Changing email" do
     expect(page).to have_css(".dialog-body", text: I18n.t("js.user.change_email.confirm_success"))
     find(".dialog-footer .btn-primary").click
 
-    expect(user.reload.primary_email.email).to eq(new_email)
+    try_until_success(timeout: Capybara.default_max_wait_time * 2) do
+      expect(user.reload.primary_email.email).to eq(new_email)
+    end
   end
 
   it "works when user has totp 2fa", dump_threads_on_failure: true do
@@ -63,7 +65,9 @@ describe "Changing email" do
     find(".second-factor-token-input").fill_in with: second_factor.totp_object.now
     find("button[type=submit]").click
 
-    expect(user.reload.primary_email.email).to eq(new_email)
+    try_until_success(timeout: Capybara.default_max_wait_time * 2) do
+      expect(user.reload.primary_email.email).to eq(new_email)
+    end
   end
 
   it "works when user has webauthn 2fa" do
@@ -74,9 +78,9 @@ describe "Changing email" do
       find(".confirm-new-email .btn-primary").click
       find("#security-key-authenticate-button").click
 
-      try_until_success(
-        reason: "Something about webauthn.js that we can't seem to track properly",
-      ) { expect(user.reload.primary_email.email).to eq(new_email) }
+      try_until_success(timeout: Capybara.default_max_wait_time * 2) do
+        expect(user.reload.primary_email.email).to eq(new_email)
+      end
     end
   end
 
@@ -94,7 +98,9 @@ describe "Changing email" do
     find(".second-factor-token-input").fill_in with: second_factor.totp_object.now
     find("button[type=submit]:not([disabled])").click
 
-    expect(user.reload.primary_email.email).to eq(new_email)
+    try_until_success(timeout: Capybara.default_max_wait_time * 2) do
+      expect(user.reload.primary_email.email).to eq(new_email)
+    end
   end
 
   it "makes admins verify old email" do
@@ -126,7 +132,9 @@ describe "Changing email" do
     expect(page).to have_css(".dialog-body", text: I18n.t("js.user.change_email.confirm_success"))
     find(".dialog-footer .btn-primary").click
 
-    expect(user.reload.primary_email.email).to eq(new_email)
+    try_until_success(timeout: Capybara.default_max_wait_time * 2) do
+      expect(user.reload.primary_email.email).to eq(new_email)
+    end
   end
 
   it "allows admin to verify old email while logged out" do
@@ -160,6 +168,8 @@ describe "Changing email" do
     expect(page).to have_css(".dialog-body", text: I18n.t("js.user.change_email.confirm_success"))
     find(".dialog-footer .btn-primary").click
 
-    expect(user.reload.primary_email.email).to eq(new_email)
+    try_until_success(timeout: Capybara.default_max_wait_time * 2) do
+      expect(user.reload.primary_email.email).to eq(new_email)
+    end
   end
 end

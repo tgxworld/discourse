@@ -8,12 +8,10 @@ RSpec.describe TopicTrackingState do
   let(:post) { create_post }
   let(:topic) { post.topic }
 
-  shared_examples "does not publish message for private topics" do |method, **arguments|
-    it "does not publish a message for a private topic" do
+  shared_examples "does not publish message for private topics" do |method|
+    it "should not publish any message for a private topic" do
       messages =
-        MessageBus.track_publish do
-          described_class.public_send(method, private_message_topic, **arguments)
-        end
+        MessageBus.track_publish { described_class.public_send(method, private_message_topic) }
 
       expect(messages).to eq([])
     end
@@ -35,7 +33,7 @@ RSpec.describe TopicTrackingState do
       Fabricate(:topic, category: read_restricted_category_with_no_groups)
     end
 
-    it "publishes to everyone for a publicly readable category" do
+    it "should publish message to everyone for a topic in a category that is not read restricted" do
       message =
         MessageBus
           .track_publish(message_bus_channel) do
@@ -50,7 +48,7 @@ RSpec.describe TopicTrackingState do
       expect(message.user_ids).to eq(nil)
     end
 
-    it "publishes only to administrators and groups with category access" do
+    it "should publish message only to admin group and groups that have permission to read a category when topic is in category that is restricted to certain groups" do
       message =
         MessageBus
           .track_publish(message_bus_channel) do
@@ -65,7 +63,7 @@ RSpec.describe TopicTrackingState do
       expect(message.user_ids).to eq(nil)
     end
 
-    it "publishes only to administrators when no group has category access" do
+    it "should publish message only to admin group when topic is in category that is read restricted but no groups have been granted access" do
       message =
         MessageBus
           .track_publish(message_bus_channel) do
@@ -81,171 +79,9 @@ RSpec.describe TopicTrackingState do
     end
   end
 
-  shared_examples "publishes only to recipients who can see the topic" do |channel, message_type|
-    subject(:recipient_ids) do
-      message =
-        MessageBus
-          .track_publish(channel) { publish(topic_in_category, whisper:) }
-          .detect { it.data["message_type"] == message_type }
-      Array(message&.user_ids)
-    end
-
-    fab!(:group)
-    fab!(:whisper_group, :group)
-    fab!(:member) { Fabricate(:user, last_seen_at: 1.minute.ago) }
-    fab!(:whisperer) { Fabricate(:user, last_seen_at: 1.minute.ago) }
-    fab!(:outsider) { Fabricate(:user, last_seen_at: 1.minute.ago) }
-    fab!(:moderator) { Fabricate(:moderator, last_seen_at: 1.minute.ago) }
-    fab!(:recipient_admin) { Fabricate(:admin, last_seen_at: 1.minute.ago) }
-
-    let(:candidates) { [member, whisperer, outsider, moderator, recipient_admin] }
-    let(:category) { Fabricate(:private_category, group:) }
-    let(:topic_in_category) { Fabricate(:topic, category:) }
-    let(:whisper) { false }
-    let(:visible_ids) do
-      candidates
-        .select { it.guardian.can_see?(topic_in_category) }
-        .select { !whisper || it.guardian.can_see_whispers? }
-        .map(&:id)
-    end
-
-    before do
-      SiteSetting.whispers_allowed_groups = whisper_group.id.to_s
-      group.add(member)
-      group.add(whisperer)
-      whisper_group.add(whisperer)
-      candidates.each { add_recipient(it, topic_in_category) }
-    end
-
-    it "publishes to the members of the category groups and to administrators" do
-      expect(recipient_ids).to contain_exactly(member.id, whisperer.id, recipient_admin.id)
-    end
-
-    it "publishes to the users who can see the topic" do
-      expect(recipient_ids).to match_array(visible_ids)
-    end
-
-    context "when a recipient is in two groups that can see the category" do
-      let(:other_group) { Fabricate(:group) }
-      let(:category) do
-        Fabricate(:category, read_restricted: true).tap do
-          it.set_permissions(group => :full, other_group => :full)
-          it.save!
-        end
-      end
-
-      before { other_group.add(member) }
-
-      it "publishes to the recipient one time" do
-        expect(recipient_ids).to contain_exactly(member.id, whisperer.id, recipient_admin.id)
-      end
-    end
-
-    context "when no group can see the category" do
-      let(:category) { Fabricate(:category, read_restricted: true) }
-
-      it "publishes to administrators only" do
-        expect(recipient_ids).to contain_exactly(recipient_admin.id)
-      end
-
-      it "publishes to the users who can see the topic" do
-        expect(recipient_ids).to match_array(visible_ids)
-      end
-    end
-
-    context "when logged in users can see the category" do
-      let(:category) { Fabricate(:category, permissions: { logged_in_users: :readonly }) }
-
-      it "publishes to every recipient" do
-        expect(recipient_ids).to match_array(candidates.map(&:id))
-      end
-
-      it "publishes to the users who can see the topic" do
-        expect(recipient_ids).to match_array(visible_ids)
-      end
-    end
-
-    context "when the post is a whisper" do
-      let(:whisper) { true }
-
-      it "publishes to whisperers who can see the category" do
-        expect(recipient_ids).to contain_exactly(whisperer.id, recipient_admin.id)
-      end
-
-      it "publishes to the users who can see the whisper" do
-        expect(recipient_ids).to match_array(visible_ids)
-      end
-
-      context "when the category is public" do
-        let(:category) { Fabricate(:category) }
-
-        it "publishes to whisperers only" do
-          expect(recipient_ids).to contain_exactly(whisperer.id, recipient_admin.id)
-        end
-
-        it "publishes to the users who can see the whisper" do
-          expect(recipient_ids).to match_array(visible_ids)
-        end
-
-        context "when the staff group can whisper" do
-          before do
-            SiteSetting.whispers_allowed_groups =
-              "#{Group::AUTO_GROUPS[:staff]}|#{whisper_group.id}"
-          end
-
-          it "publishes to staff and to whisperers" do
-            expect(recipient_ids).to contain_exactly(moderator.id, whisperer.id, recipient_admin.id)
-          end
-
-          it "publishes to the users who can see the whisper" do
-            expect(recipient_ids).to match_array(visible_ids)
-          end
-        end
-      end
-
-      context "when no group can whisper" do
-        before { SiteSetting.whispers_allowed_groups = "" }
-
-        it "publishes to nobody" do
-          expect(recipient_ids).to be_empty
-        end
-
-        it "publishes to the users who can see the whisper" do
-          expect(recipient_ids).to match_array(visible_ids)
-        end
-      end
-    end
-  end
-
   describe ".publish_new" do
     include_examples("publishes message to right groups and users", "/new", :publish_new)
     include_examples("does not publish message for private topics", :publish_new)
-
-    it "includes tags as objects with id when tagging is enabled" do
-      SiteSetting.tagging_enabled = true
-      tag1 = Fabricate(:tag)
-      tag2 = Fabricate(:tag)
-      topic.tags = [tag1, tag2]
-      topic.save!
-
-      message = MessageBus.track_publish("/new") { described_class.publish_new(topic) }.first
-
-      expect(message.data["payload"]["tags"]).to contain_exactly(
-        { "id" => tag1.id },
-        { "id" => tag2.id },
-      )
-    end
-
-    it "does not include tags when tagging is disabled" do
-      SiteSetting.tagging_enabled = false
-      tag = Fabricate(:tag)
-      topic.tags = [tag]
-      topic.save!
-
-      message = MessageBus.track_publish("/new") { described_class.publish_new(topic) }.first
-
-      expect(message.data["payload"]["tags"]).to be_nil
-    end
   end
 
   describe ".publish_latest" do
@@ -264,30 +100,19 @@ RSpec.describe TopicTrackingState do
       expect(message.user_ids).to eq(nil)
     end
 
-    it "includes tags as objects with id when tagging is enabled" do
-      SiteSetting.tagging_enabled = true
-      tag1 = Fabricate(:tag)
-      tag2 = Fabricate(:tag)
-      topic.tags = [tag1, tag2]
-      topic.save!
-
-      message = MessageBus.track_publish("/latest") { described_class.publish_latest(topic) }.first
-
-      expect(message.data["payload"]["tags"]).to contain_exactly(
-        { "id" => tag1.id },
-        { "id" => tag2.id },
-      )
-    end
-
-    it "does not publish whisper posts to /latest" do
+    it "publishes whisper post to staff users and members of whisperers group" do
+      whisperers_group = Fabricate(:group)
+      Fabricate(:user, groups: [whisperers_group])
+      Fabricate(:topic_user_watching, topic: topic, user: user)
+      SiteSetting.whispers_allowed_groups = "#{whisperers_group.id}"
       post.update!(post_type: Post.types[:whisper])
 
-      messages =
-        MessageBus.track_publish("/latest") do
-          Jobs::PostUpdateTopicTrackingState.new.execute(post_id: post.id)
-        end
+      message =
+        MessageBus
+          .track_publish("/latest") { TopicTrackingState.publish_latest(post.topic, true) }
+          .first
 
-      expect(messages).to be_empty
+      expect(message.group_ids).to contain_exactly(whisperers_group.id, Group::AUTO_GROUPS[:staff])
     end
   end
 
@@ -336,42 +161,9 @@ RSpec.describe TopicTrackingState do
   end
 
   describe "#publish_unread" do
-    shared_examples "notifying logged in category watchers" do |granular_permissions_enabled:|
-      it "publishes the unread topic to its category watcher" do
-        SiteSetting.granular_anonymous_and_logged_in_groups_permissions =
-          granular_permissions_enabled
-        topic.update!(category: Fabricate(:category, permissions: { logged_in_users: :readonly }))
-
-        message = MessageBus.track_publish("/unread") { described_class.publish_unread(post) }.first
-
-        expect(message.user_ids).to contain_exactly(other_user.id)
-      end
-    end
-
-    context "when granular permissions are disabled" do
-      include_examples "notifying logged in category watchers", granular_permissions_enabled: false
-    end
-
-    context "when granular permissions are enabled" do
-      include_examples "notifying logged in category watchers", granular_permissions_enabled: true
-    end
-
     let(:other_user) { Fabricate(:user) }
-    let!(:other_user_watching_topic) do
-      Fabricate(:topic_user_watching, topic: topic, user: other_user)
-    end
 
-    it_behaves_like "publishes only to recipients who can see the topic",
-                    "/unread",
-                    described_class::UNREAD_MESSAGE_TYPE do
-      def add_recipient(user, topic)
-        TopicUser.change(user.id, topic.id, notification_level: NotificationLevels.all[:tracking])
-      end
-
-      def publish(topic, whisper:)
-        described_class.publish_unread(Fabricate(whisper ? :whisper : :post, topic:))
-      end
-    end
+    before { Fabricate(:topic_user_watching, topic: topic, user: other_user) }
 
     it "can correctly publish unread" do
       message =
@@ -384,22 +176,6 @@ RSpec.describe TopicTrackingState do
       expect(data["topic_id"]).to eq(topic.id)
       expect(data["message_type"]).to eq(described_class::UNREAD_MESSAGE_TYPE)
       expect(data["payload"]["archetype"]).to eq(Archetype.default)
-    end
-
-    it "includes tags as objects with id when tagging is enabled" do
-      SiteSetting.tagging_enabled = true
-      tag1 = Fabricate(:tag)
-      tag2 = Fabricate(:tag)
-      topic.tags = [tag1, tag2]
-      topic.save!
-
-      message =
-        MessageBus.track_publish("/unread") { TopicTrackingState.publish_unread(post) }.first
-
-      expect(message.data["payload"]["tags"]).to contain_exactly(
-        { "id" => tag1.id },
-        { "id" => tag2.id },
-      )
     end
 
     it "does not publish unread to the user who created the post" do
@@ -489,37 +265,12 @@ RSpec.describe TopicTrackingState do
         )
       end
 
-      it "does not publish a message" do
+      it "should not publish any message" do
         messages =
           MessageBus.track_publish { TopicTrackingState.publish_unread(private_message_post) }
 
         expect(messages).to eq([])
       end
-    end
-
-    it "allows plugins to modify the scope via topic_tracking_state_publish_unread_scope modifier" do
-      user_to_exclude = Fabricate(:user)
-      Fabricate(:topic_user_watching, topic: topic, user: user_to_exclude)
-
-      messages = MessageBus.track_publish("/unread") { TopicTrackingState.publish_unread(post) }
-      expect(messages.first.user_ids).to include(user_to_exclude.id)
-
-      plugin = Plugin::Instance.new
-      modifier_block = Proc.new { |scope, _post| scope.where.not(user_id: user_to_exclude.id) }
-      DiscoursePluginRegistry.register_modifier(
-        plugin,
-        :topic_tracking_state_publish_unread_scope,
-        &modifier_block
-      )
-
-      messages = MessageBus.track_publish("/unread") { TopicTrackingState.publish_unread(post) }
-      expect(messages.first.user_ids).not_to include(user_to_exclude.id)
-    ensure
-      DiscoursePluginRegistry.unregister_modifier(
-        plugin,
-        :topic_tracking_state_publish_unread_scope,
-        &modifier_block
-      )
     end
   end
 
@@ -527,26 +278,11 @@ RSpec.describe TopicTrackingState do
     let(:user) { Fabricate(:user, last_seen_at: Date.today, refresh_auto_groups: true) }
     let(:post) { create_post(user: user) }
 
-    include_examples("does not publish message for private topics", :publish_muted, whisper: false)
-
-    it_behaves_like "publishes only to recipients who can see the topic",
-                    "/latest",
-                    described_class::MUTED_MESSAGE_TYPE do
-      def add_recipient(user, topic)
-        TopicUser.change(user.id, topic.id, notification_level: NotificationLevels.all[:muted])
-      end
-
-      def publish(topic, whisper:)
-        described_class.publish_muted(topic, whisper:)
-      end
-    end
+    include_examples("does not publish message for private topics", :publish_muted)
 
     it "can correctly publish muted" do
       TopicUser.find_by(topic: topic, user: post.user).update(notification_level: 0)
-      messages =
-        MessageBus.track_publish("/latest") do
-          TopicTrackingState.publish_muted(topic, whisper: false)
-        end
+      messages = MessageBus.track_publish("/latest") { TopicTrackingState.publish_muted(topic) }
 
       muted_message = messages.find { |message| message.data["message_type"] == "muted" }
 
@@ -554,23 +290,17 @@ RSpec.describe TopicTrackingState do
       expect(muted_message.data["message_type"]).to eq(described_class::MUTED_MESSAGE_TYPE)
     end
 
-    it "does not publish when the notification level is not muted" do
-      messages =
-        MessageBus.track_publish("/latest") do
-          TopicTrackingState.publish_muted(topic, whisper: false)
-        end
+    it "should not publish any message when notification level is not muted" do
+      messages = MessageBus.track_publish("/latest") { TopicTrackingState.publish_muted(topic) }
       muted_messages = messages.select { |message| message.data["message_type"] == "muted" }
 
       expect(muted_messages).to eq([])
     end
 
-    it "does not publish when the user was absent for seven days" do
+    it "should not publish any message when the user was not seen in the last 7 days" do
       TopicUser.find_by(topic: topic, user: post.user).update(notification_level: 0)
       post.user.update(last_seen_at: 8.days.ago)
-      messages =
-        MessageBus.track_publish("/latest") do
-          TopicTrackingState.publish_muted(topic, whisper: false)
-        end
+      messages = MessageBus.track_publish("/latest") { TopicTrackingState.publish_muted(topic) }
       muted_messages = messages.select { |message| message.data["message_type"] == "muted" }
       expect(muted_messages).to eq([])
     end
@@ -582,23 +312,7 @@ RSpec.describe TopicTrackingState do
     let(:third_user) { Fabricate(:user, last_seen_at: Date.today) }
     let(:post) { create_post(user: user) }
 
-    include_examples(
-      "does not publish message for private topics",
-      :publish_unmuted,
-      whisper: false,
-    )
-
-    it_behaves_like "publishes only to recipients who can see the topic",
-                    "/latest",
-                    described_class::UNMUTED_MESSAGE_TYPE do
-      def add_recipient(user, topic)
-        TopicUser.change(user.id, topic.id, notification_level: NotificationLevels.all[:watching])
-      end
-
-      def publish(topic, whisper:)
-        described_class.publish_unmuted(topic, whisper:)
-      end
-    end
+    include_examples("does not publish message for private topics", :publish_unmuted)
 
     it "can correctly publish unmuted" do
       Fabricate(:topic_tag, topic: topic)
@@ -607,10 +321,7 @@ RSpec.describe TopicTrackingState do
       CategoryUser.create!(category: topic.category, user: second_user, notification_level: 1)
       TagUser.create!(tag: topic.tags.first, user: third_user, notification_level: 1)
       TagUser.create!(tag: topic.tags.first, user: Fabricate(:user), notification_level: 0)
-      messages =
-        MessageBus.track_publish("/latest") do
-          TopicTrackingState.publish_unmuted(topic, whisper: false)
-        end
+      messages = MessageBus.track_publish("/latest") { TopicTrackingState.publish_unmuted(topic) }
 
       unmuted_message = messages.find { |message| message.data["message_type"] == "unmuted" }
       expect(unmuted_message.user_ids.sort).to eq([user.id, second_user.id, third_user.id].sort)
@@ -618,25 +329,19 @@ RSpec.describe TopicTrackingState do
       expect(unmuted_message.data["message_type"]).to eq(described_class::UNMUTED_MESSAGE_TYPE)
     end
 
-    it "does not publish when the notification level is not muted" do
+    it "should not publish any message when notification level is not muted" do
       SiteSetting.mute_all_categories_by_default = true
       TopicUser.find_by(topic: topic, user: post.user).update(notification_level: 0)
-      messages =
-        MessageBus.track_publish("/latest") do
-          TopicTrackingState.publish_unmuted(topic, whisper: false)
-        end
+      messages = MessageBus.track_publish("/latest") { TopicTrackingState.publish_unmuted(topic) }
       unmuted_messages = messages.select { |message| message.data["message_type"] == "unmuted" }
 
       expect(unmuted_messages).to eq([])
     end
 
-    it "does not publish when the user was absent for seven days" do
+    it "should not publish any message when the user was not seen in the last 7 days" do
       TopicUser.find_by(topic: topic, user: post.user).update(notification_level: 1)
       post.user.update(last_seen_at: 8.days.ago)
-      messages =
-        MessageBus.track_publish("/latest") do
-          TopicTrackingState.publish_unmuted(topic, whisper: false)
-        end
+      messages = MessageBus.track_publish("/latest") { TopicTrackingState.publish_unmuted(topic) }
       unmuted_messages = messages.select { |message| message.data["message_type"] == "unmuted" }
       expect(unmuted_messages).to eq([])
     end
@@ -738,7 +443,7 @@ RSpec.describe TopicTrackingState do
         expect(messages).to be_empty
       end
 
-      it "publishes a read count update to every client" do
+      it "publish a read count update to every client" do
         message =
           MessageBus
             .track_publish(read_post_key) do
@@ -750,8 +455,7 @@ RSpec.describe TopicTrackingState do
             end
             .first
 
-        expect(message.data[:type]).to eq(:read)
-        expect(message.data[:readers_count]).to eq(post_2.readers_count)
+        expect(message.data[:type]).to eq :read
       end
     end
   end
@@ -979,9 +683,7 @@ RSpec.describe TopicTrackingState do
       report = TopicTrackingState.report(user)
       expect(report.length).to eq(1)
       row = report[0]
-      expect(row.tags.map { |t| t["id"] }).to contain_exactly(
-        *Tag.where(name: %w[apples bananas]).pluck(:id),
-      )
+      expect(row.tags).to contain_exactly("apples", "bananas")
     end
   end
 
@@ -1033,45 +735,7 @@ RSpec.describe TopicTrackingState do
     expect(TopicTrackingState.report(user)).to be_empty
   end
 
-  it "does not report a topic as unread when its only new post is a small action" do
-    TopicUser.change(
-      user.id,
-      topic.id,
-      notification_level: TopicUser.notification_levels[:tracking],
-      last_read_post_number: 1,
-    )
-
-    topic.add_small_action(Discourse.system_user, "closed.enabled")
-
-    expect(topic.reload.highest_post_number).to eq(1)
-    expect(TopicTrackingState.report(user).map(&:topic_id)).not_to include(topic.id)
-  end
-
   describe ".report" do
-    shared_examples "reporting logged in category topics" do |granular_permissions_enabled:|
-      it "includes permitted topics and excludes private category topics" do
-        SiteSetting.granular_anonymous_and_logged_in_groups_permissions =
-          granular_permissions_enabled
-        author = Fabricate(:admin)
-        category = Fabricate(:category, permissions: { logged_in_users: :readonly })
-        public_post = create_post(category: category, user: author)
-        private_category = Fabricate(:private_category, group: Fabricate(:group))
-        create_post(category: private_category, user: author)
-
-        report = TopicTrackingState.report(user)
-
-        expect(report.map(&:topic_id)).to eq([public_post.topic_id])
-      end
-    end
-
-    context "when granular permissions are disabled" do
-      include_examples "reporting logged in category topics", granular_permissions_enabled: false
-    end
-
-    context "when granular permissions are enabled" do
-      include_examples "reporting logged in category topics", granular_permissions_enabled: true
-    end
-
     it "correctly reports topics with staff posts" do
       SiteSetting.whispers_allowed_groups = "#{Group::AUTO_GROUPS[:staff]}"
       create_post(raw: "this is a test post", topic: topic, user: post.user)
@@ -1094,51 +758,51 @@ RSpec.describe TopicTrackingState do
   describe ".report_totals" do
     fab!(:user2, :user)
 
-    it "correctly returns combined new + unread totals" do
+    it "correctly returns new/unread totals" do
       report = TopicTrackingState.report_totals(user)
-      expect(report).to eq({ new: 0 })
+      expect(report).to eq({ new: 0, unread: 0 })
 
       post.topic.notifier.watch_topic!(post.topic.user_id)
 
       report = TopicTrackingState.report_totals(user)
-      expect(report).to eq({ new: 1 })
+      expect(report).to eq({ new: 1, unread: 0 })
 
       create_post(user: user, topic: post.topic)
 
-      # when user replies, they have 0 combined new+unread count
+      # when user replies, they have 0 new count
       report = TopicTrackingState.report_totals(user)
-      expect(report).to eq({ new: 0 })
+      expect(report).to eq({ new: 0, unread: 0 })
 
-      # when we reply the poster will have one combined new+unread item
+      # when we reply the poster will have an unread item
       report = TopicTrackingState.report_totals(post.user)
-      expect(report).to eq({ new: 1 })
+      expect(report).to eq({ new: 0, unread: 1 })
 
       create_post(user: user2, topic: post.topic)
 
-      # when a third user replies, the original user should have one combined new+unread item
+      # when a third user replies, the original user should have an unread item
       report = TopicTrackingState.report_totals(user)
-      expect(report).to eq({ new: 1 })
+      expect(report).to eq({ new: 0, unread: 1 })
 
-      # the post user still has one combined new+unread item
+      # the post user still has one unread
       report = TopicTrackingState.report_totals(post.user)
-      expect(report).to eq({ new: 1 })
+      expect(report).to eq({ new: 0, unread: 1 })
 
       post2 = create_post
       post2.topic.notifier.watch_topic!(user.id)
 
-      # watching another new topic bumps the combined new+unread count
+      # watching another new topic bumps the new count
       report = TopicTrackingState.report_totals(user)
-      expect(report).to eq({ new: 2 })
+      expect(report).to eq({ new: 1, unread: 1 })
     end
 
     it "respects treat_as_new_topic_start_date user option" do
       report = TopicTrackingState.report_totals(user)
-      expect(report).to eq({ new: 0 })
+      expect(report).to eq({ new: 0, unread: 0 })
 
       post.topic.notifier.watch_topic!(post.topic.user_id)
 
       report = TopicTrackingState.report_totals(user)
-      expect(report).to eq({ new: 1 })
+      expect(report).to eq({ new: 1, unread: 0 })
 
       user.user_option.new_topic_duration_minutes = 5
       user.user_option.save
@@ -1146,7 +810,31 @@ RSpec.describe TopicTrackingState do
       post.topic.save
 
       report = TopicTrackingState.report_totals(user)
+      expect(report).to eq({ new: 0, unread: 0 })
+    end
+
+    it "respects new_new_view_enabled" do
+      new_new_group = Fabricate(:group)
+      SiteSetting.experimental_new_new_view_groups = new_new_group.name
+      user.groups << new_new_group
+
+      report = TopicTrackingState.report_totals(user)
       expect(report).to eq({ new: 0 })
+
+      post.topic.notifier.watch_topic!(post.topic.user_id)
+
+      post2 = create_post
+      Fabricate(:post, topic: post2.topic)
+
+      tracking = {
+        notification_level: TopicUser.notification_levels[:tracking],
+        last_read_post_number: 1,
+      }
+
+      TopicUser.change(user.id, post2.topic_id, tracking)
+
+      report = TopicTrackingState.report_totals(user)
+      expect(report).to eq({ new: 2 })
     end
   end
 

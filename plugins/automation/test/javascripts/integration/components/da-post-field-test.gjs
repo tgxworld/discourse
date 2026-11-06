@@ -5,7 +5,7 @@ import { setupRenderingTest } from "discourse/tests/helpers/component-test";
 import AutomationField from "discourse/plugins/automation/admin/components/automation-field";
 import AutomationFabricators from "discourse/plugins/automation/admin/lib/fabricators";
 
-module("Integration | Component | DaPostField", function (hooks) {
+module("Integration | Component | da-post-field", function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function () {
@@ -13,6 +13,8 @@ module("Integration | Component | DaPostField", function (hooks) {
   });
 
   test("set value", async function (assert) {
+    const self = this;
+
     this.field = new AutomationFabricators(getOwner(this)).field({
       component: "post",
     });
@@ -20,12 +22,12 @@ module("Integration | Component | DaPostField", function (hooks) {
     await render(
       <template>
         <AutomationField
-          @automation={{this.automation}}
-          @field={{this.field}}
+          @automation={{self.automation}}
+          @field={{self.field}}
         />
       </template>
     );
-    await fillIn(".d-editor-input", "Hello World");
+    await fillIn("textarea", "Hello World");
 
     assert.strictEqual(this.field.metadata.value, "Hello World");
   });

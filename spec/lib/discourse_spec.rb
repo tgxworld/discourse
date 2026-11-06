@@ -21,7 +21,7 @@ RSpec.describe Discourse do
   describe "running_in_rack" do
     after { ENV.delete("DISCOURSE_RUNNING_IN_RACK") }
 
-    it "is not running in Rack" do
+    it "should not be running in rack" do
       expect(Discourse.running_in_rack?).to eq(false)
       ENV["DISCOURSE_RUNNING_IN_RACK"] = "1"
       expect(Discourse.running_in_rack?).to eq(true)
@@ -67,64 +67,6 @@ RSpec.describe Discourse do
     end
   end
 
-  describe ".apply_worker_db_variables_overrides" do
-    around do |example|
-      original_env = ENV.to_hash
-      original_config = ActiveRecord::Base.configurations
-      original_show_statement_timeout =
-        ActiveRecord::Base.connection.execute("SHOW statement_timeout").first["statement_timeout"]
-
-      begin
-        example.run
-      ensure
-        ENV.replace(original_env)
-        ActiveRecord::Base.configurations = original_config
-        ActiveRecord::Base.connection_handler.clear_all_connections!(:all)
-        ActiveRecord::Base.establish_connection
-        GlobalSetting.configure!
-        GlobalSetting.load_defaults
-
-        expect(
-          ActiveRecord::Base.connection.execute("SHOW statement_timeout").first[
-            "statement_timeout"
-          ],
-        ).to eq(original_show_statement_timeout)
-      end
-    end
-
-    it "applies worker-specific database variable overrides in a production environment" do
-      test_database_config = Rails.application.config.database_configuration["test"]
-
-      temp_discourse_conf = Tempfile.new("discourse.conf")
-      temp_discourse_conf.write <<~TEXT
-      db_name = #{test_database_config["database"]}
-      db_username = ""
-      db_variables_statement_timeout = 10s
-      unicorn_worker_db_variables_statement_timeout = 100s
-      TEXT
-      temp_discourse_conf.rewind
-
-      Rails.stubs(:env).returns(ActiveSupport::StringInquirer.new("production"))
-      GlobalSetting.configure!(path: temp_discourse_conf.path, use_blank_provider: false)
-      GlobalSetting.load_defaults
-
-      Discourse.apply_worker_db_variables_overrides
-
-      expect(
-        ActiveRecord::Base.connection.execute("SHOW statement_timeout").first["statement_timeout"],
-      ).to eq("100s")
-    ensure
-      %i[
-        db_variables_statement_timeout
-        unicorn_worker_db_variables_statement_timeout
-      ].each { |method| GlobalSetting.singleton_class.remove_method(method) }
-
-      allow(Rails).to receive(:env).and_call_original
-      temp_discourse_conf&.close
-      temp_discourse_conf&.unlink
-    end
-  end
-
   describe ".plugins_sorted_by_name" do
     before do
       Discourse.stubs(:visible_plugins).returns(
@@ -163,14 +105,12 @@ RSpec.describe Discourse do
       plugin_class.new.tap do |p|
         p.enabled = true
         p.path = "my-plugin-1"
-        p.metadata = Plugin::Metadata.parse("# name: plugin1")
       end
     end
     let(:plugin2) do
       plugin_class.new.tap do |p|
         p.enabled = false
-        p.path = "my-plugin-2"
-        p.metadata = Plugin::Metadata.parse("# name: plugin2")
+        p.path = "my-plugin-1"
       end
     end
 
@@ -197,19 +137,14 @@ RSpec.describe Discourse do
       expect(Discourse.find_plugins(include_disabled: true)).to include(plugin1, plugin2)
     end
 
-    it "can find plugin css assets" do
+    it "can find plugin assets" do
       plugin2.enabled = true
 
       expect(Discourse.find_plugin_css_assets({}).length).to eq(2)
+      expect(Discourse.find_plugin_js_assets({}).length).to eq(2)
       plugin1.register_asset_filter { |type, request, opts| false }
       expect(Discourse.find_plugin_css_assets({}).length).to eq(1)
-    end
-
-    it "includes admin plugin css assets when include_admin is true" do
-      plugin2.enabled = true
-
-      expect(Discourse.find_plugin_css_assets(include_admin: true).length).to eq(4)
-      expect(Discourse.find_plugin_css_assets({}).length).to eq(2)
+      expect(Discourse.find_plugin_js_assets({}).length).to eq(1)
     end
   end
 
@@ -250,28 +185,12 @@ RSpec.describe Discourse do
 
   describe "enabled_authenticators" do
     it "only returns enabled authenticators" do
-      SiteSetting.twitter_consumer_key = "consumer_key"
-      SiteSetting.twitter_consumer_secret = "consumer_secret"
-
       expect(Discourse.enabled_authenticators.length).to be(0)
       expect { SiteSetting.enable_twitter_logins = true }.to change {
         Discourse.enabled_authenticators.length
       }.by(1)
       expect(Discourse.enabled_authenticators.length).to be(1)
       expect(Discourse.enabled_authenticators.first).to be_instance_of(Auth::TwitterAuthenticator)
-    end
-
-    it "does not return an enabled authenticator once its credentials are removed" do
-      SiteSetting.twitter_consumer_key = "consumer_key"
-      SiteSetting.twitter_consumer_secret = "consumer_secret"
-      SiteSetting.enable_twitter_logins = true
-
-      expect { SiteSetting.twitter_consumer_secret = "" }.to change {
-        Discourse.enabled_authenticators.length
-      }.by(-1)
-
-      expect(SiteSetting.enable_twitter_logins).to eq(true)
-      expect(Discourse.enabled_authenticators).to be_empty
     end
   end
 
@@ -293,38 +212,8 @@ RSpec.describe Discourse do
     end
 
     it "returns the system user otherwise" do
-      SiteSetting.site_contact_username = ""
+      SiteSetting.site_contact_username = nil
       expect(Discourse.site_contact_user.username).to eq("system")
-    end
-  end
-
-  describe "#site_contact_group" do
-    fab!(:group) { Fabricate(:group, name: "support") }
-
-    it "returns nothing when the setting is blank" do
-      SiteSetting.site_contact_group_name = ""
-      expect(Discourse.site_contact_group).to eq(nil)
-    end
-
-    it "resolves the stored group id" do
-      SiteSetting.site_contact_group_name = group.id.to_s
-      expect(Discourse.site_contact_group).to eq(group)
-    end
-
-    it "returns nothing when the group no longer exists" do
-      SiteSetting.site_contact_group_name = group.id.to_s
-      group.destroy!
-      expect(Discourse.site_contact_group).to eq(nil)
-    end
-
-    it "resolves a group name regardless of case" do
-      SiteSetting.stubs(:site_contact_group_name).returns("SUPPORT")
-      expect(Discourse.site_contact_group).to eq(group)
-    end
-
-    it "does not read a group id out of a value that merely starts with a digit" do
-      SiteSetting.stubs(:site_contact_group_name).returns("0support")
-      expect(Discourse.site_contact_group).to eq(nil)
     end
   end
 
@@ -493,13 +382,13 @@ RSpec.describe Discourse do
 
       after { Discourse.reset_job_exception_stats! }
 
-      it "handles an incorrectly shaped hash" do
+      it "should not fail on incorrectly shaped hash" do
         expect do
           Discourse.handle_job_exception(FakeTestError.new, { job: "test" })
         end.to raise_error(FakeTestError)
       end
 
-      it "collects job exception statistics" do
+      it "should collect job exception stats" do
         # see MiniScheduler Manager which reports it like this
         # https://github.com/discourse/mini_scheduler/blob/2b2c1c56b6e76f51108c2a305775469e24cf2b65/lib/mini_scheduler/manager.rb#L95
         exception_context = {
@@ -533,7 +422,7 @@ RSpec.describe Discourse do
       end
     end
 
-    it "runs without an error" do
+    it "should not fail when called" do
       exception = StandardError.new
 
       expect do Discourse.handle_job_exception(exception, nil, nil) end.to raise_error(
@@ -599,11 +488,11 @@ RSpec.describe Discourse do
     end
   end
 
-  describe ".execute_command" do
+  describe "Utils.execute_command" do
     it "works for individual commands" do
       expect(Discourse::Utils.execute_command("pwd").strip).to eq(Rails.root.to_s)
       expect(Discourse::Utils.execute_command("pwd", chdir: "plugins").strip).to eq(
-        "#{Rails.root.join("plugins")}",
+        "#{Rails.root}/plugins",
       )
     end
 
@@ -629,12 +518,12 @@ RSpec.describe Discourse do
 
       result =
         Discourse::Utils.execute_command(chdir: "plugins") do |runner|
-          expect(runner.exec("pwd").strip).to eq("#{Rails.root.join("plugins")}")
+          expect(runner.exec("pwd").strip).to eq("#{Rails.root}/plugins")
           runner.exec("pwd")
         end
 
       # Should return output of block
-      expect(result.strip).to eq("#{Rails.root.join("plugins")}")
+      expect(result.strip).to eq("#{Rails.root}/plugins")
     end
 
     it "does not leak chdir between threads" do
@@ -677,52 +566,6 @@ RSpec.describe Discourse do
     end
   end
 
-  describe ".atomic_ln_s" do
-    it "creates the destination symlink pointing at the source" do
-      Dir.mktmpdir do |dir|
-        source = File.join(dir, "source")
-        Dir.mkdir(source)
-        destination = File.join(dir, "link")
-
-        Discourse::Utils.atomic_ln_s(source, destination)
-
-        expect(File.symlink?(destination)).to eq(true)
-        expect(File.readlink(destination)).to eq(source)
-      end
-    end
-
-    it "replaces an existing symlink at the destination" do
-      Dir.mktmpdir do |dir|
-        source = File.join(dir, "source")
-        Dir.mkdir(source)
-        old_target = File.join(dir, "old")
-        Dir.mkdir(old_target)
-        destination = File.join(dir, "link")
-        File.symlink(old_target, destination)
-
-        Discourse::Utils.atomic_ln_s(source, destination)
-
-        expect(File.readlink(destination)).to eq(source)
-      end
-    end
-
-    it "falls back to a copy when tmp and destination are on different filesystems" do
-      # rename(2) raises EXDEV across filesystem boundaries (e.g. containers
-      # where Rails.root/tmp is a separate mount). The link must still land.
-      Dir.mktmpdir do |dir|
-        source = File.join(dir, "source")
-        Dir.mkdir(source)
-        destination = File.join(dir, "link")
-        allow(File).to receive(:rename).and_raise(Errno::EXDEV)
-
-        Discourse::Utils.atomic_ln_s(source, destination)
-
-        expect(File.symlink?(destination)).to eq(true)
-        expect(File.readlink(destination)).to eq(source)
-      end
-    end
-  end
-
   describe ".clear_all_theme_cache!" do
     before do
       setup_s3
@@ -751,8 +594,8 @@ RSpec.describe Discourse do
         target_id: Theme.targets[:common],
         name: "head_tag",
         value: <<~HTML,
-          <script>
-            console.log("hello world");
+          <script type="text/discourse-plugin" version="0.1">
+            console.log(settings.uploads.imajee);
           </script>
         HTML
       )
@@ -782,12 +625,26 @@ RSpec.describe Discourse do
       )
     end
 
-    it "invalidates all theme settings and CSS caches" do
+    it "invalidates all JS and CSS caches" do
       Stylesheet::Manager.clear_theme_cache!
 
       old_upload_url = Discourse.store.cdn_url(upload.url)
 
-      expect(theme.cached_settings["theme_uploads"]["imajee"]).to eq(old_upload_url)
+      head_tag_script =
+        Nokogiri::HTML5
+          .fragment(Theme.lookup_field(theme.id, :desktop, "head_tag"))
+          .css("link[rel=modulepreload]")
+          .first
+      head_tag_js = JavascriptCache.find_by(digest: head_tag_script[:href][/\h{40}/]).content
+      expect(head_tag_js).to include(old_upload_url)
+
+      js_file_script =
+        Nokogiri::HTML5
+          .fragment(Theme.lookup_field(theme.id, :extra_js, nil))
+          .css("link[rel=modulepreload]")
+          .first
+      file_js = JavascriptCache.find_by(digest: js_file_script[:href][/\h{40}/]).content
+      expect(file_js).to include(old_upload_url)
 
       css_link_tag =
         Nokogiri::HTML5
@@ -802,7 +659,21 @@ RSpec.describe Discourse do
       SiteSetting.s3_cdn_url = "https://new.s3.cdn.com/gg"
       new_upload_url = Discourse.store.cdn_url(upload.url)
 
-      expect(theme.cached_settings["theme_uploads"]["imajee"]).to eq(old_upload_url)
+      head_tag_script =
+        Nokogiri::HTML5
+          .fragment(Theme.lookup_field(theme.id, :desktop, "head_tag"))
+          .css("link[rel=modulepreload]")
+          .first
+      head_tag_js = JavascriptCache.find_by(digest: head_tag_script[:href][/\h{40}/]).content
+      expect(head_tag_js).to include(old_upload_url)
+
+      js_file_script =
+        Nokogiri::HTML5
+          .fragment(Theme.lookup_field(theme.id, :extra_js, nil))
+          .css("link[rel=modulepreload]")
+          .first
+      file_js = JavascriptCache.find_by(digest: js_file_script[:href][/\h{40}/]).content
+      expect(file_js).to include(old_upload_url)
 
       css_link_tag =
         Nokogiri::HTML5
@@ -816,7 +687,21 @@ RSpec.describe Discourse do
 
       Discourse.clear_all_theme_cache!
 
-      expect(theme.cached_settings["theme_uploads"]["imajee"]).to eq(new_upload_url)
+      head_tag_script =
+        Nokogiri::HTML5
+          .fragment(Theme.lookup_field(theme.id, :desktop, "head_tag"))
+          .css("link[rel=modulepreload]")
+          .first
+      head_tag_js = JavascriptCache.find_by(digest: head_tag_script[:href][/\h{40}/]).content
+      expect(head_tag_js).to include(new_upload_url)
+
+      js_file_script =
+        Nokogiri::HTML5
+          .fragment(Theme.lookup_field(theme.id, :extra_js, nil))
+          .css("link[rel=modulepreload]")
+          .first
+      file_js = JavascriptCache.find_by(digest: js_file_script[:href][/\h{40}/]).content
+      expect(file_js).to include(new_upload_url)
 
       css_link_tag =
         Nokogiri::HTML5
@@ -827,103 +712,6 @@ RSpec.describe Discourse do
           .first
       css = StylesheetCache.find_by(digest: css_link_tag[:href][/\h{40}/]).content
       expect(css).to include("url(#{new_upload_url})")
-    end
-  end
-
-  describe ".anonymous_locale" do
-    def locale_for(cookie: nil, path: "/", env: {}, include_param: true)
-      env = env.merge("HTTP_COOKIE" => "locale=#{cookie}") if cookie
-      Discourse.anonymous_locale(
-        ActionDispatch::Request.new(Rack::MockRequest.env_for(path, env)),
-        include_param:,
-      )
-    end
-
-    before do
-      SiteSetting.default_locale = "en"
-      SiteSetting.allow_user_locale = true
-    end
-
-    it "ignores the locale cookie by default" do
-      expect(locale_for(cookie: "es")).to eq("en")
-    end
-
-    context "when set_locale_from_cookie is enabled" do
-      before { SiteSetting.set_locale_from_cookie = true }
-
-      it "honours any available locale, even one that is not a supported content locale" do
-        SiteSetting.content_localization_supported_locales = "fr"
-
-        expect(locale_for(cookie: "es")).to eq("es")
-      end
-    end
-
-    context "when the language switcher is enabled" do
-      before do
-        SiteSetting.set_locale_from_cookie = false
-        SiteSetting.content_localization_supported_locales = "es|fr"
-        SiteSetting.content_localization_enabled = true
-        SiteSetting.content_localization_language_switcher = "all"
-      end
-
-      it "honours the locale cookie without set_locale_from_cookie" do
-        expect(locale_for(cookie: "es")).to eq("es")
-      end
-
-      it "honours the default locale, which the switcher also offers" do
-        expect(locale_for(cookie: "en")).to eq("en")
-      end
-
-      it "ignores an available locale that is not configured for this site" do
-        expect(locale_for(cookie: "ja")).to eq("en")
-      end
-
-      it "ignores the cookie once the switcher is turned off" do
-        SiteSetting.content_localization_language_switcher = "none"
-
-        expect(locale_for(cookie: "es")).to eq("en")
-      end
-
-      it "ignores the cookie when content localization is disabled" do
-        SiteSetting.content_localization_enabled = false
-
-        expect(locale_for(cookie: "es")).to eq("en")
-      end
-
-      it "ignores the cookie when user locales are not allowed" do
-        SiteSetting.allow_user_locale = false
-
-        expect(locale_for(cookie: "es")).to eq("en")
-      end
-
-      it "still prefers the locale param over the cookie" do
-        SiteSetting.set_locale_from_param = true
-
-        expect(locale_for(cookie: "es", path: "/?tl=fr")).to eq("fr")
-      end
-    end
-
-    context "without the locale param" do
-      before do
-        SiteSetting.set_locale_from_param = true
-        SiteSetting.set_locale_from_cookie = true
-        SiteSetting.set_locale_from_accept_language_header = true
-      end
-
-      it "resolves the locale the plain URL would serve" do
-        expect(locale_for(cookie: "es", path: "/?tl=fr", include_param: false)).to eq("es")
-        expect(
-          locale_for(
-            path: "/?tl=fr",
-            env: {
-              "HTTP_ACCEPT_LANGUAGE" => "ja",
-            },
-            include_param: false,
-          ),
-        ).to eq("ja")
-        expect(locale_for(path: "/?tl=fr", include_param: false)).to eq("en")
-        expect(locale_for(cookie: "es", path: "/?tl=fr")).to eq("fr")
-      end
     end
   end
 end

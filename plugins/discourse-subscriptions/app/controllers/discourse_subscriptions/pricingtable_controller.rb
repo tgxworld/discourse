@@ -2,10 +2,10 @@
 
 module DiscourseSubscriptions
   class PricingtableController < ::ApplicationController
-    requires_plugin PLUGIN_NAME
+    requires_plugin DiscourseSubscriptions::PLUGIN_NAME
 
     def index
-      head :ok
+      head 200
     end
   end
 end

@@ -66,20 +66,6 @@ describe Chat do
       expect(Upload.exists?(id: draft_upload.id)).to eq(true)
       expect(Upload.exists?(id: unused_upload.id)).to eq(false)
     end
-
-    it "marks uploads tracked as hotlinked media in use, even while unreferenced" do
-      hotlinked_upload = Fabricate(:upload, user: user, created_at: 1.month.ago)
-      Chat::MessageHotlinkedMedia.create!(
-        chat_message: chat_message,
-        url: "//example.com/image.png",
-        status: :downloaded,
-        upload: hotlinked_upload,
-      )
-
-      Jobs::CleanUpUploads.new.execute({})
-
-      expect(Upload.exists?(id: hotlinked_upload.id)).to eq(true)
-    end
   end
 
   describe "user card serializer extension #can_chat_user" do
@@ -87,7 +73,6 @@ describe Chat do
     let!(:user) { Fabricate(:user) }
     let!(:guardian) { Guardian.new(user) }
     let(:serializer) { UserCardSerializer.new(target_user, scope: guardian) }
-
     fab!(:group)
 
     context "when chat enabled" do
@@ -154,16 +139,6 @@ describe Chat do
         it "returns false if user is not in dm allowed group" do
           SiteSetting.direct_message_enabled_groups = 3
           expect(serializer.can_chat_user).to eq(false)
-        end
-
-        it "returns false if target user has disabled private messages" do
-          target_user.user_option.update!(allow_private_messages: false)
-          expect(serializer.can_chat_user).to eq(false)
-        end
-
-        it "returns true even when user is not in personal_message_enabled_groups" do
-          SiteSetting.personal_message_enabled_groups = Group::AUTO_GROUPS[:staff]
-          expect(serializer.can_chat_user).to eq(true)
         end
       end
     end

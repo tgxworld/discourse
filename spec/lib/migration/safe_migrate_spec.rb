@@ -22,7 +22,7 @@ RSpec.describe Migration::SafeMigrate do
   it "bans all table removal" do
     Migration::SafeMigrate.enable!
 
-    path = File.expand_path "#{Rails.root.join("spec/fixtures/db/migrate/drop_table")}"
+    path = File.expand_path "#{Rails.root}/spec/fixtures/db/migrate/drop_table"
 
     output = capture_stdout { expect do migrate_up(path) end.to raise_error(StandardError) }
 
@@ -35,7 +35,7 @@ RSpec.describe Migration::SafeMigrate do
   it "bans all table renames" do
     Migration::SafeMigrate.enable!
 
-    path = File.expand_path "#{Rails.root.join("spec/fixtures/db/migrate/rename_table")}"
+    path = File.expand_path "#{Rails.root}/spec/fixtures/db/migrate/rename_table"
 
     output = capture_stdout { expect do migrate_up(path) end.to raise_error(StandardError) }
 
@@ -48,7 +48,7 @@ RSpec.describe Migration::SafeMigrate do
   it "bans all column removal" do
     Migration::SafeMigrate.enable!
 
-    path = File.expand_path "#{Rails.root.join("spec/fixtures/db/migrate/remove_column")}"
+    path = File.expand_path "#{Rails.root}/spec/fixtures/db/migrate/remove_column"
 
     output = capture_stdout { expect do migrate_up(path) end.to raise_error(StandardError) }
 
@@ -61,7 +61,7 @@ RSpec.describe Migration::SafeMigrate do
   it "bans all column renames" do
     Migration::SafeMigrate.enable!
 
-    path = File.expand_path "#{Rails.root.join("spec/fixtures/db/migrate/rename_column")}"
+    path = File.expand_path "#{Rails.root}/spec/fixtures/db/migrate/rename_column"
 
     output = capture_stdout { expect do migrate_up(path) end.to raise_error(StandardError) }
 
@@ -75,14 +75,16 @@ RSpec.describe Migration::SafeMigrate do
     Migration::SafeMigrate.enable!
 
     path =
-      File.expand_path "#{Rails.root.join("spec/fixtures/db/migrate/create_index_concurrently_safe_activerecord")}"
+      File.expand_path "#{Rails.root}/spec/fixtures/db/migrate/create_index_concurrently_safe_activerecord"
 
     error = nil
 
     capture_stdout do
-      migrate_up(path)
-    rescue StandardError => e
-      error = e
+      begin
+        migrate_up(path)
+      rescue StandardError => e
+        error = e
+      end
     end
 
     expect(error.cause.cause.message).to include(
@@ -93,14 +95,15 @@ RSpec.describe Migration::SafeMigrate do
   it "allows running a migration that creates an index concurrently if it drops the index first" do
     Migration::SafeMigrate.enable!
 
-    path =
-      File.expand_path "#{Rails.root.join("spec/fixtures/db/migrate/create_index_concurrently_safe")}"
+    path = File.expand_path "#{Rails.root}/spec/fixtures/db/migrate/create_index_concurrently_safe"
     error = nil
 
     capture_stdout do
-      migrate_up(path)
-    rescue StandardError => e
-      error = e
+      begin
+        migrate_up(path)
+      rescue StandardError => e
+        error = e
+      end
     end
 
     expect(error.cause.cause.message).to include(
@@ -112,9 +115,7 @@ RSpec.describe Migration::SafeMigrate do
     Migration::SafeMigrate.enable!
 
     path =
-      File.expand_path(
-        "#{Rails.root.join("spec/fixtures/db/migrate/create_index_concurrently_unsafe")}",
-      )
+      File.expand_path("#{Rails.root}/spec/fixtures/db/migrate/create_index_concurrently_unsafe")
 
     error = nil
 
@@ -132,28 +133,18 @@ RSpec.describe Migration::SafeMigrate do
   it "allows dropping NOT NULL" do
     Migration::SafeMigrate.enable!
 
-    path = File.expand_path "#{Rails.root.join("spec/fixtures/db/migrate/drop_not_null")}"
+    path = File.expand_path "#{Rails.root}/spec/fixtures/db/migrate/drop_not_null"
 
     output = capture_stdout { migrate_up(path) }
 
     expect(output).to include("change_column_null(:users, :username, true, nil)")
   end
 
-  it "allows dropping default" do
-    Migration::SafeMigrate.enable!
-
-    path = File.expand_path "#{Rails.root.join("spec/fixtures/db/migrate/drop_default")}"
-
-    output = capture_stdout { migrate_up(path) }
-
-    expect(output).to include("change_column_default(:posts, :like_count, nil)")
-  end
-
   it "supports being disabled" do
     Migration::SafeMigrate.enable!
     Migration::SafeMigrate.disable!
 
-    path = File.expand_path "#{Rails.root.join("spec/fixtures/db/migrate/drop_table")}"
+    path = File.expand_path "#{Rails.root}/spec/fixtures/db/migrate/drop_table"
 
     output = capture_stdout { migrate_up(path) }
 
@@ -161,20 +152,20 @@ RSpec.describe Migration::SafeMigrate do
   end
 
   describe "for a post deployment migration" do
-    it "does not ban unsafe migrations that use up" do
+    it "should not ban unsafe migrations using up" do
       Migration::SafeMigrate::SafeMigration.enable_safe!
 
-      path = File.expand_path "#{Rails.root.join("spec/fixtures/db/post_migrate/drop_table")}"
+      path = File.expand_path "#{Rails.root}/spec/fixtures/db/post_migrate/drop_table"
 
       output = capture_stdout { migrate_up(path) }
 
       expect(output).to include("drop_table(:email_logs)")
     end
 
-    it "does not ban unsafe migrations that use change" do
+    it "should not ban unsafe migrations using change" do
       Migration::SafeMigrate::SafeMigration.enable_safe!
 
-      path = File.expand_path "#{Rails.root.join("spec/fixtures/db/post_migrate/change")}"
+      path = File.expand_path "#{Rails.root}/spec/fixtures/db/post_migrate/change"
 
       output = capture_stdout { migrate_up(path) }
 

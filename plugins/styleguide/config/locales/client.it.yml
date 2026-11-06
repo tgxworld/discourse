@@ -5,17 +5,10 @@
 # https://translate.discourse.org/
 
 it:
-  admin_js:
-    admin:
-      site_settings:
-        categories:
-          styleguide: "Guida di stile di Discourse"
   js:
     styleguide:
       title: "Guida di stile"
-      example:
-        kind:
-          component: "Componente"
+      welcome: "Per iniziare, scegli una sezione dal menu a sinistra."
       categories:
         syntax: Sintassi
         atoms: Atomi
@@ -32,18 +25,6 @@ it:
           title: "Inserimenti Data/Ora"
         menus:
           title: "Menù"
-        context_menu:
-          actions:
-            duplicate: "Duplica"
-            delete: "Elimina"
-        multi_select:
-          title: "Selezione multipla"
-        reorderable_list:
-          policies_pinned: "Appuntato"
-          policies_required: "Obbligatorie"
-          table_field: "Campo"
-          table_type: "Tipo"
-          cross_list_primary: "Primario"
         toasts:
           title: "Toast"
         font_scale:
@@ -71,6 +52,8 @@ it:
           title: "Navigazione Impilata"
         categories_list:
           title: "Lista Categorie"
+        topic_link:
+          title: "Link all'argomento"
         topic_list_item:
           title: "Elemento Elenco Argomenti"
         topic_statuses:
@@ -79,6 +62,8 @@ it:
           title: "Elenco Argomenti"
         basic_topic_list:
           title: "Elenco argomenti di base"
+        footer_message:
+          title: "Messaggio Piè di Pagina"
         signup_cta:
           title: "CTA registrazione"
         topic_timer_info:
@@ -97,30 +82,10 @@ it:
           title: "Mappa Argomento"
         site_header:
           title: "Intestazione del Sito"
-        more_topics:
-          title: "Altri argomenti"
+        suggested_topics:
+          title: "Argomenti suggeriti"
         post_menu:
           title: "Menu Messaggio"
-        roving_focus:
-          toolbar:
-            copy: "Copia"
-          tags:
-            support: "Sostienici"
-          adjacent:
-            label: "Filtri"
-            field: "Cerca"
-            open: "Aperta"
-            recent: "Recenti"
-          listbox:
-            apple: "Apple"
-          combobox:
-            daily: "Giornaliero"
-            weekly: "Settimanale"
-            monthly: "Mensile"
-            never: "Mai"
-          tree:
-            components: "Componenti"
-            select: "Seleziona"
         modal:
           title: "Finestra Dialogo"
           header: "Titolo Finestra Dialogo"

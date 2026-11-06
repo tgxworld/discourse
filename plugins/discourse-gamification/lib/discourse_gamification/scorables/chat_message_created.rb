@@ -1,16 +1,20 @@
 # frozen_string_literal: true
-module DiscourseGamification
+module ::DiscourseGamification
   class ChatMessageCreated < Scorable
-    def self.enabled?(leaderboard: nil)
-      SiteSetting.chat_enabled && super
+    def self.enabled?
+      SiteSetting.chat_enabled && score_multiplier > 0
     end
 
-    def self.query(leaderboard: nil)
+    def self.score_multiplier
+      SiteSetting.chat_message_created_score_value
+    end
+
+    def self.query
       <<~SQL
         SELECT
           m.user_id,
           date_trunc('day', m.created_at) AS date,
-          COUNT(*) * #{score_multiplier(leaderboard:)} AS points
+          COUNT(*) * #{score_multiplier} AS points
         FROM
           chat_messages AS m
         JOIN

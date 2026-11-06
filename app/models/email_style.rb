@@ -28,7 +28,8 @@ class EmailStyle
   end
 
   def self.default_template
-    @_default_template ||= File.read(Rails.root.join("app/views/email/default_template.html").to_s)
+    @_default_template ||=
+      File.read(File.join(Rails.root, "app", "views", "email", "default_template.html"))
   end
 
   def self.default_css

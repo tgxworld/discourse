@@ -4,24 +4,21 @@ import { action } from "@ember/object";
 import willDestroy from "@ember/render-modifiers/modifiers/will-destroy";
 import { service } from "@ember/service";
 import { modifier } from "ember-modifier";
+import { and, eq } from "truth-helpers";
+import CookText from "discourse/components/cook-text";
+import DButton from "discourse/components/d-button";
 import FastEdit from "discourse/components/fast-edit";
 import FastEditModal from "discourse/components/modal/fast-edit";
+import concatClass from "discourse/helpers/concat-class";
 import { ajax } from "discourse/lib/ajax";
 import { popupAjaxError } from "discourse/lib/ajax-error";
 import { bind } from "discourse/lib/decorators";
 import { sanitize } from "discourse/lib/text";
 import { clipboardCopy } from "discourse/lib/utilities";
-import DButton from "discourse/ui-kit/d-button";
-import DCookText from "discourse/ui-kit/d-cook-text";
-import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
 import { i18n } from "discourse-i18n";
-import AiHelperLoading from "../components/ai-helper-loading.gjs";
-import AiHelperOptionsList from "../components/ai-helper-options-list.gjs";
-import {
-  isAiCreditLimitError,
-  popupAiCreditLimitError,
-} from "../lib/ai-errors.js";
-import SmoothStreamer from "../lib/smooth-streamer.gjs";
+import AiHelperLoading from "../components/ai-helper-loading";
+import AiHelperOptionsList from "../components/ai-helper-options-list";
+import SmoothStreamer from "../lib/smooth-streamer";
 
 export default class AiPostHelperMenu extends Component {
   @service messageBus;
@@ -43,6 +40,9 @@ export default class AiPostHelperMenu extends Component {
   @tracked streaming = false;
   @tracked lastSelectedOption = null;
   @tracked isSavingFootnote = false;
+  @tracked supportsAddFootnote = this.args.data.supportsFastEdit;
+
+  @tracked
   smoothStreamer = new SmoothStreamer(
     () => this.suggestion,
     (newValue) => (this.suggestion = newValue)
@@ -55,7 +55,7 @@ export default class AiPostHelperMenu extends Component {
   };
 
   showFootnoteTooltip = modifier((element) => {
-    if (this.args.data.supportsFastEdit || this.streaming) {
+    if (this.supportsAddFootnote || this.streaming) {
       return;
     }
 
@@ -76,7 +76,7 @@ export default class AiPostHelperMenu extends Component {
   @tracked _activeAiRequest = null;
 
   get footnoteDisabled() {
-    return this.streaming || !this.args.data.supportsFastEdit;
+    return this.streaming || !this.supportsAddFootnote;
   }
 
   get helperOptions() {
@@ -128,6 +128,23 @@ export default class AiPostHelperMenu extends Component {
     return this.lastSelectedOption?.name === "explain";
   }
 
+  _showUserCustomPrompts() {
+    return this.currentUser?.can_use_custom_prompts;
+  }
+
+  _sanitizeForFootnote(text) {
+    // Remove line breaks (line-breaks breaks the inline footnote display)
+    text = text.replace(/[\r\n]+/g, " ");
+
+    // Remove headings (headings don't work in inline footnotes)
+    text = text.replace(/^(#+)\s+/gm, "");
+
+    // Trim excess space
+    text = text.trim();
+
+    return sanitize(text);
+  }
+
   set progressChannel(value) {
     if (this._progressChannel) {
       this.unsubscribe();
@@ -147,6 +164,12 @@ export default class AiPostHelperMenu extends Component {
     }
     this.messageBus.unsubscribe(this._progressChannel, this._updateResult);
     this._progressChannel = null;
+  }
+
+  @bind
+  async _updateResult(result) {
+    this.streaming = !result.done;
+    await this.smoothStreamer.updateResult(result, "result");
   }
 
   @action
@@ -189,16 +212,51 @@ export default class AiPostHelperMenu extends Component {
           this.menuState = this.MENU_STATES.result;
         });
     } catch (error) {
-      if (isAiCreditLimitError(error)) {
-        popupAiCreditLimitError(error);
-      } else {
-        popupAjaxError(error);
-      }
-      this.loading = false;
-      this.menuState = this.MENU_STATES.options;
+      popupAjaxError(error);
     }
 
     return this._activeAiRequest;
+  }
+
+  _handleStreamedResult(option) {
+    this.menuState = this.MENU_STATES.result;
+    const menu = this.menu.getByIdentifier("post-text-selection-toolbar");
+    if (menu) {
+      menu.options.placement = "bottom";
+    }
+    const fetchUrl = `/discourse-ai/ai-helper/stream_suggestion`;
+
+    this._activeAiRequest = ajax(fetchUrl, {
+      method: "POST",
+      data: {
+        location: "post",
+        mode: option.name,
+        text: this.args.data.quoteState.buffer,
+        post_id: this.args.data.quoteState.postId,
+        custom_prompt: this.customPromptValue,
+        client_id: this.messageBus.clientId,
+      },
+    });
+
+    return this._activeAiRequest;
+  }
+
+  _handleProofreadOption() {
+    this.showAiButtons = false;
+
+    if (this.site.desktopView) {
+      this.showFastEdit = true;
+      return;
+    } else {
+      return this.modal.show(FastEditModal, {
+        model: {
+          initialValue: this.args.data.quoteState.buffer,
+          newValue: this.suggestion,
+          post: this.args.data.post,
+          close: this.closeFastEdit,
+        },
+      });
+    }
   }
 
   @action
@@ -257,86 +315,11 @@ export default class AiPostHelperMenu extends Component {
 
         await this.args.data.post.save({ raw: newRaw });
       } catch (error) {
-        if (isAiCreditLimitError(error)) {
-          popupAiCreditLimitError(error);
-        } else {
-          popupAjaxError(error);
-        }
+        popupAjaxError(error);
       } finally {
         this.isSavingFootnote = false;
         await this.closeMenu();
       }
-    }
-  }
-
-  _showUserCustomPrompts() {
-    return this.currentUser?.can_use_custom_prompts;
-  }
-
-  _sanitizeForFootnote(text) {
-    // Remove line breaks (line-breaks breaks the inline footnote display)
-    text = text.replace(/[\r\n]+/g, " ");
-
-    // Remove headings (headings don't work in inline footnotes)
-    text = text.replace(/^(#+)\s+/gm, "");
-
-    // Trim excess space
-    text = text.trim();
-
-    return sanitize(text);
-  }
-
-  @bind
-  async _updateResult(result) {
-    if (isAiCreditLimitError(result)) {
-      this.loading = false;
-      this.menuState = this.MENU_STATES.options;
-      popupAiCreditLimitError(result);
-      return;
-    }
-
-    this.streaming = !result.done;
-    await this.smoothStreamer.updateResult(result, "result");
-  }
-
-  _handleStreamedResult(option) {
-    this.menuState = this.MENU_STATES.result;
-    const menu = this.menu.getByIdentifier("post-text-selection-toolbar");
-    if (menu) {
-      menu.options.placement = "bottom";
-    }
-    const fetchUrl = `/discourse-ai/ai-helper/stream_suggestion`;
-
-    this._activeAiRequest = ajax(fetchUrl, {
-      method: "POST",
-      data: {
-        location: "post",
-        mode: option.name,
-        text: this.args.data.quoteState.buffer,
-        post_id: this.args.data.quoteState.postId,
-        custom_prompt: this.customPromptValue,
-        client_id: this.messageBus.clientId,
-      },
-    });
-
-    return this._activeAiRequest;
-  }
-
-  _handleProofreadOption() {
-    this.showAiButtons = false;
-
-    if (this.site.desktopView) {
-      this.showFastEdit = true;
-      return;
-    } else {
-      return this.modal.show(FastEditModal, {
-        model: {
-          initialValue: this.args.data.quoteState.buffer,
-          newValue: this.suggestion,
-          post: this.args.data.post,
-          close: this.closeFastEdit,
-        },
-      });
     }
   }
 
@@ -353,8 +336,8 @@ export default class AiPostHelperMenu extends Component {
       <div class="ai-post-helper">
         {{#if (eq this.menuState this.MENU_STATES.options)}}
           <AiHelperOptionsList
-            @customPromptValue={{this.customPromptValue}}
             @options={{this.helperOptions}}
+            @customPromptValue={{this.customPromptValue}}
             @performAction={{this.performAiSuggestion}}
             @shortcutVisible={{false}}
           />
@@ -367,40 +350,40 @@ export default class AiPostHelperMenu extends Component {
           >
             {{#if this.suggestion}}
               <div
-                class={{dConcatClass
+                class={{concatClass
                   (if this.smoothStreamer.isStreaming "streaming")
                   "streamable-content"
                   "ai-post-helper__suggestion__text"
                 }}
                 dir="auto"
               >
-                <DCookText
-                  class="cooked"
+                <CookText
                   @rawText={{this.smoothStreamer.renderedText}}
+                  class="cooked"
                 />
               </div>
               <div class="ai-post-helper__suggestion__buttons">
                 <DButton
-                  class="btn-flat ai-post-helper__suggestion__cancel"
-                  @action={{this.cancelAiAction}}
                   @icon="xmark"
                   @label="discourse_ai.ai_helper.post_options_menu.cancel"
+                  @action={{this.cancelAiAction}}
+                  class="btn-flat ai-post-helper__suggestion__cancel"
                 />
                 <DButton
-                  class="btn-flat ai-post-helper__suggestion__copy"
-                  @action={{this.copySuggestion}}
-                  @disabled={{this.streaming}}
                   @icon={{this.copyButtonIcon}}
                   @label={{this.copyButtonLabel}}
+                  @action={{this.copySuggestion}}
+                  @disabled={{this.streaming}}
+                  class="btn-flat ai-post-helper__suggestion__copy"
                 />
                 {{#if this.allowInsertFootnote}}
                   <DButton
-                    class="btn-flat ai-post-helper__suggestion__insert-footnote"
-                    @action={{this.insertFootnote}}
-                    @disabled={{this.footnoteDisabled}}
                     @icon="asterisk"
-                    @isLoading={{this.isSavingFootnote}}
                     @label="discourse_ai.ai_helper.post_options_menu.insert_footnote"
+                    @action={{this.insertFootnote}}
+                    @isLoading={{this.isSavingFootnote}}
+                    @disabled={{this.footnoteDisabled}}
+                    class="btn-flat ai-post-helper__suggestion__insert-footnote"
                     {{this.showFootnoteTooltip}}
                   />
                 {{/if}}
@@ -416,10 +399,10 @@ export default class AiPostHelperMenu extends Component {
     {{#if this.showFastEdit}}
       <div class="ai-post-helper__fast-edit">
         <FastEdit
-          @close={{this.closeFastEdit}}
           @initialValue={{@data.quoteState.buffer}}
           @newValue={{this.suggestion}}
           @post={{@data.post}}
+          @close={{this.closeFastEdit}}
         />
       </div>
     {{/if}}

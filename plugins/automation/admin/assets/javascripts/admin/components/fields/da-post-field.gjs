@@ -1,14 +1,14 @@
-import DEditor from "discourse/ui-kit/d-editor";
-import PlaceholdersList from "../placeholders-list.gjs";
-import BaseField from "./da-base-field.gjs";
-import DAFieldDescription from "./da-field-description.gjs";
-import DAFieldLabel from "./da-field-label.gjs";
+import DEditor from "discourse/components/d-editor";
+import PlaceholdersList from "../placeholders-list";
+import BaseField from "./da-base-field";
+import DAFieldDescription from "./da-field-description";
+import DAFieldLabel from "./da-field-label";
 
 export default class PostField extends BaseField {
   <template>
     <section class="field post-field">
       <div class="control-group">
-        <DAFieldLabel @field={{@field}} @label={{@label}} />
+        <DAFieldLabel @label={{@label}} @field={{@field}} />
 
         <div class="controls">
           <div class="field-wrapper">
@@ -19,8 +19,8 @@ export default class PostField extends BaseField {
             {{#if this.displayPlaceholders}}
               <PlaceholdersList
                 @currentValue={{@field.metadata.value}}
-                @onCopy={{this.mutValue}}
                 @placeholders={{@placeholders}}
+                @onCopy={{this.mutValue}}
               />
             {{/if}}
           </div>

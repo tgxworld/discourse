@@ -9,11 +9,7 @@ de:
     admin:
       site_settings:
         categories:
-          discourse_openid_connect: "Discourse OpenID Connect"
-      config:
-        login:
-          sub_pages:
-            oidc: "OIDC"
+          discourse_openid_connect: "Discourse – OpenID Connect"
   js:
     login:
       oidc:

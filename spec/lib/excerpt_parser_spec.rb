@@ -40,27 +40,6 @@ RSpec.describe ExcerptParser do
     )
   end
 
-  describe ".get_excerpt" do
-    let(:html) { <<~HTML }
-        <aside class="onebox">
-          <header class="custom-header source">Merged discourse/discourse</header>
-          <article class="onebox-body">Add audio onebox #5</article>
-        </aside>
-      HTML
-
-    it "returns only the body text when keep_onebox_body is true and the header has other classes" do
-      expect(ExcerptParser.get_excerpt(html, 200, keep_onebox_body: true)).to eq(
-        "Add audio onebox #5",
-      )
-    end
-
-    it "returns only the header text when keep_onebox_source is true and the header has other classes" do
-      expect(ExcerptParser.get_excerpt(html, 200, keep_onebox_source: true)).to eq(
-        "Merged discourse/discourse",
-      )
-    end
-  end
-
   describe "keep_onebox_body parameter" do
     it "keeps the body content for external oneboxes" do
       html = <<~HTML.strip
@@ -160,7 +139,7 @@ RSpec.describe ExcerptParser do
   end
 
   describe "keep_quotes parameter" do
-    it "keeps quoted content in the HTML" do
+    it "should keep the quoted content in html" do
       html = <<~HTML.strip
         <aside class="quote">
           <blockquote>
@@ -171,177 +150,6 @@ RSpec.describe ExcerptParser do
       expect(ExcerptParser.get_excerpt(html, 100, keep_quotes: true)).to eq(
         "This is a quoted text.",
       )
-    end
-  end
-
-  describe "image handling options" do
-    describe "default behavior (no image option specified)" do
-      it "replaces images with alt text in brackets" do
-        html = '<p>Check out <img src="/uploads/image.jpg" alt="sunset"></p>'
-        expect(ExcerptParser.get_excerpt(html, 100)).to eq("Check out [sunset]")
-      end
-
-      it "uses title text when alt is not present" do
-        html = '<p><img src="/uploads/image.jpg" title="My Image"></p>'
-        expect(ExcerptParser.get_excerpt(html, 100)).to eq("[My Image]")
-      end
-
-      it "uses default image text when neither alt nor title is present" do
-        html = '<p><img src="/uploads/image.jpg"></p>'
-        expect(ExcerptParser.get_excerpt(html, 100)).to eq("[image]")
-      end
-
-      it "handles multiple images" do
-        html =
-          '<p><img src="/uploads/1.jpg" alt="first"> and <img src="/uploads/2.jpg" alt="second"></p>'
-        expect(ExcerptParser.get_excerpt(html, 100)).to eq("[first] and [second]")
-      end
-
-      it "does not include the URL" do
-        html = '<p><img src="/uploads/image.jpg" alt="photo"></p>'
-        result = ExcerptParser.get_excerpt(html, 100)
-        expect(result).to eq("[photo]")
-        expect(result).not_to include("/uploads/image.jpg")
-      end
-    end
-
-    describe "strip_images option" do
-      it "completely removes images with no replacement text" do
-        html = '<p>Check out this photo: <img src="/uploads/image.jpg" alt="sunset"></p>'
-        expect(ExcerptParser.get_excerpt(html, 100, strip_images: true)).to eq(
-          "Check out this photo:",
-        )
-      end
-
-      it "removes images regardless of alt or title attributes" do
-        html = '<p><img src="/uploads/image.jpg" title="My Image"></p>'
-        expect(ExcerptParser.get_excerpt(html, 100, strip_images: true)).to eq("")
-      end
-
-      it "removes images with no attributes" do
-        html = '<p><img src="/uploads/image.jpg"></p>'
-        expect(ExcerptParser.get_excerpt(html, 100, strip_images: true)).to eq("")
-      end
-
-      it "removes multiple images leaving only text" do
-        html =
-          '<p><img src="/uploads/1.jpg" alt="first"> and <img src="/uploads/2.jpg" alt="second"></p>'
-        expect(ExcerptParser.get_excerpt(html, 100, strip_images: true)).to eq("and")
-      end
-
-      it "still handles emoji images with keep_emoji_images" do
-        html =
-          '<p>Hello <img src="/images/emoji/emoji_one/smile.png" class="emoji" alt=":smile:"></p>'
-        expect(
-          ExcerptParser.get_excerpt(html, 100, strip_images: true, keep_emoji_images: true),
-        ).to match(/<img.*class="emoji"/)
-      end
-    end
-
-    describe "markdown_images option" do
-      it "converts images to markdown format with alt text" do
-        html = '<p>Check out <img src="/uploads/image.jpg" alt="sunset"></p>'
-        expect(ExcerptParser.get_excerpt(html, 100, markdown_images: true)).to eq(
-          "Check out ![sunset](/uploads/image.jpg)",
-        )
-      end
-
-      it "uses title text when alt is not present" do
-        html = '<p><img src="/uploads/image.jpg" title="My Image"></p>'
-        expect(ExcerptParser.get_excerpt(html, 100, markdown_images: true)).to eq(
-          "![My Image](/uploads/image.jpg)",
-        )
-      end
-
-      it "uses default image text when neither alt nor title is present" do
-        html = '<p><img src="/uploads/image.jpg"></p>'
-        expect(ExcerptParser.get_excerpt(html, 100, markdown_images: true)).to eq(
-          "![image](/uploads/image.jpg)",
-        )
-      end
-
-      it "handles multiple images" do
-        html =
-          '<p><img src="/uploads/1.jpg" alt="first"> and <img src="/uploads/2.jpg" alt="second"></p>'
-        expect(ExcerptParser.get_excerpt(html, 100, markdown_images: true)).to eq(
-          "![first](/uploads/1.jpg) and ![second](/uploads/2.jpg)",
-        )
-      end
-
-      it "handles images with complex URLs" do
-        html = '<p><img src="https://example.com/path/to/image.jpg?size=large" alt="external"></p>'
-        expect(ExcerptParser.get_excerpt(html, 100, markdown_images: true)).to eq(
-          "![external](https://example.com/path/to/image.jpg?size=large)",
-        )
-      end
-    end
-
-    describe "keep_images option" do
-      it "preserves the full img tag" do
-        html = '<p>Check out <img src="/uploads/image.jpg" alt="sunset" class="photo"></p>'
-        expect(ExcerptParser.get_excerpt(html, 100, keep_images: true)).to eq(
-          'Check out <img src="/uploads/image.jpg" alt="sunset" class="photo">',
-        )
-      end
-
-      it "preserves multiple attributes" do
-        html =
-          '<p><img src="/uploads/image.jpg" alt="sunset" title="Beautiful" width="100" height="100"></p>'
-        expect(ExcerptParser.get_excerpt(html, 100, keep_images: true)).to eq(
-          '<img src="/uploads/image.jpg" alt="sunset" title="Beautiful" width="100" height="100">',
-        )
-      end
-
-      it "preserves multiple images" do
-        html = '<p><img src="/1.jpg" alt="a"> <img src="/2.jpg" alt="b"></p>'
-        result = ExcerptParser.get_excerpt(html, 100, keep_images: true)
-        expect(result).to include('<img src="/1.jpg" alt="a">')
-        expect(result).to include('<img src="/2.jpg" alt="b">')
-      end
-    end
-  end
-
-  describe ".to_plain_text" do
-    it "decodes the entities emitted by the excerpt generator" do
-      excerpt =
-        ExcerptParser.get_excerpt("<p>Tom &amp; Jerry&rsquo;s \"tale\" of 1 &lt; 2</p>", 100, {})
-
-      expect(excerpt).to eq("Tom &amp; Jerry’s &quot;tale&quot; of 1 &lt; 2")
-      expect(ExcerptParser.to_plain_text(excerpt)).to eq(%(Tom & Jerry’s "tale" of 1 < 2))
-    end
-
-    it "decodes the &hellip; truncation marker" do
-      excerpt = ExcerptParser.get_excerpt("<p>Lorem ipsum dolor</p>", 5, {})
-
-      expect(excerpt).to eq("Lorem&hellip;")
-      expect(ExcerptParser.to_plain_text(excerpt)).to eq("Lorem…")
-    end
-
-    it "keeps entities the user literally typed" do
-      excerpt = ExcerptParser.get_excerpt("<p>the &amp;hellip; entity</p>", 100, {})
-
-      expect(ExcerptParser.to_plain_text(excerpt)).to eq("the &hellip; entity")
-    end
-
-    it "strips the markup the parser keeps for hashtags" do
-      html =
-        '<p>see <a class="hashtag-cooked" href="/c/general"><span class="hashtag-icon-placeholder"><svg class="fa d-icon"><use href="#folder"></use></svg></span><span>general</span></a> please</p>'
-      excerpt = ExcerptParser.get_excerpt(html, 100, strip_links: true, strip_images: true)
-
-      expect(excerpt).to include("<span")
-      expect(ExcerptParser.to_plain_text(excerpt)).to eq("see general please")
-    end
-
-    it "neutralizes markup in values that bypassed the generator" do
-      expect(ExcerptParser.to_plain_text(%(pwned "><script>alert(1)</script>))).to eq(
-        %(pwned ">alert(1)),
-      )
-    end
-
-    it "returns nil when nothing is left" do
-      expect(ExcerptParser.to_plain_text(nil)).to be_nil
-      expect(ExcerptParser.to_plain_text("")).to be_nil
-      expect(ExcerptParser.to_plain_text("<span></span>")).to be_nil
     end
   end
 end

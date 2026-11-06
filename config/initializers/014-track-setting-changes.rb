@@ -1,16 +1,16 @@
 # frozen_string_literal: true
 
+PRIVATE_BOOTSTRAP_MODE_MIN_USERS = 10
+
 DiscourseEvent.on(:site_setting_changed) do |name, old_value, new_value|
   Category.clear_subcategory_ids if name === :max_category_nesting
 
   # Enabling `must_approve_users` on an existing site is odd, so we assume that the
-  # existing users are approved unless they currently have a pending reviewable.
+  # existing users are approved.
   if name == :must_approve_users && new_value == true
     User
       .where(approved: false)
-      .joins(
-        "LEFT JOIN reviewables r ON r.target_id = users.id AND r.target_type = 'User' AND r.status = #{Reviewable.statuses[:pending]}",
-      )
+      .joins("LEFT JOIN reviewables r ON r.target_id = users.id")
       .where(r: { id: nil })
       .update_all(approved: true)
   end
@@ -31,7 +31,21 @@ DiscourseEvent.on(:site_setting_changed) do |name, old_value, new_value|
     end
   end
 
-  Stylesheet::Manager.cache.clear if %i[base_font heading_font default_theme_id].include?(name)
+  # Set bootstrap min users for private sites to a lower default
+  if name == :login_required && SiteSetting.bootstrap_mode_enabled == true
+    if new_value == true &&
+         SiteSetting.bootstrap_mode_min_users == SiteSetting.defaults.get(:bootstrap_mode_min_users)
+      SiteSetting.bootstrap_mode_min_users = PRIVATE_BOOTSTRAP_MODE_MIN_USERS
+    end
+
+    # Set bootstrap min users for public sites back to the default
+    if new_value == false &&
+         SiteSetting.bootstrap_mode_min_users == PRIVATE_BOOTSTRAP_MODE_MIN_USERS
+      SiteSetting.bootstrap_mode_min_users = SiteSetting.defaults.get(:bootstrap_mode_min_users)
+    end
+  end
+
+  Stylesheet::Manager.clear_color_scheme_cache! if %i[base_font heading_font].include?(name)
 
   Report.clear_cache(:storage_stats) if %i[backup_location s3_backup_bucket].include?(name)
 
@@ -39,10 +53,7 @@ DiscourseEvent.on(:site_setting_changed) do |name, old_value, new_value|
     Scheduler::Defer.later("Null topic slug") { Topic.update_all(slug: nil) }
   end
 
-  if name.to_s.include?("_icon") ||
-       %i[icon objects].include?(SiteSetting.type_supervisor.get_type(name))
-    SvgSprite.expire_cache
-  end
+  SvgSprite.expire_cache if name.to_s.include?("_icon")
 
   SiteIconManager.ensure_optimized! if SiteIconManager::WATCHED_SETTINGS.include?(name)
 
@@ -59,50 +70,21 @@ DiscourseEvent.on(:site_setting_changed) do |name, old_value, new_value|
   if %i[title site_description].include?(name)
     topics = SeedData::Topics.with_default_locale
     topics.update(site_setting_names: ["welcome_topic_id"], skip_changed: true)
+  elsif %i[company_name contact_email governing_law city_for_disputes].include?(name)
+    topics = SeedData::Topics.with_default_locale
+    %w[tos_topic_id privacy_topic_id].each do |site_setting|
+      topic_id = SiteSetting.get(site_setting)
+      if topic_id > 0 && Topic.with_deleted.exists?(id: topic_id)
+        if SiteSetting.company_name.blank?
+          topics.delete(site_setting_names: [site_setting], skip_changed: true)
+        else
+          topics.update(site_setting_names: [site_setting], skip_changed: true)
+        end
+      elsif SiteSetting.company_name.present?
+        topics.create(site_setting_names: [site_setting])
+      end
+    end
   end
 
   Theme.expire_site_cache! if name == :default_theme_id
-
-  if name == :splash_screen_image && new_value.present?
-    SiteSetting::SplashScreenImageChanged.call(
-      upload_id: new_value,
-      guardian: Discourse.system_user.guardian,
-    ) do |result|
-      on_model_not_found(:upload) { Rails.logger.error("Upload not found for #{name} change") }
-      on_model_not_found(:svg) do
-        Rails.logger.error("SVG could not be parsed from upload #{new_value} when updating #{name}")
-      end
-      on_success { Rails.logger.info("Successfully updated #{name} SVG") }
-      on_failure { Rails.logger.error("Failed to update #{name} SVG") }
-    end
-  end
-
-  if name == :simple_email_subject
-    SiteSetting::Action::SimpleEmailSubjectToggled.call(enabled: new_value)
-  end
-
-  if name == :content_localization_enabled && new_value == true
-    %i[post_menu post_menu_hidden_items].each do |setting_name|
-      current_items = SiteSetting.get(setting_name).split("|")
-      if current_items.exclude?("addTranslation")
-        edit_index = current_items.index("edit")
-        insert_position = edit_index ? edit_index + 1 : 0
-        current_items.insert(insert_position, "addTranslation")
-        SiteSetting.set(setting_name, current_items.join("|"))
-      end
-    end
-  end
-
-  # Update Discourse ID metadata
-  if SiteSetting.discourse_id_client_id.present? && SiteSetting.discourse_id_client_secret.present?
-    if %i[title logo logo_small site_description].include?(name)
-      Scheduler::Defer.later("Update Discourse ID metadata") do
-        DiscourseId::Register.call(update: true)
-      rescue StandardError => e
-        Rails.logger.error(
-          "Failed to update Discourse ID metadata after #{name} change: #{e.message}",
-        )
-      end
-    end
-  end
 end

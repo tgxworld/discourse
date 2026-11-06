@@ -11,7 +11,6 @@ RSpec.describe BookmarkManager do
 
   describe ".destroy" do
     let!(:bookmark) { Fabricate(:bookmark, user: user, bookmarkable: post) }
-
     it "deletes the existing bookmark" do
       manager.destroy(bookmark.id)
       expect(Bookmark.exists?(id: bookmark.id)).to eq(false)
@@ -28,7 +27,6 @@ RSpec.describe BookmarkManager do
 
     context "if the bookmark is belonging to some other user" do
       let!(:bookmark) { Fabricate(:bookmark, user: Fabricate(:admin), bookmarkable: post) }
-
       it "raises an invalid access error" do
         expect { manager.destroy(bookmark.id) }.to raise_error(Discourse::InvalidAccess)
       end
@@ -91,7 +89,6 @@ RSpec.describe BookmarkManager do
 
     context "if the bookmark is belonging to some other user" do
       let!(:bookmark) { Fabricate(:bookmark, user: Fabricate(:admin), bookmarkable: post) }
-
       it "raises an invalid access error" do
         expect { update_bookmark }.to raise_error(Discourse::InvalidAccess)
       end
@@ -99,7 +96,6 @@ RSpec.describe BookmarkManager do
 
     context "if the bookmark no longer exists" do
       before { bookmark.destroy! }
-
       it "raises a not found error" do
         expect { update_bookmark }.to raise_error(Discourse::NotFound)
       end
@@ -137,7 +133,6 @@ RSpec.describe BookmarkManager do
 
   describe ".send_reminder_notification" do
     let(:bookmark) { Fabricate(:bookmark, user: user) }
-
     it "sets the reminder_last_sent_at" do
       expect(bookmark.reminder_last_sent_at).to eq(nil)
       described_class.send_reminder_notification(bookmark.id)
@@ -153,7 +148,6 @@ RSpec.describe BookmarkManager do
 
     context "when the bookmark does no longer exist" do
       before { bookmark.destroy }
-
       it "does not error, and does not create a notification" do
         described_class.send_reminder_notification(bookmark.id)
         expect(notifications_for_user.any?).to eq(false)
@@ -162,7 +156,6 @@ RSpec.describe BookmarkManager do
 
     context "if the post has been deleted" do
       before { bookmark.bookmarkable.trash! }
-
       it "does not error and does not create a notification" do
         described_class.send_reminder_notification(bookmark.id)
         bookmark.reload
@@ -195,7 +188,6 @@ RSpec.describe BookmarkManager do
 
     context "if the bookmark is belonging to some other user" do
       let!(:bookmark) { Fabricate(:bookmark, user: Fabricate(:admin)) }
-
       it "raises an invalid access error" do
         expect { manager.toggle_pin(bookmark_id: bookmark.id) }.to raise_error(
           Discourse::InvalidAccess,
@@ -205,7 +197,6 @@ RSpec.describe BookmarkManager do
 
     context "if the bookmark no longer exists" do
       before { bookmark.destroy! }
-
       it "raises a not found error" do
         expect { manager.toggle_pin(bookmark_id: bookmark.id) }.to raise_error(Discourse::NotFound)
       end
@@ -398,7 +389,6 @@ RSpec.describe BookmarkManager do
 
     context "when the post is inaccessible for the user" do
       before { post.trash! }
-
       it "raises an invalid access error" do
         expect {
           manager.create_for(bookmarkable_id: post.id, bookmarkable_type: "Post", name: name)
@@ -408,7 +398,6 @@ RSpec.describe BookmarkManager do
 
     context "when the topic is inaccessible for the user" do
       before { post.topic.update(category: Fabricate(:private_category, group: Fabricate(:group))) }
-
       it "raises an invalid access error" do
         expect {
           manager.create_for(bookmarkable_id: post.id, bookmarkable_type: "Post", name: name)

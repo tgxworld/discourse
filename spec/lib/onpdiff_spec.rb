@@ -12,12 +12,10 @@ RSpec.describe ONPDiff do
       )
     end
 
-    it "raises when comparison budget is exceeded" do
-      diff = ONPDiff.new("abcd", "wxyz", comparison_budget_factor: 1, max_comparison_budget: 2)
-
-      expect { diff.diff }.to raise_error(ONPDiff::DiffLimitExceeded)
-      expect(diff.comparison_budget).to eq(2)
-      expect(diff.comparisons_used).to eq(3)
+    it "bails out on large diffs" do
+      a = SecureRandom.alphanumeric(5_000)
+      b = SecureRandom.alphanumeric(5_000)
+      expect(ONPDiff.new(a, b).diff).to eq([])
     end
   end
 

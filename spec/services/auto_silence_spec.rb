@@ -118,16 +118,14 @@ RSpec.describe SpamRule::AutoSilence do
 
         it "sends private message to moderators" do
           SiteSetting.notify_mods_when_user_silenced = true
-          expect { autosilence.silence_user }.to change {
-            Topic.where("subtype = 'system_message' AND title LIKE '%silenced%'").count
-          }.by(1)
+          autosilence.silence_user
+          expect(autosilence.group_message).to be_present
         end
 
         it "doesn't send a pm to moderators if notify_mods_when_user_silenced is false" do
           SiteSetting.notify_mods_when_user_silenced = false
-          expect { autosilence.silence_user }.not_to change {
-            Topic.where("subtype = 'system_message' AND title LIKE '%silenced%'").count
-          }
+          autosilence.silence_user
+          expect(autosilence.group_message).to be_blank
         end
       end
     end
@@ -150,7 +148,7 @@ RSpec.describe SpamRule::AutoSilence do
     let(:post2) { Fabricate(:post, user: user) }
 
     context "with higher trust levels or staff" do
-      it "does not automatically silence any users" do
+      it "should not autosilence any of them" do
         PostActionCreator.spam(flagger, post)
         PostActionCreator.spam(flagger2, post)
 

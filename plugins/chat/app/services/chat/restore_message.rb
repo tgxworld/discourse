@@ -47,10 +47,7 @@ module Chat
     end
 
     def invalid_access(guardian:, message:)
-      (
-        guardian.can_post_in_chatable?(message.chat_channel.chatable) ||
-          guardian.can_moderate_chat?(message.chat_channel.chatable)
-      ) && guardian.can_restore_chat?(message, message.chat_channel.chatable)
+      guardian.can_restore_chat?(message, message.chat_channel.chatable)
     end
 
     def restore_message(message:)

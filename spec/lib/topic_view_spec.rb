@@ -28,144 +28,6 @@ RSpec.describe TopicView do
     end
   end
 
-  describe "#has_localized_content?" do
-    before { SiteSetting.content_localization_enabled = true }
-
-    it "ignores localizations on posts that are not eligible for translation" do
-      localized_topic = Fabricate(:topic, locale: "en")
-      post = Fabricate(:post, topic: localized_topic, locale: nil)
-      Fabricate(:post_localization, post:, locale: "en")
-
-      expect(TopicView.new(localized_topic.id, user).has_localized_content?).to eq(false)
-    end
-
-    it "detects a site-default post localization when default fallback is enabled" do
-      SiteSetting.default_locale = "en"
-      SiteSetting.content_localization_use_default_locale_when_unsupported = true
-      localized_topic = Fabricate(:topic, locale: "de")
-      post = Fabricate(:post, topic: localized_topic, locale: "ja")
-      Fabricate(:post_localization, post:, locale: "en")
-
-      I18n.with_locale(:de) do
-        expect(TopicView.new(localized_topic.id, user).has_localized_content?).to eq(true)
-      end
-    end
-  end
-
-  describe "#reset_post_collection" do
-    fab!(:post1) { Fabricate(:post, topic: topic) }
-    fab!(:post2) { Fabricate(:post, topic: topic) }
-    fab!(:post3) { Fabricate(:post, topic: topic) }
-
-    it "replaces the posts collection" do
-      tv = TopicView.new(topic.id, evil_trout)
-      original_posts = tv.posts.to_a
-
-      new_posts = [post3]
-      tv.reset_post_collection(posts: new_posts)
-
-      expect(tv.posts).to eq(new_posts)
-      expect(tv.posts).not_to eq(original_posts)
-    end
-
-    it "clears memoized state derived from the previous posts" do
-      tv = TopicView.new(topic.id, evil_trout)
-
-      tv.all_post_actions
-      tv.reviewable_counts
-      tv.mentioned_users
-      tv.category_group_moderator_user_ids
-      tv.primary_group_names
-      tv.last_post
-
-      tv.reset_post_collection(posts: [post2])
-
-      expect(tv.all_post_actions).to be_a(Hash)
-      expect(tv.last_post).to eq(post2)
-      expect(tv.mentioned_users).to eq({})
-      expect(tv.primary_group_names).to be_a(Hash)
-    end
-
-    it "allows preload hooks to run on the new posts" do
-      tv = TopicView.new(topic.id, evil_trout)
-      preloaded_post_ids = nil
-      preloader = lambda { |view| preloaded_post_ids = view.posts.map(&:id) }
-
-      TopicView.on_preload(&preloader)
-
-      tv.reset_post_collection(posts: [post2, post3])
-      TopicView.preload(tv)
-
-      expect(preloaded_post_ids).to contain_exactly(post2.id, post3.id)
-    ensure
-      TopicView.cancel_preload(&preloader)
-    end
-
-    it "skips post loading when skip_post_loading is true" do
-      tv = TopicView.new(topic.id, evil_trout, skip_post_loading: true)
-
-      expect(tv.posts).to eq([])
-      expect(tv.filtered_posts.count).to eq(0)
-      expect(tv.topic).to eq(topic)
-
-      tv.reset_post_collection(posts: [post1, post2])
-      expect(tv.posts).to eq([post1, post2])
-    end
-  end
-
-  describe "#reset_post_collection (memoize_for_posts)" do
-    fab!(:post1) { Fabricate(:post, topic: topic) }
-    fab!(:post2) { Fabricate(:post, topic: topic) }
-
-    it "clears all registered post-dependent caches when posts are replaced" do
-      tv = TopicView.new(topic.id, evil_trout)
-
-      # Force memoization of a registered cache
-      tv.all_post_actions
-      expect(tv.instance_variable_defined?(:@all_post_actions)).to eq(true)
-
-      tv.reset_post_collection(posts: [post1])
-
-      expect(tv.instance_variable_defined?(:@all_post_actions)).to eq(false)
-    end
-
-    it "clears caches with custom ivar names" do
-      tv = TopicView.new(topic.id, evil_trout)
-
-      # primary_group_names is registered as `memoize_for_posts :primary_group_names, :@group_names`
-      tv.primary_group_names
-      expect(tv.instance_variable_defined?(:@group_names)).to eq(true)
-
-      tv.reset_post_collection(posts: [post1])
-
-      expect(tv.instance_variable_defined?(:@group_names)).to eq(false)
-    end
-
-    it "allows plugins to register their own post-dependent caches" do
-      original_ivars = TopicView.post_dependent_ivars.dup
-      TopicView.memoize_for_posts(:test_plugin_cache)
-
-      tv = TopicView.new(topic.id, evil_trout)
-      tv.instance_variable_set(:@test_plugin_cache, { some: "data" })
-
-      tv.reset_post_collection(posts: [post1])
-
-      expect(tv.instance_variable_defined?(:@test_plugin_cache)).to eq(false)
-    ensure
-      TopicView.post_dependent_ivars = original_ivars
-    end
-
-    it "replaces @posts with the new collection" do
-      tv = TopicView.new(topic.id, evil_trout)
-
-      tv.reset_post_collection(posts: [post2])
-      expect(tv.posts).to eq([post2])
-
-      tv.reset_post_collection(posts: [post1, post2])
-      expect(tv.posts).to eq([post1, post2])
-    end
-  end
-
   it "raises a not found error if the topic doesn't exist" do
     expect { TopicView.new(1_231_232, evil_trout) }.to raise_error(Discourse::NotFound)
   end
@@ -210,28 +72,19 @@ RSpec.describe TopicView do
     fab!(:p0) { Fabricate(:post, topic: topic) }
     fab!(:p1) { Fabricate(:post, topic: topic, wiki: true) }
 
-    let(:tv) { described_class.new(topic.id, evil_trout, { filter: }) }
-    let(:enabled?) { true }
-    let(:filter) { "wiki" }
+    after { TopicView.custom_filters.clear }
 
-    before do
-      described_class.add_custom_filter("wiki", enabled: method(:enabled?)) do |posts, topic_view|
-        posts.where(wiki: true)
-      end
-    end
+    it "allows to register custom filters" do
+      tv = TopicView.new(topic.id, evil_trout, { filter: "wiki" })
+      expect(tv.filter_posts({ filter: "wiki" })).to eq([p0, p1])
 
-    after { described_class.custom_filters.clear }
+      TopicView.add_custom_filter("wiki") { |posts, topic_view| posts.where(wiki: true) }
 
-    it "applies custom filters" do
-      expect(tv.filter_posts).to contain_exactly(p1)
-    end
+      tv = TopicView.new(topic.id, evil_trout, { filter: "wiki" })
+      expect(tv.filter_posts).to eq([p1])
 
-    context "when the custom filter is disabled" do
-      let(:enabled?) { false }
-
-      it "does not apply the custom filter" do
-        expect(tv.filter_posts).to contain_exactly(p0, p1)
-      end
+      tv = TopicView.new(topic.id, evil_trout, { filter: "whatever" })
+      expect(tv.filter_posts).to eq([p0, p1])
     end
   end
 
@@ -310,7 +163,7 @@ RSpec.describe TopicView do
     fab!(:p2) { Fabricate(:post, topic: topic, user: evil_trout, percent_rank: 0.5) }
     fab!(:p3) { Fabricate(:post, topic: topic, user: first_poster, percent_rank: 0) }
 
-    it "finds the best responses" do
+    it "it can find the best responses" do
       best2 = TopicView.new(topic.id, evil_trout, best: 2)
       expect(best2.posts.count).to eq(2)
       expect(best2.posts[0].id).to eq(p2.id)
@@ -510,7 +363,7 @@ RSpec.describe TopicView do
 
       before { TopicView.stubs(:chunk_size).returns(2) }
 
-      it "returns the next page" do
+      it "should return the next page" do
         expect(TopicView.new(topic.id, user, { post_number: post.post_number }).next_page).to eql(3)
       end
     end
@@ -553,14 +406,6 @@ RSpec.describe TopicView do
       end
     end
 
-    describe ".participant_count" do
-      it "uses the cached participant count on mega topics" do
-        topic.update!(posts_count: TopicView::MEGA_TOPIC_POSTS_COUNT, participant_count: 42)
-
-        expect(topic_view.participant_count).to eq(42)
-      end
-    end
-
     describe ".all_post_actions" do
       it "is blank at first" do
         expect(topic_view.all_post_actions).to be_blank
@@ -589,7 +434,7 @@ RSpec.describe TopicView do
       end
     end
 
-    describe "#bookmarks for regular bookmarks" do
+    describe "#bookmarks" do
       let!(:user) { Fabricate(:user) }
       let!(:bookmark1) do
         Fabricate(:bookmark, bookmarkable: Fabricate(:post, topic: topic), user: user)
@@ -610,7 +455,7 @@ RSpec.describe TopicView do
       end
     end
 
-    describe "#bookmarks for next-business-day reminders" do
+    describe "#bookmarks" do
       let!(:user) { Fabricate(:user) }
       let!(:bookmark1) do
         Fabricate(:bookmark_next_business_day_reminder, bookmarkable: topic.first_post, user: user)
@@ -726,7 +571,7 @@ RSpec.describe TopicView do
     end
 
     describe "contains_gaps?" do
-      it "returns the requested topic view" do
+      it "works" do
         # does not contain contains_gaps with default filtering
         expect(topic_view.contains_gaps?).to eq(false)
         # contains contains_gaps when filtered by username" do
@@ -776,7 +621,7 @@ RSpec.describe TopicView do
       describe "ascending" do
         let(:asc) { true }
 
-        it "returns the expected posts" do
+        it "should return the right posts" do
           topic_view = create_topic_view(p3.post_number)
 
           expect(topic_view.posts).to eq([p5])
@@ -789,7 +634,7 @@ RSpec.describe TopicView do
       describe "descending" do
         let(:asc) { false }
 
-        it "returns the expected posts" do
+        it "should return the right posts" do
           topic_view = create_topic_view(p7.post_number)
 
           expect(topic_view.posts).to eq([p5, p3, p2])
@@ -956,13 +801,11 @@ RSpec.describe TopicView do
     context "with uncategorized topic" do
       context "when topic_page_title_includes_category is false" do
         before { SiteSetting.topic_page_title_includes_category = false }
-
         it { is_expected.to eq(topic.title) }
       end
 
       context "when topic_page_title_includes_category is true" do
         before { SiteSetting.topic_page_title_includes_category = true }
-
         it { is_expected.to eq(topic.title) }
 
         context "with tagged topic" do
@@ -1006,27 +849,6 @@ RSpec.describe TopicView do
       end
     end
 
-    context "with a tagged personal message" do
-      fab!(:pm) { Fabricate(:private_message_topic, user: user) }
-      fab!(:pm_post) { Fabricate(:post, topic: pm) }
-
-      before do
-        SiteSetting.tagging_enabled = true
-        SiteSetting.topic_page_title_includes_category = true
-        pm.tags << tag2
-      end
-
-      it "does not include the tag for participants who cannot tag personal messages" do
-        expect(TopicView.new(pm.id, user).page_title).not_to include(tag2.name)
-      end
-
-      it "includes the tag for participants who can tag personal messages" do
-        SiteSetting.pm_tags_allowed_for_groups = Group::AUTO_GROUPS[:trust_level_0]
-
-        expect(TopicView.new(pm.id, user).page_title).to end_with(tag2.name)
-      end
-    end
-
     context "with categorized topic" do
       let(:category) { Fabricate(:category) }
 
@@ -1034,13 +856,11 @@ RSpec.describe TopicView do
 
       context "when topic_page_title_includes_category is false" do
         before { SiteSetting.topic_page_title_includes_category = false }
-
         it { is_expected.to eq(topic.title) }
       end
 
       context "when topic_page_title_includes_category is true" do
         before { SiteSetting.topic_page_title_includes_category = true }
-
         it { is_expected.to start_with(topic.title) }
         it { is_expected.to end_with(category.name) }
 
@@ -1064,12 +884,12 @@ RSpec.describe TopicView do
     let!(:post2) { Fabricate(:post, topic: topic, user: evil_trout, created_at: 6.hours.ago) }
     let!(:post3) { Fabricate(:post, topic: topic, user: first_poster) }
 
-    it "returns the expected columns" do
+    it "should return the right columns" do
       expect(topic_view.filtered_post_stream).to eq([[post.id, 1], [post2.id, 0], [post3.id, 0]])
     end
 
     describe "for mega topics" do
-      it "returns the expected columns" do
+      it "should return the right columns" do
         stub_const(TopicView, "MEGA_TOPIC_POSTS_COUNT", 2) do
           expect(topic_view.filtered_post_stream).to eq([post.id, post2.id, post3.id])
         end
@@ -1078,7 +898,7 @@ RSpec.describe TopicView do
   end
 
   describe "#filtered_post_id" do
-    it "returns the expected ID" do
+    it "should return the right id" do
       post = Fabricate(:post, topic: topic)
 
       expect(topic_view.filtered_post_id(nil)).to eq(nil)
@@ -1093,7 +913,7 @@ RSpec.describe TopicView do
 
     before { [p1, p2, p3].each_with_index { |post, index| post.update!(sort_order: index + 1) } }
 
-    it "returns the expected ID" do
+    it "should return the right id" do
       expect(topic_view.last_post_id).to eq(p3.id)
     end
   end
@@ -1110,7 +930,7 @@ RSpec.describe TopicView do
       topic_view.topic.reload
     end
 
-    it "returns the expected read time" do
+    it "should return the right read time" do
       SiteSetting.read_time_word_count = 500
       expect(topic_view.read_time).to eq(1)
 
@@ -1165,19 +985,6 @@ RSpec.describe TopicView do
         expect(topic_view_for_post(2).image_url).to eq(nil)
         expect(topic_view_for_post(3).image_url).to end_with(post3_upload.url)
       end
-
-      it "uses the generated OG image only for eligible topics" do
-        SiteSetting.generate_topic_og_image = true
-        og_upload = Fabricate(:image_upload)
-        topic.update_column(:og_image_upload_id, og_upload.id)
-
-        expect(topic_view_for_post(1).image_url).to end_with(og_upload.url)
-
-        private_category = Fabricate(:private_category, group: Fabricate(:group))
-        topic.update_column(:category_id, private_category.id)
-
-        expect(TopicView.new(topic.id, admin, post_number: 1).image_url).to eq(nil)
-      end
     end
   end
 
@@ -1191,21 +998,6 @@ RSpec.describe TopicView do
 
       topic_view = TopicView.new(pm_topic.id, admin)
       expect(topic_view.show_read_indicator?).to be_truthy
-    end
-
-    it "does not show read indicator if current_user cannot see members of the read state group" do
-      user = Fabricate(:user)
-      group =
-        Fabricate(
-          :group,
-          users: [user],
-          publish_read_state: true,
-          members_visibility_level: Group.visibility_levels[:staff],
-        )
-      pm_topic.topic_allowed_groups = [Fabricate.build(:topic_allowed_group, group: group)]
-
-      topic_view = TopicView.new(pm_topic.id, user)
-      expect(topic_view.show_read_indicator?).to be_falsey
     end
 
     it "does not show read indicator if groups do not have read indicator enabled" do
@@ -1364,262 +1156,6 @@ RSpec.describe TopicView do
           &modifier
         )
       end
-    end
-  end
-
-  describe "#localized_oneboxes" do
-    fab!(:reader) { Fabricate(:user, locale: "ja") }
-    fab!(:source_topic, :topic)
-    fab!(:source_post) do
-      Fabricate(:post, topic: source_topic, post_number: 1, locale: "ja", raw: "見てください")
-    end
-
-    fab!(:linked_topic) { Fabricate(:topic, title: "Sun Tzu's strategies", locale: "en") }
-    fab!(:linked_first_post) do
-      Fabricate(
-        :post,
-        topic: linked_topic,
-        post_number: 1,
-        locale: "en",
-        raw: "Subdue the enemy without fighting.",
-      )
-    end
-    fab!(:linked_second_post) do
-      Fabricate(
-        :post,
-        topic: linked_topic,
-        post_number: 2,
-        locale: "en",
-        raw: "Every battle is won before it is fought.",
-      )
-    end
-
-    def link_to(post, **overrides)
-      TopicLink.create!(
-        {
-          topic: source_topic,
-          post: source_post,
-          user: source_post.user,
-          url: post.url,
-          domain: Discourse.current_hostname,
-          internal: true,
-          # onebox cards are extracted as quote links (aside.quote)
-          quote: true,
-          reflection: false,
-          link_topic_id: post.topic_id,
-          link_post_id: post.id,
-        }.merge(overrides),
-      )
-    end
-
-    def localized_oneboxes_for(post, viewer: reader)
-      I18n.with_locale(:ja) { TopicView.new(post.topic_id, viewer).localized_oneboxes[post.id] }
-    end
-
-    before { SiteSetting.content_localization_enabled = true }
-
-    it "returns the translated title and preview for an internal onebox" do
-      Fabricate(:topic_localization, topic: linked_topic, locale: "ja", title: "孫子の兵法")
-      Fabricate(:post_localization, post: linked_first_post, locale: "ja", cooked: "<p>戦わずして勝つ</p>")
-      link_to(linked_first_post)
-
-      entries = localized_oneboxes_for(source_post)
-
-      expect(entries.size).to eq(1)
-      expect(entries.first[:topic_id]).to eq(linked_topic.id)
-      expect(entries.first[:post_number]).to eq(1)
-      expect(entries.first[:title]).to eq("孫子の兵法")
-      expect(entries.first[:excerpt]).to include("戦わずして勝つ")
-    end
-
-    it "produces a sanitized excerpt (no script/event-handler markup)" do
-      Fabricate(:topic_localization, topic: linked_topic, locale: "ja", title: "孫子の兵法")
-      Fabricate(
-        :post_localization,
-        post: linked_first_post,
-        locale: "ja",
-        cooked: "<p>安全な要約<script>alert(1)</script><img src=x onerror=alert(2)></p>",
-      )
-      link_to(linked_first_post)
-
-      excerpt = localized_oneboxes_for(source_post).first[:excerpt]
-
-      expect(excerpt).to include("安全な要約")
-      expect(excerpt).not_to include("<script")
-      expect(excerpt).not_to include("onerror")
-    end
-
-    it "uses the linked post's own translation, not another post's" do
-      Fabricate(:topic_localization, topic: linked_topic, locale: "ja", title: "孫子の兵法")
-      Fabricate(:post_localization, post: linked_first_post, locale: "ja", cooked: "<p>戦わずして勝つ</p>")
-      Fabricate(:post_localization, post: linked_second_post, locale: "ja", cooked: "<p>戦う前に勝つ</p>")
-      link_to(linked_second_post)
-
-      entry = localized_oneboxes_for(source_post).first
-
-      expect(entry[:post_number]).to eq(2)
-      expect(entry[:excerpt]).to include("戦う前に勝つ")
-      expect(entry[:excerpt]).not_to include("戦わずして勝つ")
-    end
-
-    it "localizes a topic-level onebox whose link_post_id was never recorded" do
-      Fabricate(:topic_localization, topic: linked_topic, locale: "ja", title: "孫子の兵法")
-      Fabricate(:post_localization, post: linked_first_post, locale: "ja", cooked: "<p>戦わずして勝つ</p>")
-      link_to(linked_first_post, link_post_id: nil)
-
-      entry = localized_oneboxes_for(source_post).first
-
-      expect(entry[:post_number]).to eq(1)
-      expect(entry[:title]).to eq("孫子の兵法")
-      expect(entry[:excerpt]).to include("戦わずして勝つ")
-    end
-
-    it "prefers the exact locale over a regional variant" do
-      Fabricate(:topic_localization, topic: linked_topic, locale: "ja", title: "正確な日本語タイトル")
-      Fabricate(:topic_localization, topic: linked_topic, locale: "ja_JP", title: "地域別の日本語タイトル")
-      link_to(linked_first_post)
-
-      entry = localized_oneboxes_for(source_post).first
-
-      expect(entry[:title]).to eq("正確な日本語タイトル")
-    end
-
-    it "sends only the title when the linked post has no translation" do
-      Fabricate(:topic_localization, topic: linked_topic, locale: "ja", title: "孫子の兵法")
-      link_to(linked_first_post)
-
-      entry = localized_oneboxes_for(source_post).first
-
-      expect(entry[:title]).to eq("孫子の兵法")
-      expect(entry).not_to have_key(:excerpt)
-    end
-
-    it "returns nothing when there is no translation" do
-      link_to(linked_first_post)
-
-      expect(localized_oneboxes_for(source_post)).to be_blank
-    end
-
-    it "returns nothing when the linked topic is already in the reader's language" do
-      linked_topic.update!(locale: "ja")
-      Fabricate(:topic_localization, topic: linked_topic, locale: "ja", title: "孫子の兵法")
-      link_to(linked_first_post)
-
-      expect(localized_oneboxes_for(source_post)).to be_blank
-    end
-
-    it "returns nothing when content localization is disabled" do
-      SiteSetting.content_localization_enabled = false
-      Fabricate(:topic_localization, topic: linked_topic, locale: "ja", title: "孫子の兵法")
-      link_to(linked_first_post)
-
-      expect(localized_oneboxes_for(source_post)).to be_blank
-    end
-
-    it "skips posts the reader sees translated (their cards are localized at cook time)" do
-      source_post.update!(locale: "en")
-      Fabricate(:post_localization, post: source_post, locale: "ja", raw: "翻訳", cooked: "<p>翻訳</p>")
-      Fabricate(:topic_localization, topic: linked_topic, locale: "ja", title: "孫子の兵法")
-      link_to(linked_first_post)
-
-      expect(localized_oneboxes_for(source_post)).to be_blank
-    end
-
-    it "localizes oneboxes in an untranslated post viewed in a foreign language" do
-      # source post is English with no Japanese translation, so the reader sees
-      # its original cooked — its oneboxes should still be localized.
-      source_post.update!(locale: "en")
-      Fabricate(:topic_localization, topic: linked_topic, locale: "ja", title: "孫子の兵法")
-      Fabricate(:post_localization, post: linked_first_post, locale: "ja", cooked: "<p>戦わずして勝つ</p>")
-      link_to(linked_first_post)
-
-      entry = localized_oneboxes_for(source_post).first
-
-      expect(entry[:title]).to eq("孫子の兵法")
-      expect(entry[:excerpt]).to include("戦わずして勝つ")
-    end
-
-    context "with visibility restrictions" do
-      it "does not expose a topic the reader cannot see" do
-        secured_category = Fabricate(:category)
-        secured_category.set_permissions(staff: :full)
-        secured_category.save!
-        linked_topic.update!(category: secured_category)
-        Fabricate(:topic_localization, topic: linked_topic, locale: "ja", title: "孫子の兵法")
-        link_to(linked_first_post)
-
-        expect(localized_oneboxes_for(source_post)).to be_blank
-      end
-
-      it "does not expose a private message" do
-        pm = Fabricate(:private_message_topic, title: "Secret plans")
-        pm_post = Fabricate(:post, topic: pm, post_number: 1, locale: "en")
-        Fabricate(:topic_localization, topic: pm, locale: "ja", title: "秘密")
-        link_to(pm_post)
-
-        expect(localized_oneboxes_for(source_post)).to be_blank
-      end
-
-      it "does not expose a deleted linked post" do
-        Fabricate(:topic_localization, topic: linked_topic, locale: "ja", title: "孫子の兵法")
-        Fabricate(
-          :post_localization,
-          post: linked_first_post,
-          locale: "ja",
-          cooked: "<p>戦わずして勝つ</p>",
-        )
-        link_to(linked_first_post)
-        linked_first_post.trash!
-
-        expect(localized_oneboxes_for(source_post)).to be_blank
-      end
-
-      it "does not expose a hidden linked post" do
-        Fabricate(:topic_localization, topic: linked_topic, locale: "ja", title: "孫子の兵法")
-        Fabricate(
-          :post_localization,
-          post: linked_first_post,
-          locale: "ja",
-          cooked: "<p>戦わずして勝つ</p>",
-        )
-        link_to(linked_first_post)
-        linked_first_post.update!(hidden: true)
-
-        expect(localized_oneboxes_for(source_post)).to be_blank
-      end
-
-      it "requires anonymous visibility for a cross-category linked topic" do
-        # mirrors Oneboxer.local_topic: a card to a different category is only
-        # baked when anonymous can see it, so we must not emit swap data for a
-        # staff-only topic even to a staff reader.
-        secured_category = Fabricate(:category)
-        secured_category.set_permissions(staff: :full)
-        secured_category.save!
-        linked_topic.update!(category: secured_category)
-        Fabricate(:topic_localization, topic: linked_topic, locale: "ja", title: "孫子の兵法")
-        link_to(linked_first_post)
-
-        admin = Fabricate(:admin, locale: "ja")
-        expect(localized_oneboxes_for(source_post, viewer: admin)).to be_blank
-      end
-    end
-
-    it "localizes an internal onebox link regardless of the quote flag" do
-      Fabricate(:topic_localization, topic: linked_topic, locale: "ja", title: "孫子の兵法")
-      Fabricate(:post_localization, post: linked_first_post, locale: "ja", cooked: "<p>戦わずして勝つ</p>")
-      link_to(linked_first_post, quote: false)
-
-      entry = localized_oneboxes_for(source_post).first
-
-      expect(entry[:title]).to eq("孫子の兵法")
-      expect(entry[:excerpt]).to include("戦わずして勝つ")
-    end
-
-    it "ignores inbound reflection links" do
-      Fabricate(:topic_localization, topic: linked_topic, locale: "ja", title: "孫子の兵法")
-      link_to(linked_first_post, reflection: true)
-
-      expect(localized_oneboxes_for(source_post)).to be_blank
     end
   end
 end

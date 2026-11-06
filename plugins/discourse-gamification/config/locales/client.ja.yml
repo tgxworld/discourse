@@ -32,8 +32,6 @@ ja:
         cta: "最初のリーダーボードを作成しよう"
         none: "リーダーボードはまだ作成されていません。"
         confirm_destroy: "このリーダーボードを削除してもよろしいですか？"
-        section:
-          groups: "グループ"
         date:
           range: "開始日/終了日の範囲"
           from: "開始日"
@@ -48,9 +46,6 @@ ja:
         default_period: "デフォルトの期間"
         default_period_help: "このリーダーボードに表示するデフォルトの期間を設定します。"
         period_filter_disabled: "期間フィルタを無効化"
-        weight:
-          post_created: "投稿を作成"
-          solution: "解決策"
         period:
           all_time: "全期間"
           yearly: "年間"
@@ -64,7 +59,9 @@ ja:
       close: "閉じる"
       delete: "削除"
       edit: "編集"
+      back: "戻る"
       save: "保存"
+      apply: "適用"
       recalculate: "スコアを再計算"
       recalculating: "スコアを再計算中..."
       completed: "完了！スコアが正常に再計算されました。"
@@ -82,11 +79,4 @@ ja:
       admin:
         title: "ゲーミフィケーション"
         name: "名前"
-        created_by: "作成者"
         period: "期間"
-    discourse_workflows:
-      gamification_score:
-        username: "ユーザー"
-        date: "日付"
-        description: "説明"
-        category_id: "カテゴリ"

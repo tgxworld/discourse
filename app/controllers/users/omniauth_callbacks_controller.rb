@@ -14,7 +14,6 @@ class Users::OmniauthCallbacksController < ApplicationController
 
   # These are usually GET requests but some providers use POST requests
   allow_in_staff_writes_only_mode :complete
-  allow_when_archived :complete
 
   def confirm_request
     self.class.find_authenticator(params[:provider])
@@ -40,17 +39,15 @@ class Users::OmniauthCallbacksController < ApplicationController
 
     preferred_origin = request.env["omniauth.origin"]
 
-    session.delete(:destination_url) # Clean up old values. TODO: Remove after March 2026
-    if server_session[:destination_url].present?
-      preferred_origin = server_session[:destination_url]
+    if session[:destination_url].present?
+      preferred_origin = session[:destination_url]
+      session.delete(:destination_url)
     elsif SiteSetting.enable_discourse_connect_provider && payload = cookies.delete(:sso_payload)
       preferred_origin = session_sso_provider_url + "?" + payload
     elsif cookies[:destination_url].present?
       preferred_origin = cookies[:destination_url]
+      cookies.delete(:destination_url)
     end
-
-    server_session.delete(:destination_url)
-    cookies.delete(:destination_url)
 
     if preferred_origin.present?
       parsed =
@@ -106,7 +103,7 @@ class Users::OmniauthCallbacksController < ApplicationController
     true
   end
 
-  ALLOWED_FAILURE_ERRORS = %w[csrf_detected request_error invalid_iat unauthorized].index_by { it }
+  ALLOWED_FAILURE_ERRORS = %w[csrf_detected request_error invalid_iat].to_h { [_1, _1] }
 
   def failure
     error_name = params[:message].to_s.gsub(/[^\w-]/, "").presence
@@ -114,7 +111,7 @@ class Users::OmniauthCallbacksController < ApplicationController
 
     if error == "generic"
       provider_name = params[:provider].presence || params[:strategy].presence
-      provider = Discourse.enabled_authenticators.find { it.name == provider_name }&.display_name
+      provider = Discourse.enabled_authenticators.find { _1.name == provider_name }&.display_name
 
       if provider.blank? && Discourse.enabled_authenticators.one?
         provider = Discourse.enabled_authenticators[0].display_name
@@ -123,7 +120,7 @@ class Users::OmniauthCallbacksController < ApplicationController
       error = provider.present? ? "generic_with_provider" : "generic_without_provider"
     end
 
-    flash[:error] = I18n.t("login.omniauth_error.#{error}", provider:)
+    flash[:error] = I18n.t("login.omniauth_error.#{error}", provider:).html_safe
 
     render "failure"
   end
@@ -141,7 +138,7 @@ class Users::OmniauthCallbacksController < ApplicationController
   protected
 
   def render_auth_result_failure
-    flash[:error] = PrettyText.sanitize(@auth_result.failed_reason).html_safe
+    flash[:error] = @auth_result.failed_reason.html_safe
     render "failure"
   end
 
@@ -151,7 +148,7 @@ class Users::OmniauthCallbacksController < ApplicationController
     elsif invite_required?
       @auth_result.requires_invite = true
     else
-      server_session[:authentication] = @auth_result.session_data
+      session[:authentication] = @auth_result.session_data
     end
   end
 
@@ -159,8 +156,8 @@ class Users::OmniauthCallbacksController < ApplicationController
     if SiteSetting.invite_only?
       path = Discourse.route_for(@origin)
       return true unless path
-      return true if path[:controller] != "invites" || path[:action] != "show"
-      !Invite.find_by(invite_key: path[:id])&.redeemable?
+      return true if path[:controller] != "invites" && path[:action] != "show"
+      !Invite.exists?(invite_key: path[:id])
     end
   end
 
@@ -207,9 +204,9 @@ class Users::OmniauthCallbacksController < ApplicationController
         return
       end
 
-      log_on_user(user, { authenticated_with_oauth: true }, replay_anonymous_action: true)
+      log_on_user(user, { authenticated_with_oauth: true })
       Invite.invalidate_for_email(user.email) # invite link can't be used to log in anymore
-      server_session.delete(:authentication) # don't carry around old auth info
+      session[:authentication] = nil # don't carry around old auth info, perhaps move elsewhere
       @auth_result.authenticated = true
     else
       if SiteSetting.must_approve_users? && !user.approved?
@@ -223,7 +220,7 @@ class Users::OmniauthCallbacksController < ApplicationController
   def persist_auth_token(auth)
     secret = SecureRandom.hex
     key = Users::AssociateAccountsController.key(secret)
-    server_session.set(key, auth.to_json, expires: 10.minutes)
+    secure_session.set key, auth.to_json, expires: 10.minutes
     "#{Discourse.base_path}/associate/#{secret}"
   end
 end

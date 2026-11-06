@@ -1,21 +1,17 @@
 import { setOwner } from "@ember/owner";
 import { service } from "@ember/service";
 import EmojiPickerDetached from "discourse/components/emoji-picker/detached";
-import GifsModal from "discourse/components/modal/gifs";
 import { bind } from "discourse/lib/decorators";
-import EmbedMode from "discourse/lib/embed-mode";
 import { number } from "discourse/lib/formatter";
+import { getOwnerWithFallback } from "discourse/lib/get-owner";
 import { replaceIcon } from "discourse/lib/icon-library";
 import { withPluginApi } from "discourse/lib/plugin-api";
 import { i18n } from "discourse-i18n";
 import { clearChatComposerButtons } from "discourse/plugins/chat/discourse/lib/chat-composer-buttons";
-import { buildGifPickHandler } from "discourse/plugins/chat/discourse/lib/gif-pick-handler";
-import groupChatTranscripts from "discourse/plugins/chat/discourse/lib/group-chat-transcripts";
 import ChannelHashtagType from "discourse/plugins/chat/discourse/lib/hashtag-types/channel";
-import richEditorExtension from "../../lib/rich-editor-extension.js";
-import ChatHeaderIcon from "../components/chat/header/icon.gjs";
-import StartChattingStep from "../components/chat/onboarding/start-chatting-step.gjs";
-import chatStyleguide from "../components/styleguide/organisms/chat.gjs";
+import richEditorExtension from "../../lib/rich-editor-extension";
+import ChatHeaderIcon from "../components/chat/header/icon";
+import chatStyleguide from "../components/styleguide/organisms/chat";
 
 let _lastForcedRefreshAt;
 const MIN_REFRESH_DURATION_MS = 180000; // 3 minutes
@@ -26,7 +22,9 @@ class ChatSetupInit {
   @service router;
   @service("chat") chatService;
   @service chatHistory;
+  @service site;
   @service siteSettings;
+  @service currentUser;
   @service appEvents;
 
   constructor(owner) {
@@ -34,37 +32,6 @@ class ChatSetupInit {
     this.appEvents.on("discourse:focus-changed", this, "_handleFocusChanged");
 
     withPluginApi((api) => {
-      api.addUserNavSidebarLink("preferences", {
-        name: "preferences-chat",
-        route: "preferences.chat",
-        label: "chat.title_capitalized",
-        icon: "d-chat",
-        displayed: ({ siteSettings, currentUser, user }) =>
-          siteSettings.chat_enabled && (user?.can_chat || currentUser?.admin),
-      });
-
-      api.registerReviewableComponent(
-        "ReviewableChatMessage",
-        async () =>
-          (await import("../components/reviewable/chat-message.gjs")).default
-      );
-
-      api.registerValueTransformer(
-        "admin-onboarding-banner-location",
-        ({ value, context }) =>
-          context.homepage === "chat" ? "chat_channel" : value
-      );
-
-      api.registerValueTransformer(
-        "admin-onboarding-steps",
-        ({ value, context }) =>
-          context.homepage === "chat"
-            ? value.map((Step) =>
-                Step.name === "start_posting" ? StartChattingStep : Step
-              )
-            : value
-      );
-
       api.addAboutPageActivity("chat_messages", (periods) => {
         const count = periods["7_days"];
         if (count) {
@@ -80,49 +47,7 @@ class ChatSetupInit {
         }
       });
 
-      // transcripts are post content, so they're decorated even for users who
-      // can't chat, anons included
-      api.decorateCookedElement((elem) => {
-        const currentUser = owner.lookup("service:current-user");
-        const currentUserTimezone = currentUser?.user_option?.timezone;
-        const chatTranscriptElements =
-          elem.querySelectorAll(".chat-transcript");
-
-        chatTranscriptElements.forEach((el) => {
-          const dateTimeRaw = el.dataset["datetime"];
-          const dateTimeEl = el.querySelector(
-            ".chat-transcript-datetime a, .chat-transcript-datetime span"
-          );
-
-          if (currentUserTimezone) {
-            dateTimeEl.innerText = moment
-              .tz(dateTimeRaw, currentUserTimezone)
-              .format(i18n("dates.long_no_year"));
-          } else {
-            dateTimeEl.innerText = moment(dateTimeRaw).format(
-              i18n("dates.long_no_year")
-            );
-          }
-
-          dateTimeEl.dataset.dateFormatted = true;
-        });
-
-        groupChatTranscripts(elem, {
-          site: owner.lookup("service:site"),
-          chatChannelsManager: owner.lookup("service:chat-channels-manager"),
-        });
-      });
-
       if (!this.chatService.userCanChat) {
-        // include chat elements for anons (except header icon)
-        if (
-          this.chatService.anonymousUserCanViewPublicChat &&
-          !EmbedMode.enabled
-        ) {
-          document.body.classList.add("chat-enabled");
-          api.addCardClickListenerSelector(".chat-drawer-outlet");
-        }
-
         return;
       }
 
@@ -142,7 +67,9 @@ class ChatSetupInit {
           class: "chat-emoji-btn",
           icon: "face-smile",
           position: "dropdown",
-          displayed: () => owner.lookup("service:site").mobileView,
+          get displayed() {
+            return owner.lookup("service:site").mobileView;
+          },
           action(context) {
             const didSelectEmoji = (emoji) => {
               const composer = owner.lookup(`service:chat-${context}-composer`);
@@ -172,36 +99,11 @@ class ChatSetupInit {
         label: "chat.upload",
         position: "dropdown",
         action: "uploadClicked",
-        synchronous: true,
         dependentKeys: ["canAttachUploads"],
         displayed() {
           return this.canAttachUploads;
         },
       });
-
-      if (this.siteSettings.enable_gifs) {
-        api.registerChatComposerButton({
-          id: "gifs",
-          label: "gifs.composer_title",
-          icon: "gif",
-          position: "dropdown",
-          action(context) {
-            const modal = owner.lookup("service:modal");
-            const currentUser = owner.lookup("service:current-user");
-
-            modal.show(GifsModal, {
-              model: {
-                customPickHandler: buildGifPickHandler({
-                  api,
-                  draft: this.draft,
-                  isThread: context === "thread",
-                  currentUser,
-                }),
-              },
-            });
-          },
-        });
-      }
 
       if (this.siteSettings.discourse_local_dates_enabled) {
         api.registerChatComposerButton({
@@ -216,7 +118,37 @@ class ChatSetupInit {
         });
       }
 
-      if (!this.chatService.userCanChat || EmbedMode.enabled) {
+      // we want to decorate the chat quote dates regardless
+      // of whether the current user has chat enabled
+      api.decorateCookedElement((elem) => {
+        const currentUser = getOwnerWithFallback(this).lookup(
+          "service:current-user"
+        );
+        const currentUserTimezone = currentUser?.user_option?.timezone;
+        const chatTranscriptElements =
+          elem.querySelectorAll(".chat-transcript");
+
+        chatTranscriptElements.forEach((el) => {
+          const dateTimeRaw = el.dataset["datetime"];
+          const dateTimeEl = el.querySelector(
+            ".chat-transcript-datetime a, .chat-transcript-datetime span"
+          );
+
+          if (currentUserTimezone) {
+            dateTimeEl.innerText = moment
+              .tz(dateTimeRaw, currentUserTimezone)
+              .format(i18n("dates.long_no_year"));
+          } else {
+            dateTimeEl.innerText = moment(dateTimeRaw).format(
+              i18n("dates.long_no_year")
+            );
+          }
+
+          dateTimeEl.dataset.dateFormatted = true;
+        });
+      });
+
+      if (!this.chatService.userCanChat) {
         return;
       }
 

@@ -1,20 +1,20 @@
 # frozen_string_literal: true
 
 class ThemeSettingsManager
-  attr_reader :name, :theme, :default, :opts
+  attr_reader :name, :theme, :default
 
   def self.types
     ThemeSetting.types
   end
 
   def self.cast_row_value(row)
-    type_name = types.invert[row.data_type].downcase.capitalize
+    type_name = self.types.invert[row.data_type].downcase.capitalize
     klass = "ThemeSettingsManager::#{type_name}".constantize
     klass.cast(klass.extract_value_from_row(row))
   end
 
   def self.create(name, default, type, theme, opts = {})
-    type_name = types.invert[type].downcase.capitalize
+    type_name = self.types.invert[type].downcase.capitalize
     klass = "ThemeSettingsManager::#{type_name}".constantize
     klass.new(name, default, theme, opts)
   end
@@ -36,15 +36,7 @@ class ThemeSettingsManager
   end
 
   def value
-    configured_value
-  end
-
-  def default_value
-    default
-  end
-
-  def value_for_editing
-    value
+    has_record? ? db_record.value : default
   end
 
   def type_name
@@ -61,10 +53,6 @@ class ThemeSettingsManager
 
   def requests_refresh?
     @opts[:refresh]
-  end
-
-  def disallowed_groups
-    @opts[:disallowed_groups]
   end
 
   def value=(new_value)
@@ -113,11 +101,5 @@ class ThemeSettingsManager
   def has_max?
     max = @opts[:max]
     (max.is_a?(::Integer) || max.is_a?(::Float)) && max != ::Float::INFINITY
-  end
-
-  protected
-
-  def configured_value
-    has_record? ? db_record.value : default
   end
 end

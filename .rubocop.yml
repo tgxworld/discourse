@@ -1,21 +1,11 @@
 inherit_gem:
   rubocop-discourse: stree-compat.yml
 
-inherit_mode:
-  merge:
-    - Exclude
-
-Layout/EmptyLineBetweenDefs:
-  Enabled: true
-
 # Still work to do in ensuring we don't link old files
 Discourse/NoAddReferenceOrAliasesActiveRecordMigration:
   Enabled: false
 
 Discourse/NoResetColumnInformationInMigrations:
-  Enabled: true
-
-Discourse/NoIterationOverRSpecDefinitions:
   Enabled: true
 
 Discourse/Plugins/CallRequiresPlugin:
@@ -42,11 +32,6 @@ Discourse/Plugins/NoMonkeyPatching:
   Include:
     - "plugins/**/*"
 
-Discourse/NoChdir:
-  Exclude:
-    - script/ci/test_selection_lab/run.rb
-    - script/ci/test_selection_lab/shared_state.rb
-
 Lint/Debugger:
   Exclude:
     - script/**/*
@@ -58,42 +43,3 @@ RSpec/InstanceVariable:
   Enabled: true
   Include:
     - spec/models/**/*
-
-Style/AccessModifierDeclarations:
-  Enabled: true
-  AllowModifiersOnSymbols: false
-
-Style/RedundantFreeze:
-  Enabled: true
-
-Style/RedundantConditional:
-  Enabled: true
-
-Lint/DuplicateMagicComment:
-  Enabled: true
-
-Lint/IdentityComparison:
-  Enabled: true
-
-Lint/SymbolConversion:
-  Enabled: true
-
-Style/RedundantParentheses:
-  Enabled: true
-
-Style/RedundantBegin:
-  Enabled: true
-
-Rails/FilePath:
-  Enabled: true
-
-Rails/IndexBy:
-  Exclude:
-    - script/ci/**/*.rb
-
-Style/InvertibleUnlessCondition:
-  Exclude:
-    - script/ci/**/*.rb
-
-Style/RedundantSelf:
-  Enabled: true

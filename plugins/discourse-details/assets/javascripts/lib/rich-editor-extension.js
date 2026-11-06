@@ -2,6 +2,7 @@
 const extension = {
   nodeSpec: {
     details: {
+      allowGapCursor: true,
       attrs: { open: { default: true } },
       content: "summary block+",
       group: "block",
@@ -20,7 +21,9 @@ const extension = {
   parse: {
     bbcode_open(state, token) {
       if (token.tag === "details") {
-        state.openNode(state.schema.nodes.details);
+        state.openNode(state.schema.nodes.details, {
+          open: token.attrGet("open") !== null,
+        });
         return true;
       }
 
@@ -41,7 +44,7 @@ const extension = {
       state.renderContent(node);
       state.write("[/details]\n\n");
     },
-    summary(state, node) {
+    summary(state, node, parent) {
       let hasSummary = false;
       // If the [details] tag has no summary.
       if (node.content.childCount === 0) {
@@ -55,7 +58,7 @@ const extension = {
             state.text(child.text.replace(/"/g, "“"), state.inAutolink)
         );
       }
-      let finalState = "]\n";
+      let finalState = `${parent.attrs.open ? " open" : ""}]\n`;
       if (hasSummary) {
         finalState = `"${finalState}`;
       }

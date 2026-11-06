@@ -13,7 +13,7 @@ class RobotsTxtController < ApplicationController
   DISALLOWED_PATHS = %w[
     /admin/
     /auth/
-    /assets/js/browser-update*.js
+    /assets/browser-update*.js
     /email/
     /session
     /user-api-key

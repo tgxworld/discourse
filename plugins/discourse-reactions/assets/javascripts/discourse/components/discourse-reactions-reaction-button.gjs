@@ -4,9 +4,8 @@ import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
 import { isBlank } from "@ember/utils";
-import { isExistingIconId } from "discourse/lib/icon-library";
+import icon from "discourse/helpers/d-icon";
 import { emojiUrlFor } from "discourse/lib/text";
-import DButton from "discourse/ui-kit/d-button";
 import { i18n } from "discourse-i18n";
 
 export default class ReactionsReactionButton extends Component {
@@ -15,37 +14,49 @@ export default class ReactionsReactionButton extends Component {
   @service site;
   @service currentUser;
 
-  get likedIcon() {
-    const icon = this.siteSettings.discourse_reactions_like_icon;
-    // Map "heart" to the d-liked alias to follow core replacement pattern
-    if (icon === "heart") {
-      return "d-liked";
-    }
+  @action
+  click() {
+    this.args.cancelCollapse();
 
-    return icon;
+    const currentUserReaction = this.args.post.current_user_reaction;
+    if (!this.capabilities.touch || !this.site.mobileView) {
+      this.args.toggleFromButton({
+        reaction: currentUserReaction
+          ? currentUserReaction.id
+          : this.siteSettings.discourse_reactions_reaction_for_like,
+      });
+    }
   }
 
-  get unlikedIcon() {
-    const icon = this.siteSettings.discourse_reactions_like_icon;
-    // Map "heart" to the d-unliked alias to follow core replacement pattern
-    if (icon === "heart") {
-      return "d-unliked";
+  @action
+  pointerOver(event) {
+    if (event.pointerType !== "mouse") {
+      return;
     }
 
-    // Not all icons have a far- version, so we need to check if it exists.
-    if (isExistingIconId(`far-${icon}`)) {
-      return `far-${icon}`;
+    this.args.cancelCollapse();
+
+    const likeAction = this.args.post.likeAction;
+    const currentUserReaction = this.args.post.current_user_reaction;
+    if (
+      currentUserReaction &&
+      !currentUserReaction.can_undo &&
+      (!likeAction || isBlank(likeAction.can_undo))
+    ) {
+      return;
     }
 
-    return icon;
+    this.args.toggleReactions(event);
   }
 
-  // Without emoji rendering, any reaction is shown as a like.
-  get showLikedIcon() {
-    return (
-      this.args.post.current_user_used_main_reaction ||
-      (this.args.post.current_user_reaction && !this.siteSettings.enable_emoji)
-    );
+  @action
+  pointerOut(event) {
+    if (event.pointerType !== "mouse") {
+      return;
+    }
+
+    this.args.cancelExpand();
+    this.args.scheduleCollapse("collapseReactionsPicker");
   }
 
   get title() {
@@ -94,97 +105,45 @@ export default class ReactionsReactionButton extends Component {
     return options ? i18n(title, options) : i18n(title);
   }
 
-  @action
-  click() {
-    this.args.cancelCollapse();
-
-    const currentUserReaction = this.args.post.current_user_reaction;
-    if (!this.capabilities.touch || this.site.desktopView) {
-      this.args.toggleFromButton({
-        reaction: currentUserReaction
-          ? currentUserReaction.id
-          : this.siteSettings.discourse_reactions_reaction_for_like,
-      });
-    }
-  }
-
-  @action
-  pointerOver(event) {
-    if (event.pointerType !== "mouse") {
-      return;
-    }
-
-    this.args.cancelCollapse();
-
-    // Anonymous users haven't authenticated yet — they can still pick a
-    // reaction, it gets deferred until login. Archived topics reject
-    // reactions server-side; closed topics still accept them.
-    if (!this.currentUser) {
-      if (this.args.post.topic?.archived) {
-        return;
-      }
-      this.args.toggleReactions(event);
-      return;
-    }
-
-    const likeAction = this.args.post.likeAction;
-    if (!likeAction?.canToggle) {
-      return;
-    }
-
-    const currentUserReaction = this.args.post.current_user_reaction;
-    if (
-      currentUserReaction &&
-      !currentUserReaction.can_undo &&
-      isBlank(likeAction.can_undo)
-    ) {
-      return;
-    }
-
-    this.args.toggleReactions(event);
-  }
-
-  @action
-  pointerOut(event) {
-    if (event.pointerType !== "mouse") {
-      return;
-    }
-
-    this.args.scheduleCollapse("collapseReactionsPicker");
-  }
-
   <template>
-    {{! eslint-disable ember/template-no-invalid-interactive }}
+    {{! template-lint-disable no-invalid-interactive }}
     <div
       class="discourse-reactions-reaction-button"
-      title={{this.title}}
       {{on "click" this.click}}
       {{on "pointerover" this.pointerOver}}
       {{on "pointerout" this.pointerOut}}
+      title={{this.title}}
     >
-      {{#if this.showLikedIcon}}
-        <DButton
-          class="btn-toggle-reaction-like btn-flat btn-icon no-text reaction-button"
-          @icon={{this.likedIcon}}
-          @translatedTitle={{this.title}}
-        />
+      {{#if @post.current_user_used_main_reaction}}
+        <button
+          type="button"
+          class="btn-toggle-reaction-like btn-icon no-text reaction-button"
+          title={{this.title}}
+        >
+          {{icon this.siteSettings.discourse_reactions_like_icon}}
+        </button>
       {{else if @post.current_user_reaction}}
-        <DButton
-          class="btn-icon no-text btn-flat reaction-button"
-          @translatedTitle={{this.title}}
+        <button
+          type="button"
+          class="btn-icon no-text reaction-button"
+          title={{this.title}}
         >
           <img
-            alt={{concat ":" @post.current_user_reaction.id}}
             class="btn-toggle-reaction-emoji reaction-button"
             src={{emojiUrlFor @post.current_user_reaction.id}}
+            alt={{concat ":" @post.current_user_reaction.id}}
           />
-        </DButton>
+        </button>
       {{else}}
-        <DButton
-          class="btn-toggle-reaction-like btn-flat btn-icon no-text reaction-button"
-          @icon={{this.unlikedIcon}}
-          @translatedTitle={{this.title}}
-        />
+        <button
+          type="button"
+          class="btn-toggle-reaction-like btn-icon no-text reaction-button"
+          title={{this.title}}
+        >
+          {{icon
+            (concat "far-" this.siteSettings.discourse_reactions_like_icon)
+          }}
+        </button>
       {{/if}}
     </div>
   </template>

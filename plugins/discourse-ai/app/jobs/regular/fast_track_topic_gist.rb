@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Jobs
+module ::Jobs
   class FastTrackTopicGist < ::Jobs::Base
     sidekiq_options retry: false
 
@@ -12,14 +12,9 @@ module Jobs
       topic = Topic.find_by(id: args[:topic_id])
       return if topic.blank?
 
-      summarizer = DiscourseAi::Summarization.topic_gist(topic, locale: args[:locale])
-      return if summarizer.blank?
-
+      summarizer = DiscourseAi::Summarization.topic_gist(topic)
       gist = summarizer.existing_summary
-
-      unless args[:force_regenerate]
-        return if gist.present? && (!gist.outdated || gist.created_at >= 5.minutes.ago)
-      end
+      return if gist.present? && (!gist.outdated || gist.created_at >= 5.minutes.ago)
 
       summarizer.summarize(Discourse.system_user)
     end

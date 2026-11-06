@@ -56,16 +56,18 @@ module PostStreamSerializerMixin
 
   def posts
     @posts ||=
-      (object.posts || []).map do |post|
-        post.topic = object.topic
+      begin
+        (object.posts || []).map do |post|
+          post.topic = object.topic
 
-        serializer = PostSerializer.new(post, scope: scope, root: false)
-        serializer.add_raw = true if @options[:include_raw]
-        serializer.topic_view = object
+          serializer = PostSerializer.new(post, scope: scope, root: false)
+          serializer.add_raw = true if @options[:include_raw]
+          serializer.topic_view = object
 
-        serializer.notice_created_by_users = post_notice_created_by_users if scope.is_staff?
+          serializer.notice_created_by_users = post_notice_created_by_users if scope.is_staff?
 
-        serializer.as_json
+          serializer.as_json
+        end
       end
   end
 

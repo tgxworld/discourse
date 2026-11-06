@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 class AddFilterLinkToSidebar < ActiveRecord::Migration[7.0]
   def up
-    return if Migration::Helpers.new_site?
-
     # Find the community section
     community_section_id = execute(<<~SQL).first&.fetch("id")
       SELECT id FROM sidebar_sections WHERE section_type = 0 LIMIT 1

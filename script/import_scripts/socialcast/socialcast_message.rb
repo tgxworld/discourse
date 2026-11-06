@@ -3,7 +3,7 @@
 require "json"
 require "cgi"
 require "time"
-require_relative "create_title"
+require_relative "create_title.rb"
 
 class SocialcastMessage
   DEFAULT_CATEGORY = "Socialcast Import"

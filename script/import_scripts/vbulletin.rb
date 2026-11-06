@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "mysql2"
-require_relative "base"
+require File.expand_path(File.dirname(__FILE__) + "/base.rb")
 require "htmlentities"
 begin
   require "php_serialize" # https://github.com/jqr/php-serialize
@@ -186,22 +186,24 @@ class ImportScripts::VBulletin < ImportScripts::Base
     puts "", "Creating groups membership..."
 
     Group.find_each do |group|
-      next if group.automatic
-      puts "\t#{group.name}"
-      next if GroupUser.where(group_id: group.id).count > 0
-      user_ids_in_group = User.where(primary_group_id: group.id).pluck(:id).to_a
-      next if user_ids_in_group.size == 0
-      values =
-        user_ids_in_group
-          .map { |user_id| "(#{group.id}, #{user_id}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)" }
-          .join(",")
+      begin
+        next if group.automatic
+        puts "\t#{group.name}"
+        next if GroupUser.where(group_id: group.id).count > 0
+        user_ids_in_group = User.where(primary_group_id: group.id).pluck(:id).to_a
+        next if user_ids_in_group.size == 0
+        values =
+          user_ids_in_group
+            .map { |user_id| "(#{group.id}, #{user_id}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)" }
+            .join(",")
 
-      DB.exec <<~SQL
+        DB.exec <<~SQL
           INSERT INTO group_users (group_id, user_id, created_at, updated_at) VALUES #{values}
         SQL
-    rescue Exception => e
-      puts e.message
-      puts e.backtrace.join("\n")
+      rescue Exception => e
+        puts e.message
+        puts e.backtrace.join("\n")
+      end
     end
 
     Group.reset_all_counters!
@@ -736,16 +738,18 @@ class ImportScripts::VBulletin < ImportScripts::Base
     max = Post.count
 
     Post.find_each do |post|
-      old_raw = post.raw.dup
-      new_raw = postprocess_post_raw(post.raw)
-      if new_raw != old_raw
-        post.raw = new_raw
-        post.save
+      begin
+        old_raw = post.raw.dup
+        new_raw = postprocess_post_raw(post.raw)
+        if new_raw != old_raw
+          post.raw = new_raw
+          post.save
+        end
+      rescue PrettyText::JavaScriptError
+        nil
+      ensure
+        print_status(current += 1, max)
       end
-    rescue PrettyText::JavaScriptError
-      nil
-    ensure
-      print_status(current += 1, max)
     end
   end
 

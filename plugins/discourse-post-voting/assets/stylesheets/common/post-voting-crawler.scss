@@ -5,32 +5,29 @@ body > noscript {
   }
 
   .post-voting-comments {
-    padding-top: var(--space-4);
+    padding-top: 15px;
 
-    &__comment {
+    .post-voting-comment-row {
+      display: flex;
       border-top: 1px solid var(--primary-low);
-      padding: var(--space-1) 0;
-    }
+      padding: 5px 0 5px 0;
 
-    &__comment-cooked p,
-    &__comment-creator {
-      display: inline;
-    }
+      .post-voting-comment-cooked p,
+      .post-voting-comment-creator {
+        display: inline;
+      }
 
-    &__separator {
-      display: inline;
-      margin: 0 var(--space-1);
-    }
-
-    &__comment-time {
-      margin-left: var(--space-1);
+      .post-voting-comment-info-separator {
+        display: inline;
+        margin: 0 0.3em;
+      }
     }
   }
 
   .post-voting-answer-count {
-    padding-top: var(--space-5);
+    padding-top: 20px;
 
-    &__value {
+    .post-voting-answer-count-span {
       display: none;
     }
   }

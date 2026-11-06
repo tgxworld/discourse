@@ -1,7 +1,7 @@
 import { cached, tracked } from "@glimmer/tracking";
 import { setOwner } from "@ember/owner";
-import { trackedMap, trackedObject } from "@ember/reactive/collections";
 import { service } from "@ember/service";
+import { TrackedMap, TrackedObject } from "@ember-compat/tracked-built-ins";
 import Promise from "rsvp";
 import ChatThread from "discourse/plugins/chat/discourse/models/chat-thread";
 
@@ -14,14 +14,19 @@ import ChatThread from "discourse/plugins/chat/discourse/models/chat-thread";
 */
 
 export default class ChatThreadsManager {
+  @service chatTrackingStateManager;
   @service chatChannelsManager;
   @service chatApi;
 
-  @tracked _cached = trackedObject();
-  @tracked _unreadThreadOverview = trackedMap();
+  @tracked _cached = new TrackedObject();
+  @tracked _unreadThreadOverview = new TrackedMap();
 
   constructor(owner) {
     setOwner(this, owner);
+  }
+
+  get unreadThreadCount() {
+    return this.unreadThreadOverview.size;
   }
 
   get unreadThreadOverview() {
@@ -38,20 +43,16 @@ export default class ChatThreadsManager {
     }
   }
 
-  get unreadThreadCount() {
-    return this.unreadThreadOverview.size;
-  }
-
-  @cached
-  get threads() {
-    return Object.values(this._cached);
-  }
-
   markThreadUnread(threadId, lastReplyCreatedAt) {
     this.unreadThreadOverview.set(
       parseInt(threadId, 10),
       new Date(lastReplyCreatedAt)
     );
+  }
+
+  @cached
+  get threads() {
+    return Object.values(this._cached);
   }
 
   async find(channelId, threadId, options = { fetchIfNotFound: true }) {
@@ -60,7 +61,7 @@ export default class ChatThreadsManager {
     if (existingThread) {
       return Promise.resolve(existingThread);
     } else if (options.fetchIfNotFound) {
-      return await this.#fetchFromServer(channelId, threadId);
+      return this.#fetchFromServer(channelId, threadId);
     } else {
       return Promise.resolve();
     }

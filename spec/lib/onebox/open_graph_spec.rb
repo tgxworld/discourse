@@ -3,29 +3,26 @@
 require "onebox/open_graph"
 
 RSpec.describe Onebox::OpenGraph do
-  describe "Normalization" do
-    subject(:graph) { described_class.new(doc) }
-
-    let(:doc) do
+  it "excludes html tags in title" do
+    doc =
       Nokogiri.HTML(
-        '<html><title>Did&#8217; you &lt;b&gt;miss me&lt;/b&gt;? - Album on Imgur</title><meta name="og:description" content="Post with 7 votes and 151 views. Shared by vinothkannans. Did you &lt;b&gt;miss me&lt;/b&gt;?" /><meta property="og:image" content="http://test.com/test\'ing.mp3" /><meta name="og:author" content="Batman &amp; Robin" /></html>',
+        '<html><title>Did&#8217; you &lt;b&gt;miss me&lt;/b&gt;? - Album on Imgur</title><meta name="og:description" content="Post with 7 votes and 151 views. Shared by vinothkannans. Did you &lt;b&gt;miss me&lt;/b&gt;?" /><meta property="og:image" content="https://i.imgur.com/j1CNCZY.gif?noredirect" /></html>',
       )
-    end
+    og = described_class.new(doc)
+    expect(og.title).to eq("Did’ you miss me? - Album on Imgur")
+    expect(og.description).to eq(
+      "Post with 7 votes and 151 views. Shared by vinothkannans. Did you miss me?",
+    )
+    expect(og.image).to eq("https://i.imgur.com/j1CNCZY.gif?noredirect")
+  end
 
-    it "excludes html tags" do
-      expect(graph).to have_attributes(
-        title: "Did’ you miss me? - Album on Imgur",
-        description: "Post with 7 votes and 151 views. Shared by vinothkannans. Did you miss me?",
+  it "correctly normalizes the url properties" do
+    doc =
+      Nokogiri.HTML(
+        "<html><meta property=\"og:image\" content=\"http://test.com/test'ing.mp3\" /></html>",
       )
-    end
-
-    it "correctly normalizes the url properties" do
-      expect(graph.image).to eq("http://test.com/test&apos;ing.mp3")
-    end
-
-    it "normalizes ampersands properly" do
-      expect(graph.author).to eq("Batman & Robin")
-    end
+    og = described_class.new(doc)
+    expect(og.image).to eq("http://test.com/test&apos;ing.mp3")
   end
 
   describe "Collections" do

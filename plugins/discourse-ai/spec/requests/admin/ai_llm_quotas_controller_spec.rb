@@ -34,7 +34,6 @@ RSpec.describe DiscourseAi::Admin::AiLlmQuotasController do
           llm_model_id: llm_model.id,
           max_tokens: 1000,
           max_usages: 100,
-          max_cost: "1.25",
           duration_seconds: 1.day.to_i,
         },
       }
@@ -49,9 +48,6 @@ RSpec.describe DiscourseAi::Admin::AiLlmQuotasController do
       quota = LlmQuota.last
       expect(quota.group_id).to eq(group.id)
       expect(quota.max_tokens).to eq(1000)
-      expect(quota.max_cost).to eq(BigDecimal("1.25"))
-      serialized_quota = response.parsed_body["llm_quota"] || response.parsed_body
-      expect(serialized_quota["max_cost"]).to eq("1.25")
     end
 
     it "fails with invalid params" do
@@ -73,13 +69,11 @@ RSpec.describe DiscourseAi::Admin::AiLlmQuotasController do
           params: {
             quota: {
               max_tokens: 2000,
-              max_cost: "2.50",
             },
           }
 
       expect(response.status).to eq(200)
       expect(quota.reload.max_tokens).to eq(2000)
-      expect(quota.max_cost).to eq(BigDecimal("2.5"))
     end
 
     it "fails with invalid params" do

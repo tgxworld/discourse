@@ -6,45 +6,26 @@ class ThemeSetting < ActiveRecord::Base
   has_many :upload_references, as: :target, dependent: :destroy
 
   TYPES_ENUM =
-    Enum.new(
-      integer: 0,
-      float: 1,
-      string: 2,
-      bool: 3,
-      list: 4,
-      enum: 5,
-      upload: 6,
-      objects: 7,
-      icon: 8,
-    )
+    Enum.new(integer: 0, float: 1, string: 2, bool: 3, list: 4, enum: 5, upload: 6, objects: 7)
 
   MAXIMUM_JSON_VALUE_SIZE_BYTES = 0.5 * 1024 * 1024 # 0.5 MB
 
-  validates :name, :theme, presence: true
+  validates_presence_of :name, :theme
   validates :data_type, inclusion: { in: TYPES_ENUM.values }
-  validate :json_value_size, if: -> { data_type == TYPES_ENUM[:objects] }
+  validate :json_value_size, if: -> { self.data_type == TYPES_ENUM[:objects] }
   validates :name, length: { maximum: 255 }
 
-  after_destroy :clear_settings_cache
   after_save :clear_settings_cache
+  after_destroy :clear_settings_cache
 
   after_save do
-    if data_type == ThemeSetting.types[:upload] && saved_change_to_value?
-      UploadReference.ensure_exist!(upload_ids: [value], target: self)
-    elsif data_type == ThemeSetting.types[:objects] && saved_change_to_json_value? &&
-          json_value.present?
-      upload_ids =
-        SchemaSettingsObjectValidator.upload_ids(
-          schema: theme.settings[name.to_sym].schema,
-          objects: json_value,
-        )
-
-      UploadReference.ensure_exist!(upload_ids: upload_ids, target: self)
+    if self.data_type == ThemeSetting.types[:upload] && saved_change_to_value?
+      UploadReference.ensure_exist!(upload_ids: [self.value], target: self)
     end
 
     if theme.theme_modifier_set.refresh_theme_setting_modifiers(
-         target_setting_name: name,
-         target_setting_value: value,
+         target_setting_name: self.name,
+         target_setting_value: self.value,
        )
       theme.theme_modifier_set.save!
     end
@@ -92,11 +73,11 @@ end
 # Table name: theme_settings
 #
 #  id         :bigint           not null, primary key
-#  data_type  :integer          not null
-#  json_value :jsonb
 #  name       :string(255)      not null
+#  data_type  :integer          not null
 #  value      :text
+#  theme_id   :integer          not null
 #  created_at :datetime         not null
 #  updated_at :datetime         not null
-#  theme_id   :integer          not null
+#  json_value :jsonb
 #

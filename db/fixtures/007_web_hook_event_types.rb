@@ -91,11 +91,6 @@ WebHookEventType.seed do |b|
   b.group = WebHookEventType.groups[:user]
 end
 WebHookEventType.seed do |b|
-  b.id = WebHookEventType::TYPES[:user_anonymized]
-  b.name = "user_anonymized"
-  b.group = WebHookEventType.groups[:user]
-end
-WebHookEventType.seed do |b|
   b.id = WebHookEventType::TYPES[:group_created]
   b.name = "group_created"
   b.group = WebHookEventType.groups[:group]
@@ -234,19 +229,4 @@ WebHookEventType.seed do |b|
   b.id = WebHookEventType::TYPES[:chat_message_restored]
   b.name = "chat_message_restored"
   b.group = WebHookEventType.groups[:chat]
-end
-WebHookEventType.seed do |b|
-  b.id = WebHookEventType::TYPES[:calendar_event_created]
-  b.name = "calendar_event_created"
-  b.group = WebHookEventType.groups[:calendar]
-end
-WebHookEventType.seed do |b|
-  b.id = WebHookEventType::TYPES[:calendar_event_updated]
-  b.name = "calendar_event_updated"
-  b.group = WebHookEventType.groups[:calendar]
-end
-WebHookEventType.seed do |b|
-  b.id = WebHookEventType::TYPES[:calendar_event_destroyed]
-  b.name = "calendar_event_destroyed"
-  b.group = WebHookEventType.groups[:calendar]
 end

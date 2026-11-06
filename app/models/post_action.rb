@@ -37,23 +37,6 @@ class PostAction < ActiveRecord::Base
     user_actions
   end
 
-  def self.ignored_user_like_counts_for(posts, user)
-    return {} if posts.blank? || user.blank?
-
-    ignored_ids = user.ignored_user_ids
-    return {} if ignored_ids.empty?
-
-    PostAction
-      .where(
-        post_id: posts.map(&:id),
-        user_id: ignored_ids,
-        post_action_type_id: PostActionType::LIKE_POST_ACTION_ID,
-        deleted_at: nil,
-      )
-      .group(:post_id)
-      .count
-  end
-
   def self.lookup_for(user, topics, post_action_type_id)
     return if topics.blank?
     # in critical path 2x faster than AR
@@ -119,7 +102,7 @@ class PostAction < ActiveRecord::Base
     message_key << "_and_deleted" if delete_post
 
     I18n.with_locale(SiteSetting.default_locale) do
-      related_post.topic.add_moderator_post(moderator, I18n.t(message_key), bump: true)
+      related_post.topic.add_moderator_post(moderator, I18n.t(message_key))
     end
 
     # archive message for moderators
@@ -226,14 +209,26 @@ class PostAction < ActiveRecord::Base
   def update_counters
     # Update denormalized counts
     column = "#{post_action_type_key}_count"
+    count = PostAction.where(post_id: post_id).where(post_action_type_id: post_action_type_id).count
 
     # We probably want to refactor this method to something cleaner.
     case post_action_type_key
     when :like
-      Post.recalculate_like_counts!([post_id])
+      # 'like_score' is weighted higher for staff accounts
+      score =
+        PostAction
+          .joins(:user)
+          .where(post_id: post_id)
+          .sum(
+            "CASE WHEN users.moderator OR users.admin THEN #{SiteSetting.staff_like_weight} ELSE 1 END",
+          )
+      Post.where(id: post_id).update_all [
+                     "like_count = :count, like_score = :score",
+                     count: count,
+                     score: score,
+                   ]
     else
       if ActiveRecord::Base.connection.column_exists?(:posts, column)
-        count = PostAction.where(post_id:, post_action_type_id:).count
         Post.where(id: post_id).update_all ["#{column} = ?", count]
       end
     end
@@ -249,7 +244,7 @@ class PostAction < ActiveRecord::Base
       )
     end
 
-    Topic.recalculate_like_counts!([topic_id]) if column == "like_count"
+    Topic.find_by(id: topic_id)&.update_action_counts if column == "like_count"
   end
 end
 
@@ -258,22 +253,22 @@ end
 # Table name: post_actions
 #
 #  id                  :integer          not null, primary key
-#  agreed_at           :datetime
-#  deferred_at         :datetime
+#  post_id             :integer          not null
+#  user_id             :integer          not null
+#  post_action_type_id :integer          not null
 #  deleted_at          :datetime
-#  disagreed_at        :datetime
-#  staff_took_action   :boolean          default(FALSE), not null
-#  targets_topic       :boolean          default(FALSE), not null
 #  created_at          :datetime         not null
 #  updated_at          :datetime         not null
-#  agreed_by_id        :integer
-#  deferred_by_id      :integer
 #  deleted_by_id       :integer
-#  disagreed_by_id     :integer
-#  post_action_type_id :integer          not null
-#  post_id             :integer          not null
 #  related_post_id     :integer
-#  user_id             :integer          not null
+#  staff_took_action   :boolean          default(FALSE), not null
+#  deferred_by_id      :integer
+#  targets_topic       :boolean          default(FALSE), not null
+#  agreed_at           :datetime
+#  agreed_by_id        :integer
+#  deferred_at         :datetime
+#  disagreed_at        :datetime
+#  disagreed_by_id     :integer
 #
 # Indexes
 #

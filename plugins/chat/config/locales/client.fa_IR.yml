@@ -44,12 +44,6 @@ fa_IR:
           one: "%{formatted_number} پیام چت"
           other: "%{formatted_number} پیام چت"
     chat:
-      edit_category:
-        tab_title: "گفتگو"
-        channel: "کانال"
-        description: "توضیح"
-        actions: "عملیات"
-        settings: "تنظیم"
       text_copied: متن در کلیپ بورد کپی شد
       link_copied: پیوند در کلیپ بورد کپی شد
       back_to_forum: "انجمن"
@@ -64,9 +58,6 @@ fa_IR:
       cancel: "انصراف"
       cancel_reply: "لغو پاسخ"
       chat_channels: "کانال‌ها"
-      pinned_bar:
-        title: "سنجاق شده"
-      pinned: "سنجاق شده"
       browse_all_channels: "مرور همه کانال‌ها"
       see_in: "ببینید در"
       move_to_channel:
@@ -90,7 +81,6 @@ fa_IR:
         join_channel: "پیوستن به کانال"
         leave_channel: "ترک کانال"
         leave_groupchat_info: "با ترک این چت گروهی، دیگر به آن دسترسی نخواهید داشت و اعلان های مربوط به آن را دریافت نخواهید کرد. برای پیوستن مجدد، باید دوباره توسط یکی از اعضای چت گروهی دعوت شوید."
-        notification_settings_context: "اعلان‌ها"
         join: "عضو شدن"
         leave: "ترک کردن"
         save_label:
@@ -115,6 +105,7 @@ fa_IR:
         process_started: "روند حذف کانال شروع شده است. این پنجره به زودی بسته می شود، دیگر کانال حذف شده را در هیچ کجا نخواهید دید."
       channels_list_popup:
         browse: "مرور کانال‌ها"
+        create: "کانال جدید"
       close: "بستن"
       remove: "پاک کردن"
       collapse: "جمع کردن کشو چت"
@@ -129,11 +120,14 @@ fa_IR:
       muted: "خاموش"
       joined: "ملحق شده"
       empty_state:
+        direct_message_cta: "شروع گفتگوی شخصی"
+        direct_message: "شما همچنین می‌توانید یک گفتگو شخصی را با یک یا چند کاربر شروع کنید."
         title: "هیچ کانالی پیدا نشد"
         my_threads: "شما هنوز هیچ موضوعی ندارید. موضوعاتی که در آنها شرکت می کنید در اینجا نمایش داده می شوند."
       email_frequency:
         description: "فقط در صورتی که در ۱۵ دقیقه گذشته شما را ندیده باشیم به شما ایمیل ارسال می کنیم."
         never: "هرگز"
+        title: "آگاه‌سازی‌های ایمیل"
         when_away: "فقط وقتی نیستم"
       header_indicator_preference:
         title: "نمایش نشانگر فعالیت در سربرگ"
@@ -141,6 +135,12 @@ fa_IR:
         dm_and_mentions: "پیام‌های مستقیم، منشن‌ها و موضوعات تماشا شده"
         only_mentions: "فقط منشن‌ها"
         never: "هرگز"
+      send_shortcut:
+        enter:
+          label: "ارسال با Enter"
+          description: "خط جدید با Shift + Enter"
+        meta_enter:
+          description: "خط جدید توسط Enter"
       enable: "فعال کردن گفتگو"
       flag: "پرچم"
       emoji: "درج ایموجی"
@@ -170,6 +170,7 @@ fa_IR:
       retry_staged_message:
         title: "خطای شبکه"
         action: "دوباره بفرستم؟"
+      unreliable_network: "شبکه پایدار نیست، ارسال پیام‌ها و ذخیره پیش‌نویس ممکن است کار نکند"
       bookmark_message: "نشانک"
       bookmark_message_edit: "ویرایش نشانک"
       restore: "بازگرداندن پیام حذف شده"
@@ -185,6 +186,8 @@ fa_IR:
         title: "صدای آگاه‌سازی گفتگوی دسکتاپ"
       sounds:
         none: "هیچ کدام"
+        bell: "زنگ"
+        ding: "دینگ"
       title: "گفتگو"
       title_capitalized: "گفتگو"
       upload: "پیوست کردن یک پرونده"
@@ -192,6 +195,7 @@ fa_IR:
         one: "%{count} پرونده"
         other: "%{count} پرونده"
       you_flagged: "شما این پیام را پرچم گذاری کردید"
+      exit: "بازگشت"
       channel_status:
         read_only: "فقط خواندنی"
         archived: "بایگانی شد"
@@ -207,13 +211,9 @@ fa_IR:
         filter_closed: بسته
         filter_archived: بایگانی شد
         filter_input_placeholder: کانال را با نام جستجو کنید
-        filter_joined_all: "همه"
-        filter_joined_joined: "ملحق شده"
       chat_message_separator:
         today: امروز
         yesterday: دیروز
-      search_view:
-        filter_placeholder: جستجوی پیام‌ها
       members_view:
         filter_placeholder: جستجوی اعضا
       about_view:
@@ -228,7 +228,6 @@ fa_IR:
         tabs:
           members: اعضاء
           settings: تنظیمات
-          search: جستجو
         remove_member: "پاک کردن"
       new_message_modal:
         filter: "فیلتر"
@@ -251,14 +250,12 @@ fa_IR:
         memberships_count:
           one: "%{count} عضو"
           other: "%{count} عضو"
-        preview_card:
-          log_in: "ورود"
       create_channel:
         choose_category:
           label: "انتخاب دسته‌بندی"
           none: "یکی را انتخاب کنید..."
         create: "ایجاد کانال"
-        description: "توضیح"
+        description: "توضیحات «اختیاری»"
         name: "نام کانال"
         title: "کانال جدید"
         type: "نوع"
@@ -267,7 +264,6 @@ fa_IR:
           topic: "موضوعات"
       reviewable:
         type: "پیام گفتگو"
-        message_in_channel: "کانال"
       composer:
         italic_text: "متن تاکید شده"
         bold_text: "نوشته‌ی ضخیم "
@@ -300,20 +296,10 @@ fa_IR:
         members_label: "اعضاء"
       admin:
         title: "گفتگو"
-      search:
-        short_title: جستجو
-        no_results: "چیزی یافت نشد"
-        sort:
-          relevance: "ارتباطات"
-          latest: "آخرین"
       direct_messages:
+        new: "ایجاد گفتگوی شخصی"
         create: "برو"
         cannot_create: "با عرض پوزش، شما نمی‌توانید پیام مستقیم ارسال کنید."
-      channel_list:
-        options:
-          filter: "فیلتر"
-        filter:
-          mentions: "اشاره‌ها"
       incoming_webhooks:
         back: "بازگشت"
         channel_placeholder: "یک کانال را انتخاب کنید"
@@ -410,6 +396,7 @@ fa_IR:
         title: "گفتگو"
         keyboard_shortcuts:
           switch_channel_arrows: "%{shortcut} تغییر کانال"
+          drawer_open: "%{shortcut} باز کردن کِشوی گفتگو"
           drawer_close: "%{shortcut} بستن کِشوی گفتگو"
     topic_statuses:
       chat:
@@ -435,21 +422,3 @@ fa_IR:
       panels:
         chat:
           label: "گفتگو"
-    discourse_workflows:
-      chat_message_created:
-        channel_id: "کانال"
-      send_chat_message:
-        targets:
-          channel: "کانال"
-        channel_id: "کانال"
-        message: "پیام"
-        actor_username: "فرستنده"
-      chat_approval:
-        message: "پیام"
-        buttons: "دکمه‌ها"
-        value: "مقدار"
-        style_default: "پیش‌فرض"
-        style_primary: "اصلی"
-        style_success: "موفقیت"
-        icon: "آیکن"
-        channel_id: "کانال"

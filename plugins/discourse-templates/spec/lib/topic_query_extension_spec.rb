@@ -11,9 +11,9 @@ describe DiscourseTemplates::TopicQueryExtension do
   end
 
   describe "list_category_templates" do
-    fab!(:other_category, :category_with_definition)
+    fab!(:other_category) { Fabricate(:category_with_definition) }
     fab!(:other_topics) { Fabricate.times(5, :topic, category: other_category) }
-    fab!(:discourse_templates_category, :category_with_definition)
+    fab!(:discourse_templates_category) { Fabricate(:category_with_definition) }
     fab!(:templates) do
       Fabricate.times(100, :template_item, category: discourse_templates_category)
     end
@@ -111,8 +111,8 @@ describe DiscourseTemplates::TopicQueryExtension do
   end
 
   describe "list_private_templates" do
-    fab!(:user_a, :user)
-    fab!(:user_b, :user)
+    fab!(:user_a) { Fabricate(:user) }
+    fab!(:user_b) { Fabricate(:user) }
     fab!(:group) do
       group = Fabricate(:group)
       Fabricate(:group_user, group: group, user: user)
@@ -186,9 +186,9 @@ describe DiscourseTemplates::TopicQueryExtension do
       expect(topics.size).to eq(0)
     end
 
-    it "does not list received private messages as templates" do
+    it "won't list private messages received as templates" do
       topics = topic_query.list_private_templates.topics
-      expect((topics.map(&:id) & private_messages_from_user_a.map(&:id)).any?).to eq(false)
+      expect(((topics.map(&:id) & private_messages_from_user_a.map(&:id)).any?)).to eq(false)
     end
   end
 end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "Edit Category Form Templates" do
+describe "Edit Category Form Templates", type: :system do
   fab!(:color_scheme)
   fab!(:theme)
   fab!(:admin)
@@ -12,47 +12,49 @@ describe "Edit Category Form Templates" do
   let(:category_page) { PageObjects::Pages::Category.new }
 
   before do
-    SiteSetting.enable_form_templates = true
+    SiteSetting.experimental_form_templates = true
     sign_in(admin)
   end
 
   describe "when editing a category with no form templates set" do
     before { category.update(form_template_ids: []) }
 
-    it "disables form templates and enables the topic template" do
+    it "should have form templates disabled and topic template enabled" do
       category_page.visit_edit_template(category)
       expect(category_page).not_to have_form_template_enabled
       expect(category_page).to have_d_editor
     end
 
-    it "allows selecting and saving one form template" do
+    it "should allow you to select and save a form template" do
       category_page.visit_edit_template(category)
       category_page.toggle_form_templates
       expect(category_page).to have_no_d_editor
       category_page.select_form_template(form_template.name)
       expect(category_page).to have_selected_template(form_template.name)
       category_page.save_settings
-
-      expect(Category.find_by_id(category.id).form_template_ids).to eq([form_template.id])
+      try_until_success do
+        expect(Category.find_by_id(category.id).form_template_ids).to eq([form_template.id])
+      end
     end
 
-    it "allows selecting and saving multiple form templates" do
+    it "should allow you to select and save multiple form templates" do
       category_page.visit_edit_template(category)
       category_page.toggle_form_templates
       category_page.select_form_template(form_template.name)
       category_page.select_form_template(form_template_2.name)
       category_page.save_settings
-
-      expect(Category.find_by_id(category.id).form_template_ids).to eq(
-        [form_template.id, form_template_2.id],
-      )
+      try_until_success do
+        expect(Category.find_by_id(category.id).form_template_ids).to eq(
+          [form_template.id, form_template_2.id],
+        )
+      end
     end
   end
 
   describe "when editing a category with form templates set" do
     before { category.update(form_template_ids: [form_template.id, form_template_2.id]) }
 
-    it "enables form templates and shows the selected templates" do
+    it "should have form templates enabled and showing the selected templates" do
       category_page.visit_edit_template(category)
       expect(category_page).to have_form_template_enabled
       expect(category_page).to have_no_d_editor

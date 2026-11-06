@@ -1,12 +1,11 @@
 # frozen_string_literal: true
 
-describe "Creating Invites" do
+describe "Creating Invites", type: :system do
   fab!(:group)
   fab!(:user) { Fabricate(:user, groups: [group]) }
   fab!(:topic) { Fabricate(:post).topic }
   fab!(:invite) { Fabricate(:invite, invited_by: user, email: "test@example.com") } # avoid empty state
   let(:user_invited_pending_page) { PageObjects::Pages::UserInvitedPending.new }
-  let(:group_page) { PageObjects::Pages::Group.new }
   let(:create_invite_modal) { PageObjects::Modals::CreateInvite.new }
   let(:cdp) { PageObjects::CDP.new }
 
@@ -14,17 +13,11 @@ describe "Creating Invites" do
     find(".user-invite-buttons .btn", match: :first).click
   end
 
-  def visit_invites_page_and_open_modal
-    user_invited_pending_page.visit(user)
-    open_invite_modal
-  end
-
   def display_advanced_options
     create_invite_modal.edit_options_link.click
   end
 
   before do
-    SiteSetting.enable_invite_modal_with_roles = false
     SiteSetting.invite_allowed_groups = "#{group.id}"
     SiteSetting.invite_link_max_redemptions_limit_users = 7
     SiteSetting.invite_link_max_redemptions_limit = 63
@@ -32,8 +25,12 @@ describe "Creating Invites" do
     sign_in(user)
   end
 
+  before do
+    user_invited_pending_page.visit(user)
+    open_invite_modal
+  end
+
   it "is possible to create an invite link without toggling the advanced options" do
-    visit_invites_page_and_open_modal
     cdp.allow_clipboard
 
     create_invite_modal.save_button.click
@@ -58,19 +55,15 @@ describe "Creating Invites" do
       max_redemption_count: 7,
     )
     expect(user_invited_pending_page.latest_invite.expiry_date).to be_within(2.minutes).of(
-      3.days.from_now,
+      Time.zone.now + 3.days,
     )
   end
 
   it "has the correct modal title when creating a new invite" do
-    visit_invites_page_and_open_modal
-
     expect(create_invite_modal.header).to have_text(I18n.t("js.user.invited.invite.new_title"))
   end
 
   it "hides the modal footer after creating an invite via simple mode" do
-    visit_invites_page_and_open_modal
-
     expect(create_invite_modal).to have_footer
     create_invite_modal.save_button.click
     expect(create_invite_modal).to have_no_footer
@@ -78,11 +71,10 @@ describe "Creating Invites" do
 
   context "when editing an invite" do
     before do
-      visit_invites_page_and_open_modal
       create_invite_modal.save_button.click
       create_invite_modal.close
 
-      expect(user_invited_pending_page.invites_list.size).to eq(2)
+      try_until_success { expect(user_invited_pending_page.invites_list.size).to eq(2) }
 
       user_invited_pending_page.latest_invite.edit_button.click
     end
@@ -98,10 +90,7 @@ describe "Creating Invites" do
   end
 
   context "with the advanced options" do
-    before do
-      visit_invites_page_and_open_modal
-      display_advanced_options
-    end
+    before { display_advanced_options }
 
     it "is possible to populate all the fields" do
       user.update!(admin: true)
@@ -137,7 +126,7 @@ describe "Creating Invites" do
       expect(user_invited_pending_page.latest_invite).to have_group(group)
       expect(user_invited_pending_page.latest_invite).to have_topic(topic)
       expect(user_invited_pending_page.latest_invite.expiry_date).to be_within(2.minutes).of(
-        Time.find_zone(user.user_option.timezone).now + 90.days,
+        Time.zone.now + 90.days,
       )
     end
 
@@ -178,7 +167,7 @@ describe "Creating Invites" do
       expect(user_invited_pending_page.latest_invite).to have_group(another_group)
       expect(user_invited_pending_page.latest_invite).to have_topic(topic)
       expect(user_invited_pending_page.latest_invite.expiry_date).to be_within(2.minutes).of(
-        1.day.from_now,
+        Time.zone.now + 1.day,
       )
       sent_email = ActionMailer::Base.deliveries.first
       expect(sent_email.to).to contain_exactly("someone@discourse.org")
@@ -226,8 +215,8 @@ describe "Creating Invites" do
 
     it "replaces the expiresAfterDays field with expiresAt with date and time controls after creating the invite" do
       create_invite_modal.form.field("expiresAfterDays").select(1)
-      now = Time.zone.now
       create_invite_modal.save_button.click
+      now = Time.zone.now
 
       expect(create_invite_modal.form).to have_no_field_with_name("expiresAfterDays")
       expect(create_invite_modal.form).to have_field_with_name("expiresAt")
@@ -236,34 +225,8 @@ describe "Creating Invites" do
       date = expires_at_field.find(".date-picker").value
       time = expires_at_field.find(".time-input").value
 
-      expire_date = Time.parse("#{date} #{time}").utc
-      expected = (now + 1.day).beginning_of_minute
-      expect(expire_date).to eq(expected).or eq(expected + 1.minute)
-    end
-  end
-
-  context "when inviting from a group page" do
-    before { group.add_owner(user) }
-
-    it "attaches the group to the invite whether or not the advanced options are opened" do
-      group_page.visit(group)
-      group_page.invite_members
-      create_invite_modal.save_button.click
-      create_invite_modal.close
-
-      user_invited_pending_page.visit(user)
-
-      expect(user_invited_pending_page.latest_invite).to have_group(group)
-
-      group_page.visit(group)
-      group_page.invite_members
-      display_advanced_options
-      create_invite_modal.save_button.click
-      create_invite_modal.close
-
-      user_invited_pending_page.visit(user)
-
-      expect(user_invited_pending_page.latest_invite).to have_group(group)
+      expire_date = Time.parse("#{date} #{time}:#{now.strftime("%S")}").utc
+      expect(expire_date).to be_within_one_minute_of(now + 1.day)
     end
   end
 

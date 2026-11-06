@@ -10,16 +10,18 @@ const OPTIONS = [
   { id: "6c986ebcde3d5822a6e91a695c388094", html: "Other", votes: 5, rank: 0 },
 ];
 
-module("Component | PollInfo", function (hooks) {
+module("Poll | Component | poll-info", function (hooks) {
   setupRenderingTest(hooks);
 
   test("public multiple poll with results anytime", async function (assert) {
+    const self = this;
+
     this.setProperties({
       isMultiple: true,
       min: 1,
       max: 2,
       options: OPTIONS,
-      closesAt: null,
+      close: null,
       closed: false,
       results: [],
       showResults: false,
@@ -32,18 +34,18 @@ module("Component | PollInfo", function (hooks) {
     await render(
       <template>
         <PollInfo
-          @closed={{this.closed}}
-          @closesAt={{this.closesAt}}
-          @hasVoted={{this.hasVoted}}
-          @isMultiple={{this.isMultiple}}
-          @isPublic={{this.isPublic}}
-          @max={{this.max}}
-          @min={{this.min}}
-          @options={{this.options}}
-          @postUserId={{this.postUserId}}
-          @results={{this.results}}
-          @showResults={{this.showResults}}
-          @voters={{this.voters}}
+          @options={{self.options}}
+          @min={{self.min}}
+          @max={{self.max}}
+          @isMultiple={{self.isMultiple}}
+          @close={{self.close}}
+          @closed={{self.closed}}
+          @results={{self.results}}
+          @showResults={{self.showResults}}
+          @postUserId={{self.postUserId}}
+          @isPublic={{self.isPublic}}
+          @hasVoted={{self.hasVoted}}
+          @voters={{self.voters}}
         />
       </template>
     );
@@ -64,12 +66,14 @@ module("Component | PollInfo", function (hooks) {
   });
 
   test("public multiple poll with results only shown on vote", async function (assert) {
+    const self = this;
+
     this.setProperties({
       isMultiple: true,
       min: 1,
       max: 2,
       options: OPTIONS,
-      closesAt: null,
+      close: null,
       closed: false,
       results: "on_vote",
       showResults: false,
@@ -82,18 +86,18 @@ module("Component | PollInfo", function (hooks) {
     await render(
       <template>
         <PollInfo
-          @closed={{this.closed}}
-          @closesAt={{this.closesAt}}
-          @hasVoted={{this.hasVoted}}
-          @isMultiple={{this.isMultiple}}
-          @isPublic={{this.isPublic}}
-          @max={{this.max}}
-          @min={{this.min}}
-          @options={{this.options}}
-          @postUserId={{this.postUserId}}
-          @results={{this.results}}
-          @showResults={{this.showResults}}
-          @voters={{this.voters}}
+          @options={{self.options}}
+          @min={{self.min}}
+          @max={{self.max}}
+          @isMultiple={{self.isMultiple}}
+          @close={{self.close}}
+          @closed={{self.closed}}
+          @results={{self.results}}
+          @showResults={{self.showResults}}
+          @postUserId={{self.postUserId}}
+          @isPublic={{self.isPublic}}
+          @hasVoted={{self.hasVoted}}
+          @voters={{self.voters}}
         />
       </template>
     );
@@ -118,41 +122,5 @@ module("Component | PollInfo", function (hooks) {
         i18n("poll.public.title").replace(/<\/?[^>]+(>|$)/g, ""),
         "displays the public label"
       );
-  });
-
-  test("displays who closed the poll", async function (assert) {
-    this.setProperties({
-      options: OPTIONS,
-      closesAt: null,
-      closed: true,
-      closedBy: { username: "jane" },
-      results: [],
-      showResults: false,
-      postUserId: 59,
-      isPublic: false,
-      hasVoted: false,
-      voters: [],
-    });
-
-    await render(
-      <template>
-        <PollInfo
-          @closed={{this.closed}}
-          @closedBy={{this.closedBy}}
-          @closesAt={{this.closesAt}}
-          @hasVoted={{this.hasVoted}}
-          @isPublic={{this.isPublic}}
-          @options={{this.options}}
-          @postUserId={{this.postUserId}}
-          @results={{this.results}}
-          @showResults={{this.showResults}}
-          @voters={{this.voters}}
-        />
-      </template>
-    );
-
-    assert
-      .dom(".poll-info_instructions li.poll-info_closed-by span")
-      .hasText(i18n("poll.closed_by", { username: "jane" }));
   });
 });

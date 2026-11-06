@@ -1,54 +1,25 @@
-import { cached } from "@glimmer/tracking";
-import { service } from "@ember/service";
+import { withSilencedDeprecations } from "discourse/lib/deprecated";
 import { replaceIcon } from "discourse/lib/icon-library";
 import { withPluginApi } from "discourse/lib/plugin-api";
 import { emojiUrlFor } from "discourse/lib/text";
 import { userPath } from "discourse/lib/url";
 import { formatUsername } from "discourse/lib/utilities";
 import { i18n } from "discourse-i18n";
-import { resetCurrentReaction } from "../components/discourse-reactions-actions.gjs";
-import ReactionsActionButton from "../components/discourse-reactions-actions-button.gjs";
-import ReactionsActionSummary from "../components/discourse-reactions-actions-summary.gjs";
+import { resetCurrentReaction } from "../components/discourse-reactions-actions";
+import ReactionsActionButton from "../components/discourse-reactions-actions-button";
+import ReactionsActionSummary from "../components/discourse-reactions-actions-summary";
+
+const PLUGIN_ID = "discourse-reactions";
 
 replaceIcon("notification.reaction", "bell");
 
 function initializeDiscourseReactions(api) {
   customizePostMenu(api);
+  customizeWidgetPost(api);
 
-  for (const [section, link] of [
-    [
-      "activity",
-      { name: "activity-reactions", route: "userActivity.reactions" },
-    ],
-    [
-      "notifications",
-      {
-        name: "notifications-reactions",
-        route: "userNotifications.reactionsReceived",
-      },
-    ],
-  ]) {
-    api.addUserNavSidebarLink(section, {
-      ...link,
-      label: "discourse_reactions.reactions_title",
-      icon: "far-face-smile",
-      displayed: ({ siteSettings }) => siteSettings.discourse_reactions_enabled,
-    });
-  }
-
-  api.addKeyboardShortcut(
-    "l",
-    () => {
-      document
-        .querySelector(
-          ".topic-post.selected .discourse-reactions-reaction-button"
-        )
-        ?.click();
-    },
-    {
-      context: ".topic-post.selected .discourse-reactions-reaction-button",
-    }
-  );
+  api.addKeyboardShortcut("l", null, {
+    click: ".topic-post.selected .discourse-reactions-reaction-button",
+  });
 
   api.addTrackedPostProperties(
     "current_user_used_main_reaction",
@@ -59,47 +30,41 @@ function initializeDiscourseReactions(api) {
 
   api.modifyClass(
     "component:emoji-value-list",
-    (SuperClass) =>
-      class extends SuperClass {
-        @service siteSettings;
+    {
+      pluginId: PLUGIN_ID,
 
-        @cached
-        get collection() {
-          const result = super.collection;
+      didReceiveAttrs() {
+        this._super(...arguments);
 
-          if (
-            this.args.setting.setting ===
-            "discourse_reactions_enabled_reactions"
-          ) {
-            const hasDefaultValue = this.args.values.includes(
+        if (this.setting.setting !== "discourse_reactions_enabled_reactions") {
+          return;
+        }
+
+        let defaultValue = this.values.includes(
+          this.siteSettings.discourse_reactions_reaction_for_like
+        );
+
+        if (!defaultValue) {
+          this.collection.unshiftObject({
+            emojiUrl: emojiUrlFor(
               this.siteSettings.discourse_reactions_reaction_for_like
-            );
+            ),
+            isEditable: false,
+            isEditing: false,
+            value: this.siteSettings.discourse_reactions_reaction_for_like,
+          });
+        } else {
+          const mainEmoji = this.collection.findBy(
+            "value",
+            this.siteSettings.discourse_reactions_reaction_for_like
+          );
 
-            if (!hasDefaultValue) {
-              result.unshift({
-                emojiUrl: emojiUrlFor(
-                  this.siteSettings.discourse_reactions_reaction_for_like
-                ),
-                isEditable: false,
-                isEditing: false,
-                value: this.siteSettings.discourse_reactions_reaction_for_like,
-              });
-            } else {
-              const mainEmoji = result.find(
-                (item) =>
-                  item.value ===
-                  this.siteSettings.discourse_reactions_reaction_for_like
-              );
-
-              if (mainEmoji) {
-                mainEmoji.isEditable = false;
-              }
-            }
+          if (mainEmoji) {
+            mainEmoji.isEditable = false;
           }
-
-          return result;
         }
       },
+    },
     // It's an admin component so it's not always present
     { ignoreMissing: true }
   );
@@ -188,13 +153,50 @@ function initializeDiscourseReactions(api) {
   }
 }
 
+function customizeWidgetPost(api) {
+  withSilencedDeprecations("discourse.post-stream-widget-overrides", () => {
+    api.modifyClass("component:scrolling-post-stream", {
+      pluginId: PLUGIN_ID,
+
+      didInsertElement() {
+        this._super(...arguments);
+
+        const topicId = this?.posts?.firstObject?.topic_id;
+        if (topicId) {
+          this.messageBus.subscribe(`/topic/${topicId}/reactions`, (data) => {
+            this.dirtyKeys.keyDirty(
+              `discourse-reactions-counter-${data.post_id}`,
+              {
+                onRefresh: "reactionsChanged",
+                refreshArg: data,
+              }
+            );
+            this._refresh({ id: data.post_id });
+          });
+        }
+      },
+    });
+
+    api.modifyClass("controller:topic", {
+      pluginId: PLUGIN_ID,
+
+      unsubscribe() {
+        this._super(...arguments);
+
+        const topicId = this.model.id;
+        topicId && this.messageBus.unsubscribe(`/topic/${topicId}/reactions`);
+      },
+    });
+  });
+}
+
 function customizePostMenu(api) {
   api.registerValueTransformer(
     "post-menu-buttons",
     ({ value: dag, context: { buttonKeys } }) => {
       dag.replace(buttonKeys.LIKE, ReactionsActionButton);
       dag.add("discourse-reactions-actions", ReactionsActionSummary, {
-        before: buttonKeys.REPLIES,
+        after: buttonKeys.REPLIES,
       });
     }
   );

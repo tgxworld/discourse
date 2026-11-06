@@ -1,6 +1,6 @@
-import { computed } from "@ember/object";
-import { trustHTML } from "@ember/template";
-import AdComponent from "./ad-component.js";
+import { htmlSafe } from "@ember/template";
+import discourseComputed from "discourse/lib/decorators";
+import AdComponent from "./ad-component";
 
 export default class CarbonadsAd extends AdComponent {
   serve_id = null;
@@ -12,15 +12,15 @@ export default class CarbonadsAd extends AdComponent {
     super.init();
   }
 
-  @computed("serve_id", "placement")
-  get url() {
-    return trustHTML(
-      `//cdn.carbonads.com/carbon.js?serve=${this.serve_id}&placement=${this.placement}`
+  @discourseComputed("serve_id", "placement")
+  url(serveId, placement) {
+    return htmlSafe(
+      `//cdn.carbonads.com/carbon.js?serve=${serveId}&placement=${placement}`
     );
   }
 
-  @computed
-  get showCarbonAds() {
+  @discourseComputed
+  showCarbonAds() {
     if (!this.currentUser) {
       return true;
     }
@@ -28,37 +28,23 @@ export default class CarbonadsAd extends AdComponent {
     return this.currentUser.show_carbon_ads;
   }
 
-  @computed(
+  @discourseComputed(
     "placement",
     "serve_id",
     "showCarbonAds",
     "showToGroups",
     "showOnCurrentPage"
   )
-  get showAd() {
+  showAd(placement, serveId, showCarbonAds, showToGroups, showOnCurrentPage) {
     return (
-      this.placement &&
-      this.serve_id &&
-      this.showCarbonAds &&
-      this.showToGroups &&
-      this.showOnCurrentPage
+      placement && serveId && showCarbonAds && showToGroups && showOnCurrentPage
     );
-  }
-
-  buildImpressionPayload() {
-    return {
-      ad_plugin_impression: {
-        ad_type: this.site.ad_types.carbon,
-        ad_plugin_house_ad_id: null,
-        placement: this.placement,
-      },
-    };
   }
 
   <template>
     {{#if this.showAd}}
-      {{! eslint-disable ember/template-no-forbidden-elements }}
-      <script async id="_carbonads_js" src={{this.url}} type="text/javascript">
+      {{! template-lint-disable no-forbidden-elements }}
+      <script src={{this.url}} id="_carbonads_js" async type="text/javascript">
       </script>
     {{/if}}
   </template>

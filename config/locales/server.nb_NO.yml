@@ -5,35 +5,6 @@
 # https://translate.discourse.org/
 
 nb_NO:
-  markdown_endpoints:
-    latest: "Siste"
-    categories: "Kategorier"
-    tags: "Stikkord"
-    previous_page: "Forrige side"
-    next_page: "Neste side"
-    replies: "Svar"
-    last_updated: "Sist oppdatert"
-    event:
-      location: "Sted"
-  mcp:
-    errors:
-      category_not_found: "Kategorien finnes ikke"
-      topic_not_found: "Fant ikke emnet"
-    oauth:
-      deny: "Avslå"
-      approve: "Autoriser"
-  llms_txt:
-    sections:
-      optional: "Valgfritt"
-    links:
-      search:
-        label: "Søk"
-      categories:
-        label: "Kategorier"
-      about:
-        label: "Om"
-      guidelines:
-        label: "Retningslinjer"
   dates:
     short_date_no_year: "D. MMM"
     short_date: "D. MMM, YYYY"
@@ -146,6 +117,7 @@ nb_NO:
       exclusion: er reservert
       greater_than: må være større enn %{count}
       greater_than_or_equal_to: må være lik eller større enn %{count}
+      has_already_been_used: "har allerede blitt brukt"
       inclusion: er ikke inkludert i listen
       invalid: er ugyldig
       is_invalid: "virker uklart, er det en komplett setning?"
@@ -207,13 +179,7 @@ nb_NO:
   not_in_group:
     join_group: "Bli medlem av gruppe"
   reading_time: "Lesetid"
-  reading_time_minutes:
-    one: "%{count} minutt 🕑"
-    other: "%{count} minutter 🕑"
   likes: "Likes"
-  likes_count:
-    one: "%{count} ❤"
-    other: "%{count} ❤"
   too_many_replies:
     one: "Vi beklager, men nye brukere er midlertidig begrenset til %{count} svar i det samme tråden."
     other: "Vi beklager, men for nye brukere er det en midlertidig begrenset på %{count} svar i samme emne."
@@ -322,11 +288,6 @@ nb_NO:
       trust_level_2: "tillitsnivå_2"
       trust_level_3: "tillitsnivå_3"
       trust_level_4: "tillitsnivå_4"
-    default_full_names:
-      everyone: "Alle"
-      admins: "Adminer"
-      moderators: "Moderatorer"
-      staff: "Stab"
     request_membership_pm:
       title: "Ønske om medlemskap i gruppen @%{group_name}"
   education:
@@ -537,10 +498,6 @@ nb_NO:
       iphone: "iPhone"
     os:
       android: "Android"
-  admin_site_traffic_explorer:
-    unknown: "Ukjent"
-    traffic_types:
-      anonymous: "Anonym"
   change_email:
     error: "Det oppsto en feil ved endring av din e-postadresse. Kanskje addressen allerede er i bruk?"
     error_staged: "En feil oppstod ved endring av e-postadressen din. Den nye adressen er allerede i bruk av en arrangert bruker."
@@ -630,7 +587,7 @@ nb_NO:
     topic_description: "For å melde deg på %{link} igjen, bruk varslingskontrollene til høyre for eller i bunnen av emnet."
     private_topic_description: "For å melde deg på igjen, bruk varslingskontrollene til høyre for eller i bunnen av emnet."
   unsubscribe:
-    unsubscribe: "Avmeld"
+    title: "Avmeld"
     stop_watching_topic: "Slutt å følge dette emnet, %{link}"
     mute_topic: "Ignorer alle varslene for dette emnet, %{link}"
     unwatch_category: "Slutt å følge alle emner i %{category}"
@@ -646,11 +603,11 @@ nb_NO:
       every_month: "hver måned"
       every_six_months: "hver sjette måned"
   user_api_key:
+    title: "Autoriser tilgang fra applikasjon"
     authorize: "Autoriser"
-    deny: "Avbryt"
     read: "les"
     read_write: "les/skriv"
-    copied: "Kopiert!"
+    description: '"%{application_name}" ber om følgende tilgang til kontoen din:'
     otp_confirmation:
       confirm_title: Fortsett til %{site_name}
       logging_in_as: Logger inn som %{username}
@@ -664,9 +621,6 @@ nb_NO:
       session_info: "Les informasjon om brukersesjon"
       read: "Les alt"
       write: "Skriv alt"
-    device:
-      code: "Kode"
-      continue: "Fortsett"
   reports:
     default:
       labels:
@@ -707,9 +661,7 @@ nb_NO:
         time_to_resolution: Løsningstid
     visits:
       title: "Brukerbesøk"
-      xaxis:
-        desktop: "Skrivebord"
-        mobile: "Mobil"
+      xaxis: "Dag"
       yaxis: "Antall besøk"
     signups:
       title: "Nye brukere"
@@ -719,34 +671,6 @@ nb_NO:
       title: "Nye Bidragsytere"
       xaxis: "Dag"
       yaxis: "Antall nye bidragsytere"
-    activity_by_category:
-      labels:
-        category: "Kategori"
-        topics: "Emner"
-        posts: "Innlegg"
-        share: "Del"
-    posters_by_member_type:
-      labels:
-        count: "Innlegg"
-        share: "Del"
-      types:
-        staff: "Stab"
-    posters_by_member_type_members:
-      labels:
-        user: "Bruker"
-        count: "Innlegg"
-        share: "Del"
-    trust_level_pipeline:
-      labels:
-        count: "Medlemmer"
-        share: "Del"
-        signups: "Påmeldinger"
-      levels:
-        "0": "Ny"
-        "1": "Basic"
-        "2": "Medlem"
-        "3": "Aktivt medlem"
-        "4": "Leder"
     trust_level_growth:
       yaxis: "Dag"
     consolidated_page_views:
@@ -764,10 +688,9 @@ nb_NO:
     consolidated_page_views_browser_detection:
       yaxis: "Dag"
     site_traffic:
-      xaxis:
-        page_view_anon_browser: "Anonym"
       yaxis: "Dag"
     dau_by_mau:
+      title: "DAB/MAB"
       xaxis: "Dag"
       yaxis: "DAB/MAB"
     daily_engaged_users:
@@ -859,15 +782,6 @@ nb_NO:
         user: "Bruker"
         num_clicks: "Klikk"
         num_topics: "Emner"
-    top_countries_by_browser_pageviews:
-      labels:
-        count: "Besøk"
-    top_entry_urls:
-      labels:
-        count: "Besøk"
-    top_referrers_by_browser_pageviews:
-      labels:
-        count: "Besøk"
     top_traffic_sources:
       title: "Topp trafikk-kilder"
       xaxis: "Domene"
@@ -913,8 +827,6 @@ nb_NO:
     page_view_anon_browser_reqs:
       xaxis: "Dag"
     page_view_logged_in_browser_reqs:
-      xaxis: "Dag"
-    page_view_embed_reqs:
       xaxis: "Dag"
     http_background_reqs:
       title: "Bakgrunn"
@@ -962,7 +874,7 @@ nb_NO:
       labels:
         user: Bruker
         location: Sted
-    admin_logins:
+    staff_logins:
       labels:
         user: Bruker
         location: Sted
@@ -1024,12 +936,15 @@ nb_NO:
     educate_until_posts: "Når brukeren begynner å skrive sine første (n) innlegg, vis pop-up med opplæringspanelet for nye brukere i redigeringspanelet."
     crawl_images: "Hent bilder fra ekstern URL for å sette inn korrekt høyde og bredde."
     download_remote_images_threshold: "Minimum ledig diskplass for å kunne laste ned eksterne bilder (i prosent)"
+    disabled_image_download_domains: "Eksterne bilder vil aldri bli lastet ned fra disse domenene (pipe-separert liste)."
     editing_grace_period: "(n) sekunder etter publisering vil redigering ikke opprette en ny versjon i redigeringsloggen."
     editing_grace_period_max_diff: "Maksimalt antall tegn for en endring utført i nådeperioden, hvis antallet overskrides lagres en ny revisjon av innlegget (tillitsnivå 0 og 1)"
     editing_grace_period_max_diff_high_trust: "Maksimalt antall tegn for en endring utført i nådeperioden, hvis antallet overskrides lagres en ny revisjon av innlegget (tillitsnivå 2 og opp)"
     staff_edit_locks_post: "Innlegg vil bli sperret for redigering av brukere hvis de har vært redigert av staben "
+    edit_history_visible_to_public: "La alle se tidligere versjoner av et redigert innlegg. Hvis det er slått av, kan kun staben se det."
     delete_removed_posts_after: "Innlegg som blir fjernet av forfatter blir automatisk slettet etter (n) timer. Sett til 0 og innleggene blir slettet øyeblikkelig."
     fixed_category_positions: "Hvis denne er valgt kan du manuelt bestemme rekkefølgen i listen over kategorier. Ellers vil kategoriene sorteres automatisk basert på aktivitet."
+    fixed_category_positions_on_create: "Hvis denne er valgt vil den fastsatte rekkefølgen på kategorier også gjelde for dialogboksen når man lager nye emner (krever fixed_category_positions)."
     add_rel_nofollow_to_user_content: 'Legg til rel nofollow på alle lenker som publiseres av brukere, bortsett fra interne lenker (inkludert foreldredomener). Hvis du endrer denne, må du rebake alle innlegg med: "rake posts:rebake"'
     exclude_rel_nofollow_domains: "En liste over domener hvor nofollow ikke skal legges til i lenker. example.com vil automatisk også tillate sub.example.com. Som et minimum bør du legge til dette nettstedets domene slik at søkeroboter klarer å finne alt innholdet. Hvis andre deler av nettstedet ditt ligger under forskjellige domener bør de også legges til."
     post_excerpt_maxlength: "Maksimal lengde på utdrag eller oppsummering av innlegg."
@@ -1038,6 +953,7 @@ nb_NO:
     post_onebox_maxlength: "Maksimal lengde på et onebox Discourse innlegg i antall tegn."
     allowed_inline_onebox_domains: "En liste over domener hvor onebox brukes i miniatyrstørrelse hvis lenken ikke har en tittel"
     notification_email: "Adressen som skal brukes som avsender: på alle viktige system e-poster. Domenet som spesifiseres her må ha SPF, DKIM og reverse PTR record satt korrekt for at e-post skal nå frem."
+    email_custom_headers: "En liste over tilpassede e-posthoder med pipe-tegn mellom hvert element"
     force_https: "Tving dette nettstedet til å bare tillate HTTPS. ADVARSEL: Du må IKKE aktivere dette valget før du har verifisert at HTTPS er riktig satt opp og fungerer absolutt alle steder! Har du sjekket CDN, alle sosiale loginmetoder og eventuelle eksterne ressurser for å sikre at de også er kompatible med HTTPS?"
     summary_score_threshold: "Minste score for at et innlegg skal inkluderes i 'Sammendrag for Emnet'"
     summary_percent_filter: "Når en bruker klikker 'Summér Dette Emnet', vis topp % av innlegg"
@@ -1071,6 +987,7 @@ nb_NO:
     suppress_digest_email_after_days: "Utelat oppsummerings-eposter for brukere ikke sett på nettstedet siden mer enn (n) dager."
     digest_suppress_categories: "Utelat disse kategoriene i oppsummerings-eposter"
     allow_profile_backgrounds: "Gi brukere mulighet til å laste opp profilbakgrunner."
+    enable_mobile_theme: "Mobilenheter bruker et mobilvennlig drakt, med muligheten til å gå til den fulle siden. Deaktiver dette hvis du ønsker å bruke et tilpasset stilark."
     dominating_topic_minimum_percent: "Hvor mange innlegg en bruker kan lage innenfor en topic før de blir påminnet om dominering av en topic."
     automatically_unpin_topics: "Automatisk fjern feste for emner når brukeren når bunnen."
     embed_post_limit: "Maksimalt antall innlegg som skal bygges inn."
@@ -1085,12 +1002,15 @@ nb_NO:
     default_categories_tracking: "Liste med kategorier som overvåkes som forvalg"
     default_categories_muted: "Liste med kategorier som er dempet som forvalg"
     default_categories_watching_first_post: "Liste over kategorier hvor det er forvalgt innstilling at det første innlegget i hvert nye emne følges."
+    watched_precedence_over_muted: "Varsle meg om emner i kategorier eller tagger jeg ser på, som også tilhører en jeg har dempet"
     errors:
       invalid_email: "Ugyldig e-mail adresse"
       invalid_username: "Ingen bruker med det brukernavnet."
       invalid_integer_min_max: "Verdien må være mellom %{min} og %{max}."
       invalid_integer: "Verdien må være et heltall."
       invalid_string: "Ugyldig verdi"
+      min_username_length_range: "Du kan ikke sette minimum høyere enn maksimum."
+      max_username_length_range: "Du kan ikke sette maksimum under minimum."
   search:
     within_post: "#%{post_number} av %{username}"
     types:
@@ -1098,10 +1018,6 @@ nb_NO:
       topic: "Resultater"
       user: "Brukere"
     results_page: "Søkeresultater for \"%{term}\""
-  posts_filter:
-    description:
-      order_latest: "Siste innlegg"
-      order_latest_topic: "Siste emner"
   most_recent_poster: "Ferskeste innlegg av"
   redirected_to_top_reasons:
     new_user: "Velkommen til felleskapet vårt! Dette er de mest populære emnene for tiden. "
@@ -1150,7 +1066,6 @@ nb_NO:
     new_registrations_disabled: "Nye kontoregistreringer tillates ikke per nå."
     password_too_long: "Passord er begrenset til 200 tegn."
     reserved_username: "Det brukernavnet tillates ikke."
-    missing_username: "Skriv inn et brukernavn"
     second_factor_title: "To-faktor autentisering"
     second_factor_backup_description: "Vennligst skriv en av reservekodene dine:"
     second_factor_toggle:
@@ -1173,10 +1088,8 @@ nb_NO:
     queued_by_staff:
       title: "Innlegg trenger godkjenning"
     welcome_user:
-      preview: "Velkommen til %{site_name}!"
       subject_template: "Velkommen til %{site_name}!"
     welcome_invite:
-      preview: "Velkommen til %{site_name}!"
       subject_template: "Velkommen til %{site_name}!"
     backup_failed:
       subject_template: "Sikkerhetskopiering mislyktes"
@@ -1187,7 +1100,6 @@ nb_NO:
     too_many_tl3_flags:
       subject_template: "Ny konto på vent"
     unsilenced:
-      preview: "Kontoen er ikke lenger på vent."
       subject_template: "Kontoen er ikke lenger på vent"
   unsubscribe_mailing_list: |
     Du mottar dette fordi du har slått på e-postlistemodus.
@@ -1235,20 +1147,20 @@ nb_NO:
       join_the_discussion: "Les mer"
       popular_posts: "Populære innlegg"
       more_new: "Nytt for deg"
-      subject_template_improved: "Sammendrag"
       click_here: "trykk her"
     forgot_password:
       title: "Glemt passord"
     set_password:
       title: "Sett passord"
-    admin_login:
-      subject_template_improved: "Login"
     post_approved:
       title: "Ditt innlegg ble godkjent"
   page_not_found:
     page_title: "Side Ikke funnet"
     title: "Oisann! Den siden finnes ikke eller er privat."
+    popular_topics: "Populært"
+    recent_topics: "Nylig"
     see_more: "Mer"
+    search_title: "Søk i denne siden"
     search_button: "Søk"
   upload:
     edit_reason: "Last ned lokal kopi av bilder"
@@ -1372,14 +1284,10 @@ nb_NO:
       message: "<p>Vi har sendt aktiverings-eposten på nytt til <b>%{email}</b>"
   safe_mode:
     title: "Start sikkerhetsmodus"
-  design_wizard:
-    palette_pairs:
-      default: "Forvalg"
   wizard:
     title: "Discourse-oppsett"
     step:
-      setup:
-        title: "Kom godt i gang"
+      privacy:
         fields:
           login_required:
             label: "Synlighet"
@@ -1388,29 +1296,17 @@ nb_NO:
                 label: "Offentlig"
               private:
                 label: "Privat"
+      styling:
+        fields:
+          styling_preview:
+            label: "Forhåndsvis"
+          homepage_style:
+            choices:
+              latest:
+                label: "Siste"
   onebox:
-    discourse:
-      recurrence:
-        every_day: "Hver dag"
-        weekdays:
-          sunday: "Søndag"
-          monday: "Mandag"
-          tuesday: "Tirsdag"
-          wednesday: "Onsdag"
-          thursday: "Torsdag"
-          friday: "Fredag"
-          saturday: "Lørdag"
-    google_meet:
-      meeting_code: "Kode:"
     github:
-      header:
-        success: "Suksess"
       closed: "lukket"
-      pr_status:
-        draft: "Utkast"
-        open: "Åpne"
-        approved: "Godkjent"
-        closed: "Lukket"
   discourse_push_notifications:
     popup:
       mentioned: '%{username} nevnte deg i "%{topic}" - %{site_title}'
@@ -1436,10 +1332,6 @@ nb_NO:
       low: "Lav"
       medium: "Middels"
       high: "Høy"
-    reasons:
-      fast_typer_time:
-        one: "%{count} sekund"
-        other: "%{count} sekunder"
     actions:
       agree:
         title: "Ja"
@@ -1449,47 +1341,33 @@ nb_NO:
         description: "Si deg enig med rapportering og demp bruker. "
       agree_and_restore:
         description: "Gjenopprett innlegget slik at alle brukere kan se det."
-      delete:
+      delete_single:
         title: "Slett"
         complete: "Post slettet."
       delete_and_ignore:
         complete: "Post slettet."
       delete_and_agree:
         complete: "Post slettet."
-      disagree_bundle:
+      disagree_and_restore:
+        description: "Gjenopprett innlegget slik at alle brukere kan se det."
+      disagree:
         title: "Nei"
       ignore:
         title: "Ignorer"
       ignore_and_do_nothing:
         title: "ikke gjør noe"
       approve:
-        title: "Ja"
-      approve_post:
-        title: "Ja"
-      approve_post_closed:
-        title: "Ja"
-      reject_post_bundle:
-        title: "Nei"
+        title: "Godkjenn"
       approve_user:
-        title: "Ja"
         complete: "Brukar godkjent."
       reject_user:
-        title: "Nei"
         delete:
           title: "Slett bruker"
           complete: "Bruker slettet."
-      confirm_spam:
-        title: "Ja"
-      not_spam:
-        title: "Nei"
       reject:
         title: "Avvis"
-      approve_and_restore:
-        title: "Ja"
-      approve_and_unhide:
-        title: "Ja"
       delete_user:
-        complete: "Bruker slettet"
+        complete: "Bruker slettet."
   fallback_username: "bruker"
   activemodel:
     errors:

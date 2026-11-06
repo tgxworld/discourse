@@ -14,11 +14,13 @@ shared_examples "social authentication scenarios" do
 
   context "when user does not exist" do
     context "with Facebook" do
-      before { enable_auth_provider(:facebook) }
+      before { SiteSetting.enable_facebook_logins = true }
       after { reset_omniauth_config(:facebook) }
 
       it "fills the signup form" do
         mock_facebook_auth
+        visit("/")
+
         signup_page.open.click_social_button("facebook")
         expect(signup_page).to be_open
         expect(signup_page).to have_no_password_input
@@ -32,11 +34,13 @@ shared_examples "social authentication scenarios" do
     end
 
     context "with Google" do
-      before { enable_auth_provider(:google_oauth2) }
+      before { SiteSetting.enable_google_oauth2_logins = true }
       after { reset_omniauth_config(:google_oauth2) }
 
       it "fills the signup form" do
         mock_google_auth
+        visit("/")
+
         signup_page.open.click_social_button("google_oauth2")
         expect(signup_page).to be_open
         expect(signup_page).to have_no_password_input
@@ -51,6 +55,8 @@ shared_examples "social authentication scenarios" do
       context "when the email is not verified" do
         it "needs to verify email" do
           mock_google_auth(verified: false)
+          visit("/")
+
           signup_page.open.click_social_button("google_oauth2")
           expect(signup_page).to be_open
           expect(signup_page).to have_no_password_input
@@ -65,11 +71,13 @@ shared_examples "social authentication scenarios" do
     end
 
     context "with Github" do
-      before { enable_auth_provider(:github) }
+      before { SiteSetting.enable_github_logins = true }
       after { reset_omniauth_config(:github) }
 
       it "fills the signup form" do
         mock_github_auth
+        visit("/")
+
         signup_page.open.click_social_button("github")
         expect(signup_page).to be_open
         expect(signup_page).to have_no_password_input
@@ -83,6 +91,8 @@ shared_examples "social authentication scenarios" do
       context "when the email is not verified" do
         it "needs to verify email" do
           mock_github_auth(verified: false)
+          visit("/")
+
           signup_page.open.click_social_button("github")
           expect(signup_page).to be_open
           expect(signup_page).to have_no_password_input
@@ -102,6 +112,8 @@ shared_examples "social authentication scenarios" do
 
         it "lets user input Name when no name is provided" do
           mock_github_auth(name: "")
+          visit("/")
+
           signup_page.open.click_social_button("github")
           expect(signup_page).to be_open
           expect(signup_page).to have_no_password_input
@@ -118,6 +130,8 @@ shared_examples "social authentication scenarios" do
 
         it "works with a provided name" do
           mock_github_auth(name: "Some Name")
+          visit("/")
+
           signup_page.open.click_social_button("github")
           expect(signup_page).to be_open
           expect(signup_page).to have_no_password_input
@@ -132,11 +146,13 @@ shared_examples "social authentication scenarios" do
     end
 
     context "with Twitter" do
-      before { enable_auth_provider(:twitter) }
+      before { SiteSetting.enable_twitter_logins = true }
       after { reset_omniauth_config(:twitter) }
 
       it "fills the signup form" do
         mock_twitter_auth
+        visit("/")
+
         signup_page.open.click_social_button("twitter")
         expect(signup_page).to be_open
         expect(signup_page).to have_no_password_input
@@ -151,6 +167,8 @@ shared_examples "social authentication scenarios" do
       context "when the email is not verified" do
         it "needs to verify email" do
           mock_twitter_auth(verified: false)
+          visit("/")
+
           signup_page.open.click_social_button("twitter")
           expect(signup_page).to be_open
           expect(signup_page).to have_no_password_input
@@ -164,11 +182,13 @@ shared_examples "social authentication scenarios" do
     end
 
     context "with Discord" do
-      before { enable_auth_provider(:discord) }
+      before { SiteSetting.enable_discord_logins = true }
       after { reset_omniauth_config(:discord) }
 
       it "fills the signup form" do
         mock_discord_auth
+        visit("/")
+
         signup_page.open.click_social_button("discord")
         expect(signup_page).to be_open
         expect(signup_page).to have_no_password_input
@@ -181,12 +201,17 @@ shared_examples "social authentication scenarios" do
     end
 
     context "with Linkedin" do
-      before { enable_auth_provider(:linkedin_oidc) }
-
+      before do
+        SiteSetting.linkedin_oidc_client_id = "12345"
+        SiteSetting.linkedin_oidc_client_secret = "abcde"
+        SiteSetting.enable_linkedin_oidc_logins = true
+      end
       after { reset_omniauth_config(:linkedin_oidc) }
 
       it "fills the signup form" do
         mock_linkedin_auth
+        visit("/")
+
         signup_page.open.click_social_button("linkedin_oidc")
         expect(signup_page).to be_open
         expect(signup_page).to have_no_password_input
@@ -200,11 +225,13 @@ shared_examples "social authentication scenarios" do
 
     # These tests use Google, but they should be the same for all providers
     context "when opening the external auth from /login" do
-      before { enable_auth_provider(:google_oauth2) }
+      before { SiteSetting.enable_google_oauth2_logins = true }
       after { reset_omniauth_config(:google_oauth2) }
 
       it "fills the signup form" do
         mock_google_auth
+        visit("/")
+
         signup_page.open.click_social_button("google_oauth2")
         expect(signup_page).to be_open
         expect(signup_page).to have_no_password_input
@@ -218,15 +245,16 @@ shared_examples "social authentication scenarios" do
 
     context "when overriding local fields" do
       before do
-        enable_auth_provider(:google_oauth2)
+        SiteSetting.enable_google_oauth2_logins = true
         SiteSetting.auth_overrides_name = true
         SiteSetting.auth_overrides_username = true
       end
-
       after { reset_omniauth_config(:google_oauth2) }
 
       it "fills the signup form and disables the inputs" do
         mock_google_auth
+        visit("/")
+
         signup_page.open.click_social_button("google_oauth2")
         expect(signup_page).to be_open
         expect(signup_page).to have_no_password_input
@@ -242,34 +270,25 @@ shared_examples "social authentication scenarios" do
 
     context "when skipping the signup form" do
       before do
-        enable_auth_provider(:google_oauth2)
+        SiteSetting.enable_google_oauth2_logins = true
         SiteSetting.auth_skip_create_confirm = true
       end
-
       after { reset_omniauth_config(:google_oauth2) }
 
       it "creates the account directly" do
         mock_google_auth
+        visit("/")
+
         signup_page.open.click_social_button("google_oauth2")
         expect(page).to have_css(".header-dropdown-toggle.current-user")
-      end
-
-      it "shows signup form when no username can be derived" do
-        SiteSetting.use_email_for_username_and_name_suggestions = false
-        mock_google_auth(name: "")
-        signup_page.open.click_social_button("google_oauth2")
-        expect(signup_page).to be_open
-        expect(signup_page).to have_no_password_input
-        expect(page).to have_field("new-account-username", with: "")
       end
     end
 
     context "when there is only one external login method enabled" do
       before do
-        enable_auth_provider(:google_oauth2)
+        SiteSetting.enable_google_oauth2_logins = true
         SiteSetting.enable_local_logins = false
       end
-
       after { reset_omniauth_config(:google_oauth2) }
 
       context "when login is required" do
@@ -408,43 +427,15 @@ shared_examples "social authentication scenarios" do
     end
 
     context "with Facebook" do
-      before { enable_auth_provider(:facebook) }
+      before { SiteSetting.enable_facebook_logins = true }
       after { reset_omniauth_config(:facebook) }
 
       it "logs in user" do
         mock_facebook_auth
-        signup_page.open.click_social_button("facebook")
-        expect(page).to have_css(".header-dropdown-toggle.current-user")
-      end
-
-      it "removes destination_url cookie if present after setting up redirect" do
-        mock_facebook_auth
         visit("/")
 
-        category = Fabricate(:category)
-
-        signup_page.open
-
-        # Manually set the destination_url, as if it were set by a plugin
-        page.driver.with_playwright_page do |pw_page|
-          pw_page.context.add_cookies(
-            [{ url: pw_page.url, name: :destination_url, value: category.url }],
-          )
-
-          cookie_found =
-            pw_page.context.cookies.any? { |cookie| cookie["name"] == "destination_url" }
-          expect(cookie_found).not_to be_falsey
-        end
-
-        signup_page.click_social_button("facebook")
-        expect(page).to have_current_path(category.url)
-
-        # Ensure the destination_url cookie was removed after being used
-        page.driver.with_playwright_page do |pw_page|
-          cookie_found =
-            pw_page.context.cookies.any? { |cookie| cookie["name"] == "destination_url" }
-          expect(cookie_found).to be_falsey
-        end
+        signup_page.open.click_social_button("facebook")
+        expect(page).to have_css(".header-dropdown-toggle.current-user")
       end
 
       context "with a suspended user" do
@@ -456,6 +447,8 @@ shared_examples "social authentication scenarios" do
 
         it "shows suspended message" do
           mock_facebook_auth
+          visit("/")
+
           signup_page.open.click_social_button("facebook")
 
           expect(page).to have_css(
@@ -467,29 +460,33 @@ shared_examples "social authentication scenarios" do
     end
 
     context "with Google" do
-      before { enable_auth_provider(:google_oauth2) }
+      before { SiteSetting.enable_google_oauth2_logins = true }
       after { reset_omniauth_config(:google_oauth2) }
 
       it "logs in user" do
         mock_google_auth
+        visit("/")
+
         signup_page.open.click_social_button("google_oauth2")
         expect(page).to have_css(".header-dropdown-toggle.current-user")
       end
     end
 
     context "with Github" do
-      before { enable_auth_provider(:github) }
+      before { SiteSetting.enable_github_logins = true }
       after { reset_omniauth_config(:github) }
 
       it "logs in user" do
         mock_github_auth
+        visit("/")
+
         signup_page.open.click_social_button("github")
         expect(page).to have_css(".header-dropdown-toggle.current-user")
       end
     end
 
     context "with Twitter" do
-      before { enable_auth_provider(:twitter) }
+      before { SiteSetting.enable_twitter_logins = true }
       after { reset_omniauth_config(:twitter) }
 
       it "logs in user" do
@@ -500,53 +497,46 @@ shared_examples "social authentication scenarios" do
         )
 
         mock_twitter_auth
+        visit("/")
+
         signup_page.open.click_social_button("twitter")
         expect(page).to have_css(".header-dropdown-toggle.current-user")
       end
     end
 
     context "with Discord" do
-      before { enable_auth_provider(:discord) }
+      before { SiteSetting.enable_discord_logins = true }
       after { reset_omniauth_config(:discord) }
 
       it "logs in user" do
         mock_discord_auth
+        visit("/")
+
         signup_page.open.click_social_button("discord")
         expect(page).to have_css(".header-dropdown-toggle.current-user")
       end
     end
 
     context "with Linkedin" do
-      before { enable_auth_provider(:linkedin_oidc) }
-
+      before do
+        SiteSetting.linkedin_oidc_client_id = "12345"
+        SiteSetting.linkedin_oidc_client_secret = "abcde"
+        SiteSetting.enable_linkedin_oidc_logins = true
+      end
       after { reset_omniauth_config(:linkedin_oidc) }
 
       it "logs in user" do
         mock_linkedin_auth
+        visit("/")
+
         signup_page.open.click_social_button("linkedin_oidc")
         expect(page).to have_css(".header-dropdown-toggle.current-user")
       end
     end
   end
-
-  context "when the provider returns an error" do
-    before { enable_auth_provider(:google_oauth2) }
-
-    it "shows the unauthorized error message" do
-      visit("/auth/failure?message=unauthorized")
-
-      expect(page).to have_css(".alert-error", text: I18n.t("login.omniauth_error.unauthorized"))
-    end
-
-    it "shows the request_error message" do
-      visit("/auth/failure?message=request_error")
-
-      expect(page).to have_css(".alert-error", text: I18n.t("login.omniauth_error.request_error"))
-    end
-  end
 end
 
-describe "Social authentication" do
+describe "Social authentication", type: :system do
   before { SiteSetting.full_name_requirement = "optional_at_signup" }
 
   context "when desktop" do

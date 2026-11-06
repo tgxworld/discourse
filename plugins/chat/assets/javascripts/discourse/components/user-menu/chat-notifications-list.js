@@ -1,5 +1,4 @@
 import UserMenuNotificationsList from "discourse/components/user-menu/notifications-list";
-import UserMenuChatNotificationsListEmptyState from "discourse/plugins/chat/discourse/components/user-menu/chat-notifications-list-empty-state";
 
 export default class UserMenuChatNotificationsList extends UserMenuNotificationsList {
   get dismissTypes() {
@@ -7,6 +6,6 @@ export default class UserMenuChatNotificationsList extends UserMenuNotifications
   }
 
   get emptyStateComponent() {
-    return UserMenuChatNotificationsListEmptyState;
+    return "user-menu/chat-notifications-list-empty-state";
   }
 }

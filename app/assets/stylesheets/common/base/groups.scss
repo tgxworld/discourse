@@ -1,3 +1,5 @@
+@use "sass:math";
+
 .groups-header {
   display: flex;
   flex-wrap: wrap;
@@ -33,7 +35,7 @@
 
 .groups-boxes {
   display: grid;
-  gap: 1em;
+  grid-gap: 1em;
   grid-template-columns: repeat(auto-fit, minmax(16em, 1fr));
   margin: 1em 0;
   width: 100%;
@@ -107,18 +109,36 @@
 
       .group-description {
         color: var(--primary-high);
-        overflow-wrap: break-word;
+        word-wrap: break-word;
       }
     }
+
+    $size: 40px;
+    $icon-size: math.div($size, 1.8);
 
     .group-avatar-flair {
       display: inline-block;
       color: var(--primary);
 
       .avatar-flair {
-        --avatar-flair-size: 40px;
+        background-size: $size;
+        height: $size;
+        width: $size;
         border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-repeat: no-repeat;
+
+        .d-icon {
+          height: $icon-size;
+          width: $icon-size;
+        }
       }
+    }
+
+    .avatar-flair-image {
+      width: $size;
     }
   }
 }

@@ -3,18 +3,31 @@ import { fn, hash } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
-import EmojiPicker from "discourse/components/emoji-picker";
-import DButton from "discourse/ui-kit/d-button";
-import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
+import DButton from "discourse/components/d-button";
+import concatClass from "discourse/helpers/concat-class";
+import emoji from "discourse/helpers/emoji";
 import { i18n } from "discourse-i18n";
-import discourseReactionsEmoji from "../helpers/discourse-reactions-emoji.js";
 
 export default class DiscourseReactionsPicker extends Component {
-  @service capabilities;
-  @service currentUser;
   @service siteSettings;
 
-  emojiPickerIsOpen = false;
+  @action
+  pointerOut(event) {
+    if (event.pointerType !== "mouse") {
+      return;
+    }
+
+    this.args.scheduleCollapse("collapseReactionsPicker");
+  }
+
+  @action
+  pointerOver() {
+    if (event.pointerType !== "mouse") {
+      return;
+    }
+
+    this.args.cancelCollapse();
+  }
 
   get reactionInfo() {
     const reactions = this.siteSettings.discourse_reactions_enabled_reactions
@@ -46,15 +59,10 @@ export default class DiscourseReactionsPicker extends Component {
         isUsed = currentUserReaction && currentUserReaction.id === reaction;
       }
 
-      if (!this.currentUser) {
-        // Anonymous users can pick a reaction — it gets deferred until login.
-        // Disallow on archived/closed topics where no one can react.
-        const topic = post.topic;
-        canUndo = !(topic?.archived || topic?.closed);
-      } else if (currentUserReaction) {
-        canUndo = currentUserReaction.can_undo && post.likeAction?.canToggle;
+      if (currentUserReaction) {
+        canUndo = currentUserReaction.can_undo && post.likeAction.canToggle;
       } else {
-        canUndo = post.likeAction?.canToggle;
+        canUndo = post.likeAction.canToggle;
       }
 
       let title;
@@ -75,16 +83,9 @@ export default class DiscourseReactionsPicker extends Component {
     });
   }
 
-  get optimalColsCount() {
-    let count = this.reactionInfo.length;
-
-    if (this.siteSettings.discourse_reactions_allow_any_emoji) {
-      count += 1;
-    }
-
+  _getOptimalColsCount(count) {
     let x;
-    // below the small breakpoint, 8 cols is slightly too wide, so cap at 7
-    const colsByRow = this.capabilities.viewport.sm ? [5, 6, 7, 8] : [5, 6, 7];
+    const colsByRow = [5, 6, 7, 8];
 
     // if small count, just use it
     if (count < colsByRow[0]) {
@@ -115,49 +116,9 @@ export default class DiscourseReactionsPicker extends Component {
     return x;
   }
 
-  @action
-  pointerOut(event) {
-    if (event.pointerType !== "mouse" || this.emojiPickerIsOpen) {
-      return;
-    }
-
-    this.args.scheduleCollapse("collapseReactionsPicker");
-  }
-
-  @action
-  pointerOver(event) {
-    if (event.pointerType !== "mouse") {
-      return;
-    }
-
-    this.args.cancelCollapse();
-  }
-
-  @action
-  onSelectEmoji(selected_emoji) {
-    this.args.toggle({
-      reaction: selected_emoji,
-      postId: this.args.post.id,
-      canUndo: true,
-    });
-  }
-
-  @action
-  preventCollapse() {
-    this.emojiPickerIsOpen = true;
-    this.args.cancelCollapse?.();
-    this.args.disableClickOutside?.();
-  }
-
-  @action
-  reenableCollapse() {
-    this.emojiPickerIsOpen = false;
-    this.args.enableClickOutside?.();
-  }
-
   <template>
     <div
-      class={{dConcatClass
+      class={{concatClass
         "discourse-reactions-picker"
         (if @reactionsPickerExpanded "is-expanded")
       }}
@@ -166,12 +127,13 @@ export default class DiscourseReactionsPicker extends Component {
     >
       {{#if @reactionsPickerExpanded}}
         <div
-          class="discourse-reactions-picker-container col-{{this.optimalColsCount}}"
+          class="discourse-reactions-picker-container col-{{this._getOptimalColsCount
+              this.reactionInfo.length
+            }}"
         >
           {{#each this.reactionInfo as |reaction|}}
             <DButton
-              class={{dConcatClass
-                "btn-flat"
+              class={{concatClass
                 "pickable-reaction"
                 reaction.id
                 (if reaction.canUndo "can-undo")
@@ -186,20 +148,9 @@ export default class DiscourseReactionsPicker extends Component {
               }}
               @translatedTitle={{reaction.title}}
             >
-              {{discourseReactionsEmoji reaction.id}}
+              {{emoji reaction.id}}
             </DButton>
           {{/each}}
-          {{#if this.siteSettings.discourse_reactions_allow_any_emoji}}
-            <EmojiPicker
-              ...attributes
-              @btnClass="btn-icon btn-flat"
-              @context="discourse-reactions"
-              @didSelectEmoji={{this.onSelectEmoji}}
-              @icon="discourse-emojis"
-              @onClose={{this.reenableCollapse}}
-              @onShow={{this.preventCollapse}}
-            />
-          {{/if}}
         </div>
       {{/if}}
     </div>

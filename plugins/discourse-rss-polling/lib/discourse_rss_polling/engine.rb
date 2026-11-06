@@ -2,7 +2,7 @@
 
 module DiscourseRssPolling
   class Engine < ::Rails::Engine
-    engine_name PLUGIN_NAME
+    engine_name "discourse_rss_polling"
     isolate_namespace DiscourseRssPolling
 
     config.to_prepare do

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "List channels | no sidebar" do
+RSpec.describe "List channels | no sidebar", type: :system do
   fab!(:current_user, :user)
 
   let(:chat) { PageObjects::Pages::Chat.new }
@@ -133,7 +133,7 @@ RSpec.describe "List channels | no sidebar" do
       expect(chat).to have_direct_message_channels_section
     end
 
-    context "with drawer preferred" do
+    context "with drawer prefered" do
       before { chat.prefers_drawer }
 
       it "shows the create direct message button in the drawer" do

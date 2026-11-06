@@ -9,16 +9,11 @@
 
 enabled_site_setting :openid_connect_enabled
 
-register_svg_icon "id-card"
-
 require_relative "lib/openid_connect_faraday_formatter"
 require_relative "lib/omniauth_open_id_connect"
 require_relative "lib/openid_connect_authenticator"
 
 GlobalSetting.add_default :openid_connect_request_timeout_seconds, 10
-
-register_site_setting_area("oidc")
-register_admin_config_login_route("oidc")
 
 # RP-initiated logout
 # https://openid.net/specs/openid-connect-rpinitiated-1_0.html
@@ -59,17 +54,8 @@ on(:before_session_destroy) do |data|
 
   params << ["id_token_hint", token]
 
-  if SiteSetting.openid_connect_rp_initiated_logout_include_client_id &&
-       SiteSetting.openid_connect_client_id.present?
-    params << ["client_id", SiteSetting.openid_connect_client_id]
-  end
-
   post_logout_redirect = SiteSetting.openid_connect_rp_initiated_logout_redirect.presence
   params << ["post_logout_redirect_uri", post_logout_redirect] if post_logout_redirect
-
-  if SiteSetting.openid_connect_rp_initiated_logout_include_state
-    params << ["state", SecureRandom.hex(16)]
-  end
 
   uri.query = URI.encode_www_form(params)
   data[:redirect_url] = uri.to_s

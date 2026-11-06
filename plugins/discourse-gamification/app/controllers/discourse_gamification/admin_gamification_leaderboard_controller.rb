@@ -5,23 +5,17 @@ class DiscourseGamification::AdminGamificationLeaderboardController < Admin::Adm
 
   def index
     render_serialized(
-      {
-        leaderboards:
-          DiscourseGamification::GamificationLeaderboard.includes(:created_by).order(
-            updated_at: :desc,
-          ),
-      },
+      { leaderboards: DiscourseGamification::GamificationLeaderboard.all },
       AdminGamificationIndexSerializer,
       root: false,
     )
   end
 
   def show
-    leaderboard = DiscourseGamification::GamificationLeaderboard.find(params[:id])
-
-    render_json_dump(
-      { leaderboard: serialize_data(leaderboard, AdminLeaderboardSerializer, root: false) },
-    )
+    render json:
+             LeaderboardSerializer.new(
+               DiscourseGamification::GamificationLeaderboard.find(params[:id]),
+             )
   end
 
   def create
@@ -33,9 +27,9 @@ class DiscourseGamification::AdminGamificationLeaderboardController < Admin::Adm
         created_by_id: params[:created_by_id],
       )
     if leaderboard.save
-      Jobs.enqueue(Jobs::RecalculateLeaderboardScores, leaderboard_id: leaderboard.id)
+      Jobs.enqueue(Jobs::GenerateLeaderboardPositions, leaderboard_id: leaderboard.id)
 
-      render_serialized(leaderboard, AdminLeaderboardSerializer, root: false)
+      render_serialized(leaderboard, LeaderboardSerializer, root: false)
     else
       render_json_error(leaderboard)
     end
@@ -47,9 +41,6 @@ class DiscourseGamification::AdminGamificationLeaderboardController < Admin::Adm
     leaderboard = DiscourseGamification::GamificationLeaderboard.find(params[:id])
     raise Discourse::NotFound unless leaderboard
 
-    previous_score_overrides = leaderboard.score_overrides
-    previous_scorable_category_ids = leaderboard.scorable_category_ids
-
     leaderboard.update(
       name: params[:name],
       to_date: params[:to_date],
@@ -59,20 +50,11 @@ class DiscourseGamification::AdminGamificationLeaderboardController < Admin::Adm
       visible_to_groups_ids: params[:visible_to_groups_ids] || [],
       default_period: params[:default_period],
       period_filter_disabled: params[:period_filter_disabled] || false,
-      score_overrides: params[:score_overrides].presence&.to_unsafe_h&.transform_values(&:to_i),
-      scorable_category_ids: params[:scorable_category_ids].presence,
     )
 
     if leaderboard.save
-      scoring_changed =
-        leaderboard.score_overrides != previous_score_overrides ||
-          leaderboard.scorable_category_ids != previous_scorable_category_ids
-
-      if scoring_changed
-        Jobs.enqueue(Jobs::RecalculateLeaderboardScores, leaderboard_id: leaderboard.id)
-      else
-        Jobs.enqueue(Jobs::RefreshLeaderboardPositions, leaderboard_id: leaderboard.id)
-      end
+      # TODO(selase): Only refresh on specific attribute changes
+      Jobs.enqueue(Jobs::RefreshLeaderboardPositions, leaderboard_id: leaderboard.id)
 
       render json: success_json
     else

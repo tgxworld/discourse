@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
 class Admin::ImpersonateController < Admin::AdminController
-  skip_before_action :ensure_admin, only: :destroy
-  skip_before_action :redirect_to_login_if_required, only: :destroy
-
   def create
     params.require(:username_or_email)
 
@@ -12,21 +9,11 @@ class Admin::ImpersonateController < Admin::AdminController
 
     guardian.ensure_can_impersonate!(user)
 
+    # log impersonate
     StaffActionLogger.new(current_user).log_impersonate(user)
 
-    raise Discourse::InvalidAccess if current_user.is_impersonating
-
-    start_impersonating_user(user)
-
-    render body: nil
-  end
-
-  def destroy
-    if current_user.is_impersonating
-      impersonated_user = current_user
-      stop_impersonating_user
-      StaffActionLogger.new(current_user).log_stop_impersonation(impersonated_user)
-    end
+    # Log on as the user
+    log_on_user(user, impersonate: true)
 
     render body: nil
   end

@@ -32,7 +32,8 @@ class DetailedUserBadgeSerializer < BasicUserBadgeSerializer
   end
 
   def can_favorite
-    SiteSetting.max_favorite_badges > 0 && scope.current_user.present? &&
-      object.user_id == scope.current_user.id && !(1..4).include?(object.badge_id)
+    SiteSetting.max_favorite_badges > 0 &&
+      (scope.current_user.present? && object.user_id == scope.current_user.id) &&
+      !(1..4).include?(object.badge_id)
   end
 end

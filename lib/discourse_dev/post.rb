@@ -94,18 +94,20 @@ module DiscourseDev
       puts "Creating #{count} replies in '#{topic.title}'"
 
       count.times do |i|
-        user = User.random
-        reply =
-          Faker::DiscourseMarkdown.with_user(user.id) do
-            {
-              topic_id: topic.id,
-              raw: Faker::DiscourseMarkdown.sandwich(sentences: 5),
-              skip_validations: true,
-            }
-          end
-        PostCreator.new(user, reply).create!
-      rescue ActiveRecord::RecordNotSaved => e
-        puts e
+        begin
+          user = User.random
+          reply =
+            Faker::DiscourseMarkdown.with_user(user.id) do
+              {
+                topic_id: topic.id,
+                raw: Faker::DiscourseMarkdown.sandwich(sentences: 5),
+                skip_validations: true,
+              }
+            end
+          PostCreator.new(user, reply).create!
+        rescue ActiveRecord::RecordNotSaved => e
+          puts e
+        end
       end
 
       puts "Done!"

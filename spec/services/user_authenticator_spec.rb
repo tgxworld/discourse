@@ -17,11 +17,11 @@ RSpec.describe UserAuthenticator do
     }
   end
 
-  before { enable_auth_provider(:github) }
+  before { SiteSetting.enable_github_logins = true }
 
   describe "#start" do
     describe "without authentication session" do
-      it "requires a password without an authentication session" do
+      it "should apply the right user attributes" do
         user = User.new
         UserAuthenticator.new(user, {}).start
 

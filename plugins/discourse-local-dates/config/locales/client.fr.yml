@@ -5,11 +5,6 @@
 # https://translate.discourse.org/
 
 fr:
-  admin_js:
-    admin:
-      site_settings:
-        categories:
-          discourse_local_dates: "Dates locales de Discourse"
   js:
     discourse_local_dates:
       relative_dates:
@@ -19,11 +14,11 @@ fr:
         countdown:
           passed: la date est passée
       title: Insérer une date et une heure
-      edit_date: Modifier %{date}
       create:
         form:
           insert: Insérer
-          save: Enregistrer
+          advanced_mode: Mode avancé
+          simple_mode: Mode simple
           format_description: "Format utilisé pour afficher la date à l'utilisateur. Utilisez « Z » pour afficher le décalage et « zz » pour le nom du fuseau horaire."
           timezones_title: Fuseaux horaires à afficher
           timezones_description: Les fuseaux horaires seront utilisés pour afficher les dates en mode aperçu et en mode secours.

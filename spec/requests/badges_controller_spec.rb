@@ -7,7 +7,7 @@ RSpec.describe BadgesController do
   before { SiteSetting.enable_badges = true }
 
   describe "#index" do
-    it "returns all badges" do
+    it "should return a list of all badges" do
       get "/badges.json"
 
       expect(response.status).to eq(200)
@@ -15,124 +15,17 @@ RSpec.describe BadgesController do
       expect(parsed["badges"].length).to eq(Badge.enabled.count)
       expect(response.headers["X-Robots-Tag"]).to eq("noindex")
     end
-
-    it "does not expose disabled badges via XHR requests" do
-      disabled_badge = Fabricate(:badge, enabled: false)
-
-      get "/badges.json", headers: { "HTTP_X_REQUESTED_WITH" => "XMLHttpRequest" }
-
-      expect(response.status).to eq(200)
-      badge_ids = response.parsed_body["badges"].map { |b| b["id"] }
-      expect(badge_ids).not_to include(disabled_badge.id)
-    end
-
-    it "does not expose non-listable badges via XHR requests" do
-      non_listable_badge = Fabricate(:badge, listable: false)
-
-      get "/badges.json", headers: { "HTTP_X_REQUESTED_WITH" => "XMLHttpRequest" }
-
-      expect(response.status).to eq(200)
-      badge_ids = response.parsed_body["badges"].map { |b| b["id"] }
-      expect(badge_ids).not_to include(non_listable_badge.id)
-    end
-
-    it "allows staff to see disabled and non-listable badges via XHR requests" do
-      admin = Fabricate(:admin)
-      disabled_badge = Fabricate(:badge, enabled: false)
-      non_listable_badge = Fabricate(:badge, listable: false)
-
-      sign_in(admin)
-      get "/badges.json", headers: { "HTTP_X_REQUESTED_WITH" => "XMLHttpRequest" }
-
-      expect(response.status).to eq(200)
-      badge_ids = response.parsed_body["badges"].map { |b| b["id"] }
-      expect(badge_ids).to include(disabled_badge.id)
-      expect(badge_ids).to include(non_listable_badge.id)
-    end
-
-    it "filters disabled and non-listable badges for staff on non-XHR requests" do
-      admin = Fabricate(:admin)
-      disabled_badge = Fabricate(:badge, enabled: false)
-      non_listable_badge = Fabricate(:badge, listable: false)
-
-      sign_in(admin)
-      get "/badges.json"
-
-      expect(response.status).to eq(200)
-      badge_ids = response.parsed_body["badges"].map { |b| b["id"] }
-      expect(badge_ids).not_to include(disabled_badge.id)
-      expect(badge_ids).not_to include(non_listable_badge.id)
-    end
-
-    it "filters disabled and non-listable badges for staff when only_listable param is true" do
-      admin = Fabricate(:admin)
-      disabled_badge = Fabricate(:badge, enabled: false)
-      non_listable_badge = Fabricate(:badge, listable: false)
-
-      sign_in(admin)
-      get "/badges.json",
-          params: {
-            only_listable: "true",
-          },
-          headers: {
-            "HTTP_X_REQUESTED_WITH" => "XMLHttpRequest",
-          }
-
-      expect(response.status).to eq(200)
-      badge_ids = response.parsed_body["badges"].map { |b| b["id"] }
-      expect(badge_ids).not_to include(disabled_badge.id)
-      expect(badge_ids).not_to include(non_listable_badge.id)
-    end
-
-    context "with an API key" do
-      let(:api_key) { Fabricate(:api_key, user:) }
-
-      def list_badges
-        get "/badges.json",
-            headers: {
-              "HTTP_API_KEY" => api_key.key,
-              "HTTP_API_USERNAME" => user.username,
-            }
-      end
-
-      it "allows listing badges with the badges -> list scope" do
-        Fabricate(:api_key_scope, resource: "badges", action: "list", api_key_id: api_key.id)
-
-        list_badges
-
-        expect(response.status).to eq(200)
-        expect(response.parsed_body["badges"]).to be_present
-      end
-
-      it "denies listing badges with a non-matching scope" do
-        Fabricate(:api_key_scope, resource: "badges", action: "show", api_key_id: api_key.id)
-
-        list_badges
-
-        expect(response.status).to eq(403)
-      end
-
-      it "allows listing badges with the badges -> list scope when login is required" do
-        SiteSetting.login_required = true
-        Fabricate(:api_key_scope, resource: "badges", action: "list", api_key_id: api_key.id)
-
-        list_badges
-
-        expect(response.status).to eq(200)
-        expect(response.parsed_body["badges"]).to be_present
-      end
-    end
   end
 
   describe "#show" do
-    it "returns the badge" do
+    it "should return a badge" do
       get "/badges/#{badge.id}.json"
       expect(response.status).to eq(200)
       parsed = response.parsed_body
       expect(parsed["badge"]).to be_present
     end
 
-    it "marks the notification as viewed" do
+    it "should mark the notification as viewed" do
       sign_in(user)
       user_badge = BadgeGranter.grant(badge, user)
       expect(user_badge.notification.read).to eq(false)

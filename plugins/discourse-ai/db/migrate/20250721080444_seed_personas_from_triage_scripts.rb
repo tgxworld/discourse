@@ -35,10 +35,6 @@ class SeedPersonasFromTriageScripts < ActiveRecord::Migration[8.0]
                 "Unnamed triage automation script ID #{field["automation_id"]}"
               end
             )
-
-          # Persona's name field cannot be longer than 100 chars.
-          name = name.truncate(99)
-
           temp = field["temperature"]
 
           # Extract the model ID from the setting value (e.g., "custom:-5" -> "-5")

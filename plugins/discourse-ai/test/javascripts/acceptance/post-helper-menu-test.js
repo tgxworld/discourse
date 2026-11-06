@@ -9,11 +9,9 @@ import {
   query,
   selectText,
 } from "discourse/tests/helpers/qunit-helpers";
-import aiHelperPrompts from "../fixtures/ai-helper-prompts.js";
+import aiHelperPrompts from "../fixtures/ai-helper-prompts";
 
-let lastStreamRequest = null;
-
-acceptance("Post Helper Menu", function (needs) {
+acceptance("AI Helper - Post Helper Menu", function (needs) {
   needs.settings({
     discourse_ai_enabled: true,
     ai_helper_enabled: true,
@@ -26,7 +24,7 @@ acceptance("Post Helper Menu", function (needs) {
   needs.user({
     admin: true,
     moderator: true,
-    visibleGroups: [AUTO_GROUPS.admins],
+    groups: [AUTO_GROUPS.admins],
     can_use_assistant_in_post: true,
     ai_helper_prompts: aiHelperPrompts,
     trust_level: 4,
@@ -46,17 +44,7 @@ acceptance("Post Helper Menu", function (needs) {
       return helper.response(json);
     });
 
-    server.get("/t/3.json", () => {
-      const json = cloneJSON(topicFixtures["/t/28830/1.json"]);
-      json.post_stream.posts[0].cooked =
-        "<p>plain start <b>BOLD MIDDLE</b> plain end</p>";
-      return helper.response(json);
-    });
-
-    server.post(`/discourse-ai/ai-helper/stream_suggestion/`, (request) => {
-      lastStreamRequest = Object.fromEntries(
-        new URLSearchParams(request.requestBody)
-      );
+    server.post(`/discourse-ai/ai-helper/stream_suggestion/`, () => {
       return helper.response({
         result: "This is a suggestio",
         done: false,
@@ -120,19 +108,5 @@ acceptance("Post Helper Menu", function (needs) {
       result: translated,
     });
     assert.dom(".ai-post-helper__suggestion__text").hasText(translated);
-  });
-
-  test("AI helper request sends the markdown form, not plaintext", async function (assert) {
-    lastStreamRequest = null;
-    await visit("/t/-/3");
-
-    await selectText(query("#post_1 .cooked p"));
-    await click(".ai-post-helper__trigger");
-    await click(".ai-helper-options__button[data-name='translate']");
-
-    assert.true(
-      lastStreamRequest?.text?.includes("**BOLD MIDDLE**"),
-      `payload should contain markdown formatting (got: ${lastStreamRequest?.text})`
-    );
   });
 });

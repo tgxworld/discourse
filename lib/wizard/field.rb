@@ -2,7 +2,7 @@
 
 class Wizard
   class Choice
-    attr_reader :id, :label, :data, :extra_label
+    attr_reader :id, :label, :icon, :data, :extra_label
     attr_accessor :field
 
     def initialize(id, opts)
@@ -10,11 +10,12 @@ class Wizard
       @data = opts[:data]
       @label = opts[:label]
       @extra_label = opts[:extra_label]
+      @icon = opts[:icon]
     end
   end
 
   class Field
-    attr_reader :id, :type, :required, :value, :choices
+    attr_reader :id, :type, :required, :value, :icon, :choices, :disabled, :show_in_sidebar
     attr_accessor :step
 
     def initialize(attrs)
@@ -24,7 +25,10 @@ class Wizard
       @type = attrs[:type]
       @required = !!attrs[:required]
       @value = attrs[:value]
+      @icon = attrs[:icon]
+      @disabled = attrs[:disabled]
       @choices = []
+      @show_in_sidebar = attrs[:show_in_sidebar]
     end
 
     def add_choice(id, opts = nil)

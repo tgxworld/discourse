@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class WizardStepSerializer < ApplicationSerializer
-  attributes :id, :title, :index, :emoji
+  attributes :id, :next, :previous, :description, :title, :index, :emoji
   has_many :fields, serializer: WizardFieldSerializer, embed: :objects
 
   def id
@@ -10,6 +10,22 @@ class WizardStepSerializer < ApplicationSerializer
 
   def index
     object.index
+  end
+
+  def next
+    object.next.id if object.next.present?
+  end
+
+  def include_next?
+    object.next.present?
+  end
+
+  def previous
+    object.previous.id if object.previous.present?
+  end
+
+  def include_previous?
+    object.previous.present?
   end
 
   def i18n_key
@@ -21,6 +37,15 @@ class WizardStepSerializer < ApplicationSerializer
     return nil unless I18n.exists?(key)
 
     vars.nil? ? I18n.t(key) : I18n.t(key, vars)
+  end
+
+  def description
+    key = object.disabled ? "disabled" : "description"
+    translate(key, object.description_vars)
+  end
+
+  def include_description?
+    description.present?
   end
 
   def title

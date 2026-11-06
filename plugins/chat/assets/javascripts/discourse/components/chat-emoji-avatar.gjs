@@ -1,9 +1,9 @@
-import dReplaceEmoji from "discourse/ui-kit/helpers/d-replace-emoji";
+import replaceEmoji from "discourse/helpers/replace-emoji";
 
 const ChatEmojiAvatar = <template>
   <div class="chat-emoji-avatar">
     <div class="chat-emoji-avatar-container">
-      {{dReplaceEmoji @emoji}}
+      {{replaceEmoji @emoji}}
     </div>
   </div>
 </template>;

@@ -53,8 +53,8 @@ RSpec.describe Chat::DirectMessageChannel do
   end
 
   describe "#threading_enabled" do
-    it "defaults to false" do
-      expect(channel.threading_enabled).to be(false)
+    it "defaults to true" do
+      expect(channel.threading_enabled).to be(true)
     end
   end
 
@@ -115,7 +115,6 @@ RSpec.describe Chat::DirectMessageChannel do
       channel.chatable.update!(group: false)
       expect(channel).not_to be_direct_message_group
     end
-
     it "returns true if the DirectMessage chatable is for a group DM" do
       channel.chatable.update!(group: true)
       expect(channel).to be_direct_message_group

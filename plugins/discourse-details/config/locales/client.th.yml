@@ -6,6 +6,8 @@
 
 th:
   js:
+    details:
+      title: ซ่อนรายละเอียด
     composer:
       details_title: สรุป
       details_text: "ข้อความนี้จะถูกซ่อน"

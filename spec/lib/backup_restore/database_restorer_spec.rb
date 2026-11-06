@@ -17,7 +17,6 @@ RSpec.describe BackupRestore::DatabaseRestorer do
       expect_psql(stub_thread: true).in_sequence(restore)
       expect_db_migrate.in_sequence(restore)
       expect_db_reconnect.in_sequence(restore)
-      ActiveRecord::Base.connection.expects(:reconnect!).in_sequence(restore)
 
       restorer.restore("foo.sql")
     end
@@ -28,28 +27,6 @@ RSpec.describe BackupRestore::DatabaseRestorer do
       execute_stubbed_restore
 
       expect(BackupMetadata.value_for(BackupMetadata::LAST_RESTORE_DATE)).to eq(date_string)
-    end
-
-    context "without transactional tests" do
-      self.use_transactional_tests = false
-
-      after { BackupMetadata.delete_all }
-
-      it "reconnects when the database connection drops while the dump is restored" do
-        pid = DB.query_single("SELECT pg_backend_pid()").first
-        psql = BackupRestore::DatabaseRestorer.psql_command
-        BackupRestore::DatabaseRestorer.stubs(:psql_command).returns(
-          "#{psql} --command='SELECT pg_terminate_backend(#{pid})'",
-        )
-
-        execute_stubbed_restore(
-          stub_psql: false,
-          stub_reconnect: false,
-          dump_file_path: "/dev/null",
-        )
-
-        expect(BackupMetadata.last_restore_date).to be_present
-      end
     end
 
     context "with real psql" do
@@ -94,14 +71,6 @@ RSpec.describe BackupRestore::DatabaseRestorer do
 
       it "restores from PostgreSQL 12" do
         expect_restore_to_work("postgresql_12.1.sql")
-      end
-
-      it "restores from PostgreSQL 15.14" do
-        expect_restore_to_work("postgresql_15.14.sql")
-      end
-
-      it "ignores unwanted SQL" do
-        expect_restore_to_work("unwanted.sql")
       end
 
       it "detects error during restore" do
@@ -164,26 +133,10 @@ RSpec.describe BackupRestore::DatabaseRestorer do
           /^CREATE TRIGGER foo_user_id_readonly .+? EXECUTE FUNCTION discourse_functions.raise_foo_user_id_readonly/,
         )
       end
-
-      it "removes unwanted SQL" do
-        log = restore_and_log_output("unwanted.sql")
-
-        expect(log).to include("CREATE TABLE public.foo")
-        expect(log).not_to be_blank
-        expect(log).not_to include("SET transaction_timeout")
-        expect(log).not_to include("CREATE EXTENSION")
-        expect(log).not_to include("COMMENT ON EXTENSION")
-        expect(log).not_to include(
-          "CREATE FUNCTION discourse_functions.raise_topic_status_updates_readonly",
-        )
-        expect(log).not_to include("CREATE SERVER")
-        expect(log).not_to include("CREATE USER")
-        expect(log).not_to include("CREATE FOREIGN TABLE")
-      end
     end
 
     describe "database connection" do
-      it "does not raise an error outside multisite mode" do
+      it "it is not erroring for non-multisite" do
         expect { execute_stubbed_restore }.not_to raise_error
       end
     end

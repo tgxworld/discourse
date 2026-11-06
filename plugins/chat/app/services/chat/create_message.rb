@@ -49,7 +49,6 @@ module Chat
 
       validates :chat_channel_id, presence: true
       validates :message, presence: true, if: -> { upload_ids.blank? && blocks.blank? }
-      validates :message, length: { maximum: -> { SiteSetting.chat_maximum_message_length } }
 
       after_validation do
         next if message.blank?
@@ -63,10 +62,9 @@ module Chat
     end
 
     model :channel
-    policy :can_post_in_channel
     step :enforce_membership
     model :membership
-    policy :channel_allows_message_creation, class_name: Chat::Channel::Policy::MessageCreation
+    policy :allowed_to_create_message_in_channel, class_name: Chat::Channel::Policy::MessageCreation
     model :reply, optional: true
     policy :ensure_reply_consistency
     model :thread, optional: true
@@ -84,13 +82,12 @@ module Chat
       step :create_webhook_event
       step :update_channel_last_message
       step :update_membership_last_read
+      step :process_direct_message_channel
     end
 
-    step :process_direct_message_channel
     step :publish_new_thread
     step :process
     step :publish_user_tracking_state
-    step :index_message
 
     private
 
@@ -100,10 +97,6 @@ module Chat
 
     def no_silenced_user(guardian:)
       !guardian.is_silenced?
-    end
-
-    def can_post_in_channel(guardian:, channel:)
-      guardian.can_post_in_chatable?(channel.chatable)
     end
 
     def fetch_channel(params:)
@@ -157,10 +150,7 @@ module Chat
 
     def fetch_uploads(params:, guardian:)
       return [] if !SiteSetting.chat_allow_uploads
-      Upload
-        .where(id: params.upload_ids)
-        .joins(:user_uploads)
-        .where(user_uploads: { user: guardian.user })
+      guardian.user.uploads.where(id: params.upload_ids)
     end
 
     def instantiate_message(channel:, guardian:, params:, uploads:, thread:, reply:, options:)
@@ -171,12 +161,7 @@ module Chat
         message: params.message,
         uploads: uploads,
         thread: thread,
-        cooked:
-          ::Chat::Message.cook(
-            params.message,
-            user_id: guardian.user.id,
-            author_username: guardian.user.username,
-          ),
+        cooked: ::Chat::Message.cook(params.message, user_id: guardian.user.id),
         cooked_version: ::Chat::Message::BAKED_VERSION,
         streaming: options.streaming,
         blocks: params.blocks,
@@ -191,21 +176,13 @@ module Chat
       Chat::Draft.where(user: guardian.user, chat_channel: channel).destroy_all
     end
 
-    def post_process_thread(thread:, message_instance:, guardian:, channel:)
+    def post_process_thread(thread:, message_instance:, guardian:)
       return unless thread
 
       thread.update!(last_message: message_instance)
       thread.increment_replies_count_cache
-
-      if channel.direct_message_channel? && !channel.threading_enabled
-        # Add all DM participants to threads so they have memberships
-        # for unread tracking and mark-as-read functionality
-        channel.chatable.users.each { |user| thread.add(user) }
-        thread.membership_for(guardian.user).update!(last_read_message: message_instance)
-      else
-        thread.add(thread.original_message_user)
-        thread.add(guardian.user).update!(last_read_message: message_instance)
-      end
+      thread.add(guardian.user).update!(last_read_message: message_instance)
+      thread.add(thread.original_message_user)
     end
 
     def create_webhook_event(message_instance:)
@@ -278,12 +255,6 @@ module Chat
       message_to_publish =
         membership.last_read_message || message_instance if message_instance.in_thread?
       Chat::Publisher.publish_user_tracking_state!(guardian.user, channel, message_to_publish)
-    end
-
-    def index_message(message_instance:)
-      Scheduler::Defer.later "Index chat message for search" do
-        SearchIndexer.index(message_instance)
-      end
     end
   end
 end

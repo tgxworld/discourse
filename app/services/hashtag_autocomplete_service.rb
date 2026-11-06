@@ -33,23 +33,19 @@ class HashtagAutocompleteService
   end
 
   def self.enabled_data_sources
-    data_sources.filter(&:enabled?)
+    self.data_sources.filter(&:enabled?)
   end
 
   def self.data_source_types
-    enabled_data_sources.map(&:type)
+    self.enabled_data_sources.map(&:type)
   end
 
   def self.data_source_icon_map
-    enabled_data_sources.map { |ds| [ds.type, ds.icon] }.to_h
+    self.enabled_data_sources.map { |ds| [ds.type, ds.icon] }.to_h
   end
 
   def self.data_source_from_type(type)
-    enabled_data_sources.find { |ds| ds.type == type }
-  end
-
-  def self.ref_for(type, record_id)
-    data_sources.find { |ds| ds.type == type }.try(:ref_for, record_id).presence
+    self.enabled_data_sources.find { |ds| ds.type == type }
   end
 
   def self.find_priorities_for_context(context)
@@ -130,20 +126,20 @@ class HashtagAutocompleteService
 
     def to_h
       opts = {
-        relative_url: relative_url,
-        text: text,
-        description: description,
-        icon: icon,
-        colors: colors,
-        type: type,
-        ref: ref,
-        slug: slug,
-        id: id,
+        relative_url: self.relative_url,
+        text: self.text,
+        description: self.description,
+        icon: self.icon,
+        colors: self.colors,
+        type: self.type,
+        ref: self.ref,
+        slug: self.slug,
+        id: self.id,
       }
 
-      if style_type.present?
-        opts[:style_type] = style_type
-        opts[:emoji] = emoji
+      if self.style_type.present?
+        opts[:style_type] = self.style_type
+        opts[:emoji] = self.emoji
       end
 
       opts
@@ -152,25 +148,6 @@ class HashtagAutocompleteService
 
   def initialize(guardian)
     @guardian = guardian
-  end
-
-  def hashtags_for(type, slugs)
-    return [] if slugs.blank?
-
-    higher_ranked_types =
-      HashtagAutocompleteService
-        .ordered_types_for_context("topic-composer")
-        .take_while { |candidate| candidate != type }
-
-    conflicting_refs =
-      higher_ranked_types
-        .flat_map { |candidate| lookup_for_type(candidate, guardian, slugs) }
-        .to_set { |item| UrlHelper.unencode(item.ref).downcase }
-
-    slugs.map do |slug|
-      ref = conflicting_refs.include?(slug.downcase) ? "#{slug}::#{type}" : slug
-      HashtagRewriter.usable_ref?(ref) ? "##{ref}" : slug
-    end
   end
 
   def find_by_ids(ids_by_type)
@@ -285,7 +262,11 @@ class HashtagAutocompleteService
   #                        bother searching subsequent types if the first types in
   #                        the array already reach the limit.
   # @returns {Array} The results as HashtagItems
-  def search(term, types_in_priority_order, limit: 20)
+  def search(
+    term,
+    types_in_priority_order,
+    limit: SiteSetting.experimental_hashtag_search_result_limit
+  )
     raise Discourse::InvalidParameters.new(:order) if !types_in_priority_order.is_a?(Array)
     limit = [limit, SEARCH_MAX_LIMIT].min
     types_in_priority_order =

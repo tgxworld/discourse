@@ -1,23 +1,23 @@
 import { hash } from "@ember/helper";
-import MultiSelect from "discourse/select-kit/components/multi-select";
-import BaseField from "./da-base-field.gjs";
-import DAFieldDescription from "./da-field-description.gjs";
-import DAFieldLabel from "./da-field-label.gjs";
+import MultiSelect from "select-kit/components/multi-select";
+import BaseField from "./da-base-field";
+import DAFieldDescription from "./da-field-description";
+import DAFieldLabel from "./da-field-label";
 
 export default class TextListField extends BaseField {
   <template>
     <section class="field text-list-field">
       <div class="control-group">
-        <DAFieldLabel @field={{@field}} @label={{@label}} />
+        <DAFieldLabel @label={{@label}} @field={{@field}} />
 
         <div class="controls">
           <MultiSelect
-            @content={{@field.metadata.value}}
-            @nameProperty={{null}}
-            @onChange={{this.mutValue}}
-            @options={{hash allowAny=true disabled=@field.isDisabled}}
             @value={{@field.metadata.value}}
+            @content={{@field.metadata.value}}
+            @onChange={{this.mutValue}}
+            @nameProperty={{null}}
             @valueProperty={{null}}
+            @options={{hash allowAny=true disabled=@field.isDisabled}}
           />
 
           <DAFieldDescription @description={{@description}} />

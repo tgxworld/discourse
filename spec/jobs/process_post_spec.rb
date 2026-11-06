@@ -85,7 +85,7 @@ RSpec.describe Jobs::ProcessPost do
       expect(post.cooked).to eq(cooked)
     end
 
-    it "updates first post caches only for the OP" do
+    it "updates the topic excerpt when first post" do
       post = Fabricate(:post, raw: "Some OP content", cooked: "")
       post.topic.update_excerpt("Incorrect")
 
@@ -99,9 +99,8 @@ RSpec.describe Jobs::ProcessPost do
   end
 
   describe "#enqueue_pull_hotlinked_images" do
-    subject(:job) { described_class.new }
-
     fab!(:post) { Fabricate(:post, created_at: 20.days.ago) }
+    let(:job) { Jobs::ProcessPost.new }
 
     it "runs even when download_remote_images_to_local is disabled" do
       # We want to run it to pull hotlinked optimized images

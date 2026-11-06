@@ -1,4 +1,5 @@
 import EmberObject, { computed } from "@ember/object";
+import discourseComputed from "discourse/lib/decorators";
 
 export default class Plan extends EmberObject {
   @computed("unit_amount")
@@ -7,17 +8,17 @@ export default class Plan extends EmberObject {
   }
 
   set amountDollars(value) {
-    const decimal = Math.round(parseFloat(value) * 100);
+    const decimal = parseFloat(value) * 100;
     this.set("unit_amount", decimal);
   }
 
-  @computed("recurring.interval")
-  get billingInterval() {
-    return this.recurring?.interval || "one-time";
+  @discourseComputed("recurring.interval")
+  billingInterval(interval) {
+    return interval || "one-time";
   }
 
-  @computed("amountDollars", "currency", "billingInterval")
-  get subscriptionRate() {
-    return `${this.amountDollars} ${this.currency.toUpperCase()} / ${this.billingInterval}`;
+  @discourseComputed("amountDollars", "currency", "billingInterval")
+  subscriptionRate(amountDollars, currency, interval) {
+    return `${amountDollars} ${currency.toUpperCase()} / ${interval}`;
   }
 }

@@ -15,8 +15,6 @@ hr:
       removed: "je uklonio %{removed}"
     provider:
       slack:
-        errors:
-          action_prohibited: "Bot nema dozvolu za objavljivanje na tom kanalu"
         messaging:
           topic_tag_changed:
             added_and_removed: "Dodano %{added} i uklonjeno %{removed}"

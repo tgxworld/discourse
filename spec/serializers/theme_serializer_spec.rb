@@ -4,7 +4,7 @@ RSpec.describe ThemeSerializer do
   describe ".settings" do
     fab!(:theme)
 
-    it "adds an error for an invalid settings format" do
+    it "should add error message when settings format is invalid" do
       Theme
         .any_instance
         .stubs(:settings)
@@ -15,7 +15,7 @@ RSpec.describe ThemeSerializer do
       expect(serialized[:errors][0]).to eq(I18n.t("themes.settings_errors.invalid_yaml"))
     end
 
-    it "adds error messages from theme fields" do
+    it "should add errors messages from theme fields" do
       error = "error when compiling theme field"
       theme_field = Fabricate(:theme_field, error: error, theme: theme)
       serialized = ThemeSerializer.new(theme.reload).as_json[:theme]
@@ -28,55 +28,53 @@ RSpec.describe ThemeSerializer do
     fab!(:theme) { Fabricate(:theme, color_scheme_id: 1, dark_color_scheme_id: 2) }
     let(:serialized) { ThemeSerializer.new(theme.reload).as_json[:theme] }
 
-    it "includes the color scheme ID" do
+    it "should include color scheme id" do
       expect(serialized[:color_scheme_id]).to eq(1)
     end
 
-    it "includes the dark color scheme ID" do
+    it "should include dark color scheme id" do
       expect(serialized[:dark_color_scheme_id]).to eq(2)
     end
   end
 
-  describe "screenshot_light_url" do
+  describe "screenshot_url" do
     fab!(:theme)
     let(:serialized) { ThemeSerializer.new(theme.reload).as_json[:theme] }
 
-    it "includes screenshot_light_url for the light screenshot field" do
+    it "should include screenshot_url when there is a theme field with screenshot upload type" do
       Fabricate(
         :theme_field,
         theme: theme,
         type_id: ThemeField.types[:theme_screenshot_upload_var],
-        name: "screenshot_light",
+        name: "theme_screenshot_1",
         upload: Fabricate(:upload),
       )
-      expect(serialized[:screenshot_light_url]).to be_present
+      expect(serialized[:screenshot_url]).to be_present
     end
 
-    it "omits screenshot URLs when no screenshot fields exist" do
-      expect(serialized[:screenshot_light_url]).to be_nil
-      expect(serialized[:screenshot_dark_url]).to be_nil
+    it "should not include screenshot_url when there is no theme field with screenshot upload type" do
+      expect(serialized[:screenshot_url]).to be_nil
     end
 
-    it "includes both dark and light screenshot URLs" do
+    it "should handle multiple screenshot fields and use the first one" do
       first_upload = Fabricate(:upload)
       second_upload = Fabricate(:upload)
       Fabricate(
         :theme_field,
         theme: theme,
         type_id: ThemeField.types[:theme_screenshot_upload_var],
-        name: "screenshot_light",
+        name: "theme_screenshot_1",
         upload: first_upload,
       )
       Fabricate(
         :theme_field,
         theme: theme,
         type_id: ThemeField.types[:theme_screenshot_upload_var],
-        name: "screenshot_dark",
+        name: "theme_screenshot_2",
         upload: second_upload,
       )
 
-      expect(serialized[:screenshot_light_url]).to eq(first_upload.url)
-      expect(serialized[:screenshot_dark_url]).to eq(second_upload.url)
+      expect(serialized[:screenshot_url]).to eq(first_upload.url)
     end
   end
 

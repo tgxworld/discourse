@@ -25,7 +25,7 @@ class LocaleSiteSetting < EnumSiteSetting
     @lock.synchronize do
       @language_names ||=
         begin
-          names = YAML.safe_load(File.read(Rails.root.join("config/locales/names.yml").to_s))
+          names = YAML.safe_load(File.read(File.join(Rails.root, "config", "locales", "names.yml")))
 
           DiscoursePluginRegistry.locales.each do |locale, options|
             if !names.key?(locale) && options[:name] && options[:nativeName]
@@ -44,7 +44,7 @@ class LocaleSiteSetting < EnumSiteSetting
         begin
           locales =
             Dir
-              .glob(Rails.root.join("config/locales/client.*.yml").to_s)
+              .glob(File.join(Rails.root, "config", "locales", "client.*.yml"))
               .map { |x| x.split(".")[-2] }
 
           locales += DiscoursePluginRegistry.locales.keys

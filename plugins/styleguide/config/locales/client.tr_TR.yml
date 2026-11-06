@@ -9,13 +9,11 @@ tr_TR:
     admin:
       site_settings:
         categories:
-          styleguide: "Discourse Biçim Kılavuzu"
+          styleguide: "Söylem Biçim Kılavuzu"
   js:
     styleguide:
       title: "Stil rehberi"
-      example:
-        kind:
-          component: "Bileşen"
+      welcome: "Başlamak için soldaki menüden bir bölüm seçin."
       categories:
         syntax: Sözdizimi
         atoms: Atomlar
@@ -32,28 +30,14 @@ tr_TR:
           title: "Tarih/Saat girdileri"
         menus:
           title: "Menüler"
-        context_menu:
-          actions:
-            duplicate: "Eş Kopya"
-            delete: "Sil"
         multi_select:
           title: "Çoklu seçim"
-        reorderable_list:
-          policies_pinned: "Sabitlendi"
-          policies_required: "Gerekli"
-          table_field: "Alan"
-          table_type: "Tür"
-          cross_list_primary: "Birincil"
         toasts:
           title: "Beliren pencereler"
         font_scale:
           title: "Yazı Tipi Sistemi"
         colors:
           title: "Renkler"
-        dialog:
-          title: "Diyalog"
-        drag_and_drop:
-          locked: "Kilitli"
         icons:
           title: "Simgeler"
           full_list: "Font Awesome Simgelerinin tam listesine bakın"
@@ -76,7 +60,7 @@ tr_TR:
         categories_list:
           title: "Kategori Listesi"
         topic_link:
-          title: "Konu Bağlantısı ve Durumu"
+          title: "Konu Bağlantısı"
         topic_list_item:
           title: "Konu Listesi Ögesi"
         topic_statuses:
@@ -85,6 +69,8 @@ tr_TR:
           title: "Konu Listesi"
         basic_topic_list:
           title: "Temel Konu Listesi"
+        footer_message:
+          title: "Alt Bilgi Mesajı"
         signup_cta:
           title: "CTA'ya kaydolun"
         topic_timer_info:
@@ -99,41 +85,14 @@ tr_TR:
           title: "Gönderi Listesi"
           empty_example: "<PostList /> boş durum"
           populated_example: "<PostList /> doldurulmuş durum"
-        post_oneboxes:
-          title: "Onebox'ları Gönder"
         topic_map:
           title: "Konu Haritası"
         site_header:
           title: "Site Başlığı"
-        more_topics:
-          title: "Daha Fazla Konu"
+        suggested_topics:
+          title: "Önerilen Konular"
         post_menu:
           title: "Gönderi Menüsü"
-        roving_focus:
-          toolbar:
-            copy: "Kopyala"
-          tags:
-            remove: "%{tag} öğesini kaldır"
-            design: "Tasarım"
-            support: "Destek"
-          adjacent:
-            label: "Filtreler"
-            field: "Ara"
-            placeholder: "Konuları ara"
-            open: "Aç"
-            recent: "Yakın zaman"
-          listbox:
-            apple: "Apple"
-          combobox:
-            daily: "Günlük"
-            weekly: "Haftalık"
-            monthly: "Aylık"
-            never: "Asla"
-          tree:
-            components: "Bileşenler"
-            select: "Seç"
-        docked_composer:
-          title: "Docked Composer"
         modal:
           title: "Kalıcı"
           header: "Kalıcı Başlık"
@@ -144,8 +103,6 @@ tr_TR:
           title: "Başlık Simgeleri"
         spinners:
           title: "Değer Değiştiriciler"
-        otp:
-          title: "OTP"
         empty_state:
           title: "Boş Durum"
         tooltips:
@@ -156,5 +113,3 @@ tr_TR:
         char_counter:
           title: "Karakter Sayacı"
           placeholder: "Metninizi buraya girin..."
-        segmented_control:
-          title: "Bölümlü Kontrol (Düğme geçiş grubu)"

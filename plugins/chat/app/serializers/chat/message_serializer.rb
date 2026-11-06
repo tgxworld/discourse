@@ -28,10 +28,6 @@ module Chat
             edited
             thread
             blocks
-            channel
-            thread_title
-            pinned
-            is_action
           ]
       ),
     )
@@ -43,15 +39,17 @@ module Chat
     def mentioned_users
       object
         .user_mentions
-        .first(SiteSetting.max_mentions_per_chat_message)
-        .filter_map(&:user)
+        .includes(user: :user_option)
+        .limit(SiteSetting.max_mentions_per_chat_message)
+        .map(&:user)
+        .compact
         .sort_by(&:id)
         .map { |user| BasicUserSerializer.new(user, root: false, include_status: true) }
         .as_json
     end
 
-    def channel_object
-      @channel_object ||= @options.dig(:chat_channel) || object.chat_channel
+    def channel
+      @channel ||= @options.dig(:chat_channel) || object.chat_channel
     end
 
     def user
@@ -60,18 +58,15 @@ module Chat
     end
 
     def excerpt
-      object.excerpt_for_display
-    end
-
-    def is_action
-      object.action?
+      object.excerpt || object.build_excerpt
     end
 
     def reactions
       object
         .reactions
+        .includes(user: :user_option)
         .group_by(&:emoji)
-        .filter_map do |emoji, reactions|
+        .map do |emoji, reactions|
           next unless Emoji.exists?(emoji)
 
           users = reactions.take(5).map(&:user)
@@ -84,6 +79,7 @@ module Chat
             reacted: users_reactions.include?(emoji),
           }
         end
+        .compact
     end
 
     def include_reactions?
@@ -96,8 +92,6 @@ module Chat
     end
 
     def users_bookmark
-      return if scope&.user.blank?
-
       @user_bookmark ||= object.bookmarks.find { |bookmark| bookmark.user_id == scope&.user&.id }
     end
 
@@ -174,7 +168,6 @@ module Chat
       ActiveModel::ArraySerializer.new(
         object.blocks || [],
         each_serializer: Chat::BlockSerializer,
-        user_id: object.user_id,
         scope:,
         root: false,
       ).as_json
@@ -184,16 +177,8 @@ module Chat
       return [] if !scope.can_flag_chat_message?(object)
       return [] if reviewable_id.present? && user_flag_status == ReviewableScore.statuses[:pending]
 
-      if scope.can_only_flag_chat_messages_as_illegal?
-        return [] unless scope.can_flag_message_as?(object, scope.chat_flag_types[:illegal], {})
-        return scope.chat_flag_types.slice(:illegal).keys
-      end
-
-      scope.chat_flag_types.filter_map do |sym, id|
-        next unless scope.can_flag_message_as?(object, id, {})
-        if channel_object.direct_message_channel? && %i[notify_moderators notify_user].include?(sym)
-          next
-        end
+      PostActionType.flag_types.map do |sym, id|
+        next if channel.direct_message_channel? && %i[notify_moderators notify_user].include?(sym)
 
         if sym == :notify_user &&
              (
@@ -207,36 +192,12 @@ module Chat
       end
     end
 
-    def include_channel?
-      @options[:include_channel]
-    end
-
-    def channel
-      ::Chat::ChannelSerializer.new(channel_object, scope:, root: false)
-    end
-
     def include_thread_id?
-      channel_object.threading_enabled || object.thread&.force
+      channel.threading_enabled || object.thread&.force
     end
 
     def include_thread?
       include_thread_id? && object.thread_om? && object.thread.present?
-    end
-
-    def include_thread_title?
-      include_thread_id? && !object.thread_om? && object.thread.present?
-    end
-
-    def thread_title
-      object.thread&.title
-    end
-
-    def pinned
-      object.pinned_message.present?
-    end
-
-    def include_pinned?
-      SiteSetting.chat_pinned_messages
     end
 
     def thread

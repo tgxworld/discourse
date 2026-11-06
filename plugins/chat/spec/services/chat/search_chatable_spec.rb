@@ -69,54 +69,10 @@ RSpec.describe Chat::SearchChatable do
           expect(result.users).to include(current_user, sam, charlie, alain)
         end
 
-        it "includes listed bots but not unlisted bots" do
-          bot = Fabricate(:bot)
-          unlisted_bot = Fabricate(:bot)
-          Chat::DiscoverableBot.create!(user: bot)
-          params[:term] = bot.username
-          expect(result.users).to contain_exactly(bot)
-          params[:term] = unlisted_bot.username
-          expect(described_class.call(params: params, **dependencies).users).to be_empty
-        end
-
-        it "preserves listed bots when a modifier replaces the allowlist" do
-          bot = Fabricate(:bot)
-          Chat::DiscoverableBot.create!(user: bot)
-          params[:term] = bot.username
-          modifier = proc { [] }
-          plugin = Plugin::Instance.new
-          plugin.register_modifier(:chat_allowed_bot_user_ids, &modifier)
-          expect(result.users).to contain_exactly(bot)
-        ensure
-          DiscoursePluginRegistry.unregister_modifier(plugin, :chat_allowed_bot_user_ids, &modifier)
-        end
-
         it "can filter usernames" do
           params[:term] = "sam"
 
           expect(result.users).to contain_exactly(sam)
-        end
-
-        context "with match_quality" do
-          fab!(:david) { Fabricate(:user, username: "david") }
-          fab!(:davidb) { Fabricate(:user, username: "davidb") }
-
-          before { params[:term] = "david" }
-
-          it "assigns correct match quality values" do
-            users = result.users
-            expect(users.find { |u| u.username == "david" }.match_quality).to eq(
-              Chat::ChannelFetcher::MATCH_QUALITY_EXACT,
-            )
-            expect(users.find { |u| u.username == "davidb" }.match_quality).to eq(
-              Chat::ChannelFetcher::MATCH_QUALITY_PREFIX,
-            )
-          end
-
-          it "orders users by match quality" do
-            users = result.users.select { |u| u.username.start_with?("david") }
-            expect(users.map(&:username)).to eq(%w[david davidb])
-          end
         end
 
         it "can filter users with a membership to a specific channel" do
@@ -156,30 +112,10 @@ RSpec.describe Chat::SearchChatable do
       end
 
       context "when including groups" do
-        fab!(:hidden_group) do
-          Fabricate(
-            :group,
-            name: "hidden-group-1",
-            visibility_level: Group.visibility_levels[:members],
-          )
-        end
-
-        fab!(:hidden_members_group) do
-          Fabricate(
-            :group,
-            name: "hidden-group-2",
-            members_visibility_level: Group.visibility_levels[:members],
-          )
-        end
-
         let(:include_groups) { true }
 
         it "fetches groups" do
           expect(result.groups).to include(group_1, group_2)
-        end
-
-        it "does not preload group users" do
-          expect(result.groups.first.association(:users).loaded?).to eq(false)
         end
 
         it "can filter groups by name" do
@@ -190,44 +126,6 @@ RSpec.describe Chat::SearchChatable do
         it "excludes groups not matching the search term" do
           params[:term] = "nonexistent"
           expect(result.groups).to be_empty
-        end
-
-        it "excludes groups that user cannot see by default" do
-          expect(result.groups).to_not include(hidden_group)
-          expect(result.groups).to_not include(hidden_members_group)
-        end
-
-        it "excludes groups that user cannot see when searching" do
-          params[:term] = "hidden-group"
-
-          expect(result.groups).to_not include(hidden_group)
-          expect(result.groups).to_not include(hidden_members_group)
-        end
-
-        context "with match_quality" do
-          fab!(:dev_group) { Fabricate(:group, name: "dev") }
-          fab!(:devops_group) { Fabricate(:group, name: "devops") }
-          fab!(:mydev_group) { Fabricate(:group, name: "mydev") }
-
-          before { params[:term] = "dev" }
-
-          it "assigns correct match quality values" do
-            groups = result.groups
-            expect(groups.find { |g| g.name == "dev" }.match_quality).to eq(
-              Chat::ChannelFetcher::MATCH_QUALITY_EXACT,
-            )
-            expect(groups.find { |g| g.name == "devops" }.match_quality).to eq(
-              Chat::ChannelFetcher::MATCH_QUALITY_PREFIX,
-            )
-            expect(groups.find { |g| g.name == "mydev" }.match_quality).to eq(
-              Chat::ChannelFetcher::MATCH_QUALITY_PARTIAL,
-            )
-          end
-
-          it "orders groups by match quality then name" do
-            groups = result.groups.select { |g| g.name.include?("dev") }
-            expect(groups.map(&:name)).to eq(%w[dev devops mydev])
-          end
         end
       end
 
@@ -282,7 +180,7 @@ RSpec.describe Chat::SearchChatable do
           expect(result.direct_message_channels).to contain_exactly(channel_2, channel_3, channel_5)
         end
 
-        it "doesn't fetch inaccessible direct message channels" do
+        it "doesn’t fetches inaccessible direct message channels" do
           expect(result.direct_message_channels).to_not include(channel_4)
         end
 

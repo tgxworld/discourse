@@ -10,10 +10,10 @@ class Service::PolicyBase
   end
 
   def call
-    raise NotImplementedError
+    raise "Not implemented"
   end
 
   def reason
-    raise NotImplementedError
+    raise "Not implemented"
   end
 end

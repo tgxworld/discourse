@@ -36,13 +36,6 @@ module PageObjects
           ).click
         end
 
-        def has_community_section_link?(text, href: nil)
-          selector = ".#{SIDEBAR_SECTION_LINK_SELECTOR}"
-          selector += "[href='#{href}']" if href.present?
-
-          community_section.has_css?(selector, text:)
-        end
-
         def has_one_active_section_link?
           has_css?(".#{SIDEBAR_SECTION_LINK_SELECTOR}--active", count: 1)
         end
@@ -62,17 +55,12 @@ module PageObjects
           section_link_present?(name, href: href, active: active, present: false)
         end
 
-        def sidebar_section_selector(name)
-          name = name.parameterize if name.include?(" ") || name.match?(/[A-Z]/)
-          ".sidebar-sections [data-section-name='#{name}']"
-        end
-
         def has_section?(name)
-          has_css?(sidebar_section_selector(name))
+          has_css?(".sidebar-sections [data-section-name='#{name.parameterize}']")
         end
 
         def has_no_section?(name)
-          has_no_css?(sidebar_section_selector(name))
+          has_no_css?(".sidebar-sections [data-section-name='#{name.parameterize}']")
         end
 
         def has_section_expanded?(name)
@@ -134,6 +122,15 @@ module PageObjects
             )
 
           expect(tag_section_links.map(&:text)).to eq(tag_names)
+        end
+
+        def has_tag_section_link_with_title?(tag, title)
+          section_link =
+            find(
+              ".sidebar-section[data-section-name='tags'] .sidebar-section-link-wrapper[data-tag-name='#{tag.name}'] .sidebar-section-link",
+            )
+
+          expect(section_link["title"]).to eq(title)
         end
 
         def find_section_link(name)
@@ -210,6 +207,10 @@ module PageObjects
         end
 
         private
+
+        def sidebar_section_selector(name)
+          ".sidebar-section[data-section-name='#{name}']"
+        end
 
         def section_link_present?(name, href: nil, active: false, target: nil, count: 1, present:)
           attributes = { exact_text: name }

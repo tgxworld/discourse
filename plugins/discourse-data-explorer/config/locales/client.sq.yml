@@ -8,25 +8,21 @@ sq:
   js:
     explorer:
       or: "ose"
-      ai:
-        generate: "Gjenero"
+      import:
+        label: "Importo"
       help:
         label: "Ndihmë"
       types:
         bool:
           yes: "Po"
           no: "Jo"
+      export: "Eksporto"
+      save: "Ruaj ndryshimet"
+      edit: "Redaktoni"
       delete: "Fshij"
       result_count:
         one: "%{count} rezultat."
         other: "%{count} rezultate."
-      name: "Emri"
       query_groups: "Grupet"
-      query_tags: "Etiketat"
       query_description: "Përshkrimi"
       reset_params: "Rivendosni"
-    discourse_workflows:
-      sql:
-        param_value: "Vlera"
-        output:
-          results: "Results"

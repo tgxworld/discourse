@@ -3,7 +3,7 @@
 module Chat
   class MessageRateLimiter
     def self.run!(user)
-      instance = new(user)
+      instance = self.new(user)
       instance.run!
     end
 

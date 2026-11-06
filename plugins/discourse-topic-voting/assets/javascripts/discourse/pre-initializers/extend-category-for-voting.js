@@ -1,16 +1,8 @@
-import { computed, get } from "@ember/object";
+import { tracked } from "@glimmer/tracking";
 import { withPluginApi } from "discourse/lib/plugin-api";
-import Category from "discourse/models/category";
 import { i18n } from "discourse-i18n";
 
-function extendCategory(api) {
-  Category.reopen({
-    enable_topic_voting: computed("custom_fields.enable_topic_voting", {
-      get() {
-        return get(this.custom_fields, "enable_topic_voting") === true;
-      },
-    }),
-  });
+function initialize(api) {
   api.addPostClassesCallback((post) => {
     if (post.post_number === 1 && post.can_vote) {
       return ["voting-post"];
@@ -19,9 +11,7 @@ function extendCategory(api) {
   api.addTrackedPostProperties("can_vote");
   api.addTagsHtmlCallback(
     (topic) => {
-      const router = api.container.lookup("service:router");
-
-      if (!topic.can_vote || router.currentRouteName?.startsWith("topic.")) {
+      if (!topic.can_vote) {
         return;
       }
 
@@ -40,16 +30,29 @@ function extendCategory(api) {
       buffer.push(i18n("topic_voting.votes", { count: topic.vote_count }));
       buffer.push("</a>");
 
-      return buffer.join("");
+      if (buffer.length > 0) {
+        return buffer.join("");
+      }
     },
     { priority: -100 }
   );
 
-  api.addModelField("topic", "vote_count");
-  api.addModelField("topic", "user_voted");
-  api.addModelField("user", "votes_exceeded");
-  api.addModelField("user", "vote_limit");
-  api.addModelField("user", "votes_left");
+  api.modifyClass(
+    "model:topic",
+    (Superclass) =>
+      class extends Superclass {
+        @tracked vote_count;
+        @tracked user_voted;
+      }
+  );
+  api.modifyClass(
+    "model:user",
+    (Superclass) =>
+      class extends Superclass {
+        @tracked votes_exceeded;
+        @tracked votes_left;
+      }
+  );
 }
 
 export default {
@@ -58,9 +61,7 @@ export default {
   before: "inject-discourse-objects",
 
   initialize() {
-    withPluginApi((api) => {
-      extendCategory(api);
-      api.addCategorySortCriteria("votes");
-    });
+    withPluginApi((api) => initialize(api));
+    withPluginApi((api) => api.addCategorySortCriteria("votes"));
   },
 };

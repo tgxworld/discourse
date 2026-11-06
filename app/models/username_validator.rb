@@ -9,40 +9,25 @@ class UsernameValidator
   #
   # Example: UsernameValidator.perform_validation(user, 'name')
   def self.perform_validation(object, field_name, opts = {})
-    validator = UsernameValidator.new(object.public_send(field_name), object:, **opts)
+    validator = UsernameValidator.new(object.public_send(field_name), **opts)
     unless validator.valid_format?
       validator.errors.each { |e| object.errors.add(field_name.to_sym, e) }
     end
   end
 
-  def self.clashing_with_existing_route?(username)
-    normalized_username = User.normalize_username(username)
-    http_verbs = %w[GET POST PUT DELETE PATCH]
-    allowed_actions = %w[show update destroy]
-
-    http_verbs.any? do |verb|
-      path = Rails.application.routes.recognize_path("/u/#{normalized_username}", method: verb)
-      allowed_actions.exclude?(path[:action])
-    rescue ActionController::RoutingError
-      false
-    end
-  end
-
-  WATCHED_WORD_ACTIONS = %i[block censor require_approval flag silence].freeze
-
-  def initialize(username, skip_length_validation: false, skip_watched_words: false, object: nil)
+  def initialize(username, skip_length_validation: false)
     @username = username&.unicode_normalize
     @skip_length_validation = skip_length_validation
-    @skip_watched_words = skip_watched_words
-    @object = object
     @errors = []
   end
 
   attr_accessor :errors
   attr_reader :username
-  attr_reader :object
   attr_reader :skip_length_validation
-  attr_reader :skip_watched_words
+
+  def user
+    @user ||= User.new(user)
+  end
 
   def valid_format?
     username_present?
@@ -54,8 +39,6 @@ class UsernameValidator
     username_last_char_valid?
     username_no_double_special?
     username_does_not_end_with_confusing_suffix?
-    username_not_watched_word? if !skip_watched_words
-    username_plugin_validation
     errors.empty?
   end
 
@@ -100,14 +83,14 @@ class UsernameValidator
   def username_present?
     return unless errors.empty?
 
-    errors << I18n.t(:"user.username.blank") if username.blank?
+    self.errors << I18n.t(:"user.username.blank") if username.blank?
   end
 
   def username_length_min?
     return unless errors.empty?
 
     if username_grapheme_clusters.size < User.username_length.begin
-      errors << I18n.t(:"user.username.short", count: User.username_length.begin)
+      self.errors << I18n.t(:"user.username.short", count: User.username_length.begin)
     end
   end
 
@@ -115,9 +98,9 @@ class UsernameValidator
     return unless errors.empty?
 
     if username_grapheme_clusters.size > User.username_length.end
-      errors << I18n.t(:"user.username.long", count: User.username_length.end)
+      self.errors << I18n.t(:"user.username.long", count: User.username_length.end)
     elsif username.length > MAX_CHARS
-      errors << I18n.t(:"user.username.too_long")
+      self.errors << I18n.t(:"user.username.too_long")
     end
   end
 
@@ -125,7 +108,7 @@ class UsernameValidator
     return unless errors.empty?
 
     if self.class.invalid_char_pattern.match?(username)
-      errors << I18n.t(:"user.username.characters")
+      self.errors << I18n.t(:"user.username.characters")
     end
   end
 
@@ -133,7 +116,7 @@ class UsernameValidator
     return unless errors.empty? && self.class.char_allowlist_exists?
 
     if username.chars.any? { |c| !self.class.allowed_char?(c) }
-      errors << I18n.t(:"user.username.characters")
+      self.errors << I18n.t(:"user.username.characters")
     end
   end
 
@@ -141,7 +124,7 @@ class UsernameValidator
     return unless errors.empty?
 
     if INVALID_LEADING_CHAR_PATTERN.match?(username_grapheme_clusters.first)
-      errors << I18n.t(:"user.username.must_begin_with_alphanumeric_or_underscore")
+      self.errors << I18n.t(:"user.username.must_begin_with_alphanumeric_or_underscore")
     end
   end
 
@@ -149,7 +132,7 @@ class UsernameValidator
     return unless errors.empty?
 
     if INVALID_TRAILING_CHAR_PATTERN.match?(username_grapheme_clusters.last)
-      errors << I18n.t(:"user.username.must_end_with_alphanumeric")
+      self.errors << I18n.t(:"user.username.must_end_with_alphanumeric")
     end
   end
 
@@ -157,7 +140,7 @@ class UsernameValidator
     return unless errors.empty?
 
     if REPEATED_SPECIAL_CHAR_PATTERN.match?(username)
-      errors << I18n.t(:"user.username.must_not_contain_two_special_chars_in_seq")
+      self.errors << I18n.t(:"user.username.must_not_contain_two_special_chars_in_seq")
     end
   end
 
@@ -165,27 +148,8 @@ class UsernameValidator
     return unless errors.empty?
 
     if CONFUSING_EXTENSIONS.match?(username)
-      errors << I18n.t(:"user.username.must_not_end_with_confusing_suffix")
+      self.errors << I18n.t(:"user.username.must_not_end_with_confusing_suffix")
     end
-  end
-
-  def username_not_watched_word?
-    return unless errors.empty?
-
-    matches = WordWatcher.new(username).word_matches_across_actions(WATCHED_WORD_ACTIONS)
-    return if matches.blank?
-
-    errors << I18n.t(
-      :"user.username.contains_blocked_words",
-      count: matches.size,
-      words: matches.join(", "),
-    )
-  end
-
-  def username_plugin_validation
-    return unless errors.empty?
-
-    DiscoursePluginRegistry.apply_modifier(:username_validation, errors, self)
   end
 
   def username_grapheme_clusters

@@ -1,12 +1,13 @@
 {
   "name": "Discourse",
-  "image": "docker.io/discourse/discourse_dev:release",
+  "image": "docker.io/discourse/discourse_dev:20250307-0016",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/discourse,type=bind",
   "workspaceFolder": "/workspace/discourse",
   "postStartCommand": "./.devcontainer/scripts/start.rb",
   "forwardPorts": [
-    9292, // bin/pitchfork
-    3000, // bin/dev
+    9292, // bin/unicorn
+    3000, // bin/rails s
+    4200, // ember-cli
     8025, // mailhog
     9229  // chrome remote debug
   ],
@@ -28,8 +29,7 @@
         "esbenp.prettier-vscode",
         "dbaeumer.vscode-eslint",
         "lifeart.vscode-glimmer-syntax",
-        "typed-ember.glint2-vscode",
-        "TypeScriptTeam.native-preview",
+        "typed-ember.glint-vscode",
         "stylelint.vscode-stylelint"
       ]
     }

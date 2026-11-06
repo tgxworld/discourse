@@ -1,54 +1,53 @@
 import Component from "@glimmer/component";
 import { service } from "@ember/service";
 import bodyClass from "discourse/helpers/body-class";
-import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
-import AiSearchDiscoveries from "../../components/ai-search-discoveries.gjs";
-import { SEARCH_TYPE_ASK_AI } from "../../lib/full-page-search-types.js";
+import icon from "discourse/helpers/d-icon";
+import { i18n } from "discourse-i18n";
+import AiSearchDiscoveries from "../../components/ai-search-discoveries";
+import AiSearchDiscoveriesTooltip from "../../components/ai-search-discoveries-tooltip";
 
 export default class AiFullPageDiscobotDiscoveries extends Component {
   static shouldRender(args, { siteSettings, currentUser }) {
     return (
-      siteSettings.ai_ask_ai_enabled &&
-      siteSettings.ai_ask_ai_agent &&
-      currentUser?.can_use_ask_ai
+      siteSettings.ai_bot_discover_persona &&
+      currentUser?.can_use_ai_bot_discover_persona &&
+      currentUser?.user_option?.ai_search_discoveries
     );
   }
 
+  @service capabilities;
   @service discobotDiscoveries;
+  @service site;
 
-  // Asking is a search type here rather than a mode, so the answer belongs on
-  // screen exactly while that type is the one selected.
-  get shouldShow() {
-    return this.args.outletArgs.type === SEARCH_TYPE_ASK_AI;
-  }
-
-  get hasContent() {
-    return this.discobotDiscoveries.showDiscoveryTitle;
+  get previewLength() {
+    if (!this.capabilities.viewport.md) {
+      return 50;
+    } else {
+      return 10000;
+    }
   }
 
   <template>
-    {{#if this.shouldShow}}
-      {{#if this.hasContent}}
-        {{bodyClass "has-discoveries"}}
+    {{bodyClass "has-discoveries"}}
+    <div class="ai-search-discoveries__discoveries-wrapper">
+      {{#if this.discobotDiscoveries.showDiscoveryTitle}}
+        <h3
+          class="ai-search-discoveries__discoveries-title full-page-discoveries"
+        >
+          <span>
+            {{icon "discobot"}}
+            {{i18n "discourse_ai.discobot_discoveries.main_title"}}
+          </span>
+          <AiSearchDiscoveriesTooltip />
+        </h3>
       {{/if}}
-      <div
-        class={{dConcatClass
-          "ai-search-discoveries__discoveries-wrapper"
-          (if this.hasContent "--has-content")
-        }}
-      >
-        <div class="full-page-discoveries">
-          <AiSearchDiscoveries
-            @fullPage={{true}}
-            @searchTerm={{@outletArgs.search}}
-            @showHeading={{true}}
-            @showSources={{true}}
-            {{! the search type runs the discovery when the search is submitted,
-                so mounting must not run a second one }}
-            @triggerOnInsert={{false}}
-          />
-        </div>
+
+      <div class="full-page-discoveries">
+        <AiSearchDiscoveries
+          @discoveryPreviewLength={{this.previewLength}}
+          @searchTerm={{@outletArgs.search}}
+        />
       </div>
-    {{/if}}
+    </div>
   </template>
 }

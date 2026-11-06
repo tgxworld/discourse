@@ -29,32 +29,6 @@ def delete_notification(resp_code, matcher)
 end
 
 RSpec.describe NotificationsController do
-  describe "#index" do
-    it "hides reviewable titles in recent notifications and history after losing category access" do
-      SiteSetting.enable_mentions = true
-      admin = Fabricate(:admin)
-      moderator = Fabricate(:moderator)
-      reviewable = Fabricate(:reviewable_flagged_post)
-      ReviewableNote.create!(reviewable: reviewable, user: admin, content: "@#{moderator.username}")
-      sign_in(moderator)
-
-      get "/notifications.json", params: { recent: true }
-      expect(response.status).to eq(200)
-      expect(response.parsed_body["notifications"].size).to eq(1)
-
-      category = Fabricate(:private_category, group: Fabricate(:group))
-      reviewable.topic.update!(category: category)
-      reviewable.update!(category: category)
-
-      [true, false].each do |recent|
-        get "/notifications.json", params: { recent: recent ? true : nil }
-        expect(response.status).to eq(200)
-        expect(response.parsed_body["notifications"]).to be_empty
-        expect(response.body).not_to include(reviewable.topic.title)
-      end
-    end
-  end
-
   context "when logged in" do
     context "as normal user" do
       fab!(:user) { sign_in(Fabricate(:user)) }
@@ -64,12 +38,12 @@ RSpec.describe NotificationsController do
       end
 
       describe "#index" do
-        it "returns recent notifications" do
+        it "should succeed for recent" do
           get "/notifications", params: { recent: true }
           expect(response.status).to eq(200)
         end
 
-        it "returns notification history" do
+        it "should succeed for history" do
           get "/notifications.json"
 
           expect(response.status).to eq(200)
@@ -80,7 +54,7 @@ RSpec.describe NotificationsController do
           expect(notifications.first["id"]).to eq(notification.id)
         end
 
-        it "marks notifications as viewed" do
+        it "should mark notifications as viewed" do
           expect(user.reload.unread_notifications).to eq(1)
           expect(user.reload.total_unread_notifications).to eq(1)
 
@@ -91,7 +65,7 @@ RSpec.describe NotificationsController do
           expect(user.reload.total_unread_notifications).to eq(1)
         end
 
-        it "does not mark notifications viewed with the silent parameter" do
+        it "should not mark notifications as viewed if silent param is present" do
           expect(user.reload.unread_notifications).to eq(1)
           expect(user.reload.total_unread_notifications).to eq(1)
 
@@ -102,7 +76,7 @@ RSpec.describe NotificationsController do
           expect(user.reload.total_unread_notifications).to eq(1)
         end
 
-        it "does not mark notifications viewed in read-only mode" do
+        it "should not mark notifications as viewed in readonly mode" do
           Discourse.received_redis_readonly!
           expect(user.reload.unread_notifications).to eq(1)
           expect(user.reload.total_unread_notifications).to eq(1)
@@ -232,7 +206,7 @@ RSpec.describe NotificationsController do
             )
           end
 
-          it "does not update the last-seen reviewable in read-only mode" do
+          it "should not bump last seen reviewable in readonly mode" do
             user.update!(admin: true)
 
             Discourse.received_redis_readonly!
@@ -245,14 +219,14 @@ RSpec.describe NotificationsController do
             Discourse.clear_redis_readonly!
           end
 
-          it "does not update the last-seen reviewable without review access" do
+          it "should not bump last seen reviewable if the user can't see reviewables" do
             expect {
               get "/notifications.json", params: { recent: true, bump_last_seen_reviewable: true }
               expect(response.status).to eq(200)
             }.not_to change { user.reload.last_seen_reviewable_id }
           end
 
-          it "does not update the last-seen reviewable with the silent parameter" do
+          it "should not bump last seen reviewable if the silent param is present" do
             user.update!(admin: true)
 
             expect {
@@ -266,7 +240,7 @@ RSpec.describe NotificationsController do
             }.not_to change { user.reload.last_seen_reviewable_id }
           end
 
-          it "does not update the last-seen reviewable without the bump parameter" do
+          it "should not bump last seen reviewable if the bump_last_seen_reviewable param is not present" do
             user.update!(admin: true)
 
             expect {
@@ -399,7 +373,7 @@ RSpec.describe NotificationsController do
         end
 
         context "when username params is not valid" do
-          it "returns the permission error" do
+          it "should raise the right error" do
             get "/notifications.json", params: { username: "somedude" }
             expect(response.status).to eq(404)
           end
@@ -454,69 +428,6 @@ RSpec.describe NotificationsController do
           end
         end
 
-        context "with notifications for disabled badges" do
-          fab!(:enabled_badge) { Fabricate(:badge, enabled: true) }
-          fab!(:disabled_badge) { Fabricate(:badge, enabled: false) }
-
-          fab!(:enabled_badge_notification) do
-            BadgeGranter.send_notification(user.id, user.username, user.locale, enabled_badge)
-          end
-
-          fab!(:disabled_badge_notification) do
-            BadgeGranter.send_notification(user.id, user.username, user.locale, disabled_badge)
-          end
-
-          context "with 'recent' filter" do
-            it "filters badge notifications for badges that are disabled" do
-              get "/notifications.json", params: { recent: true }
-
-              expect(response.status).to eq(200)
-
-              expect(response.parsed_body["notifications"].map { |n| n["id"] }).to contain_exactly(
-                notification.id,
-                enabled_badge_notification.id,
-              )
-            end
-
-            it "filters all badge notifications when `enable_badges` site setting is false" do
-              SiteSetting.enable_badges = false
-
-              get "/notifications.json", params: { recent: true }
-
-              expect(response.status).to eq(200)
-
-              expect(response.parsed_body["notifications"].map { |n| n["id"] }).to contain_exactly(
-                notification.id,
-              )
-            end
-          end
-
-          context "without 'recent' filter" do
-            it "filters badge notifications for badges that are disabled" do
-              get "/notifications.json"
-
-              expect(response.status).to eq(200)
-
-              expect(response.parsed_body["notifications"].map { |n| n["id"] }).to contain_exactly(
-                notification.id,
-                enabled_badge_notification.id,
-              )
-            end
-
-            it "filters all badge notifications when `enable_badges` site setting is false" do
-              SiteSetting.enable_badges = false
-
-              get "/notifications.json"
-
-              expect(response.status).to eq(200)
-
-              expect(response.parsed_body["notifications"].map { |n| n["id"] }).to contain_exactly(
-                notification.id,
-              )
-            end
-          end
-        end
-
         context "with `show_user_menu_avatars` setting enabled" do
           before { SiteSetting.show_user_menu_avatars = true }
 
@@ -528,62 +439,6 @@ RSpec.describe NotificationsController do
             notifications.each do |notification|
               expect(notification["acting_user_avatar_template"]).to be_present
             end
-          end
-        end
-
-        context "with names disabled" do
-          fab!(:mentioner) { Fabricate(:user, name: "Hidden Mentioner Name") }
-
-          before { SiteSetting.enable_names = false }
-
-          it "does not expose a mentioner's full name" do
-            post = Fabricate(:post, user: mentioner, raw: "@#{user.username}")
-            PostAlerter.post_created(post)
-
-            mention_notification =
-              user.notifications.find_by!(
-                notification_type: Notification.types[:mentioned],
-                topic: post.topic,
-              )
-            expect(mention_notification.data_hash).not_to have_key(:display_name)
-
-            get "/notifications.json"
-
-            expect(response.status).to eq(200)
-            notification =
-              response.parsed_body["notifications"].find do |item|
-                item["id"] == mention_notification.id
-              end
-            expect(notification["data"]).not_to have_key("display_name")
-            expect(response.body).not_to include(mentioner.name)
-          end
-        end
-
-        context "with user-menu avatars enabled and names disabled" do
-          fab!(:liker) { Fabricate(:user, name: "Hidden Liker Name") }
-          fab!(:liked_post) { Fabricate(:post, user: user) }
-
-          before do
-            SiteSetting.enable_names = false
-            SiteSetting.show_user_menu_avatars = true
-            user.user_option.update!(
-              like_notification_frequency: UserOption.like_notification_frequency_type[:always],
-            )
-            PostActionNotifier.enable
-            PostActionCreator.like(liker, liked_post)
-          end
-
-          it "does not expose a liker's name" do
-            get "/notifications.json"
-
-            expect(response.status).to eq(200)
-            liked_notification =
-              response.parsed_body["notifications"].find do |notification|
-                notification["notification_type"] == Notification.types[:liked]
-              end
-            expect(liked_notification["acting_user_avatar_template"]).to be_present
-            expect(liked_notification).not_to have_key("acting_user_name")
-            expect(response.body).not_to include(liker.name)
           end
         end
 
@@ -640,7 +495,7 @@ RSpec.describe NotificationsController do
         end
       end
 
-      it "marks every notification as read" do
+      it "should succeed" do
         put "/notifications/mark-read.json"
         expect(response.status).to eq(200)
       end
@@ -791,7 +646,7 @@ RSpec.describe NotificationsController do
 
   context "when not logged in" do
     describe "#index" do
-      it "requires authentication" do
+      it "should raise an error" do
         get "/notifications.json", params: { recent: true }
         expect(response.status).to eq(403)
       end

@@ -1,24 +1,25 @@
-import Component from "@glimmer/component";
-import { tracked } from "@glimmer/tracking";
-import { Input } from "@ember/component";
+/* eslint-disable ember/no-classic-components */
+import Component, { Input } from "@ember/component";
 import { fn } from "@ember/helper";
-import { on } from "@ember/modifier";
 import { action } from "@ember/object";
-import withEventValue from "discourse/helpers/with-event-value";
-import ComboBox from "discourse/select-kit/components/combo-box";
-import DButton from "discourse/ui-kit/d-button";
+import DButton from "discourse/components/d-button";
+import discourseComputed from "discourse/lib/decorators";
 import { i18n } from "discourse-i18n";
+import ComboBox from "select-kit/components/combo-box";
 
 export default class CreateCouponForm extends Component {
-  @tracked discountType = "amount";
-  @tracked discount = null;
-  @tracked promoCode = null;
-  @tracked active = false;
+  discountType = "amount";
+  discount = null;
+  promoCode = null;
+  active = false;
 
-  discountTypes = [
-    { id: "amount", name: "Amount" },
-    { id: "percent", name: "Percent" },
-  ];
+  @discourseComputed
+  discountTypes() {
+    return [
+      { id: "amount", name: "Amount" },
+      { id: "percent", name: "Percent" },
+    ];
+  }
 
   @action
   createNewCoupon() {
@@ -29,27 +30,22 @@ export default class CreateCouponForm extends Component {
       active: this.active,
     };
 
-    this.args.create(createParams);
+    this.create(createParams);
   }
 
   @action
   cancelCreate() {
-    this.args.cancel();
+    this.cancel();
   }
 
   <template>
-    <div class="create-coupon-form" ...attributes>
+    <div class="create-coupon-form">
       <form class="form-horizontal">
         <p>
           <label for="promo_code">
             {{i18n "discourse_subscriptions.admin.coupons.promo_code"}}
           </label>
-          <input
-            name="promo_code"
-            type="text"
-            value={{this.promoCode}}
-            {{on "input" (withEventValue (fn (mut this.promoCode)))}}
-          />
+          <Input @type="text" name="promo_code" @value={{this.promoCode}} />
         </p>
 
         <p>
@@ -58,15 +54,14 @@ export default class CreateCouponForm extends Component {
           </label>
           <ComboBox
             @content={{this.discountTypes}}
-            @onChange={{fn (mut this.discountType)}}
             @value={{this.discountType}}
+            @onChange={{fn (mut this.discountType)}}
           />
-          <input
+          <Input
             class="discount-amount"
+            @type="text"
             name="amount"
-            type="text"
-            value={{this.discount}}
-            {{on "input" (withEventValue (fn (mut this.discount)))}}
+            @value={{this.discount}}
           />
         </p>
 
@@ -74,24 +69,24 @@ export default class CreateCouponForm extends Component {
           <label for="active">
             {{i18n "discourse_subscriptions.admin.coupons.active"}}
           </label>
-          <Input name="active" @checked={{this.active}} @type="checkbox" />
+          <Input @type="checkbox" name="active" @checked={{this.active}} />
         </p>
       </form>
 
       <DButton
-        class="btn-primary btn btn-icon"
         @action={{this.createNewCoupon}}
-        @icon="plus"
         @label="discourse_subscriptions.admin.coupons.create"
         @title="discourse_subscriptions.admin.coupons.create"
+        @icon="plus"
+        class="btn-primary btn btn-icon"
       />
 
       <DButton
-        class="btn btn-icon"
-        label="cancel"
         @action={{this.cancelCreate}}
-        @icon="xmark"
+        label="cancel"
         @title="cancel"
+        @icon="xmark"
+        class="btn btn-icon"
       />
     </div>
   </template>

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "Filtering topics" do
+describe "Filtering topics", type: :system do
   fab!(:user)
   let(:topic_list) { PageObjects::Components::TopicList.new }
   let(:topic_query_filter) { PageObjects::Components::TopicQueryFilter.new }
@@ -47,7 +47,7 @@ describe "Filtering topics" do
       topic
     end
 
-    it "displays matching topics for a status query-string filter" do
+    it "should display the right topics when the status filter is used in the query string" do
       sign_in(user)
 
       visit("/filter")
@@ -82,7 +82,7 @@ describe "Filtering topics" do
     fab!(:topic_with_tag2) { Fabricate(:topic, tags: [tag2]) }
     fab!(:topic_with_tag_and_tag2) { Fabricate(:topic, tags: [tag, tag2]) }
 
-    it "displays matching topics for a tag query-string filter" do
+    it "should display the right topics when tags filter is used in the query string" do
       sign_in(user)
 
       visit("/filter")
@@ -105,26 +105,6 @@ describe "Filtering topics" do
       expect(topic_list).to have_no_topic(topic_with_tag)
       expect(topic_list).to have_no_topic(topic_with_tag2)
       expect(topic_list).to have_topic(topic_with_tag_and_tag2)
-    end
-  end
-
-  describe "when filtering by tag groups with special characters" do
-    fab!(:tag) { Fabricate(:tag, name: "special-tag") }
-    fab!(:tag_group) { Fabricate(:tag_group, name: "Cat & Dogs", tag_names: [tag.name]) }
-    fab!(:topic_with_tag) { Fabricate(:topic, tags: [tag]) }
-    fab!(:topic_without_tag, :topic)
-
-    it "filters by tag group name with spaces using quoted syntax" do
-      sign_in(user)
-      visit("/filter")
-
-      expect(topic_list).to have_topic(topic_with_tag)
-      expect(topic_list).to have_topic(topic_without_tag)
-
-      topic_query_filter.fill_in('tag_group:"Cat & Dogs"')
-
-      expect(topic_list).to have_topic(topic_with_tag)
-      expect(topic_list).to have_no_topic(topic_without_tag)
     end
   end
 

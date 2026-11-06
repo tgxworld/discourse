@@ -27,9 +27,8 @@ module Chat
     end
 
     model :channel
-    policy :can_join_channel
+    policy :can_view_channel
     model :users, optional: true
-    model :user_comm_screener
     step :send_invite_notifications
 
     private
@@ -38,8 +37,8 @@ module Chat
       ::Chat::Channel.find_by(id: params.channel_id)
     end
 
-    def can_join_channel(guardian:, channel:)
-      guardian.can_join_chat_channel?(channel)
+    def can_view_channel(guardian:, channel:)
+      guardian.can_preview_chat_channel?(channel)
     end
 
     def fetch_users(params:)
@@ -48,17 +47,11 @@ module Chat
         .where(user_options: { chat_enabled: true })
         .not_suspended
         .where(id: params.user_ids)
-        .order(:id)
         .limit(50)
     end
 
-    def fetch_user_comm_screener(users:, guardian:)
-      UserCommScreener.new(acting_user: guardian.user, target_user_ids: users.map(&:id))
-    end
-
-    def send_invite_notifications(channel:, guardian:, users:, user_comm_screener:, params:)
+    def send_invite_notifications(channel:, guardian:, users:, params:)
       users&.each do |invited_user|
-        next if user_comm_screener.ignoring_or_muting_actor?(invited_user.id)
         next if !invited_user.guardian.can_join_chat_channel?(channel)
 
         data = {

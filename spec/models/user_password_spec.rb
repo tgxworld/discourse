@@ -3,7 +3,6 @@
 RSpec.describe UserPassword do
   describe "#ensure_password_is_hashed" do
     let(:password) { SecureRandom.hex }
-
     fab!(:user_password)
 
     it "ensures password_hash, password_salt, password_algorithm are saved correctly" do
@@ -104,7 +103,7 @@ RSpec.describe UserPassword do
   end
 
   context "for validations" do
-    it "requires user_id" do
+    it "should validate presence of user_id" do
       user_password = Fabricate.build(:user_password, user: nil)
 
       expect(user_password).not_to be_valid

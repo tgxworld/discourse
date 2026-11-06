@@ -17,7 +17,7 @@ RSpec.describe UserExportSerializer do
     )
   end
 
-  it "renders the export without errors" do
+  it "should render without errors" do
     json_data = JSON.parse(serializer.to_json)
 
     expect(json_data["id"]).to eql user_export.id

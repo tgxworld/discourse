@@ -1,19 +1,23 @@
+import Component from "@glimmer/component";
+import { service } from "@ember/service";
 import { i18n } from "discourse-i18n";
-import UserThreads from "../../user-threads/index.gjs";
-import Navbar from "../navbar/index.gjs";
+import Navbar from "discourse/plugins/chat/discourse/components/chat/navbar";
+import UserThreads from "discourse/plugins/chat/discourse/components/user-threads";
 
-const ChatRoutesThreads = <template>
-  <div class="c-routes --threads">
-    <Navbar as |navbar|>
-      <navbar.Title @title={{i18n "chat.my_threads.title"}} />
+export default class ChatRoutesThreads extends Component {
+  @service site;
 
-      <navbar.Actions as |action|>
-        <action.OpenDrawerButton />
-      </navbar.Actions>
-    </Navbar>
+  <template>
+    <div class="c-routes --threads">
+      <Navbar as |navbar|>
+        <navbar.Title @title={{i18n "chat.my_threads.title"}} />
 
-    <UserThreads />
-  </div>
-</template>;
+        <navbar.Actions as |action|>
+          <action.OpenDrawerButton />
+        </navbar.Actions>
+      </Navbar>
 
-export default ChatRoutesThreads;
+      <UserThreads />
+    </div>
+  </template>
+}

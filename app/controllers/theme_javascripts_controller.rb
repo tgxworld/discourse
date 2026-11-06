@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 class ThemeJavascriptsController < ApplicationController
-  DISK_CACHE_PATH = "#{Rails.root.join("tmp/javascript-cache")}"
-  TESTS_DISK_CACHE_PATH = "#{Rails.root.join("tmp/javascript-cache/tests")}"
+  DISK_CACHE_PATH = "#{Rails.root}/tmp/javascript-cache"
+  TESTS_DISK_CACHE_PATH = "#{Rails.root}/tmp/javascript-cache/tests"
 
   skip_before_action(
     :check_xhr,
@@ -17,7 +17,7 @@ class ThemeJavascriptsController < ApplicationController
 
   def show
     raise Discourse::NotFound if last_modified.blank?
-    return head :not_modified if not_modified?
+    return render body: nil, status: 304 if not_modified?
 
     # Security: safe due to route constraint
     cache_file = "#{DISK_CACHE_PATH}/#{params[:digest]}.js"
@@ -36,7 +36,7 @@ class ThemeJavascriptsController < ApplicationController
 
   def show_map
     raise Discourse::NotFound if last_modified.blank?
-    return head :not_modified if not_modified?
+    return render body: nil, status: 304 if not_modified?
 
     # Security: safe due to route constraint
     cache_file = "#{DISK_CACHE_PATH}/#{params[:digest]}.map"
@@ -57,7 +57,7 @@ class ThemeJavascriptsController < ApplicationController
     raise Discourse::NotFound if content.blank? || content_digest != digest
 
     @cache_file = "#{TESTS_DISK_CACHE_PATH}/#{digest}.js"
-    return head :not_modified if not_modified?
+    return render body: nil, status: 304 if not_modified?
 
     write_if_not_cached(@cache_file) { content }
 
@@ -72,10 +72,12 @@ class ThemeJavascriptsController < ApplicationController
 
   def last_modified
     @last_modified ||=
-      if params[:action].to_s == "show_tests"
-        File.exist?(@cache_file) ? File.ctime(@cache_file) : nil
-      else
-        query.pick(:updated_at)
+      begin
+        if params[:action].to_s == "show_tests"
+          File.exist?(@cache_file) ? File.ctime(@cache_file) : nil
+        else
+          query.pick(:updated_at)
+        end
       end
   end
 
@@ -106,7 +108,7 @@ class ThemeJavascriptsController < ApplicationController
       raise Discourse::NotFound if content.nil?
 
       FileUtils.mkdir_p(File.dirname(cache_file))
-      Discourse::Utils.atomic_write_file(cache_file, content)
+      File.write(cache_file, content)
     end
   end
 

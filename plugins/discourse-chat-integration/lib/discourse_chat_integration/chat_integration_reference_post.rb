@@ -2,43 +2,9 @@
 
 module DiscourseChatIntegration
   class ChatIntegrationReferencePost
-    class StandaloneTopic
-      def id
-        nil
-      end
-
-      def title
-        SiteSetting.title
-      end
-
-      def category
-        nil
-      end
-
-      def tags
-        []
-      end
-
-      def posts
-        []
-      end
-
-      def url
-        Discourse.base_url
-      end
-
-      def highest_post_number
-        0
-      end
-
-      def custom_fields
-        {}
-      end
-    end
-
-    def initialize(user:, topic: nil, kind:, raw: nil, context: {})
+    def initialize(user:, topic:, kind:, raw: nil, context: {})
       @user = user
-      @topic = topic || StandaloneTopic.new
+      @topic = topic
       @kind = kind
       @raw = raw if raw.present?
       @context = context
@@ -78,10 +44,7 @@ module DiscourseChatIntegration
     def raw
       if @raw.nil? && @kind == DiscourseAutomation::Triggers::TOPIC_TAGS_CHANGED
         tag_list_to_raw = ->(tag_list) do
-          HashtagAutocompleteService
-            .new(user.guardian)
-            .hashtags_for("tag", tag_list.sort)
-            .join(", ")
+          tag_list.sort.map { |tag_name| "##{tag_name}" }.join(", ")
         end
 
         added_tags = @context["added_tags"]

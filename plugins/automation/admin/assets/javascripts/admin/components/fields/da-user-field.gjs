@@ -1,10 +1,10 @@
 import { fn, hash } from "@ember/helper";
 import { action } from "@ember/object";
-import UserChooser from "discourse/select-kit/components/user-chooser";
 import { i18n } from "discourse-i18n";
-import BaseField from "./da-base-field.gjs";
-import DAFieldDescription from "./da-field-description.gjs";
-import DAFieldLabel from "./da-field-label.gjs";
+import UserChooser from "select-kit/components/user-chooser";
+import BaseField from "./da-base-field";
+import DAFieldDescription from "./da-field-description";
+import DAFieldLabel from "./da-field-label";
 
 export default class UserField extends BaseField {
   @action
@@ -31,18 +31,18 @@ export default class UserField extends BaseField {
   <template>
     <section class="field user-field">
       <div class="control-group">
-        <DAFieldLabel @field={{@field}} @label={{@label}} />
+        <DAFieldLabel @label={{@label}} @field={{@field}} />
 
         <div class="controls">
           <UserChooser
-            @modifyContent={{fn this.modifyContent @field}}
+            @value={{@field.metadata.value}}
             @onChange={{this.onChangeUsername}}
+            @modifyContent={{fn this.modifyContent @field}}
             @options={{hash
               maximum=1
               excludeCurrentUser=false
               disabled=@field.isDisabled
             }}
-            @value={{@field.metadata.value}}
           />
 
           <DAFieldDescription @description={{@description}} />

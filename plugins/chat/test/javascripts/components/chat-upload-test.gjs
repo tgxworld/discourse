@@ -2,7 +2,6 @@ import { tracked } from "@glimmer/tracking";
 import Service from "@ember/service";
 import { render, triggerEvent } from "@ember/test-helpers";
 import { module, test } from "qunit";
-import { setupS3CDN } from "discourse/lib/get-url";
 import { setupRenderingTest } from "discourse/tests/helpers/component-test";
 import ChatUpload from "discourse/plugins/chat/discourse/components/chat-upload";
 
@@ -67,18 +66,15 @@ const TXT_FIXTURE = {
   human_filesize: "168 KB",
 };
 
-class MockCapabilitiesService extends Service {
-  @tracked isIOS = false;
-  @tracked isSafari = false;
-}
-
-module("Component | ChatUpload", function (hooks) {
+module("Discourse Chat | Component | chat-upload", function (hooks) {
   setupRenderingTest(hooks);
 
   test("with an image", async function (assert) {
+    const self = this;
+
     this.set("upload", IMAGE_FIXTURE);
 
-    await render(<template><ChatUpload @upload={{this.upload}} /></template>);
+    await render(<template><ChatUpload @upload={{self.upload}} /></template>);
 
     assert.dom("img.chat-img-upload").exists("displays as an image");
     assert
@@ -103,9 +99,11 @@ module("Component | ChatUpload", function (hooks) {
   });
 
   test("with a video", async function (assert) {
+    const self = this;
+
     this.set("upload", VIDEO_FIXTURE);
 
-    await render(<template><ChatUpload @upload={{this.upload}} /></template>);
+    await render(<template><ChatUpload @upload={{self.upload}} /></template>);
 
     assert.dom("video.chat-video-upload").exists("displays as an video");
     assert.dom("video.chat-video-upload").hasAttribute("controls");
@@ -119,9 +117,11 @@ module("Component | ChatUpload", function (hooks) {
   });
 
   test("with a audio", async function (assert) {
+    const self = this;
+
     this.set("upload", AUDIO_FIXTURE);
 
-    await render(<template><ChatUpload @upload={{this.upload}} /></template>);
+    await render(<template><ChatUpload @upload={{self.upload}} /></template>);
 
     assert.dom("audio.chat-audio-upload").exists("displays as an audio");
     assert.dom("audio.chat-audio-upload").hasAttribute("controls");
@@ -135,9 +135,11 @@ module("Component | ChatUpload", function (hooks) {
   });
 
   test("non image upload", async function (assert) {
+    const self = this;
+
     this.set("upload", TXT_FIXTURE);
 
-    await render(<template><ChatUpload @upload={{this.upload}} /></template>);
+    await render(<template><ChatUpload @upload={{self.upload}} /></template>);
 
     assert.dom("a.chat-other-upload").exists("displays as a link");
     assert
@@ -145,113 +147,28 @@ module("Component | ChatUpload", function (hooks) {
       .hasAttribute("href", TXT_FIXTURE.url, "has the correct URL");
   });
 
-  module("S3 CDN URLs", function (nestedHooks) {
-    nestedHooks.beforeEach(function () {
-      this.owner.unregister("service:capabilities");
-      this.owner.register("service:capabilities", MockCapabilitiesService);
-
-      setupS3CDN(
-        "//test.s3-us-west-1.amazonaws.com/site",
-        "https://awesome.cdn/site"
-      );
-    });
-
-    test("uses the CDN for image src and data-large-src", async function (assert) {
-      this.set("upload", {
-        ...IMAGE_FIXTURE,
-        url: "https://test.s3-us-west-1.amazonaws.com/site/original.jpg",
-        thumbnail: {
-          url: "https://test.s3-us-west-1.amazonaws.com/site/thumbnail.jpg",
-        },
-      });
-
-      await render(<template><ChatUpload @upload={{this.upload}} /></template>);
-
-      assert
-        .dom("img.chat-img-upload")
-        .hasAttribute(
-          "src",
-          "https://awesome.cdn/site/thumbnail.jpg",
-          "uses the CDN for image thumbnails"
-        );
-      assert
-        .dom("img.chat-img-upload")
-        .hasAttribute(
-          "data-large-src",
-          "https://awesome.cdn/site/original.jpg",
-          "uses the CDN for the full-size image URL"
-        );
-    });
-
-    test("uses the CDN for video sources", async function (assert) {
-      this.set("upload", {
-        ...VIDEO_FIXTURE,
-        url: "https://test.s3-us-west-1.amazonaws.com/site/video.mp4",
-      });
-
-      await render(<template><ChatUpload @upload={{this.upload}} /></template>);
-
-      assert
-        .dom("video.chat-video-upload source")
-        .hasAttribute(
-          "src",
-          "https://awesome.cdn/site/video.mp4",
-          "uses the CDN for video uploads"
-        );
-    });
-
-    test("uses the CDN for audio sources", async function (assert) {
-      this.set("upload", {
-        ...AUDIO_FIXTURE,
-        url: "https://test.s3-us-west-1.amazonaws.com/site/song.mp3",
-      });
-
-      await render(<template><ChatUpload @upload={{this.upload}} /></template>);
-
-      assert
-        .dom("audio.chat-audio-upload source")
-        .hasAttribute(
-          "src",
-          "https://awesome.cdn/site/song.mp3",
-          "uses the CDN for audio uploads"
-        );
-    });
-
-    test("uses the CDN for attachment hrefs", async function (assert) {
-      this.set("upload", {
-        ...TXT_FIXTURE,
-        url: "https://test.s3-us-west-1.amazonaws.com/site/file.txt",
-      });
-
-      await render(<template><ChatUpload @upload={{this.upload}} /></template>);
-
-      assert
-        .dom("a.chat-other-upload")
-        .hasAttribute(
-          "href",
-          "https://awesome.cdn/site/file.txt",
-          "uses the CDN for attachment uploads"
-        );
-    });
-  });
-
   module("video source URL", function (nestedHooks) {
     let mockCapabilities;
 
+    class MockCapabilitiesService extends Service {
+      @tracked isSafari = false;
+    }
+
     nestedHooks.beforeEach(function () {
-      this.owner.unregister("service:capabilities");
+      // Register and inject the mock service
       this.owner.register("service:capabilities", MockCapabilitiesService);
       mockCapabilities = this.owner.lookup("service:capabilities");
     });
 
     test("adds timestamp parameter for Safari", async function (assert) {
+      const self = this;
       this.set("upload", {
         ...VIDEO_FIXTURE,
         url: "https://example.com/video.mp4",
       });
       mockCapabilities.isSafari = true;
 
-      await render(<template><ChatUpload @upload={{this.upload}} /></template>);
+      await render(<template><ChatUpload @upload={{self.upload}} /></template>);
 
       assert
         .dom("video.chat-video-upload source")
@@ -263,13 +180,14 @@ module("Component | ChatUpload", function (hooks) {
     });
 
     test("does not add timestamp parameter for other browsers", async function (assert) {
+      const self = this;
       this.set("upload", {
         ...VIDEO_FIXTURE,
         url: "https://example.com/video.mp4",
       });
       mockCapabilities.isSafari = false;
 
-      await render(<template><ChatUpload @upload={{this.upload}} /></template>);
+      await render(<template><ChatUpload @upload={{self.upload}} /></template>);
 
       assert
         .dom("video.chat-video-upload source")

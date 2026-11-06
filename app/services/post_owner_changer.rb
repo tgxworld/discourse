@@ -9,26 +9,17 @@ class PostOwnerChanger
     @skip_revision = params[:skip_revision] || false
 
     %i[post_ids topic new_owner acting_user].each do |arg|
-      raise ArgumentError.new(arg) if instance_variable_get("@#{arg}").blank?
+      raise ArgumentError.new(arg) if self.instance_variable_get("@#{arg}").blank?
     end
   end
 
   def change_owner!
-    guardian = Guardian.new(@acting_user)
-    raise Discourse::InvalidAccess unless guardian.can_see?(@topic)
-
     @post_ids.each do |post_id|
       next unless post = Post.with_deleted.find_by(id: post_id, topic_id: @topic.id)
-      raise Discourse::InvalidAccess unless guardian.can_see?(post)
 
       if post.is_first_post?
         @topic.user = @new_owner
-        if post.user.nil?
-          topic_was_deleted = @topic.deleted_at.present?
-          @topic.recover!
-          # only resurrect an OP trashed alongside its topic, not one moderated individually
-          post.recover! if topic_was_deleted && post.deleted_at.present?
-        end
+        @topic.recover! if post.user.nil?
       end
 
       post.topic = @topic
@@ -52,7 +43,7 @@ class PostOwnerChanger
         @topic.last_poster = @new_owner
       end
 
-      @topic.update_statistics!
+      @topic.update_statistics
 
       @new_owner.user_stat.update(
         first_post_created_at: @new_owner.reload.posts.order("created_at ASC").first&.created_at,

@@ -1,15 +1,19 @@
 import { withPluginApi } from "discourse/lib/plugin-api";
-import AiBotSidebarNewConversation from "../components/ai-bot-sidebar-new-conversation.gjs";
-import { AI_CONVERSATIONS_PANEL } from "../services/ai-conversations-sidebar-manager.js";
+import AiBotSidebarNewConversation from "../components/ai-bot-sidebar-new-conversation";
+import { AI_CONVERSATIONS_PANEL } from "../services/ai-conversations-sidebar-manager";
 
 export default {
   name: "ai-conversations-sidebar",
 
   initialize() {
     withPluginApi((api) => {
+      const siteSettings = api.container.lookup("service:site-settings");
+      if (!siteSettings.ai_bot_enable_dedicated_ux) {
+        return;
+      }
+
       const currentUser = api.container.lookup("service:current-user");
-      const site = api.container.lookup("service:site");
-      if (!currentUser && !site.ai_bot_anonymous_preview) {
+      if (!currentUser) {
         return;
       }
 
@@ -42,7 +46,6 @@ export default {
         // if the topic is not a private message, not created by the current user,
         // or doesn't have a bot response, we don't need to override sidebar
         if (
-          currentUser &&
           topic?.archetype === "private_message" &&
           topic.user_id === currentUser.id &&
           topic.is_bot_pm

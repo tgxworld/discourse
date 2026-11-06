@@ -5,11 +5,6 @@
 # https://translate.discourse.org/
 
 ar:
-  admin_js:
-    admin:
-      site_settings:
-        categories:
-          discourse_local_dates: "التواريخ المحلية في Discourse"
   js:
     discourse_local_dates:
       relative_dates:
@@ -19,11 +14,11 @@ ar:
         countdown:
           passed: لقد انقضى التاريخ
       title: إدخال التاريخ/الوقت
-      edit_date: تعديل %{date}
       create:
         form:
           insert: إدراج
-          save: حفظ
+          advanced_mode: الوضع المتقدّم
+          simple_mode: الوضع البسيط
           format_description: "التنسيق المستخدم لعرض التاريخ للمستخدم. استخدم Z لعرض الإزاحة وzz لاسم المنطقة الزمنية."
           timezones_title: المناطق الزمنية لعرضها
           timezones_description: سيتم استخدام المناطق الزمنية لعرض التواريخ في المعاينة والنسخة الاحتياطية.

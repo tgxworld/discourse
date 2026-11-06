@@ -130,13 +130,15 @@
             (n.to_f % 10 == 1 && n.to_f % 100 != 11) ?
               :one :
               (
-                ((n.to_f % 10) % 1).zero? && (2..4).include?(n.to_f % 10) &&
-                  ((n.to_f % 100) % 1).zero? && !(12..14).include?(n.to_f % 100)
+                (((n.to_f % 10) % 1).zero? && (2..4).include?(n.to_f % 10)) &&
+                  (((n.to_f % 100) % 1).zero? && !(12..14).include?(n.to_f % 100))
               ) ?
                 :few :
-                if n.to_f % 10 == 0 ||
+                if (
+                     n.to_f % 10 == 0 ||
                        (((n.to_f % 10) % 1).zero? && (5..9).include?(n.to_f % 10)) ||
                        (((n.to_f % 100) % 1).zero? && (11..14).include?(n.to_f % 100))
+                   )
                   :many
                 else
                   :other
@@ -221,9 +223,15 @@
                     (n.to_f % 10) == 9 ||
                       (((n.to_f % 10) % 1).zero? && (3..4).include?(n.to_f % 10))
                   ) &&
-                    ((n.to_f % 100) % 1).zero? &&
-                          !(10..19).include?(n.to_f % 100) && !(70..79).include?(n.to_f % 100) &&
+                    (
+                      (
+                        ((n.to_f % 100) % 1).zero? &&
+                          (
+                            !(10..19).include?(n.to_f % 100) || !(70..79).include?(n.to_f % 100) ||
                               !(90..99).include?(n.to_f % 100)
+                          )
+                      )
+                    )
                 ) ?
                   :few :
                   (n.to_f != 0 && n.to_f % 1_000_000 == 0) ? :many : :other
@@ -262,6 +270,7 @@
             ) ?
               :one :
               if (
+                   (
                      ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 &&
                        (2..4).include?(n.to_i % 10) && !(12..14).include?(n.to_i % 100)
                    ) ||
@@ -269,6 +278,7 @@
                        (2..4).include?(((f = n.to_s.split(".")[1]) ? f.to_i : 0) % 10) &&
                          !(12..14).include?(((f = n.to_s.split(".")[1]) ? f.to_i : 0) % 100)
                      )
+                 )
                 :few
               else
                 :other
@@ -296,7 +306,8 @@
         rule:
           lambda do |n|
             n = n.respond_to?(:abs) ? n.abs : ((m = n.to_s)[0] == "-" ? m[1, m.length] : m)
-            if (((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 && [1, 2, 3].include?(n.to_i)) ||
+            if (
+                 (((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 && [1, 2, 3].include?(n.to_i)) ||
                    (
                      ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 &&
                        ![4, 6, 9].include?(n.to_i % 10)
@@ -305,6 +316,7 @@
                      ((v = n.to_s.split(".")[1]) ? v.length : 0) != 0 &&
                        ![4, 6, 9].include?(((f = n.to_s.split(".")[1]) ? f.to_i : 0) % 10)
                    )
+               )
               :one
             else
               :other
@@ -400,11 +412,13 @@
         rule:
           lambda do |n|
             n = n.respond_to?(:abs) ? n.abs : ((m = n.to_s)[0] == "-" ? m[1, m.length] : m)
-            if n.to_f == 1 ||
+            if (
+                 n.to_f == 1 ||
                    (
                      ((t = n.to_s.split(".")[1]) ? t.gsub(/0+$/, "").to_i : 0) != 0 &&
                        [0, 1].include?(n.to_i)
                    )
+               )
               :one
             else
               :other
@@ -455,9 +469,11 @@
               ) ?
                 :two :
                 if (
+                     (
                        ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 &&
                          (3..4).include?(n.to_i % 100)
                      ) || (3..4).include?(((f = n.to_s.split(".")[1]) ? f.to_i : 0) % 100)
+                   )
                   :few
                 else
                   :other
@@ -548,9 +564,11 @@
             n.to_f == 1 ?
               :one :
               if (
+                   (
                      (e = 0) == 0 && n.to_i != 0 && n.to_i % 1_000_000 == 0 &&
                        ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0
                    ) || !(0..5).include?(e = 0)
+                 )
                 :many
               else
                 :other
@@ -614,7 +632,8 @@
         rule:
           lambda do |n|
             n = n.respond_to?(:abs) ? n.abs : ((m = n.to_s)[0] == "-" ? m[1, m.length] : m)
-            if (((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 && [1, 2, 3].include?(n.to_i)) ||
+            if (
+                 (((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 && [1, 2, 3].include?(n.to_i)) ||
                    (
                      ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 &&
                        ![4, 6, 9].include?(n.to_i % 10)
@@ -623,6 +642,7 @@
                      ((v = n.to_s.split(".")[1]) ? v.length : 0) != 0 &&
                        ![4, 6, 9].include?(((f = n.to_s.split(".")[1]) ? f.to_i : 0) % 10)
                    )
+               )
               :one
             else
               :other
@@ -665,9 +685,11 @@
             [0, 1].include?(n.to_i) ?
               :one :
               if (
+                   (
                      (e = 0) == 0 && n.to_i != 0 && n.to_i % 1_000_000 == 0 &&
                        ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0
                    ) || !(0..5).include?(e = 0)
+                 )
                 :many
               else
                 :other
@@ -729,7 +751,7 @@
               :one :
               [2, 12].include?(n.to_f) ?
                 :two :
-                if (n.to_f % 1).zero? && ((3..10).include?(n.to_f) || (13..19).include?(n.to_f))
+                if (((n.to_f % 1).zero? && ((3..10).include?(n.to_f) || (13..19).include?(n.to_f))))
                   :few
                 else
                   :other
@@ -830,8 +852,10 @@
               :one :
               (n.to_i == 2 && ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0) ?
                 :two :
-                if ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 &&
-                       (n.to_f % 1).zero? && !(0..10).include?(n.to_f) && n.to_f % 10 == 0
+                if (
+                     ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 &&
+                       ((n.to_f % 1).zero? && !(0..10).include?(n.to_f)) && n.to_f % 10 == 0
+                   )
                   :many
                 else
                   :other
@@ -871,6 +895,7 @@
             ) ?
               :one :
               if (
+                   (
                      ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 &&
                        (2..4).include?(n.to_i % 10) && !(12..14).include?(n.to_i % 100)
                    ) ||
@@ -878,6 +903,7 @@
                        (2..4).include?(((f = n.to_s.split(".")[1]) ? f.to_i : 0) % 10) &&
                          !(12..14).include?(((f = n.to_s.split(".")[1]) ? f.to_i : 0) % 100)
                      )
+                 )
                 :few
               else
                 :other
@@ -904,9 +930,11 @@
               ) ?
                 :two :
                 if (
+                     (
                        ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 &&
                          (3..4).include?(n.to_i % 100)
                      ) || (3..4).include?(((f = n.to_s.split(".")[1]) ? f.to_i : 0) % 100)
+                   )
                   :few
                 else
                   :other
@@ -995,9 +1023,11 @@
           lambda do |n|
             n = n.respond_to?(:abs) ? n.abs : ((m = n.to_s)[0] == "-" ? m[1, m.length] : m)
             if (
+                 (
                    ((t = n.to_s.split(".")[1]) ? t.gsub(/0+$/, "").to_i : 0) == 0 &&
                      n.to_i % 10 == 1 && n.to_i % 100 != 11
                  ) || ((t = n.to_s.split(".")[1]) ? t.gsub(/0+$/, "").to_i : 0) != 0
+               )
               :one
             else
               :other
@@ -1016,9 +1046,11 @@
             (n.to_i == 1 && ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0) ?
               :one :
               if (
+                   (
                      (e = 0) == 0 && n.to_i != 0 && n.to_i % 1_000_000 == 0 &&
                        ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0
                    ) || !(0..5).include?(e = 0)
+                 )
                 :many
               else
                 :other
@@ -1366,11 +1398,11 @@
         rule:
           lambda do |n|
             n = n.respond_to?(:abs) ? n.abs : ((m = n.to_s)[0] == "-" ? m[1, m.length] : m)
-            (n.to_f % 10 == 1 && ((n.to_f % 100) % 1).zero? && !(11..19).include?(n.to_f % 100)) ?
+            (n.to_f % 10 == 1 && (((n.to_f % 100) % 1).zero? && !(11..19).include?(n.to_f % 100))) ?
               :one :
               (
-                ((n.to_f % 10) % 1).zero? && (2..9).include?(n.to_f % 10) &&
-                  ((n.to_f % 100) % 1).zero? && !(11..19).include?(n.to_f % 100)
+                (((n.to_f % 10) % 1).zero? && (2..9).include?(n.to_f % 10)) &&
+                  (((n.to_f % 100) % 1).zero? && !(11..19).include?(n.to_f % 100))
               ) ?
                 :few :
                 ((f = n.to_s.split(".")[1]) ? f.to_i : 0) != 0 ? :many : :other
@@ -1393,7 +1425,8 @@
                 )
             ) ?
               :zero :
-              if (n.to_f % 10 == 1 && n.to_f % 100 != 11) ||
+              if (
+                   (n.to_f % 10 == 1 && n.to_f % 100 != 11) ||
                      (
                        ((v = n.to_s.split(".")[1]) ? v.length : 0) == 2 &&
                          ((f = n.to_s.split(".")[1]) ? f.to_i : 0) % 10 == 1 &&
@@ -1403,6 +1436,7 @@
                        ((v = n.to_s.split(".")[1]) ? v.length : 0) != 2 &&
                          ((f = n.to_s.split(".")[1]) ? f.to_i : 0) % 10 == 1
                      )
+                 )
                 :one
               else
                 :other
@@ -1455,6 +1489,7 @@
           lambda do |n|
             n = n.respond_to?(:abs) ? n.abs : ((m = n.to_s)[0] == "-" ? m[1, m.length] : m)
             if (
+                 (
                    ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 && n.to_i % 10 == 1 &&
                      n.to_i % 100 != 11
                  ) ||
@@ -1462,6 +1497,7 @@
                      ((f = n.to_s.split(".")[1]) ? f.to_i : 0) % 10 == 1 &&
                        ((f = n.to_s.split(".")[1]) ? f.to_i : 0) % 100 != 11
                    )
+               )
               :one
             else
               :other
@@ -1729,6 +1765,7 @@
               ) ?
                 :few :
                 if (
+                     (
                        ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 && n.to_i != 1 &&
                          (0..1).include?(n.to_i % 10)
                      ) ||
@@ -1740,6 +1777,7 @@
                          ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 &&
                            (12..14).include?(n.to_i % 100)
                        )
+                   )
                   :many
                 else
                   :other
@@ -1770,9 +1808,11 @@
             (0..1).include?(n.to_i) ?
               :one :
               if (
+                   (
                      (e = 0) == 0 && n.to_i != 0 && n.to_i % 1_000_000 == 0 &&
                        ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0
                    ) || !(0..5).include?(e = 0)
+                 )
                 :many
               else
                 :other
@@ -1791,9 +1831,11 @@
             (n.to_i == 1 && ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0) ?
               :one :
               if (
+                   (
                      (e = 0) == 0 && n.to_i != 0 && n.to_i % 1_000_000 == 0 &&
                        ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0
                    ) || !(0..5).include?(e = 0)
+                 )
                 :many
               else
                 :other
@@ -1835,8 +1877,10 @@
             n = n.respond_to?(:abs) ? n.abs : ((m = n.to_s)[0] == "-" ? m[1, m.length] : m)
             (n.to_i == 1 && ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0) ?
               :one :
-              if ((v = n.to_s.split(".")[1]) ? v.length : 0) != 0 || n.to_f == 0 ||
+              if (
+                   ((v = n.to_s.split(".")[1]) ? v.length : 0) != 0 || n.to_f == 0 ||
                      (((n.to_f % 100) % 1).zero? && (2..19).include?(n.to_f % 100))
+                 )
                 :few
               else
                 :other
@@ -1862,7 +1906,8 @@
                   !(12..14).include?(n.to_i % 100)
               ) ?
                 :few :
-                if (((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 && n.to_i % 10 == 0) ||
+                if (
+                     (((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 && n.to_i % 10 == 0) ||
                        (
                          ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 &&
                            (5..9).include?(n.to_i % 10)
@@ -1871,6 +1916,7 @@
                          ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 &&
                            (11..14).include?(n.to_i % 100)
                        )
+                   )
                   :many
                 else
                   :other
@@ -2020,8 +2066,10 @@
         rule:
           lambda do |n|
             n = n.respond_to?(:abs) ? n.abs : ((m = n.to_s)[0] == "-" ? m[1, m.length] : m)
-            if [0, 1].include?(n.to_f) ||
+            if (
+                 [0, 1].include?(n.to_f) ||
                    (n.to_i == 0 && ((f = n.to_s.split(".")[1]) ? f.to_i : 0) == 1)
+               )
               :one
             else
               :other
@@ -2058,9 +2106,11 @@
               (((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 && n.to_i % 100 == 2) ?
                 :two :
                 if (
+                     (
                        ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 &&
                          (3..4).include?(n.to_i % 100)
                      ) || ((v = n.to_s.split(".")[1]) ? v.length : 0) != 0
+                   )
                   :few
                 else
                   :other
@@ -2136,6 +2186,7 @@
             ) ?
               :one :
               if (
+                   (
                      ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 &&
                        (2..4).include?(n.to_i % 10) && !(12..14).include?(n.to_i % 100)
                    ) ||
@@ -2143,6 +2194,7 @@
                        (2..4).include?(((f = n.to_s.split(".")[1]) ? f.to_i : 0) % 10) &&
                          !(12..14).include?(((f = n.to_s.split(".")[1]) ? f.to_i : 0) % 100)
                      )
+                 )
                 :few
               else
                 :other
@@ -2290,8 +2342,10 @@
         rule:
           lambda do |n|
             n = n.respond_to?(:abs) ? n.abs : ((m = n.to_s)[0] == "-" ? m[1, m.length] : m)
-            if ((n.to_f % 1).zero? && (0..1).include?(n.to_f)) ||
+            if (
+                 ((n.to_f % 1).zero? && (0..1).include?(n.to_f)) ||
                    ((n.to_f % 1).zero? && (11..99).include?(n.to_f))
+               )
               :one
             else
               :other
@@ -2329,7 +2383,8 @@
                   !(12..14).include?(n.to_i % 100)
               ) ?
                 :few :
-                if (((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 && n.to_i % 10 == 0) ||
+                if (
+                     (((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 && n.to_i % 10 == 0) ||
                        (
                          ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 &&
                            (5..9).include?(n.to_i % 10)
@@ -2338,6 +2393,7 @@
                          ((v = n.to_s.split(".")[1]) ? v.length : 0) == 0 &&
                            (11..14).include?(n.to_i % 100)
                        )
+                   )
                   :many
                 else
                   :other

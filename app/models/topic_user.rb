@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 class TopicUser < ActiveRecord::Base
+  self.ignored_columns = [
+    :highest_seen_post_number, # TODO: Remove when 20240212034010_drop_deprecated_columns has been promoted to pre-deploy
+  ]
+
   belongs_to :user
   belongs_to :topic
 
@@ -81,6 +85,32 @@ class TopicUser < ActiveRecord::Base
         topic_id,
         notification_level: notification_level,
         notifications_reason_id: reason,
+      )
+    end
+
+    def unwatch_categories!(user, category_ids)
+      track_threshold = user.user_option.auto_track_topics_after_msecs
+
+      sql = <<~SQL
+        UPDATE topic_users tu
+        SET notification_level = CASE
+          WHEN t.user_id = :user_id THEN :watching
+          WHEN total_msecs_viewed > :track_threshold AND :track_threshold >= 0 THEN :tracking
+          ELSE :regular
+        end
+        FROM topics t
+        WHERE t.id = tu.topic_id AND tu.notification_level <> :muted AND category_id IN (:category_ids) AND tu.user_id = :user_id
+      SQL
+
+      DB.exec(
+        sql,
+        watching: notification_levels[:watching],
+        tracking: notification_levels[:tracking],
+        regular: notification_levels[:regular],
+        muted: notification_levels[:muted],
+        category_ids: category_ids,
+        user_id: user.id,
+        track_threshold: track_threshold,
       )
     end
 
@@ -499,12 +529,7 @@ class TopicUser < ActiveRecord::Base
           )
 SQL
 
-    DB.exec(
-      sql,
-      user_id: user_id,
-      count: count,
-      logged_in_users: Group::AUTO_GROUPS[:logged_in_users],
-    )
+    DB.exec(sql, user_id: user_id, count: count)
   end
 
   def self.ensure_consistency!(topic_id = nil)
@@ -551,27 +576,26 @@ end
 #
 # Table name: topic_users
 #
-#  id                       :integer          not null, primary key
-#  bookmarked               :boolean          default(FALSE)
-#  cleared_pinned_at        :datetime
-#  first_visited_at         :datetime
-#  last_emailed_post_number :integer
-#  last_posted_at           :datetime
+#  user_id                  :integer          not null
+#  topic_id                 :integer          not null
+#  posted                   :boolean          default(FALSE), not null
 #  last_read_post_number    :integer
 #  last_visited_at          :datetime
-#  liked                    :boolean          default(FALSE)
+#  first_visited_at         :datetime
 #  notification_level       :integer          default(1), not null
 #  notifications_changed_at :datetime
-#  posted                   :boolean          default(FALSE), not null
-#  total_msecs_viewed       :integer          default(0), not null
 #  notifications_reason_id  :integer
-#  topic_id                 :integer          not null
-#  user_id                  :integer          not null
+#  total_msecs_viewed       :integer          default(0), not null
+#  cleared_pinned_at        :datetime
+#  id                       :integer          not null, primary key
+#  last_emailed_post_number :integer
+#  liked                    :boolean          default(FALSE)
+#  bookmarked               :boolean          default(FALSE)
+#  last_posted_at           :datetime
 #
 # Indexes
 #
 #  index_topic_users_on_topic_id_and_notification_level  (topic_id,notification_level)
 #  index_topic_users_on_topic_id_and_user_id             (topic_id,user_id) UNIQUE
 #  index_topic_users_on_user_id_and_topic_id             (user_id,topic_id) UNIQUE
-#  index_topic_users_on_user_id_and_topic_id_tracked     (user_id,topic_id) WHERE (notification_level >= 2)
 #

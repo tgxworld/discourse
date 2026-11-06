@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-RSpec.describe "Reports" do
+RSpec.describe "Reports", type: :system do
   fab!(:group) { Fabricate(:group, name: "group") }
-  fab!(:user, :admin)
+  fab!(:user) { Fabricate(:admin) }
   fab!(:group_user) { Fabricate(:group_user, user: user, group: group) }
   fab!(:query_1) do
     Fabricate(

@@ -1,9 +1,9 @@
 import Component from "@glimmer/component";
-import { trustHTML } from "@ember/template";
-import DDecoratedHtml from "discourse/ui-kit/d-decorated-html";
+import { htmlSafe } from "@ember/template";
+import DecoratedHtml from "discourse/components/decorated-html";
 import { i18n } from "discourse-i18n";
 import { isCollapsible } from "discourse/plugins/chat/discourse/components/chat-message-collapser";
-import ChatMessageCollapser from "./chat-message-collapser.gjs";
+import ChatMessageCollapser from "./chat-message-collapser";
 
 export default class ChatMessageText extends Component {
   get isEdited() {
@@ -20,14 +20,14 @@ export default class ChatMessageText extends Component {
         <ChatMessageCollapser
           @cooked={{@cooked}}
           @decorate={{@decorate}}
-          @onToggleCollapse={{@onToggleCollapse}}
           @uploads={{@uploads}}
+          @onToggleCollapse={{@onToggleCollapse}}
         />
       {{else}}
-        <DDecoratedHtml
-          @className="chat-cooked"
+        <DecoratedHtml
+          @html={{htmlSafe @cooked}}
           @decorate={{@decorate}}
-          @html={{trustHTML @cooked}}
+          @className="chat-cooked"
         />
       {{/if}}
 

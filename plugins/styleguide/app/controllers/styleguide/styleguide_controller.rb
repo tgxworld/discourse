@@ -2,11 +2,13 @@
 
 module Styleguide
   class StyleguideController < ApplicationController
-    requires_plugin PLUGIN_NAME
+    requires_plugin Styleguide::PLUGIN_NAME
     skip_before_action :check_xhr
 
     def index
-      return raise Discourse::NotFound if !guardian.can_see_styleguide?
+      if !current_user || !current_user.in_any_groups?(SiteSetting.styleguide_allowed_groups_map)
+        raise Discourse::InvalidAccess.new
+      end
 
       render "default/empty"
     end

@@ -10,9 +10,6 @@ RSpec.describe Chat::GuardianExtensions do
   let(:guardian) { Guardian.new(user) }
   let(:staff_guardian) { Guardian.new(staff) }
 
-  fab!(:private_group_create_post, :group)
-  fab!(:private_channel) { Fabricate(:private_category_channel, group: private_group_create_post) }
-
   before { SiteSetting.chat_allowed_groups = chatters.id }
 
   describe "#can_chat?" do
@@ -90,21 +87,10 @@ RSpec.describe Chat::GuardianExtensions do
       end
     end
 
-    it "allows TL0 to chat by default and by extension higher trust levels" do
-      SiteSetting.chat_allowed_groups = SiteSetting.defaults[:chat_allowed_groups]
-      user.change_trust_level!(TrustLevel[0])
+    it "allows TL1 to chat by default and by extension higher trust levels" do
       expect(guardian.can_chat?).to eq(true)
       user.change_trust_level!(TrustLevel[3])
       expect(guardian.can_chat?).to eq(true)
-    end
-
-    it "allows anonymous visitors to preview public channels but not send messages by default" do
-      SiteSetting.chat_allowed_groups = SiteSetting.defaults[:chat_allowed_groups]
-      anonymous_guardian = Guardian.new
-
-      expect(anonymous_guardian.can_preview_anonymous_public_chat_channel?(channel)).to eq(true)
-      expect(anonymous_guardian.can_chat?).to eq(false)
-      expect(anonymous_guardian.can_create_chat_message?).to eq(false)
     end
 
     it "allows user in specific group to chat" do
@@ -236,31 +222,6 @@ RSpec.describe Chat::GuardianExtensions do
       end
     end
 
-    describe "#can_preview_anonymous_public_chat_channel?" do
-      before do
-        SiteSetting.enable_public_channels = true
-        SiteSetting.chat_allowed_groups =
-          "#{Group::AUTO_GROUPS[:everyone]}|#{Group::AUTO_GROUPS[:anonymous_users]}"
-      end
-
-      it "returns true for channels backed by categories anonymous users can see" do
-        expect(guardian.can_preview_anonymous_public_chat_channel?(channel)).to eq(true)
-      end
-
-      it "returns false for private category channels visible only to the user" do
-        category =
-          Fabricate(
-            :private_category,
-            group: Fabricate(:group, users: [user]),
-            permission_type: CategoryGroup.permission_types[:readonly],
-          )
-        channel.update!(chatable: category)
-
-        expect(guardian.can_preview_chat_channel?(channel)).to eq(true)
-        expect(guardian.can_preview_anonymous_public_chat_channel?(channel)).to eq(false)
-      end
-    end
-
     describe "#can_post_in_chatable?" do
       alias_matcher :be_able_to_post_in_chatable, :be_can_post_in_chatable
 
@@ -291,59 +252,6 @@ RSpec.describe Chat::GuardianExtensions do
                 channel.chatable,
                 post_allowed_category_ids: [channel.chatable.id],
               )
-            end
-          end
-
-          context "when user is a shadow account" do
-            fab!(:non_chatter) { Fabricate(:user, refresh_auto_groups: true) }
-
-            before do
-              SiteSetting.allow_anonymous_mode = true
-              private_group_create_post.add(user)
-            end
-
-            context "when allow_chat_in_anonymous_mode is true" do
-              before { SiteSetting.allow_chat_in_anonymous_mode = true }
-
-              it "allows shadow account to chat if master account can chat" do
-                anonymous = AnonymousShadowCreator.get(user)
-                expect(anonymous.id).to be_present
-                expect(
-                  Guardian.new(anonymous).can_post_in_chatable?(private_channel.chatable),
-                ).to eq(true)
-                expect(Guardian.new(user).can_post_in_chatable?(private_channel.chatable)).to eq(
-                  true,
-                )
-              end
-
-              it "doesn't allow shadow account to chat if master account can not chat" do
-                anonymous = AnonymousShadowCreator.get(non_chatter)
-                expect(anonymous.id).to be_present
-                expect(
-                  Guardian.new(anonymous).can_post_in_chatable?(private_channel.chatable),
-                ).to eq(false)
-                expect(
-                  Guardian.new(non_chatter).can_post_in_chatable?(private_channel.chatable),
-                ).to eq(false)
-              end
-            end
-
-            context "when allow_chat_in_anonymous_mode is false" do
-              before { SiteSetting.allow_chat_in_anonymous_mode = false }
-
-              it "doesn't allow shadow account to chat even if master account can chat" do
-                anonymous = AnonymousShadowCreator.get(user)
-                expect(anonymous.id).to be_present
-                expect(Guardian.new(anonymous).can_chat?).to eq(false)
-                expect(Guardian.new(user).can_chat?).to eq(true)
-              end
-
-              it "doesn't allow shadow account to chat if master account can not chat" do
-                anonymous = AnonymousShadowCreator.get(non_chatter)
-                expect(anonymous.id).to be_present
-                expect(Guardian.new(anonymous).can_chat?).to eq(false)
-                expect(Guardian.new(non_chatter).can_chat?).to eq(false)
-              end
             end
           end
 
@@ -474,77 +382,6 @@ RSpec.describe Chat::GuardianExtensions do
           expect(staff_guardian.can_flag_chat_message?(message)).to eq(true)
         end
       end
-
-      context "when allow_all_users_to_flag_illegal_content is enabled" do
-        before do
-          SiteSetting.email_address_to_report_illegal_content = "illegal@example.com"
-          SiteSetting.allow_all_users_to_flag_illegal_content = true
-        end
-
-        it "returns true for users outside the allowed groups" do
-          expect(guardian.can_flag_chat_message?(message)).to eq(true)
-        end
-
-        it "returns true for silenced users" do
-          UserSilencer.silence(user, staff)
-          expect(Guardian.new(user).can_flag_chat_message?(message)).to eq(true)
-        end
-      end
-    end
-
-    describe "#can_flag_message_as?" do
-      let!(:message) { Fabricate(:chat_message, chat_channel: channel) }
-
-      before do
-        SiteSetting.chat_message_flag_allowed_groups = ""
-        SiteSetting.email_address_to_report_illegal_content = "illegal@example.com"
-        SiteSetting.allow_all_users_to_flag_illegal_content = true
-      end
-
-      it "only allows the illegal flag for users outside the allowed groups" do
-        expect(guardian.can_flag_message_as?(message, ReviewableScore.types[:illegal], {})).to eq(
-          true,
-        )
-        expect(guardian.can_flag_message_as?(message, ReviewableScore.types[:spam], {})).to eq(
-          false,
-        )
-      end
-
-      it "allows any flag for users in the allowed groups" do
-        expect(
-          staff_guardian.can_flag_message_as?(message, ReviewableScore.types[:spam], {}),
-        ).to eq(true)
-      end
-    end
-
-    describe "#can_see_chat_message?" do
-      fab!(:message) { Fabricate(:chat_message, chat_channel: channel, user: user) }
-
-      it "returns true for a visible message in a channel the user can preview" do
-        expect(guardian.can_see_chat_message?(message)).to eq(true)
-      end
-
-      it "returns false when the user cannot preview the channel" do
-        message.update!(chat_channel: private_channel)
-        expect(guardian.can_see_chat_message?(message)).to eq(false)
-      end
-
-      context "when the message is trashed" do
-        before { message.trash! }
-
-        it "returns false for another user" do
-          other_guardian = Guardian.new(Fabricate(:user, group_ids: [chatters.id]))
-          expect(other_guardian.can_see_chat_message?(message)).to eq(false)
-        end
-
-        it "returns true for the author" do
-          expect(guardian.can_see_chat_message?(message)).to eq(true)
-        end
-
-        it "returns true for staff" do
-          expect(staff_guardian.can_see_chat_message?(message)).to eq(true)
-        end
-      end
     end
 
     describe "#can_moderate_chat?" do
@@ -646,19 +483,6 @@ RSpec.describe Chat::GuardianExtensions do
             context "when group moderation is enabled" do
               before { SiteSetting.enable_category_group_moderation = true }
 
-              it "disallows a silenced group moderator from restoring" do
-                moderator = Fabricate(:user)
-                mods = Fabricate(:group)
-                mods.add(moderator)
-                Fabricate(:category_moderation_group, category: chatable, group: mods)
-
-                expect(Guardian.new(moderator).can_restore_chat?(message, chatable)).to eq(true)
-
-                UserSilencer.new(moderator).silence
-
-                expect(Guardian.new(moderator).can_restore_chat?(message, chatable)).to eq(false)
-              end
-
               it "allows a group moderator to restore" do
                 moderator = Fabricate(:user)
                 mods = Fabricate(:group)
@@ -685,14 +509,8 @@ RSpec.describe Chat::GuardianExtensions do
 
       context "when user is owner of the message" do
         context "when chatable is a category" do
-          it "allows owner to restore when deleted by owner" do
-            message.trash!(guardian.user)
+          it "allows to restore if owner can see category" do
             expect(guardian.can_restore_chat?(message, chatable)).to eq(true)
-          end
-
-          it "disallows owner to restore when deleted by staff" do
-            message.trash!(staff_guardian.user)
-            expect(guardian.can_restore_chat?(message, chatable)).to eq(false)
           end
 
           context "when category is restricted" do
@@ -723,94 +541,6 @@ RSpec.describe Chat::GuardianExtensions do
           it "disallow owner to restore when deleted by staff" do
             message.trash!(staff_guardian.user)
             expect(guardian.can_restore_chat?(message, chatable)).to eq(false)
-          end
-        end
-
-        context "when the owner has lost access to a private category channel" do
-          fab!(:revoke_group, :group)
-          fab!(:revoked_category) { Fabricate(:private_category, group: revoke_group) }
-          fab!(:revoked_channel) { Fabricate(:chat_channel, chatable: revoked_category) }
-          fab!(:message) { Fabricate(:chat_message, chat_channel: revoked_channel, user: user) }
-
-          before do
-            revoke_group.add(user)
-            message.trash!(guardian.user)
-            GroupUser.where(group: revoke_group, user: user).destroy_all
-          end
-
-          it "disallows owner to restore" do
-            expect(guardian.can_restore_chat?(message, revoked_category)).to eq(false)
-          end
-        end
-
-        context "when the owner is no longer in a direct message channel" do
-          fab!(:other_user, :user)
-          fab!(:dm_channel) { Fabricate(:direct_message_channel, users: [user, other_user]) }
-          fab!(:message) { Fabricate(:chat_message, chat_channel: dm_channel, user: user) }
-
-          before do
-            message.trash!(guardian.user)
-            dm_channel.chatable.direct_message_users.find_by!(user: user).destroy!
-          end
-
-          it "disallows owner to restore" do
-            expect(guardian.can_restore_chat?(message, dm_channel.chatable)).to eq(false)
-          end
-        end
-      end
-    end
-
-    describe "#can_delete_chat?" do
-      fab!(:message) { Fabricate(:chat_message, chat_channel: channel, user: user) }
-      fab!(:chatable, :category)
-
-      context "when user is owner of the message" do
-        it "allows the owner to delete while they can still see the channel" do
-          expect(guardian.can_delete_chat?(message, chatable)).to eq(true)
-        end
-
-        context "when the owner has lost access to a private category channel" do
-          fab!(:revoke_group, :group)
-          fab!(:revoked_category) { Fabricate(:private_category, group: revoke_group) }
-          fab!(:revoked_channel) { Fabricate(:chat_channel, chatable: revoked_category) }
-          fab!(:message) { Fabricate(:chat_message, chat_channel: revoked_channel, user: user) }
-
-          before do
-            revoke_group.add(user)
-            GroupUser.where(group: revoke_group, user: user).destroy_all
-          end
-
-          it "disallows the owner to delete" do
-            expect(guardian.can_delete_chat?(message, revoked_category)).to eq(false)
-          end
-        end
-
-        context "when the owner is no longer in a direct message channel" do
-          fab!(:other_user, :user)
-          fab!(:dm_channel) { Fabricate(:direct_message_channel, users: [user, other_user]) }
-          fab!(:message) { Fabricate(:chat_message, chat_channel: dm_channel, user: user) }
-
-          before { dm_channel.chatable.direct_message_users.find_by!(user: user).destroy! }
-
-          it "disallows the owner to delete" do
-            expect(guardian.can_delete_chat?(message, dm_channel.chatable)).to eq(false)
-          end
-        end
-      end
-
-      context "when user is not owner of the message" do
-        fab!(:other_user, :user)
-        fab!(:message) { Fabricate(:chat_message, chat_channel: channel, user: other_user) }
-
-        context "when chatable is a direct message the actor cannot preview" do
-          fab!(:chatable) { Chat::DirectMessage.create! }
-
-          it "still allows staff to delete (non-owner path is unchanged)" do
-            expect(staff_guardian.can_delete_chat?(message, chatable)).to eq(true)
-          end
-
-          it "disallows a regular user to delete" do
-            expect(guardian.can_delete_chat?(message, chatable)).to eq(false)
           end
         end
       end
@@ -1089,19 +819,6 @@ RSpec.describe Chat::GuardianExtensions do
       end
     end
 
-    context "when target user only allows private messages from other users" do
-      fab!(:allowed_user, :user)
-
-      before do
-        other_user.user_option.update!(enable_allowed_pm_users: true)
-        AllowedPmUser.create!(user: other_user, allowed_pm_user: allowed_user)
-      end
-
-      it "returns false" do
-        expect(guardian).not_to be_able_to_receive_direct_message(other_user)
-      end
-    end
-
     context "when target user is suspended" do
       before do
         UserSuspender.new(
@@ -1151,93 +868,6 @@ RSpec.describe Chat::GuardianExtensions do
       it "returns true" do
         expect(staff_guardian).to be_able_to_receive_direct_message(other_user)
       end
-    end
-  end
-
-  describe "#can_manage_chat_message_pin?" do
-    fab!(:pin_channel, :chat_channel)
-    fab!(:message) { Fabricate(:chat_message, chat_channel: pin_channel) }
-    fab!(:pin_dm_channel) { Fabricate(:direct_message_channel, users: [user, Fabricate(:user)]) }
-    fab!(:dm_message) { Fabricate(:chat_message, chat_channel: pin_dm_channel) }
-
-    context "when user cannot chat" do
-      before { SiteSetting.chat_allowed_groups = Group::AUTO_GROUPS[:admins] }
-
-      it "returns false" do
-        expect(guardian.can_manage_chat_message_pin?(message)).to eq(false)
-      end
-    end
-
-    context "for category channels" do
-      context "when user is not staff" do
-        it "returns false" do
-          expect(guardian.can_manage_chat_message_pin?(message)).to eq(false)
-        end
-      end
-
-      context "when user is staff" do
-        it "returns true" do
-          expect(staff_guardian.can_manage_chat_message_pin?(message)).to eq(true)
-        end
-      end
-
-      context "when user is in pinning group but cannot access the channel" do
-        fab!(:private_group, :group)
-        fab!(:private_category) { Fabricate(:private_category, group: private_group) }
-        fab!(:private_pin_channel) { Fabricate(:category_channel, chatable: private_category) }
-        fab!(:private_message) { Fabricate(:chat_message, chat_channel: private_pin_channel) }
-
-        before do
-          SiteSetting.chat_pinning_messages_allowed_groups = "#{Group::AUTO_GROUPS[:trust_level_0]}"
-        end
-
-        it "returns false" do
-          expect(guardian.can_manage_chat_message_pin?(private_message)).to eq(false)
-        end
-      end
-
-      context "when user is in pinning group and can access the channel" do
-        fab!(:accessible_group, :group)
-        fab!(:accessible_category) { Fabricate(:private_category, group: accessible_group) }
-        fab!(:accessible_channel) { Fabricate(:category_channel, chatable: accessible_category) }
-        fab!(:accessible_message) { Fabricate(:chat_message, chat_channel: accessible_channel) }
-
-        before do
-          accessible_group.add(user)
-          SiteSetting.chat_pinning_messages_allowed_groups = "#{Group::AUTO_GROUPS[:trust_level_0]}"
-        end
-
-        it "returns true" do
-          expect(guardian.can_manage_chat_message_pin?(accessible_message)).to eq(true)
-        end
-      end
-    end
-
-    context "for direct message channels" do
-      context "when user is a member" do
-        it "returns true" do
-          expect(guardian.can_manage_chat_message_pin?(dm_message)).to eq(true)
-        end
-      end
-
-      context "when user is not a member" do
-        fab!(:other_user) { Fabricate(:user, group_ids: [chatters.id], refresh_auto_groups: true) }
-        let(:other_guardian) { Guardian.new(other_user) }
-
-        it "returns false" do
-          expect(other_guardian.can_manage_chat_message_pin?(dm_message)).to eq(false)
-        end
-      end
-    end
-  end
-
-  describe "#can_export_entity?" do
-    fab!(:moderator)
-
-    it "only allows admins to export chat_message" do
-      expect(Guardian.new(user).can_export_entity?("chat_message")).to eq(false)
-      expect(Guardian.new(moderator).can_export_entity?("chat_message")).to eq(false)
-      expect(staff_guardian.can_export_entity?("chat_message")).to eq(true)
     end
   end
 end

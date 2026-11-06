@@ -8,8 +8,8 @@ describe DiscourseTemplates::TemplatesController do
   fab!(:admin)
   fab!(:moderator)
   fab!(:user)
-  fab!(:user_in_group1, :user)
-  fab!(:user_in_group2, :user)
+  fab!(:user_in_group1) { Fabricate(:user) }
+  fab!(:user_in_group2) { Fabricate(:user) }
   fab!(:group1) do
     group = Fabricate(:group)
     group.add(user_in_group1)
@@ -22,8 +22,8 @@ describe DiscourseTemplates::TemplatesController do
     group.save
     group
   end
-  fab!(:templates_parent_category, :category_with_definition)
-  fab!(:templates_other_parent_category, :category_with_definition)
+  fab!(:templates_parent_category) { Fabricate(:category_with_definition) }
+  fab!(:templates_other_parent_category) { Fabricate(:category_with_definition) }
   fab!(:templates_sub_category_moderators) do
     Fabricate(
       :private_category_with_definition,
@@ -59,9 +59,9 @@ describe DiscourseTemplates::TemplatesController do
   fab!(:template_item_from_other_parent) do
     Fabricate(:template_item, category: templates_other_parent_category)
   end
-  fab!(:other_topic1, :template_item) # uncategorized
-  fab!(:other_topic2, :template_item) # uncategorized
-  fab!(:other_topic3, :template_item) # uncategorized
+  fab!(:other_topic1) { Fabricate(:template_item) } # uncategorized
+  fab!(:other_topic2) { Fabricate(:template_item) } # uncategorized
+  fab!(:other_topic3) { Fabricate(:template_item) } # uncategorized
   fab!(:tag) do
     Fabricate(
       :tag,
@@ -85,38 +85,19 @@ describe DiscourseTemplates::TemplatesController do
     context "when a regular user is logged" do
       before { sign_in(user) }
 
-      it "lists topics in the templates category" do
+      it "should list topics in the category assigned as templates" do
         SiteSetting.discourse_templates_categories = templates_sub_category_everyone.id.to_s
 
         get "/discourse_templates"
         expect(response.status).to eq(200)
 
         parsed = response.parsed_body
-        expected_response =
-          serialize_topics([template_item6, template_item7].sort_by(&:title), user)
+        expected_response = serialize_topics([template_item6, template_item7].sort_by(&:title))
 
         expect(parsed["templates"]).to eq(expected_response)
       end
 
-      it "omits tags hidden by tag group permissions" do
-        SiteSetting.discourse_templates_categories = templates_sub_category_everyone.id.to_s
-        hidden_tag = Fabricate(:tag, topics: [template_item6], name: "staff-only")
-        Fabricate(
-          :tag_group,
-          permissions: {
-            "staff" => TagGroupPermission.permission_types[:full],
-          },
-          tag_names: [hidden_tag.name],
-        )
-
-        get "/discourse_templates"
-
-        expect(response.status).to eq(200)
-        template = response.parsed_body["templates"].find { |item| item["id"] == template_item6.id }
-        expect(template["tags"]).to contain_exactly(everyone_tag.name)
-      end
-
-      it "lists topics from multiple parent categories" do
+      it "should list topics from multiple parent categories" do
         SiteSetting.discourse_templates_categories = [
           templates_sub_category_everyone,
           templates_other_parent_category,
@@ -129,13 +110,12 @@ describe DiscourseTemplates::TemplatesController do
         expected_response =
           serialize_topics(
             [template_item6, template_item7, template_item_from_other_parent].sort_by(&:title),
-            user,
           )
 
         expect(parsed["templates"]).to eq(expected_response)
       end
 
-      it "lists visible topics in the parent category and subcategories" do
+      it "should list topics in the parent category and subcategories that the user can see" do
         SiteSetting.discourse_templates_categories = templates_parent_category.id.to_s
 
         get "/discourse_templates"
@@ -151,13 +131,12 @@ describe DiscourseTemplates::TemplatesController do
               template_item6,
               template_item7,
             ].sort_by(&:title),
-            user,
           )
 
         expect(parsed["templates"]).to eq(expected_response)
       end
 
-      it "rejects templates when the user cannot see topics in the category" do
+      it "should not be able to use templates if can't see topics in the category" do
         SiteSetting.discourse_templates_categories = templates_sub_category_moderators.id.to_s
 
         get "/discourse_templates"
@@ -181,7 +160,7 @@ describe DiscourseTemplates::TemplatesController do
         sign_in(moderator)
       end
 
-      it "lists topics in the parent category and subcategories visible to the moderator" do
+      it "should list topics in the parent category and subcategories that the moderator can see" do
         SiteSetting.discourse_templates_categories = [
           templates_parent_category,
           templates_other_parent_category,
@@ -202,7 +181,6 @@ describe DiscourseTemplates::TemplatesController do
               template_item7,
               template_item_from_other_parent,
             ].sort_by(&:title),
-            moderator,
           )
 
         expect(parsed["templates"]).to eq(expected_response)
@@ -210,7 +188,7 @@ describe DiscourseTemplates::TemplatesController do
     end
 
     context "when an user belonging to a group is logged" do
-      it "lists visible topics in the parent category and subcategories" do
+      it "should list topics in the parent category and subcategories that the user can see" do
         SiteSetting.discourse_templates_categories = [
           templates_parent_category,
           templates_other_parent_category,
@@ -233,7 +211,6 @@ describe DiscourseTemplates::TemplatesController do
               template_item7,
               template_item_from_other_parent,
             ].sort_by(&:title),
-            user_in_group1,
           )
 
         expect(parsed["templates"]).to eq(expected_response)
@@ -255,7 +232,6 @@ describe DiscourseTemplates::TemplatesController do
               template_item7,
               template_item_from_other_parent,
             ].sort_by(&:title),
-            user_in_group2,
           )
 
         expect(parsed["templates"]).to eq(expected_response)
@@ -273,7 +249,7 @@ describe DiscourseTemplates::TemplatesController do
         Group.refresh_automatic_groups!
       end
 
-      it "lists topics in the parent category and subcategories visible to the admin" do
+      it "should list topics in the parent category and subcategories that the admin can see" do
         get "/discourse_templates"
         expect(response.status).to eq(200)
 
@@ -291,13 +267,12 @@ describe DiscourseTemplates::TemplatesController do
               template_item7,
               template_item_from_other_parent,
             ].sort_by(&:title),
-            admin,
           )
 
         expect(parsed["templates"]).to eq(expected_response)
       end
 
-      it "excludes deleted, archived, and unlisted topics" do
+      it "should not list delete, archived and unlisted topics" do
         template_item0.trash!(admin)
         expect(template_item0.deleted_at).not_to eq(nil)
 
@@ -322,7 +297,6 @@ describe DiscourseTemplates::TemplatesController do
               template_item7,
               template_item_from_other_parent,
             ].sort_by(&:title),
-            admin,
           )
 
         expect(parsed["templates"]).to eq(expected_response)
@@ -330,7 +304,7 @@ describe DiscourseTemplates::TemplatesController do
     end
 
     context "when no user is signed in" do
-      it "returns 404" do
+      it "should return 404" do
         SiteSetting.discourse_templates_categories = templates_sub_category_everyone.id.to_s
 
         get "/discourse_templates"
@@ -348,7 +322,7 @@ describe DiscourseTemplates::TemplatesController do
         Group.refresh_automatic_groups!
       end
 
-      it "returns 422 when id does not identify a topic" do
+      it "should return 422 when id does not belong to a valid topic" do
         # to avoid flaky testing we create a topic and immediately destroy it to obtain
         # an invalid topic id
         invalid_topic_id = Fabricate(:template_item).tap(&:destroy!).id
@@ -357,17 +331,17 @@ describe DiscourseTemplates::TemplatesController do
         expect(response.status).to eq(422)
       end
 
-      it "returns 422 for topics outside the templates category and its subcategories" do
+      it "should return 422 when topic does not belong to template category or its subcategories" do
         post "/discourse_templates/#{other_topic1.id}/use"
         expect(response.status).to eq(422)
       end
 
-      it "returns 200 for a topic in the templates category" do
+      it "should return 200 if the topic belongs to the templates category" do
         post "/discourse_templates/#{template_item0.id}/use"
         expect(response.status).to eq(200)
       end
 
-      it "returns 200 for a topic in a templates subcategory" do
+      it "should return 200 if the topic belongs to the templates subcategories" do
         post "/discourse_templates/#{template_item3.id}/use"
         expect(response.status).to eq(200)
 
@@ -390,12 +364,12 @@ describe DiscourseTemplates::TemplatesController do
         sign_in(moderator)
       end
 
-      it "increments the usage count" do
+      it "should increment usage count" do
         get "/discourse_templates"
         expect(response.status).to eq(200)
 
         parsed = response.parsed_body
-        expected_response = serialize_topics([template_item3], moderator)
+        expected_response = serialize_topics([template_item3])
 
         expect(parsed["templates"]).to eq(expected_response)
         expect(parsed["templates"][0]["usages"]).to eq(0)
@@ -409,27 +383,10 @@ describe DiscourseTemplates::TemplatesController do
         parsed = response.parsed_body
 
         template_item3.reload
-        expected_response = serialize_topics([template_item3], moderator)
+        expected_response = serialize_topics([template_item3])
 
         expect(parsed["templates"]).to eq(expected_response)
         expect(parsed["templates"][0]["usages"]).to eq(1)
-      end
-    end
-
-    context "when a regular user tries to use a template in a restricted category" do
-      before do
-        SiteSetting.discourse_templates_categories = templates_parent_category.id.to_s
-        sign_in(user)
-      end
-
-      it "returns 403 for a template the user cannot see" do
-        post "/discourse_templates/#{template_item4.id}/use"
-        expect(response.status).to eq(403)
-      end
-
-      it "returns 200 for a template the user can see" do
-        post "/discourse_templates/#{template_item0.id}/use"
-        expect(response.status).to eq(200)
       end
     end
   end

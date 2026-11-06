@@ -5,7 +5,7 @@ RSpec.describe UploadSerializer do
 
   fab!(:upload)
 
-  it "renders the upload" do
+  it "should render without errors" do
     json_data = JSON.parse(serializer.to_json)
 
     expect(json_data["id"]).to eql upload.id

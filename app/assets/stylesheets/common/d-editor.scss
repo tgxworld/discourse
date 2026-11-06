@@ -80,14 +80,14 @@
   width: 100%;
   margin: 0;
   min-height: auto;
-  overflow-wrap: break-word;
+  word-wrap: break-word;
   appearance: none;
   border-radius: 0;
 }
 
 .d-editor-input {
   border: 0;
-  padding: var(--space-2);
+  padding: 10px;
   height: 100%;
   overflow-x: hidden;
   overscroll-behavior: contain;
@@ -113,8 +113,7 @@
   }
 }
 
-.hide-preview .d-editor-preview-wrapper,
-.--rich-editor-enabled .d-editor-preview-wrapper {
+.hide-preview .d-editor-preview-wrapper {
   display: none;
   flex: 0;
 }
@@ -313,32 +312,29 @@
   }
 }
 
-.d-editor-button-bar__wrap {
-  position: relative;
-  flex-shrink: 0;
-  min-width: 0;
-  overflow: clip;
-  border-start-start-radius: inherit;
-  border-start-end-radius: inherit;
-  margin-inline: var(--space-2);
-}
-
+// d-editor bar button sizing
 .d-editor-button-bar {
   display: flex;
   flex-direction: row;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: var(--space-2);
-  margin: 0;
-  padding-block: var(--space-1);
-  overflow-x: auto;
-  overflow-y: hidden;
-  max-width: 100%;
+  margin: 0.25rem 0;
 
-  // the toolbar can be rendered outside .d-editor-textarea-wrapper, so the
-  // disabled state is carried on the bar itself
-  &.--disabled {
-    opacity: 0.5;
-    pointer-events: none;
+  @include viewport.until(sm) {
+    flex-wrap: nowrap;
+    padding-block: var(--space-1);
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    max-width: 100%;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  .composer-toggle-switch {
+    padding: 0 0.5rem;
   }
 
   .btn:focus-visible {
@@ -374,6 +370,7 @@
 
   &.--replaced-toolbar {
     animation: float-left ease 0.2s 1 forwards;
+    flex-wrap: nowrap;
 
     @keyframes float-left {
       0% {
@@ -405,7 +402,6 @@
 
   &.--active {
     background: var(--d-selected);
-    color: var(--d-selected-text-color);
 
     &.btn:hover .d-icon {
       color: var(--primary-high);
@@ -426,38 +422,19 @@
   height: 100%;
 }
 
-#reply-control.composer-action-add-translation {
+#reply-control.composer-action-add_translation {
   .topic-title-translator {
     display: flex;
     align-items: center;
-    width: 100%;
+    gap: 2rem;
 
-    .title-input-column {
-      display: flex;
-      flex: 1;
-      align-items: center;
-      gap: 2rem;
-
-      input {
-        flex: 1;
-        min-width: 0;
-      }
-    }
-
-    .title-preview-spacer {
-      flex: 1;
-      margin-left: 9px;
+    input {
+      width: 48.5vw;
     }
   }
 
   .translation-selector-dropdown {
-    .select-kit-header {
-      --d-button-default-bg-color: transparent;
-      --d-button-default-bg-color--hover: var(--primary-low);
-      --d-button-default-text-color--hover: var(--primary-high);
-      --d-button-default-icon-color--hover: var(--primary-high);
-      border: 1px solid var(--primary-low-mid);
-    }
+    margin-bottom: 0.5rem;
 
     .select-kit-body {
       max-height: 300px;
@@ -469,8 +446,23 @@
     box-sizing: border-box;
     border: var(--d-input-border);
     border-radius: var(--d-border-radius);
+    padding: var(--translation-preview-padding);
     position: relative;
-    overflow: auto;
+    padding-top: calc(var(--translation-preview-padding) * 2);
+
+    &__header {
+      position: absolute;
+      display: inline-flex;
+      align-items: center;
+      height: 1.5rem;
+      top: 0;
+      left: 0;
+      background: var(--primary-very-low);
+      padding: 0.45rem var(--translation-preview-padding);
+      border-radius: var(--d-border-radius);
+      font-size: var(--font-down-1-rem);
+      color: var(--primary-high);
+    }
 
     &__original-locale {
       margin-left: 0.5rem;
@@ -480,93 +472,5 @@
       padding: 0.25rem 0.5rem;
       border-radius: var(--d-border-radius);
     }
-  }
-
-  .d-editor-translation-preview-header {
-    position: sticky;
-    top: 0;
-    z-index: z("base");
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem var(--translation-preview-padding, 1rem);
-    padding-bottom: 0.25rem;
-    border-bottom: 1px solid var(--primary-low);
-    background: var(--primary-very-low);
-    border-radius: var(--d-border-radius) var(--d-border-radius) 0 0;
-
-    &__title {
-      display: inline-flex;
-      align-items: center;
-      font-size: var(--font-down-1-rem);
-      color: var(--primary-high);
-      font-weight: 500;
-    }
-
-    &__controls {
-      display: flex;
-      gap: 0.5em;
-
-      .btn {
-        position: relative;
-        padding: 0.65em 0.75em;
-        font-size: var(--font-down-1-rem);
-        color: var(--d-nav-color);
-        background-color: var(--d-nav-bg-color);
-        transition: var(--d-button-transition);
-        border-radius: var(--d-nav-pill-border-radius);
-
-        &:hover:not(.active) {
-          color: var(--d-nav-color--hover);
-          background: var(--d-nav-bg-color--hover);
-        }
-
-        &.active {
-          color: var(--d-nav-color--active);
-          background: var(--d-nav-bg-color--active);
-
-          &::after {
-            content: "";
-            position: absolute;
-            left: 0;
-            bottom: calc(-0.25rem - 2px);
-            right: 0;
-            height: var(--d-nav-underline-height);
-            background: var(--d-nav-color--active);
-          }
-        }
-      }
-    }
-
-    &__raw-toggle {
-      padding-left: 0.5rem;
-      margin-left: 0.5rem;
-      border-left: 1px solid var(--primary-low);
-    }
-  }
-
-  .d-editor-translation-preview-content {
-    padding-inline: var(--translation-preview-padding, 1rem);
-    overflow: hidden;
-
-    img:not(.thumbnail, .ytp-thumbnail-image, .emoji) {
-      max-width: 100%;
-      height: auto;
-    }
-  }
-
-  .d-editor-translation-preview-empty {
-    color: var(--primary-medium);
-    font-style: italic;
-    padding: 2rem 0;
-    text-align: center;
-  }
-
-  .d-editor-translation-preview-raw {
-    font-family: var(--d-font-family--monospace);
-    font-size: var(--font-down-1);
-    white-space: pre-wrap;
-    overflow-wrap: break-word;
-    overflow-x: auto;
   }
 }

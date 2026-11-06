@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-GEOLITE_DBS ||= %w[GeoLite2-City GeoLite2-ASN] # rubocop:disable Lint/OrAssignmentToConstant
+GEOLITE_DBS = %w[GeoLite2-City GeoLite2-ASN]
 
 desc "downloads MaxMind's GeoLite2-City databases"
 task "maxminddb:get" => "environment" do
@@ -37,6 +37,8 @@ def copy_maxmind(from_path, to_path)
     FileUtils.touch(to)
   end
 end
+
+maxmind_thread = nil
 
 task "maxminddb:refresh": "environment" do
   refresh_days = GlobalSetting.refresh_maxmind_db_during_precompile_days

@@ -8,6 +8,7 @@ id:
   js:
     styleguide:
       title: "Styleguide"
+      welcome: "Untuk memulai, pilih bagian dari menu di sebelah kiri."
       categories:
         atoms: Atom
         molecules: Molekul
@@ -21,12 +22,6 @@ id:
           title: "Masukan Tanggal/Waktu"
         menus:
           title: "Menu"
-        context_menu:
-          actions:
-            delete: "Hapus"
-        reorderable_list:
-          table_type: "Tipe"
-          cross_list_primary: "Utama"
         toasts:
           title: "Toast"
         font_scale:
@@ -52,6 +47,8 @@ id:
           title: "Navigasi Bertumpuk"
         categories_list:
           title: "Daftar Kategori"
+        topic_link:
+          title: "Tautan Topik"
         topic_list_item:
           title: "Item Daftar Topik"
         topic_statuses:
@@ -60,6 +57,8 @@ id:
           title: "Daftar Topik"
         basic_topic_list:
           title: "Daftar Topik Dasar"
+        footer_message:
+          title: "Pesan Footer"
         signup_cta:
           title: "CTA Pendaftaran"
         topic_timer_info:
@@ -74,20 +73,10 @@ id:
           title: "Peta Topik"
         site_header:
           title: "Header Situs"
-        more_topics:
-          title: "Topik Lainnya"
+        suggested_topics:
+          title: "Topik Yang Disarankan"
         post_menu:
           title: "Menu Post"
-        roving_focus:
-          toolbar:
-            copy: "Salin"
-          adjacent:
-            field: "Cari"
-            open: "Buka"
-          combobox:
-            never: "Tidak pernah"
-          tree:
-            select: "Pilih"
         modal:
           title: "Modal"
           header: "Judul Modal"

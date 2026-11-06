@@ -1,12 +1,10 @@
 # frozen_string_literal: true
 
-RSpec.describe "Viewing a category" do
+RSpec.describe "Viewing a category", type: :system do
   fab!(:category)
   fab!(:user)
   let(:category_page) { PageObjects::Pages::Category.new }
   let(:topic_list) { PageObjects::Components::TopicList.new }
-
-  before { SiteSetting.enable_unified_new = true }
 
   describe "when a new child category is created with a new category topic" do
     fab!(:child_category) { Fabricate(:category, parent_category: category) }
@@ -17,7 +15,7 @@ RSpec.describe "Viewing a category" do
       end
     end
 
-    it "shows the category topic on the parent and child new lists when category definitions are shown" do
+    it "should show a new count on the parent and child category when 'show_category_definitions_in_topic_lists' is true" do
       SiteSetting.show_category_definitions_in_topic_lists = true
 
       sign_in(user)
@@ -35,17 +33,19 @@ RSpec.describe "Viewing a category" do
       expect(topic_list).to have_topic(child_category_topic)
     end
 
-    it "shows the category topic only on the child new list when category definitions are hidden" do
+    it "should only show a new count on the child category when 'show_category_definitions_in_topic_lists' site setting is false" do
       SiteSetting.show_category_definitions_in_topic_lists = false
 
       sign_in(user)
 
       category_page.visit(category)
-      category_page.click_new
 
-      expect(topic_list).to have_no_topic(child_category_topic)
+      expect(category_page).to have_no_new_topics
 
       category_page.visit(child_category)
+
+      expect(category_page).to have_new_topics
+
       category_page.click_new
 
       expect(topic_list).to have_topics(count: 1)

@@ -14,8 +14,8 @@ rescue LoadError
   exit
 end
 
-require_relative "base"
-
+require File.expand_path(File.dirname(__FILE__) + "/base.rb")
+AVATAR_DIR = "/path/to/avatars"
 # Call it like this:
 #   RAILS_ENV=production bundle exec ruby script/import_scripts/xenforo.rb
 class ImportScripts::XenForo < ImportScripts::Base
@@ -23,7 +23,6 @@ class ImportScripts::XenForo < ImportScripts::Base
   TABLE_PREFIX = "xf_"
   BATCH_SIZE = 1000
   ATTACHMENT_DIR = "/tmp/attachments"
-  AVATAR_DIR = "/path/to/avatars"
 
   def initialize
     super

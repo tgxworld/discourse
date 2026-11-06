@@ -1,12 +1,15 @@
 # frozen_string_literal: true
 
-describe "Composer - ProseMirror editor - Footnote extension" do
+describe "Composer - ProseMirror editor - Footnote extension", type: :system do
   fab!(:user) { Fabricate(:user, refresh_auto_groups: true) }
   let(:cdp) { PageObjects::CDP.new }
   let(:composer) { PageObjects::Components::Composer.new }
   let(:rich) { composer.rich_editor }
 
-  before { sign_in(user) }
+  before do
+    sign_in(user)
+    SiteSetting.rich_editor = true
+  end
 
   def open_composer_and_toggle_rich_editor
     page.visit "/new-topic"

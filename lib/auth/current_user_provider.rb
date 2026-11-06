@@ -23,18 +23,6 @@ class Auth::CurrentUserProvider
   def refresh_session(user, session, cookie_jar)
   end
 
-  # Optional interface for implementing impersonation.
-  def start_impersonating_user(user)
-  end
-
-  # Optional interface for implementing impersonation.
-  def stop_impersonating_user
-  end
-
-  # Optional interface for implementing impersonation.
-  def impersonation_acting_user
-  end
-
   # api has special rights return true if api was detected
   def is_api?
     raise NotImplementedError
@@ -50,7 +38,7 @@ class Auth::CurrentUserProvider
     raise NotImplementedError
   end
 
-  def log_off_user(session, cookie_jar, push_subscription: nil)
+  def log_off_user(session, cookie_jar)
     raise NotImplementedError
   end
 end

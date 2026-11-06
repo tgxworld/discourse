@@ -2,11 +2,11 @@
 
 module BookmarkGuardian
   def can_delete_bookmark?(bookmark)
-    is_my_own?(bookmark)
+    @user == bookmark.user
   end
 
   def can_edit_bookmark?(bookmark)
-    is_my_own?(bookmark)
+    @user == bookmark.user
   end
 
   def can_see_bookmarkable?(bookmark)

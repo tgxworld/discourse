@@ -1,7 +1,8 @@
 import Component from "@glimmer/component";
-import { on } from "@ember/modifier";
 import { action } from "@ember/object";
-import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
+import { not } from "truth-helpers";
+import DButton from "discourse/components/d-button";
+import concatClass from "discourse/helpers/concat-class";
 import { i18n } from "discourse-i18n";
 
 export const ORDER_BY_ACTIVITY_FILTER = "activity";
@@ -19,12 +20,11 @@ export default class PostVotingAnswerHeader extends Component {
     const positionInStream =
       repliesToPostNumber && parseInt(repliesToPostNumber, 10) !== 1 ? 2 : 1;
     const answersCount = post.topic.posts_count - 1;
-    const { isMegaTopic, posts, stream } = post.topic.postStream;
-    const answerId = isMegaTopic
-      ? posts[0]?.post_number === 1 && posts[positionInStream]?.id
-      : stream[positionInStream];
 
-    return answersCount > 0 && post.id === answerId;
+    return (
+      answersCount > 0 &&
+      post.id === post.topic.postStream.stream[positionInStream]
+    );
   }
 
   get post() {
@@ -42,64 +42,46 @@ export default class PostVotingAnswerHeader extends Component {
     );
   }
 
-  get votesUrl() {
-    return this.post.topic.url;
-  }
-
-  get activityUrl() {
-    return `${this.post.topic.url}?filter=${ORDER_BY_ACTIVITY_FILTER}`;
-  }
-
   @action
-  async orderByVotes(event) {
-    event.preventDefault();
+  async orderByVotes() {
     await this.post.topic.postStream.orderStreamByVotes();
     this.args.outletArgs.actions.updateTopicPageQueryParams();
   }
 
   @action
-  async orderByActivity(event) {
-    event.preventDefault();
+  async orderByActivity() {
     await this.post.topic.postStream.orderStreamByActivity();
     this.args.outletArgs.actions.updateTopicPageQueryParams();
   }
 
   <template>
-    <nav
-      aria-label={{i18n "post_voting.topic.sort_by"}}
-      class="post-voting-answers-header"
-    >
-      <h5 class="post-voting-answers-header__count">
+    <div class="post-voting-answers-header small-action">
+      <span class="post-voting-answers-headers-count">
         {{i18n "post_voting.topic.answer_count" count=this.answersCount}}
-      </h5>
-      <ul class="nav-pills post-voting-answers-header__sort">
-        <li>
-          <a
-            aria-current={{unless this.sortedByActivity "true"}}
-            class={{dConcatClass
-              "--votes"
-              (unless this.sortedByActivity "active")
-            }}
-            href={{this.votesUrl}}
-            {{on "click" this.orderByVotes}}
-          >
-            {{i18n "post_voting.topic.votes"}}
-          </a>
-        </li>
-        <li>
-          <a
-            aria-current={{if this.sortedByActivity "true"}}
-            class={{dConcatClass
-              "--activity"
-              (if this.sortedByActivity "active")
-            }}
-            href={{this.activityUrl}}
-            {{on "click" this.orderByActivity}}
-          >
-            {{i18n "post_voting.topic.activity"}}
-          </a>
-        </li>
-      </ul>
-    </nav>
+      </span>
+      <span class="post-voting-answers-headers-sort">
+        <span>
+          {{i18n "post_voting.topic.activity"}}
+        </span>
+        <DButton
+          class={{concatClass
+            "post-voting-answers-headers-sort-votes"
+            (unless this.sortedByActivity "active")
+          }}
+          @disabled={{not this.sortedByActivity}}
+          @label="post_voting.topic.votes"
+          @action={{this.orderByVotes}}
+        />
+        <DButton
+          class={{concatClass
+            "post-voting-answers-headers-sort-activity"
+            (if this.sortedByActivity "active")
+          }}
+          @disabled={{this.sortedByActivity}}
+          @label="post_voting.topic.activity"
+          @action={{this.orderByActivity}}
+        />
+      </span>
+    </div>
   </template>
 }

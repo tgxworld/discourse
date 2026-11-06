@@ -18,17 +18,13 @@ module PageObjects
 
           if args[:unread]
             predicate &&
-              component.has_css?(
-                "#{channel_selector} .sidebar-section-link-content-badge.icon.unread",
-              )
+              component.has_css?("#{channel_selector} .sidebar-section-link-suffix.icon.unread")
           elsif args[:mention]
             predicate &&
-              component.has_css?(
-                "#{channel_selector} .sidebar-section-link-content-badge.icon.urgent",
-              )
+              component.has_css?("#{channel_selector} .sidebar-section-link-suffix.icon.urgent")
           else
             predicate &&
-              component.has_no_css?("#{channel_selector} .sidebar-section-link-content-badge.icon")
+              component.has_no_css?("#{channel_selector} .sidebar-section-link-suffix.icon")
           end
         end
 
@@ -40,24 +36,6 @@ module PageObjects
           selector = "#sidebar-section-content-chat-dms"
           selector += " .sidebar-section-link.channel-#{channel.id}"
           selector
-        end
-
-        def has_no_dm_section?
-          has_no_selector?(".sidebar-section[data-section-name='chat-dms']")
-        end
-
-        NEW_START_DM_SELECTOR = ".sidebar-section-link[data-link-name='new-chat-dm']"
-
-        def has_no_start_new_dm?
-          has_no_selector?(NEW_START_DM_SELECTOR)
-        end
-
-        def has_start_new_dm?
-          has_selector?(NEW_START_DM_SELECTOR)
-        end
-
-        def click_start_new_dm
-          find(NEW_START_DM_SELECTOR).click
         end
       end
     end

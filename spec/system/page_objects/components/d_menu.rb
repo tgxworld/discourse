@@ -5,14 +5,12 @@ module PageObjects
     class DMenu < PageObjects::Components::Base
       attr_reader :component
 
-      def initialize(trigger_input, identifier = nil)
-        if trigger_input.is_a?(Capybara::Node::Element)
-          @component = trigger_input
+      def initialize(input)
+        if input.is_a?(Capybara::Node::Element)
+          @component = input
         else
-          @component = find(trigger_input)
+          @component = find(input)
         end
-
-        @identifier = identifier
       end
 
       def expand
@@ -33,32 +31,20 @@ module PageObjects
         !is_expanded?
       end
 
-      def portal_with_identifier_selector
-        if @identifier.nil?
-          "#d-menu-portals"
-        else
-          "[data-content][data-identifier=\"#{@identifier}\"]"
-        end
-      end
-
-      def remove_selected_option(title)
-        find(".d-multi-select-trigger__selected-item", text: title).click
-      end
-
       def option(selector, match = nil)
         params = {}
         params[:match] = match if match
-        within(portal_with_identifier_selector, visible: false) { find(selector, **params) }
+        within("#d-menu-portals") { find(selector, **params) }
       end
 
       def has_option?(selector, text = nil)
         params = {}
         params[:text] = text if text
-        within(portal_with_identifier_selector) { has_css?(selector, **params) }
+        within("#d-menu-portals") { has_css?(selector, **params) }
       end
 
       def has_no_option?(selector)
-        within(portal_with_identifier_selector) { has_no_css?(selector) }
+        within("#d-menu-portals") { has_no_css?(selector) }
       end
 
       def has_value?(value)

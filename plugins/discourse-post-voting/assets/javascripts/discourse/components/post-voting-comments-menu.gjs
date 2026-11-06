@@ -4,12 +4,12 @@ import { action } from "@ember/object";
 import { schedule } from "@ember/runloop";
 import { service } from "@ember/service";
 import { Promise } from "rsvp";
+import DButton from "discourse/components/d-button";
 import routeAction from "discourse/helpers/route-action";
 import { ajax } from "discourse/lib/ajax";
 import { popupAjaxError } from "discourse/lib/ajax-error";
-import DButton from "discourse/ui-kit/d-button";
 import { i18n } from "discourse-i18n";
-import PostVotingCommentsMenuComposer from "./post-voting-comments-menu-composer.gjs";
+import PostVotingCommentsMenuComposer from "./post-voting-comments-menu-composer";
 
 export default class PostVotingCommentsMenu extends Component {
   @service currentUser;
@@ -33,7 +33,7 @@ export default class PostVotingCommentsMenu extends Component {
     this.fetchComments().then(() => {
       schedule("afterRender", () => {
         const textArea = document.querySelector(
-          `#post_${this.args.postNumber} .post-voting-comments__composer .post-voting-comments__composer-textarea`
+          `#post_${this.args.postNumber} .post-voting-comment-composer .post-voting-comment-composer-textarea`
         );
         textArea.focus();
         textArea.select();
@@ -70,36 +70,41 @@ export default class PostVotingCommentsMenu extends Component {
   }
 
   <template>
-    <div class="post-voting-comments__footer">
+    <div class="post-voting-comments-menu">
       {{#if this.expanded}}
         <PostVotingCommentsMenuComposer
           @id={{@id}}
-          @onCancel={{this.closeComposer}}
           @onSave={{this.handleSave}}
+          @onCancel={{this.closeComposer}}
         />
       {{else}}
-        <div class="post-voting-comments__actions">
+        <DButton
+          @display="link"
+          @action={{if
+            this.currentUser
+            this.expandComposer
+            (routeAction "showLogin")
+          }}
+          @label="post_voting.post.post_voting_comment.add"
+          class="post-voting-comment-add-link"
+        />
+      {{/if}}
+
+      {{#if this.hasMoreComments}}
+        {{#unless this.expanded}}
+          <span class="post-voting-comments-menu-separator"></span>
+        {{/unless}}
+
+        <div class="post-voting-comments-menu-show-more">
           <DButton
-            class="btn-transparent --primary btn-small post-voting-comments__actions-add"
-            @action={{if
-              this.currentUser
-              this.expandComposer
-              (routeAction "showLogin")
+            @display="link"
+            @action={{this.fetchComments}}
+            @translatedLabel={{i18n
+              "post_voting.post.post_voting_comment.show"
+              count=@moreCommentCount
             }}
-            @label="post_voting.post.post_voting_comment.add"
+            class="post-voting-comments-menu-show-more-link"
           />
-
-          {{#if this.hasMoreComments}}
-            <DButton
-              class="btn-transparent --primary btn-small post-voting-comments__actions-show-more"
-              @action={{this.fetchComments}}
-              @translatedLabel={{i18n
-                "post_voting.post.post_voting_comment.show"
-                count=@moreCommentCount
-              }}
-            />
-
-          {{/if}}
         </div>
       {{/if}}
     </div>

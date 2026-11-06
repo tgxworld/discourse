@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe DiscoursePoll::PollsValidator do
+RSpec.describe ::DiscoursePoll::PollsValidator do
   subject(:validator) { described_class.new(post) }
 
   let(:post) { Fabricate(:post) }
@@ -214,20 +214,6 @@ RSpec.describe DiscoursePoll::PollsValidator do
           name: "test",
           count: SiteSetting.poll_maximum_options,
         ),
-      )
-    end
-
-    it "rejects number polls whose generated range exceeds poll_maximum_options" do
-      SiteSetting.poll_maximum_options = 20
-
-      post.raw = <<~RAW
-        [poll type=number min=1 max=100 step=1]
-        [/poll]
-      RAW
-
-      expect(post.valid?).to eq(false)
-      expect(post.errors[:base]).to include(
-        I18n.t("poll.default_poll_must_have_less_options", count: SiteSetting.poll_maximum_options),
       )
     end
 

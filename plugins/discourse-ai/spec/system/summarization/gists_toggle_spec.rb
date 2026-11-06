@@ -1,12 +1,10 @@
 # frozen_string_literal: true
 
-describe "Gists Toggle Functionality" do
+describe "Gists Toggle Functionality", type: :system do
   fab!(:admin)
   fab!(:group)
-  fab!(:topic_with_gist, :topic)
-  fab!(:topic_ai_gist) do
-    Fabricate(:topic_ai_gist, target: topic_with_gist, locale: SiteSetting.default_locale)
-  end
+  fab!(:topic_with_gist) { Fabricate(:topic) }
+  fab!(:topic_ai_gist) { Fabricate(:topic_ai_gist, target: topic_with_gist) }
 
   before do
     enable_current_plugin
@@ -15,7 +13,7 @@ describe "Gists Toggle Functionality" do
     SiteSetting.ai_summary_gists_enabled = true
 
     group.add(admin)
-    assign_agent_to(:ai_summary_gists_agent, [group.id])
+    assign_persona_to(:ai_summary_gists_persona, [group.id])
     sign_in(admin)
   end
 
@@ -37,39 +35,11 @@ describe "Gists Toggle Functionality" do
 
       expect(page).to have_css("body.topic-list-layout-table-ai")
     end
-
-    it "shows toggle and gists on filter route" do
-      visit("/filter?q=status:open")
-
-      expect(find(".topic-list-layout-trigger")).to be_present
-
-      find(".topic-list-layout-trigger").click
-      find(
-        ".dropdown-menu__item .d-button-label",
-        text: I18n.t("js.discourse_ai.summarization.topic_list_layout.button.expanded"),
-      ).click
-
-      expect(page).to have_css("body.topic-list-layout-table-ai")
-    end
-
-    it "filter route shares toggle state with discovery routes" do
-      visit("/latest")
-      find(".topic-list-layout-trigger").click
-      find(
-        ".dropdown-menu__item .d-button-label",
-        text: I18n.t("js.discourse_ai.summarization.topic_list_layout.button.expanded"),
-      ).click
-
-      visit("/filter?q=status:open")
-      expect(page).to have_css("body.topic-list-layout-table-ai")
-    end
   end
 
   context "when viewing PM topic lists" do
     fab!(:pm_topic) { Fabricate(:private_message_topic, user: admin, recipient: Fabricate(:user)) }
-    fab!(:pm_gist) do
-      Fabricate(:topic_ai_gist, target: pm_topic, locale: SiteSetting.default_locale)
-    end
+    fab!(:pm_gist) { Fabricate(:topic_ai_gist, target: pm_topic) }
 
     it "shows toggle when PMs have gists" do
       visit("/u/#{admin.username}/messages/new")
@@ -88,6 +58,30 @@ describe "Gists Toggle Functionality" do
 
       expect(page).to have_css("body.topic-list-layout-table-ai")
     end
+
+    it "PM and public topic toggles are independent from each other" do
+      visit("/latest")
+      find(".topic-list-layout-trigger").click
+      find(
+        ".dropdown-menu__item .d-button-label",
+        text: I18n.t("js.discourse_ai.summarization.topic_list_layout.button.compact"),
+      ).click
+
+      visit("/u/#{admin.username}/messages/new")
+      find(".topic-list-layout-trigger").click
+      find(
+        ".dropdown-menu__item .d-button-label",
+        text: I18n.t("js.discourse_ai.summarization.topic_list_layout.button.expanded"),
+      ).click
+
+      visit("/latest")
+      expect(page).to have_css("body.topic-list-layout-table")
+      expect(page).not_to have_css("body.topic-list-layout-table-ai")
+
+      visit("/u/#{admin.username}/messages/new")
+      expect(page).to have_css("body.topic-list-layout-table-ai")
+      expect(page).not_to have_css("body.topic-list-layout-table")
+    end
   end
 
   context "when no gists are available" do
@@ -97,73 +91,6 @@ describe "Gists Toggle Functionality" do
       visit("/latest")
 
       expect(page).not_to have_css(".topic-list-layout-trigger")
-    end
-  end
-
-  context "when viewing gists on desktop" do
-    it "renders gist component in desktop outlet" do
-      visit("/latest")
-
-      find(".topic-list-layout-trigger").click
-      find(
-        ".dropdown-menu__item .d-button-label",
-        text: I18n.t("js.discourse_ai.summarization.topic_list_layout.button.expanded"),
-      ).click
-
-      expect(page).to have_css(".link-bottom-line .excerpt__contents")
-    end
-  end
-end
-
-describe "Gists Toggle Functionality - Mobile", mobile: true do
-  fab!(:admin)
-  fab!(:group)
-  fab!(:topic_with_gist, :topic)
-  fab!(:topic_ai_gist) do
-    Fabricate(:topic_ai_gist, target: topic_with_gist, locale: SiteSetting.default_locale)
-  end
-
-  before do
-    enable_current_plugin
-    assign_fake_provider_to(:ai_default_llm_model)
-    SiteSetting.ai_summarization_enabled = true
-    SiteSetting.ai_summary_gists_enabled = true
-
-    group.add(admin)
-    assign_agent_to(:ai_summary_gists_agent, [group.id])
-    sign_in(admin)
-  end
-
-  context "when viewing gists on mobile" do
-    it "renders gist component in mobile outlet" do
-      visit("/latest")
-
-      find(".topic-list-layout-trigger").click
-      find(
-        ".dropdown-menu__item .d-button-label",
-        text: I18n.t("js.discourse_ai.summarization.topic_list_layout.button.expanded"),
-      ).click
-
-      expect(page).to have_css(".main-link .excerpt__contents")
-    end
-  end
-
-  context "when viewing PMs on mobile" do
-    fab!(:pm_topic) { Fabricate(:private_message_topic, user: admin, recipient: Fabricate(:user)) }
-    fab!(:pm_gist) do
-      Fabricate(:topic_ai_gist, target: pm_topic, locale: SiteSetting.default_locale)
-    end
-
-    it "renders gist component in mobile PM list" do
-      visit("/u/#{admin.username}/messages/new")
-
-      find(".topic-list-layout-trigger").click
-      find(
-        ".dropdown-menu__item .d-button-label",
-        text: I18n.t("js.discourse_ai.summarization.topic_list_layout.button.expanded"),
-      ).click
-
-      expect(page).to have_css(".main-link .excerpt__contents")
     end
   end
 end

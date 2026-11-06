@@ -13,13 +13,13 @@ end
 # Table name: classification_results
 #
 #  id                  :bigint           not null, primary key
-#  classification      :jsonb
-#  classification_type :string
 #  model_used          :string
+#  classification_type :string
+#  target_id           :bigint
 #  target_type         :string
+#  classification      :jsonb
 #  created_at          :datetime         not null
 #  updated_at          :datetime         not null
-#  target_id           :bigint
 #
 # Indexes
 #

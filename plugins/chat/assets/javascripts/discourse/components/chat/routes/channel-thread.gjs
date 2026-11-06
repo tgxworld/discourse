@@ -17,14 +17,15 @@ export default class ChatRoutesChannelThread extends Component {
     <div class="c-routes --channel-thread">
       {{#each (array @thread) as |thread|}}
         <ThreadHeader
-          @showFullTitle={{this.showfullTitle}}
           @thread={{thread}}
+          @showFullTitle={{this.showfullTitle}}
         />
 
         <Thread
-          @setFullTitle={{this.setFullTitle}}
-          @targetMessageId={{@targetMessageId}}
           @thread={{thread}}
+          @targetMessageId={{@targetMessageId}}
+          @includeHeader={{true}}
+          @setFullTitle={{this.setFullTitle}}
         />
       {{/each}}
     </div>

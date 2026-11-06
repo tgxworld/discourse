@@ -30,8 +30,6 @@ sr:
       cast-votes:
         title: "Daj svoj glas"
         label: "Glasaj sada!"
-      keep-vote:
-        label: "Nazad"
       show-results:
         title: "Prikaži rezultate ankete"
         label: "Rezultati"
@@ -69,6 +67,7 @@ sr:
       error_while_fetching_voters: "Žao nam je, došlo je do greške prilikom prikazivanja glasača."
       error_while_exporting_results: "Žao nam je, došlo je do greške prilikom izvoza rezultata ankete."
       ui_builder:
+        title: Napravi anketu
         insert: Unesi anketu
         help:
           options_min_count: Unesite najmanje 1 opciju.
@@ -107,3 +106,5 @@ sr:
           add: Додај опцију
         automatic_close:
           label: Automatski zatvorite anketu
+        show_advanced: "Прикажи напредне опције"
+        hide_advanced: "Сакриј напредне опције"

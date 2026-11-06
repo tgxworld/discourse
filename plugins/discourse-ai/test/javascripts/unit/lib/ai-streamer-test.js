@@ -1,6 +1,6 @@
 import { module, test } from "qunit";
 import {
-  addProgressDecoration,
+  addProgressDot,
   applyProgress,
   MIN_LETTERS_PER_INTERVAL,
 } from "discourse/plugins/discourse-ai/discourse/lib/ai-streamer/progress-handlers";
@@ -29,10 +29,6 @@ class FakeStreamUpdater {
     return this._raw;
   }
 
-  get element() {
-    return this._element;
-  }
-
   async setRaw(value) {
     this._raw = value;
     // just fake it, calling cook is tricky
@@ -44,9 +40,13 @@ class FakeStreamUpdater {
     this._cooked = value;
     this._element.innerHTML = value;
   }
+
+  get element() {
+    return this._element;
+  }
 }
 
-module("Unit | Lib | ai-streamer", function () {
+module("Discourse AI | Unit | Lib | ai-streamer", function () {
   function confirmPlaceholder(html, expected, assert) {
     const element = document.createElement("div");
     element.innerHTML = html;
@@ -54,28 +54,10 @@ module("Unit | Lib | ai-streamer", function () {
     const expectedElement = document.createElement("div");
     expectedElement.innerHTML = expected;
 
-    addProgressDecoration(element);
+    addProgressDot(element);
 
     assert.equal(element.innerHTML, expectedElement.innerHTML);
   }
-
-  test("it correctly decorates thinking blocks at end of stream", function (assert) {
-    const html =
-      "<details class='ai-thinking'><summary>Thinking ...</summary><p>test</p></details>";
-    const expected =
-      "<details class='ai-thinking in-progress'><summary>Thinking ...</summary><p>test<span class='progress-dot'></span></p></details>";
-
-    confirmPlaceholder(html, expected, assert);
-  });
-
-  test("it does not decorate thinking blocks at middle of stream", function (assert) {
-    const html =
-      "<details class='ai-thinking'><summary>Thinking ...</summary><p>test</p></details><p>more content</p>";
-    const expected =
-      "<details class='ai-thinking'><summary>Thinking ...</summary><p>test</p></details><p>more content<span class='progress-dot'></span></p>";
-
-    confirmPlaceholder(html, expected, assert);
-  });
 
   test("inserts progress span in correct location for simple div", function (assert) {
     const html = "<div>hello world<div>hello 2</div></div>";

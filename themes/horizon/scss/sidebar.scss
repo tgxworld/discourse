@@ -1,10 +1,5 @@
 @use "lib/viewport";
 
-:root {
-  --d-sidebar-active-background: var(--d-selected);
-}
-
-body.has-full-page-chat .sidebar-wrapper,
 .sidebar-wrapper,
 .sidebar-hamburger-dropdown {
   @include viewport.until(lg) {
@@ -28,6 +23,10 @@ body.has-full-page-chat .sidebar-wrapper,
     border-right: none;
   }
 
+  .sidebar-sections {
+    padding: 0;
+  }
+
   .sidebar-section-link {
     transition: none;
     border-radius: var(--d-border-radius);
@@ -35,13 +34,6 @@ body.has-full-page-chat .sidebar-wrapper,
 
   .dropdown-menu__item .sidebar-section-link {
     border-radius: 0;
-  }
-}
-
-.sidebar-hamburger-dropdown {
-  .sidebar-new-topic-button__wrapper {
-    width: 100%;
-    margin: 0 0 var(--space-2);
   }
 }
 
@@ -54,7 +46,7 @@ body.has-full-page-chat .sidebar-wrapper,
 
   @include viewport.until(sm) {
     .hamburger-panel .revamped & {
-      margin-bottom: var(--space-4);
+      margin-bottom: var(--spacing-block-m);
     }
   }
 
@@ -68,19 +60,28 @@ body.has-full-page-chat .sidebar-wrapper,
     flex-direction: column;
 
     @include viewport.from(xl) {
-      gap: var(--space-1);
+      gap: var(--spacing-block-xs);
     }
   }
 }
 
 .sidebar-wrapper .sidebar-sections {
   --scrollbarThumbBg: var(--d-selected);
+  padding: 0 1rem;
 }
 
 .sidebar-section-link-wrapper .sidebar-section-link:focus,
 .sidebar-section-link-wrapper .sidebar-section-link:hover {
   .d-icon {
     color: var(--primary);
+  }
+}
+
+.sidebar-new-topic-button__wrapper {
+  margin: 0 var(--spacing-inline-m) var(--spacing-block-l);
+
+  .sidebar-new-topic-button .d-icon {
+    display: none;
   }
 }
 
@@ -91,21 +92,4 @@ body.has-full-page-chat .sidebar-wrapper,
       z-index: z("modal", "overlay");
     }
   }
-}
-
-.admin-area .sidebar-wrapper .admin-panel {
-  --d-sidebar-highlight-background: var(--d-selected);
-  --d-sidebar-link-icon-color: var(--d-sidebar-link-color);
-}
-
-.sidebar-theme-toggle__wrapper {
-  order: -1;
-
-  .d-icon-paintbrush {
-    display: none;
-  }
-}
-
-.sidebar-theme-toggle-dropdown.select-kit.combo-box .select-kit-header {
-  padding-left: 1em;
 }

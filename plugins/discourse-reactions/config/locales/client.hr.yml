@@ -7,14 +7,10 @@
 hr:
   js:
     discourse_reactions:
-      users_popup:
-        all: "Sve"
+      state_panel:
+        more_users: "i %{count} više..."
       main_reaction:
         add: "Like-aj objavu"
-    discourse_workflows:
-      post_reaction_changed:
-        changes_added: "Dodano"
-        changes_removed: "Uklonjeno"
     notifications:
       reaction_2_users: "%{username}, %{username2}"
       reaction_multiple_users:

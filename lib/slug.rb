@@ -5,21 +5,21 @@ module Slug
   MAX_LENGTH = 255
 
   def self.for(string, default = "topic", max_length = MAX_LENGTH, method: nil)
-    string = string.gsub(Emoji::EMOJI_CODE_REGEXP, "") if string.present?
+    string = string.gsub(/:([\w\-+]+(?::t\d)?):/, "") if string.present? # strip emoji strings
     method = (method || SiteSetting.slug_generation_method || :ascii).to_sym
     max_length = 9999 if method == :encoded # do not truncate encoded slugs
 
     slug =
       case method
       when :ascii
-        ascii_generator(string)
+        self.ascii_generator(string)
       when :encoded
-        encoded_generator(string)
+        self.encoded_generator(string)
       when :none
-        none_generator(string)
+        self.none_generator(string)
       end
 
-    slug = prettify_slug(slug, max_length: max_length)
+    slug = self.prettify_slug(slug, max_length: max_length)
     (slug.blank? || slug_is_only_numbers?(slug)) ? default : slug
   end
 

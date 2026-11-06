@@ -13,39 +13,27 @@ RSpec.describe Jobs::ReindexSearch do
   # This works since test db has a small record less than limit.
   # Didn't check `topic` because topic doesn't have posts in fabrication
   # thus no search data
-  shared_examples "rebuilding search data after a locale change" do |record_type:|
-    it "rebuilds `#{record_type}` when default_locale changes" do
+  %w[post category user].each do |m|
+    it "should rebuild `#{m}` when default_locale changed" do
       SiteSetting.default_locale = "en"
-      model = Fabricate(record_type.to_sym)
+      model = Fabricate(m.to_sym)
       SiteSetting.default_locale = locale
       job.execute({})
-      expect(model.public_send("#{record_type}_search_data").locale).to eq locale
+      expect(model.public_send("#{m}_search_data").locale).to eq locale
     end
 
-    it "rebuilds `#{record_type}` when INDEX_VERSION changes" do
-      model = Fabricate(record_type.to_sym)
+    it "should rebuild `#{m}` when INDEX_VERSION changed" do
+      model = Fabricate(m.to_sym)
       # so that search data can be reindexed
-      search_data = model.public_send("#{record_type}_search_data")
+      search_data = model.public_send("#{m}_search_data")
       search_data.update!(version: 0)
       model.reload
 
       job.execute({})
-      expect(model.public_send("#{record_type}_search_data").version).to eq(
-        "SearchIndexer::#{record_type.upcase}_INDEX_VERSION".constantize,
+      expect(model.public_send("#{m}_search_data").version).to eq(
+        "SearchIndexer::#{m.upcase}_INDEX_VERSION".constantize,
       )
     end
-  end
-
-  context "when reindexing posts" do
-    include_examples "rebuilding search data after a locale change", record_type: "post"
-  end
-
-  context "when reindexing categories" do
-    include_examples "rebuilding search data after a locale change", record_type: "category"
-  end
-
-  context "when reindexing users" do
-    include_examples "rebuilding search data after a locale change", record_type: "user"
   end
 
   describe "rebuild_posts" do
@@ -71,7 +59,7 @@ RSpec.describe Jobs::ReindexSearch do
 
     after { FakeIndexer.reset }
 
-    it "does not reindex trashed posts or posts in deleted topics" do
+    it "should not reindex posts that belong to a deleted topic or have been trashed" do
       post = Fabricate(:post)
       post2 = Fabricate(:post)
       post3 = Fabricate(:post)
@@ -84,7 +72,7 @@ RSpec.describe Jobs::ReindexSearch do
       expect(FakeIndexer.posts).to contain_exactly(post)
     end
 
-    it "does not reindex posts with a development version" do
+    it "should not reindex posts with a developmental version" do
       Fabricate(:post, version: SearchIndexer::POST_INDEX_VERSION + 1)
 
       job.rebuild_posts(indexer: FakeIndexer)
@@ -92,7 +80,7 @@ RSpec.describe Jobs::ReindexSearch do
       expect(FakeIndexer.posts).to eq([])
     end
 
-    it "does not reindex posts with empty raw content" do
+    it "should not reindex posts with empty raw" do
       post = Fabricate(:post)
       post.post_search_data.destroy!
 
@@ -106,106 +94,8 @@ RSpec.describe Jobs::ReindexSearch do
     end
   end
 
-  describe "rebuild_registered_search_handlers" do
-    let(:plugin) { Plugin::Instance.new }
-    let(:mock_model_class) do
-      Class.new do
-        def self.name
-          "TestModel"
-        end
-
-        def self.table_name
-          "test_models"
-        end
-
-        def self.find_by(id:)
-          return nil unless id == 1
-          new(id: id)
-        end
-
-        def initialize(id:)
-          @id = id
-        end
-
-        attr_reader :id
-      end
-    end
-
-    let(:mock_search_data_class) { double }
-
-    after { DiscoursePluginRegistry.reset! }
-
-    it "rebuilds records for registered search handlers" do
-      indexer = mock("SearchIndexer")
-      indexer.expects(:index).once
-
-      plugin.register_search_index(
-        model_class: mock_model_class,
-        search_data_class: mock_search_data_class,
-        index_version: 1,
-        search_data: ->(record, indexer_helper) { { a_weight: "test" } },
-        load_unindexed_record_ids: ->(**_args) { [1] },
-      )
-
-      job.rebuild_registered_search_handlers(indexer: indexer)
-    end
-
-    it "skips disabled handlers" do
-      indexer = mock("SearchIndexer")
-      indexer.expects(:index).never
-
-      plugin.register_search_index(
-        model_class: mock_model_class,
-        search_data_class: mock_search_data_class,
-        index_version: 1,
-        search_data: ->(record, indexer_helper) { { a_weight: "test" } },
-        load_unindexed_record_ids: ->(**_args) { [1] },
-        enabled: -> { false },
-      )
-
-      job.rebuild_registered_search_handlers(indexer: indexer)
-    end
-
-    it "passes limit and index_version to load_unindexed_record_ids" do
-      indexer = mock("SearchIndexer")
-      received_args = nil
-
-      plugin.register_search_index(
-        model_class: mock_model_class,
-        search_data_class: mock_search_data_class,
-        index_version: 2,
-        search_data: ->(record, indexer_helper) { { a_weight: "test" } },
-        load_unindexed_record_ids:
-          lambda do |**args|
-            received_args = args
-            []
-          end,
-      )
-
-      job.rebuild_registered_search_handlers(limit: 5000, indexer: indexer)
-
-      expect(received_args[:limit]).to eq(5000)
-      expect(received_args[:index_version]).to eq(2)
-    end
-
-    it "handles missing records gracefully" do
-      indexer = mock("SearchIndexer")
-      indexer.expects(:index).never
-
-      plugin.register_search_index(
-        model_class: mock_model_class,
-        search_data_class: mock_search_data_class,
-        index_version: 1,
-        search_data: ->(record, indexer_helper) { { a_weight: "test" } },
-        load_unindexed_record_ids: ->(**_args) { [999] },
-      )
-
-      expect { job.rebuild_registered_search_handlers(indexer: indexer) }.not_to raise_error
-    end
-  end
-
   describe "#execute" do
-    it "removes topic search data for trashed topics" do
+    it "should clean up topic_search_data of trashed topics" do
       topic = Fabricate(:post).topic
       topic2 = Fabricate(:post).topic
 
@@ -219,7 +109,7 @@ RSpec.describe Jobs::ReindexSearch do
       expect(TopicSearchData.pluck(:topic_id)).to contain_exactly(topic2.topic_search_data.topic_id)
     end
 
-    it "removes post search data for empty posts and trashed topics" do
+    it "should clean up post_search_data of posts with empty raw or posts from trashed topics" do
       post = Fabricate(:post)
       post2 = Fabricate(:post, post_type: Post.types[:small_action])
       post2.raw = ""

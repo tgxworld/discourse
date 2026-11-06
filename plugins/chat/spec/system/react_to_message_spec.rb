@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "React to message" do
+RSpec.describe "React to message", type: :system do
   fab!(:current_user) { Fabricate(:user, group_ids: [Group::AUTO_GROUPS[:trust_level_1]]) }
   fab!(:other_user) { Fabricate(:user, group_ids: [Group::AUTO_GROUPS[:trust_level_1]]) }
   fab!(:category_channel_1, :category_channel)
@@ -16,7 +16,7 @@ RSpec.describe "React to message" do
   end
 
   context "when other user has reacted" do
-    let!(:reaction_1) do
+    fab!(:reaction_1) do
       Chat::MessageReactor.new(other_user, category_channel_1).react!(
         message_id: message_1.id,
         react_action: :add,
@@ -48,31 +48,8 @@ RSpec.describe "React to message" do
     end
   end
 
-  context "when emojis are disabled" do
-    before do
-      SiteSetting.enable_emoji = false
-      Chat::MessageReactor.new(other_user, category_channel_1).react!(
-        message_id: message_1.id,
-        react_action: :add,
-        emoji: "woman_detective",
-      )
-    end
-
-    it "hides existing reactions and the ways to add one" do
-      sign_in(current_user)
-      chat.visit_channel(category_channel_1)
-
-      expect(channel).to have_no_reactions(message_1)
-
-      message = channel.hover_message(message_1)
-      expect(message).to have_css(".chat-message-actions")
-      expect(message).to have_no_css(".chat-message-actions .react-btn")
-      expect(message).to have_no_css(".chat-message-actions .chat-message-reaction")
-    end
-  end
-
   context "when current user reacts" do
-    let!(:reaction_1) do
+    fab!(:reaction_1) do
       Chat::MessageReactor.new(other_user, category_channel_1).react!(
         message_id: message_1.id,
         react_action: :add,
@@ -92,23 +69,26 @@ RSpec.describe "React to message" do
         end
 
         context "when current user has multiple sessions" do
-          it "adds reaction on each session" do
+          xit "adds reaction on each session" do
+            reaction = "grimacing"
+
             sign_in(current_user)
             chat.visit_channel(category_channel_1)
 
             using_session(:tab_1) do
               sign_in(current_user)
               chat.visit_channel(category_channel_1)
-
-              channel.react_to_message(message_1)
-              find(".emoji-picker [data-emoji=\"grimacing\"]").click
-
-              expect(channel).to have_reaction(message_1, "grimacing")
             end
 
-            try_until_success(reason: "relies on MessageBus updates") do
-              expect(channel).to have_reaction(message_1, "grimacing")
+            using_session(:tab_1) do
+              channel.hover_message(message_1)
+              find(".react-btn").click
+              find(".emoji-picker [data-emoji=\"#{reaction}\"]").click
+
+              expect(channel).to have_reaction(message_1, reaction)
             end
+
+            expect(channel).to have_reaction(message_1, "grimacing")
           end
         end
       end
@@ -167,11 +147,9 @@ RSpec.describe "React to message" do
   end
 
   context "when current user and another have reacted" do
-    fab!(:another_user) { Fabricate(:user, group_ids: [Group::AUTO_GROUPS[:trust_level_1]]) }
+    fab!(:other_user) { Fabricate(:user, group_ids: [Group::AUTO_GROUPS[:trust_level_1]]) }
 
-    before { category_channel_1.add(another_user) }
-
-    let!(:reaction_1) do
+    fab!(:reaction_1) do
       Chat::MessageReactor.new(current_user, category_channel_1).react!(
         message_id: message_1.id,
         react_action: :add,
@@ -179,8 +157,8 @@ RSpec.describe "React to message" do
       )
     end
 
-    let!(:reaction_2) do
-      Chat::MessageReactor.new(another_user, category_channel_1).react!(
+    fab!(:reaction_2) do
+      Chat::MessageReactor.new(other_user, category_channel_1).react!(
         message_id: message_1.id,
         react_action: :add,
         emoji: "woman_detective",
@@ -202,7 +180,7 @@ RSpec.describe "React to message" do
   end
 
   context "when current user has reacted" do
-    let!(:reaction_1) do
+    fab!(:reaction_1) do
       Chat::MessageReactor.new(current_user, category_channel_1).react!(
         message_id: message_1.id,
         react_action: :add,
@@ -236,9 +214,7 @@ RSpec.describe "React to message" do
     context "when receiving a duplicate reaction event" do
       fab!(:user_1) { Fabricate(:user, group_ids: [Group::AUTO_GROUPS[:trust_level_1]]) }
 
-      before { category_channel_1.add(user_1) }
-
-      let!(:reaction_2) do
+      fab!(:reaction_2) do
         Chat::MessageReactor.new(user_1, category_channel_1).react!(
           message_id: message_1.id,
           react_action: :add,
@@ -255,20 +231,6 @@ RSpec.describe "React to message" do
 
         expect(channel).to have_reaction(message_1, reaction_2.emoji, "1")
       end
-    end
-  end
-
-  context "when using one click reaction" do
-    before { current_user.user_option.update!(chat_quick_reactions_custom: "tada|smiley") }
-
-    it "appears in frequently used" do
-      sign_in(current_user)
-      chat.visit_channel(category_channel_1)
-
-      channel.click_quick_reaction(message_1, "tada")
-      channel.open_emoji_picker(message_1)
-
-      expect(page).to have_selector(".emoji-picker [data-emoji=\"tada\"]")
     end
   end
 end

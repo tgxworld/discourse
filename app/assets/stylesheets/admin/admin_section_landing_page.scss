@@ -4,6 +4,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(16em, 1fr));
   gap: 1em 2em;
+  margin-top: 1em;
   padding-top: 1em;
 
   .admin-section-landing-item {
@@ -13,16 +14,13 @@
     grid-row: span 2;
     gap: 0;
     margin-bottom: 2em;
-    padding: var(--space-4);
-    color: var(--primary);
 
     @include viewport.from(sm) {
       margin-bottom: 2em;
     }
 
-    &.--has-icon {
+    &.-has-icon {
       grid-template-columns: 1fr 8fr;
-      gap: 0 var(--space-4);
 
       .admin-section-landing-item__buttons {
         grid-column: 2;

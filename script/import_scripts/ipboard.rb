@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 require "mysql2"
-require_relative "base"
+require File.expand_path(File.dirname(__FILE__) + "/base.rb")
 require "htmlentities"
 begin
   require "reverse_markdown" # https://github.com/jqr/php-serialize
@@ -308,7 +308,7 @@ class ImportScripts::IpboardSQL < ImportScripts::Base
     create_category(params, params[:id])
 
     create_categories(categories) do |category|
-      id = category["id"].to_s
+      id = (category["id"]).to_s
       name = CGI.unescapeHTML(cat_map[id])
       {
         id: id + "gal",

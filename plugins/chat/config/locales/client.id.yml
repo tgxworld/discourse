@@ -27,11 +27,6 @@ id:
             chat:
               create_message: "Buat pesan obrolan di kanal tertentu"
     chat:
-      edit_category:
-        tab_title: "Obrolan"
-        description: "Deskripsi"
-        actions: "Aksi"
-        settings: "Pengaturan"
       text_copied: Teks disalin ke papan klip
       link_copied: Tautan disalin ke papan klip
       deleted_chat_username: dihapus
@@ -56,7 +51,6 @@ id:
         add: "Menambahkan"
         close_channel: "Tutup kanal"
         open_channel: "Buka kanal"
-        notification_settings_context: "Pemberitahuan"
         join: "Gabung"
         leave: "Keluar"
       channels_list_popup:
@@ -110,8 +104,6 @@ id:
         filter_open: Buka
         filter_closed: Tertutup
         filter_archived: Diarsipkan
-        filter_joined_all: "Semua"
-        filter_joined_joined: "Joined"
       members_view:
         back_to_settings: "Kembali ke pengaturan"
       about_view:
@@ -122,7 +114,6 @@ id:
         tabs:
           members: Anggota
           settings: Pengaturan
-          search: Cari
         remove_member: "Hapus"
       new_message_modal:
         title: Kirim pesan
@@ -144,7 +135,6 @@ id:
       create_channel:
         threading:
           label: "Aktifkan threading"
-        description: "Deskripsi"
         type: "Tipe"
         types:
           category: "Kategori"
@@ -175,19 +165,10 @@ id:
           description: "Ini mengekspor semua pesan dari semua kanal."
           create_export: "Buat ekspor"
           export_has_started: "Ekspor telah dimulai. Anda akan menerima PM jika sudah siap."
-      search:
-        short_title: Cari
-        sort:
-          latest: "Terbaru"
       direct_messages:
-        close: "Tutup kanal"
         cannot_create: "Maaf, Anda tidak dapat mengirim pesan langsung."
       channel_list:
         title: "Kanal"
-        options:
-          filter: "Filter"
-        filter:
-          mentions: "Balasan-balasan"
       incoming_webhooks:
         description: "Deskripsi"
         delete: "Hapus"
@@ -256,15 +237,3 @@ id:
       panels:
         chat:
           label: "Obrolan"
-    discourse_workflows:
-      nodes:
-        "action:send_chat_message": "Kirim pesan obrolan"
-      send_chat_message:
-        message: "pesan"
-        actor_username: "Pengirim"
-      chat_approval:
-        message: "pesan"
-        buttons: "Tombol"
-        style_default: "Asal"
-        style_primary: "Utama"
-        style_success: "Sukses"

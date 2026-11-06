@@ -1,17 +1,15 @@
 import Component from "@glimmer/component";
 import { service } from "@ember/service";
-import { trustHTML } from "@ember/template";
+import { htmlSafe } from "@ember/template";
+import concatClass from "discourse/helpers/concat-class";
+import { renderAvatar } from "discourse/helpers/user-avatar";
 import { userPath } from "discourse/lib/url";
-import DUserAvatarFlair from "discourse/ui-kit/d-user-avatar-flair";
-import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
-import { renderAvatar } from "discourse/ui-kit/helpers/d-user-avatar";
 
 export default class ChatUserAvatar extends Component {
-  @service chatStateManager;
   @service chat;
 
   get avatar() {
-    return trustHTML(
+    return htmlSafe(
       renderAvatar(this.args.user, { imageSize: this.avatarSize })
     );
   }
@@ -44,37 +42,22 @@ export default class ChatUserAvatar extends Component {
     return userPath(this.args.user.username);
   }
 
-  get ariaHidden() {
-    return this.args.ariaHidden ?? false;
-  }
-
-  get isFullPageActive() {
-    return this.chatStateManager.isFullPageActive ? "true" : "false";
-  }
-
   <template>
     <div
-      class={{dConcatClass "chat-user-avatar" (if this.isOnline "is-online")}}
+      class={{concatClass "chat-user-avatar" (if this.isOnline "is-online")}}
       data-username={{@user.username}}
     >
       {{#if this.interactive}}
         <a
-          aria-hidden={{if this.ariaHidden "true"}}
           class="chat-user-avatar__container"
-          data-user-card={{@user.username}}
           href={{this.userPath}}
-          tabindex={{if this.ariaHidden "-1"}}
+          data-user-card={{@user.username}}
         >
           {{this.avatar}}
-          <DUserAvatarFlair @user={{@user}} />
         </a>
       {{else}}
-        <span
-          aria-hidden={{if this.ariaHidden "true"}}
-          class="chat-user-avatar__container"
-        >
+        <span class="chat-user-avatar__container">
           {{this.avatar}}
-          <DUserAvatarFlair @user={{@user}} />
         </span>
       {{/if}}
     </div>

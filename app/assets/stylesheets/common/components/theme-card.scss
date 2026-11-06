@@ -80,12 +80,37 @@
     flex-grow: 1;
   }
 
-  &.--default {
+  &.-active {
     @include theme-card-border(tertiary);
   }
 
   &__icons {
     display: flex;
+  }
+
+  &__image-wrapper {
+    width: 100%;
+    height: 160px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-bottom: 1px solid var(--content-border-color);
+    border-top-left-radius: var(--d-border-radius);
+    border-top-right-radius: var(--d-border-radius);
+
+    svg {
+      width: 100%;
+      top: 0;
+      left: 0;
+    }
+  }
+
+  &__image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top left;
   }
 
   .ember-checkbox {
@@ -97,6 +122,14 @@
     font-weight: 400;
   }
 
+  &__content {
+    padding-inline: 1rem;
+    padding-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+  }
+
   &__title {
     font-size: var(--font-up-0);
     font-weight: 700;
@@ -104,24 +137,6 @@
     gap: 0.5rem;
     align-items: center;
     overflow-wrap: anywhere;
-    color: var(--primary);
-
-    &:visited {
-      color: currentcolor;
-    }
-
-    &:hover,
-    &:focus {
-      color: var(--tertiary);
-    }
-  }
-
-  &__content {
-    padding-inline: 1rem;
-    padding-top: 1rem;
-    display: flex;
-    flex-direction: column;
-    flex-grow: 1;
   }
 
   &__description {
@@ -139,21 +154,6 @@
 
   &__install-button {
     margin-top: auto;
-  }
-
-  &__install-more-icon {
-    height: 160px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-bottom: 1px solid var(--content-border-color);
-    background: var(--primary-very-low);
-    color: var(--primary-medium);
-
-    .d-icon {
-      width: 3rem;
-      height: 3rem;
-    }
   }
 
   &__button.--set-default {
@@ -202,6 +202,16 @@
       height: 0.75em;
       color: var(--primary-high);
     }
+
+    &.--active {
+      background-color: var(--tertiary);
+      color: var(--secondary);
+      position: absolute;
+      right: 8px;
+      top: 8px;
+      font-size: var(--font-down-3);
+      text-transform: uppercase;
+    }
   }
 
   .admin-config-area-card__header-action {
@@ -235,7 +245,10 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+
+  &:hover {
+    border-color: var(--tertiary-medium);
+  }
 
   .admin-config-area-card__content {
     margin: 0;
@@ -245,10 +258,6 @@
   .admin-config-area-card__header-wrapper {
     flex: none;
   }
-}
-
-.admin-config-area-card.theme-card.--install-more {
-  border-style: dashed;
 }
 
 .admin-config-area-card.theme-install-card {

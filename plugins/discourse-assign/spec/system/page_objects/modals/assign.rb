@@ -5,16 +5,8 @@ module PageObjects
     class Assign < PageObjects::Modals::Base
       def assignee=(assignee)
         assignee = assignee.is_a?(Group) ? assignee.name : assignee.username
-        assignee_chooser.search(assignee)
-        assignee_chooser.select_row_by_value(assignee)
-      end
-
-      def select_assignee_with_keyboard(assignee)
-        assignee = assignee.is_a?(Group) ? assignee.name : assignee.username
-        input = find(".control-group input")
-        input.fill_in(with: assignee)
-        find("li[data-value='#{assignee}'].is-highlighted")
-        input.send_keys(:enter)
+        find(".control-group input").fill_in(with: assignee)
+        find("li[data-value='#{assignee}']").click
       end
 
       def status=(status)
@@ -28,12 +20,6 @@ module PageObjects
 
       def confirm
         find(".d-modal__footer .btn-primary").click
-      end
-
-      private
-
-      def assignee_chooser
-        @assignee_chooser ||= PageObjects::Components::SelectKit.new("#assignee-chooser")
       end
     end
   end

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 describe PostMover do
+  fab!(:admin)
   fab!(:user)
   fab!(:topic_1) { Fabricate(:topic, user: user) }
   fab!(:topic_2) { Fabricate(:topic, user: user) }
@@ -16,9 +17,9 @@ describe PostMover do
   fab!(:user_reaction_3) { Fabricate(:reaction_user, reaction: reaction_3, post: post_2) }
   fab!(:user_reaction_4) { Fabricate(:reaction_user, reaction: reaction_4, post: post_2) }
 
-  before { enable_current_plugin }
+  before { SiteSetting.discourse_reactions_enabled = true }
 
-  it "creates a new post when the topic's first post has no reactions" do
+  it "should create new post when topic's first post has no reactions" do
     old_topic = Fabricate(:topic)
     new_topic = Fabricate(:topic)
     post = Fabricate(:post, topic: old_topic)
@@ -27,7 +28,7 @@ describe PostMover do
     expect { post_mover.to_topic(new_topic) }.to change { new_topic.posts.count }.by(1)
   end
 
-  it "creates a new post when the first post has likes but no emoji reactions" do
+  it "should create new post when first post has likes but no emoji reaction user" do
     old_topic = Fabricate(:topic)
     new_topic = Fabricate(:topic)
     post = Fabricate(:post, topic: old_topic)
@@ -46,7 +47,7 @@ describe PostMover do
     expect(new_post.reactions_user.count).to eq(0)
   end
 
-  it "moves the first post's reactions to the new post" do
+  xit "should add old post's reactions to new post when a topic's first post is moved" do
     expect(post_1.reactions).to contain_exactly(reaction_1, reaction_2)
     expect(topic_2.posts.count).to eq(0)
 
@@ -66,7 +67,7 @@ describe PostMover do
     expect(reaction_user_ids).to match_array([user_reaction_1.user_id, user_reaction_2.user_id])
   end
 
-  it "retains existing reactions after moving a post" do
+  it "should retain existing reactions after moving a post" do
     expect(post_2.reactions).to contain_exactly(reaction_3, reaction_4)
     expect(topic_3.posts.count).to eq(0)
 

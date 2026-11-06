@@ -14,3 +14,5 @@ nb_NO:
         messaging:
           topic_tag_changed:
             added: "Lagt til %{added}"
+      flowdock:
+        message_title: "skrevet"

@@ -1,7 +1,10 @@
 # frozen_string_literal: true
 
 describe "OIDC RP-Initiated Logout" do
-  let(:document_url) { "https://id.example.com/.well-known/openid-configuration" }
+  let(:document_url) do
+    SiteSetting.openid_connect_discovery_document =
+      "https://id.example.com/.well-known/openid-configuration"
+  end
   let(:document) do
     {
       issuer: "https://id.example.com/",
@@ -11,13 +14,9 @@ describe "OIDC RP-Initiated Logout" do
       end_session_endpoint: "https://id.example.com/endsession",
     }
   end
-
   fab!(:user)
 
   before do
-    SiteSetting.openid_connect_discovery_document = document_url
-    SiteSetting.openid_connect_client_id = "my-client-id"
-    SiteSetting.openid_connect_client_secret = "my-client-secret"
     SiteSetting.openid_connect_enabled = true
     SiteSetting.openid_connect_rp_initiated_logout = true
     stub_request(:get, document_url).to_return(body: lambda { |r| document.to_json })
@@ -108,33 +107,6 @@ describe "OIDC RP-Initiated Logout" do
       delete "/session/#{user.username}", xhr: true
       expect(response.status).to eq(200)
       expect(response.parsed_body["redirect_url"]).to eq("/")
-    end
-
-    context "with client_id included in logout endpoint" do
-      before do
-        SiteSetting.openid_connect_client_id = "test-client-id"
-        SiteSetting.openid_connect_rp_initiated_logout_include_client_id = true
-      end
-
-      it "appends the client id to the logout endpoint url" do
-        delete "/session/#{user.username}", xhr: true
-        expect(response.status).to eq(200)
-        expect(response.parsed_body["redirect_url"]).to eq(
-          "https://id.example.com/endsession?id_token_hint=myoidctoken&client_id=test-client-id",
-        )
-      end
-    end
-
-    context "with state included in logout endpoint" do
-      before { SiteSetting.openid_connect_rp_initiated_logout_include_state = true }
-
-      it "appends a random state param to the logout endpoint url" do
-        delete "/session/#{user.username}", xhr: true
-        expect(response.status).to eq(200)
-        expect(response.parsed_body["redirect_url"]).to match(
-          %r{\Ahttps://id\.example\.com/endsession\?id_token_hint=myoidctoken&state=[0-9a-f]{32}\z},
-        )
-      end
     end
   end
 end

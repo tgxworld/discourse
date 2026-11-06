@@ -28,28 +28,6 @@ module PageObjects
           btn.click
         end
 
-        def long_press
-          page.execute_script(<<-JS, component)
-            arguments[0].dispatchEvent(new TouchEvent("touchstart", {
-              cancelable: true,
-              bubbles: true,
-              touches: [
-                new Touch({ identifier: Date.now(), target: arguments[0] })
-              ],
-            }));
-
-            setTimeout(() => {
-              arguments[0].dispatchEvent(new TouchEvent("touchend", {
-                cancelable: true,
-                bubbles: true,
-                touches: [
-                  new Touch({ identifier: Date.now(), target: arguments[0] })
-                ],
-              }));
-            }, 600);
-          JS
-        end
-
         def component(**args)
           find(build_selector(**args))
         end
@@ -59,7 +37,7 @@ module PageObjects
         def build_selector(**args)
           selector = SELECTOR
           selector += args[:class] if args[:class]
-          selector += "[data-chat-channel-id=\"#{id}\"]" if id
+          selector += "[data-chat-channel-id=\"#{self.id}\"]" if self.id
           selector
         end
       end

@@ -8,8 +8,6 @@ class AiCustomToolSerializer < ApplicationSerializer
              :summary,
              :parameters,
              :script,
-             :secret_contracts,
-             :secret_bindings,
              :rag_chunk_tokens,
              :rag_chunk_overlap_tokens,
              :rag_llm_model_id,
@@ -23,15 +21,5 @@ class AiCustomToolSerializer < ApplicationSerializer
 
   def rag_uploads
     object.uploads
-  end
-
-  def include_secret_bindings?
-    return true if scope.blank? || !scope.is_a?(Hash)
-
-    scope[:include_secret_bindings] != false
-  end
-
-  def secret_bindings
-    object.secret_bindings.map { |binding| binding.slice(:alias, :ai_secret_id) }
   end
 end

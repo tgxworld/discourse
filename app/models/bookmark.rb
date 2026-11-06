@@ -11,12 +11,14 @@ class Bookmark < ActiveRecord::Base
   end
 
   def self.registered_bookmarkable_from_type(type)
-    resolved_type = Bookmark.polymorphic_class_for(type).name
-    Bookmark.registered_bookmarkables.find { |bm| bm.model.name == resolved_type }
+    begin
+      resolved_type = Bookmark.polymorphic_class_for(type).name
+      Bookmark.registered_bookmarkables.find { |bm| bm.model.name == resolved_type }
 
-    # If the class cannot be found from the provided type using polymorphic_class_for,
-    # then the type is not valid and thus there will not be any registered bookmarkable.
-  rescue NameError
+      # If the class cannot be found from the provided type using polymorphic_class_for,
+      # then the type is not valid and thus there will not be any registered bookmarkable.
+    rescue NameError
+    end
   end
 
   def self.valid_bookmarkable_types
@@ -25,25 +27,6 @@ class Bookmark < ActiveRecord::Base
 
   belongs_to :user
   belongs_to :bookmarkable, polymorphic: true
-
-  has_many :dependent_reminder_notifications,
-           ->(bookmark) do
-             # we keep these notifications otherwise they would be deleted when the bookmark is deleted
-             # and user would never have a chance to see them
-             if bookmark.auto_delete_preference ==
-                  Bookmark.auto_delete_preferences[:when_reminder_sent]
-               where("false")
-             else
-               where(notification_type: Notification.types[:bookmark_reminder]).where(
-                 "data::jsonb->>'bookmark_id' = ?",
-                 bookmark.id.to_s,
-               )
-             end
-           end,
-           class_name: "Notification",
-           foreign_key: :user_id,
-           primary_key: :user_id,
-           dependent: :destroy
 
   def self.auto_delete_preferences
     @auto_delete_preferences ||=
@@ -70,13 +53,13 @@ class Bookmark < ActiveRecord::Base
   validates :name, length: { maximum: 100 }
 
   def registered_bookmarkable
-    Bookmark.registered_bookmarkable_from_type(bookmarkable_type)
+    Bookmark.registered_bookmarkable_from_type(self.bookmarkable_type)
   end
 
   def polymorphic_columns_present
-    return if bookmarkable_id.present? && bookmarkable_type.present?
+    return if self.bookmarkable_id.present? && self.bookmarkable_type.present?
 
-    errors.add(:base, I18n.t("bookmarks.errors.bookmarkable_id_type_required"))
+    self.errors.add(:base, I18n.t("bookmarks.errors.bookmarkable_id_type_required"))
   end
 
   def unique_per_bookmarkable
@@ -88,16 +71,16 @@ class Bookmark < ActiveRecord::Base
       return
     end
 
-    errors.add(:base, I18n.t("bookmarks.errors.already_bookmarked", type: bookmarkable_type))
+    self.errors.add(:base, I18n.t("bookmarks.errors.already_bookmarked", type: bookmarkable_type))
   end
 
   def ensure_sane_reminder_at_time
     return if reminder_at.blank?
     if reminder_at < Time.zone.now
-      errors.add(:base, I18n.t("bookmarks.errors.cannot_set_past_reminder"))
+      self.errors.add(:base, I18n.t("bookmarks.errors.cannot_set_past_reminder"))
     end
     if reminder_at > 10.years.from_now.utc
-      errors.add(:base, I18n.t("bookmarks.errors.cannot_set_reminder_in_distant_future"))
+      self.errors.add(:base, I18n.t("bookmarks.errors.cannot_set_reminder_in_distant_future"))
     end
   end
 
@@ -105,7 +88,7 @@ class Bookmark < ActiveRecord::Base
     return if user.bookmarks.count < SiteSetting.max_bookmarks_per_user
     return if !new_record?
 
-    errors.add(
+    self.errors.add(
       :base,
       I18n.t(
         "bookmarks.errors.too_many",
@@ -116,17 +99,20 @@ class Bookmark < ActiveRecord::Base
   end
 
   def valid_bookmarkable_type
-    return if Bookmark.valid_bookmarkable_types.include?(bookmarkable_type)
+    return if Bookmark.valid_bookmarkable_types.include?(self.bookmarkable_type)
 
-    errors.add(:base, I18n.t("bookmarks.errors.invalid_bookmarkable", type: bookmarkable_type))
+    self.errors.add(
+      :base,
+      I18n.t("bookmarks.errors.invalid_bookmarkable", type: self.bookmarkable_type),
+    )
   end
 
   def auto_delete_when_reminder_sent?
-    auto_delete_preference == Bookmark.auto_delete_preferences[:when_reminder_sent]
+    self.auto_delete_preference == Bookmark.auto_delete_preferences[:when_reminder_sent]
   end
 
   def auto_clear_reminder_when_reminder_sent?
-    auto_delete_preference == Bookmark.auto_delete_preferences[:clear_reminder]
+    self.auto_delete_preference == Bookmark.auto_delete_preferences[:clear_reminder]
   end
 
   def reminder_at_ics(offset: 0)
@@ -136,7 +122,7 @@ class Bookmark < ActiveRecord::Base
   def clear_reminder!(force_clear_reminder_at: false)
     reminder_update_attrs = { reminder_last_sent_at: Time.zone.now, reminder_set_at: nil }
 
-    if auto_clear_reminder_when_reminder_sent? || force_clear_reminder_at
+    if self.auto_clear_reminder_when_reminder_sent? || force_clear_reminder_at
       reminder_update_attrs[:reminder_at] = nil
     end
 
@@ -144,10 +130,10 @@ class Bookmark < ActiveRecord::Base
   end
 
   def reminder_at_in_zone(timezone)
-    reminder_at.in_time_zone(timezone)
+    self.reminder_at.in_time_zone(timezone)
   end
 
-  scope :with_reminders, -> { where.not(reminder_at: nil) }
+  scope :with_reminders, -> { where("reminder_at IS NOT NULL") }
 
   scope :pending_reminders,
         ->(before_time = Time.now.utc) do
@@ -211,17 +197,17 @@ end
 # Table name: bookmarks
 #
 #  id                     :bigint           not null, primary key
-#  auto_delete_preference :integer          default(0), not null
-#  bookmarkable_type      :string
+#  user_id                :bigint           not null
 #  name                   :string(100)
-#  pinned                 :boolean          default(FALSE)
 #  reminder_at            :datetime
-#  reminder_last_sent_at  :datetime
-#  reminder_set_at        :datetime
 #  created_at             :datetime         not null
 #  updated_at             :datetime         not null
+#  reminder_last_sent_at  :datetime
+#  reminder_set_at        :datetime
+#  auto_delete_preference :integer          default(0), not null
+#  pinned                 :boolean          default(FALSE)
 #  bookmarkable_id        :bigint
-#  user_id                :bigint           not null
+#  bookmarkable_type      :string
 #
 # Indexes
 #

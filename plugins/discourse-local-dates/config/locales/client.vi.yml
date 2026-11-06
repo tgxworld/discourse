@@ -5,25 +5,20 @@
 # https://translate.discourse.org/
 
 vi:
-  admin_js:
-    admin:
-      site_settings:
-        categories:
-          discourse_local_dates: "Discourse Local Dates"
   js:
     discourse_local_dates:
       relative_dates:
-        today: Hôm nay %{time}
-        tomorrow: Ngày mai %{time}
-        yesterday: Hôm qua %{time}
+        today: '%{time} hôm nay'
+        tomorrow: '%{time} ngày mai'
+        yesterday: '%{time} hôm qua'
         countdown:
           passed: ngày qua
-      title: Chèn ngày/giờ
-      edit_date: Chỉnh sửa %{date}
+      title: Chèn ngày / giờ
       create:
         form:
           insert: Chèn
-          save: Lưu lại
+          advanced_mode: Chế độ nâng cao
+          simple_mode: Chế độ đơn giản
           format_description: "Định dạng được sử dụng để hiển thị ngày cho người dùng. Sử dụng Z để hiển thị độ lệch và zz cho tên múi giờ."
           timezones_title: Múi giờ hiển thị
           timezones_description: Múi giờ sẽ được sử dụng để hiển thị ngày trong bản xem trước và dự phòng.
@@ -36,7 +31,6 @@ vi:
           format_title: Định dạng ngày
           timezone: Múi giờ
           until: Cho đến khi...
-          current_timezone: "Múi giờ hiện tại:"
           recurring:
             every_day: "Mỗi ngày"
             every_week: "Mỗi tuần"
@@ -46,4 +40,3 @@ vi:
             every_three_months: "Mỗi ba tháng"
             every_six_months: "Mỗi sáu tháng"
             every_year: "Mỗi năm"
-      default_title: "Sự kiện %{site_name}"

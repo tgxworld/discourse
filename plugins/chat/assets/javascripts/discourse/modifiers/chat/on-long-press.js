@@ -11,6 +11,7 @@ function cancelEvent(event) {
 
 export default class ChatOnLongPress extends Modifier {
   @service capabilities;
+  @service site;
 
   constructor(owner, args) {
     super(owner, args);
@@ -18,16 +19,10 @@ export default class ChatOnLongPress extends Modifier {
   }
 
   get enabled() {
-    return this.enabledByCaller && this.capabilities.touch;
+    return this.capabilities.touch && this.site.mobileView;
   }
 
-  modify(
-    element,
-    [onLongPressStart, onLongPressEnd, onLongPressCancel],
-    { enabled = true }
-  ) {
-    this.enabledByCaller = enabled;
-
+  modify(element, [onLongPressStart, onLongPressEnd, onLongPressCancel]) {
     if (!this.enabled) {
       return;
     }
@@ -70,7 +65,7 @@ export default class ChatOnLongPress extends Modifier {
     this.element.addEventListener("touchend", this.onCancel);
     this.element.addEventListener("touchcancel", this.onCancel);
     this.timeout = discourseLater(() => {
-      if (this.isDestroying) {
+      if (this.isDestroying || this.isDestroyed) {
         return;
       }
 

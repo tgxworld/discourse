@@ -2,12 +2,13 @@ import Component from "@glimmer/component";
 import { fn } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
-import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
+import { eq } from "truth-helpers";
+import concatClass from "discourse/helpers/concat-class";
 import { i18n } from "discourse-i18n";
-import Channel from "./channel.gjs";
-import Group from "./group.gjs";
-import ListAction from "./list-action.gjs";
-import User from "./user.gjs";
+import Channel from "./channel";
+import Group from "./group";
+import ListAction from "./list-action";
+import User from "./user";
 
 export default class List extends Component {
   cantAddMoreMembersLabel = i18n(
@@ -60,21 +61,21 @@ export default class List extends Component {
           <ul class="chat-message-creator__list">
             {{#each @items as |item|}}
               <li
-                class={{dConcatClass
+                class={{concatClass
                   "chat-message-creator__list-item"
                   (if
                     (eq item.identifier @highlightedItem.identifier)
                     "-highlighted"
                   )
                 }}
-                data-identifier={{item.identifier}}
-                id={{item.id}}
-                role="button"
-                tabindex="0"
                 {{on "click" (fn this.handleClick item)}}
                 {{on "keypress" (fn this.handleEnter item)}}
                 {{on "mousemove" (fn @onHighlight item)}}
                 {{on "mouseleave" (fn @onHighlight null)}}
+                role="button"
+                tabindex="0"
+                data-identifier={{item.identifier}}
+                id={{item.id}}
               >
                 {{component
                   (this.componentForItem item.type)

@@ -5,10 +5,15 @@ module Jobs
     sidekiq_options queue: "low"
 
     def execute(args)
-      avatar = UserAvatar.find_by(id: args[:avatar_id], user_id: args[:user_id])
-      return if avatar&.user&.primary_email.blank?
+      user = User.find_by(id: args[:user_id])
+      avatar = UserAvatar.find_by(id: args[:avatar_id])
 
-      avatar.update_gravatar!(selection: :if_missing)
+      if user && avatar && avatar.user&.id == user.id && user.primary_email.present?
+        avatar.update_gravatar!
+        if !user.uploaded_avatar_id && avatar.gravatar_upload_id
+          user.update_column(:uploaded_avatar_id, avatar.gravatar_upload_id)
+        end
+      end
     end
   end
 end

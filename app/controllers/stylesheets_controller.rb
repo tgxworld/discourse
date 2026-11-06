@@ -23,12 +23,15 @@ class StylesheetsController < ApplicationController
   def color_scheme
     params.require("id")
     params.permit("theme_id")
+    params.permit("include_dark_scheme")
 
-    theme_id = params[:theme_id]&.to_i
-    theme_id = nil if theme_id && !guardian.allow_themes?([theme_id], include_preview: true)
-
-    manager = Stylesheet::Manager.new(theme_id: theme_id)
-    stylesheet = manager.color_scheme_stylesheet_details(params[:id], fallback_to_base: true)
+    manager = Stylesheet::Manager.new(theme_id: params[:theme_id])
+    stylesheet =
+      manager.color_scheme_stylesheet_details(
+        params[:id],
+        fallback_to_base: true,
+        include_dark_scheme: !!params[:include_dark_scheme],
+      )
 
     render json: stylesheet
   end
@@ -69,14 +72,25 @@ class StylesheetsController < ApplicationController
     handle_missing_cache(location, target, digest) if !stylesheet_time
 
     if cache_time.present? && stylesheet_time && stylesheet_time <= cache_time
-      return head :not_modified
+      return render body: nil, status: 304
     end
 
-    raise Discourse::NotFound if !StylesheetCache.write_to_disk(query, location, source_map:)
+    unless File.exist?(location)
+      if current = query.pick(source_map ? :source_map : :content)
+        FileUtils.mkdir_p(cache_path)
+        Discourse::Utils.atomic_write_file(location, current)
+      else
+        raise Discourse::NotFound
+      end
+    end
 
-    response.headers["Last-Modified"] = stylesheet_time.httpdate if stylesheet_time
-    immutable_for(1.year)
-
+    if Rails.env == "development"
+      response.headers["Last-Modified"] = Time.zone.now.httpdate
+      immutable_for(1.second)
+    else
+      response.headers["Last-Modified"] = stylesheet_time.httpdate if stylesheet_time
+      immutable_for(1.year)
+    end
     send_file(location, disposition: :inline)
   end
 
@@ -94,7 +108,9 @@ class StylesheetsController < ApplicationController
   private
 
   def read_file(location)
-    File.read(location)
-  rescue Errno::ENOENT
+    begin
+      File.read(location)
+    rescue Errno::ENOENT
+    end
   end
 end

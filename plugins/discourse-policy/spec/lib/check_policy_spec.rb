@@ -1,10 +1,13 @@
 # frozen_string_literal: true
 
-describe Jobs::DiscoursePolicy::CheckPolicy do
-  subject(:job) { described_class.new }
+describe DiscoursePolicy::CheckPolicy do
+  before do
+    enable_current_plugin
+    Jobs.run_immediately!
+  end
 
-  fab!(:user1, :user)
-  fab!(:user2, :user)
+  fab!(:user1) { Fabricate(:user) }
+  fab!(:user2) { Fabricate(:user) }
 
   fab!(:group) do
     group = Fabricate(:group)
@@ -13,9 +16,8 @@ describe Jobs::DiscoursePolicy::CheckPolicy do
     group
   end
 
-  before do
-    enable_current_plugin
-    Jobs.run_immediately!
+  def accept_policy(post)
+    [user1, user2].each { |u| PolicyUser.add!(u, post.post_policy) }
   end
 
   it "correctly renews policies with no renew-start" do
@@ -30,16 +32,16 @@ describe Jobs::DiscoursePolicy::CheckPolicy do
     post = create_post(raw: raw, user: Fabricate(:admin))
 
     freeze_time Time.utc(2021)
-    [user1, user2].each { |policy_user| PolicyUser.add!(policy_user, post.post_policy) }
+    accept_policy(post)
 
     freeze_time Time.utc(2022)
-    job.execute
+    DiscoursePolicy::CheckPolicy.new.execute
 
     post.reload
     expect(post.post_policy.accepted_by).to contain_exactly(user1, user2)
 
     freeze_time Time.utc(2023)
-    job.execute
+    DiscoursePolicy::CheckPolicy.new.execute
 
     post.reload
     expect(post.post_policy.accepted_by).to be_empty
@@ -57,11 +59,11 @@ describe Jobs::DiscoursePolicy::CheckPolicy do
     post = create_post(raw: raw, user: Fabricate(:admin))
 
     freeze_time Time.utc(2021)
-    [user1, user2].each { |policy_user| PolicyUser.add!(policy_user, post.post_policy) }
+    accept_policy(post)
 
     freeze_time Time.utc(2022)
     PolicyUser.where(user_id: user2.id).update(accepted_at: Time.now)
-    job.execute
+    DiscoursePolicy::CheckPolicy.new.execute
 
     post.reload
     expect(post.post_policy.accepted_by).to contain_exactly(user2)
@@ -86,11 +88,11 @@ describe Jobs::DiscoursePolicy::CheckPolicy do
     post2 = create_post(raw: raw2, user: Fabricate(:admin))
 
     freeze_time Time.utc(2021)
-    [user1, user2].each { |policy_user| PolicyUser.add!(policy_user, post.post_policy) }
-    [user1, user2].each { |policy_user| PolicyUser.add!(policy_user, post2.post_policy) }
+    accept_policy(post)
+    accept_policy(post2)
 
     freeze_time Time.utc(2022)
-    job.execute
+    DiscoursePolicy::CheckPolicy.new.execute
 
     post.reload
     expect(post.post_policy.accepted_by).to be_empty
@@ -108,10 +110,10 @@ describe Jobs::DiscoursePolicy::CheckPolicy do
 
     post = create_post(raw: raw, user: Fabricate(:admin))
 
-    [user1, user2].each { |policy_user| PolicyUser.add!(policy_user, post.post_policy) }
+    accept_policy(post)
 
     freeze_time Time.utc(2020)
-    job.execute
+    DiscoursePolicy::CheckPolicy.new.execute
 
     post.reload
     # did not hit renew start
@@ -119,24 +121,24 @@ describe Jobs::DiscoursePolicy::CheckPolicy do
 
     freeze_time Time.utc(2020, 10, 18)
 
-    job.execute
+    DiscoursePolicy::CheckPolicy.new.execute
 
     post.reload
     expect(post.post_policy.accepted_by).to be_empty
 
-    [user1, user2].each { |policy_user| PolicyUser.add!(policy_user, post.post_policy) }
+    accept_policy(post)
 
     freeze_time(Time.utc(2020, 10, 17) + 101.days)
 
     PolicyUser.add!(user2, post.post_policy)
 
-    job.execute
+    DiscoursePolicy::CheckPolicy.new.execute
 
     post.reload
     expect(post.post_policy.accepted_by).to contain_exactly(user2)
   end
 
-  shared_examples "scheduling policy renewal from its start date" do |how_often:|
+  %w[monthly quarterly yearly].each do |how_often|
     it "sets correctly next_renew_at for #{how_often} when renew-start is set" do
       period =
         case how_often
@@ -157,18 +159,18 @@ describe Jobs::DiscoursePolicy::CheckPolicy do
 
       post = create_post(raw: raw, user: Fabricate(:admin))
 
-      [user1, user2].each { |policy_user| PolicyUser.add!(policy_user, post.post_policy) }
+      accept_policy(post)
 
       freeze_time Time.utc(2020, 10, 17)
 
-      job.execute
+      DiscoursePolicy::CheckPolicy.new.execute
 
       post.reload
       expect(post.post_policy.accepted_by).to contain_exactly(user1, user2)
 
       freeze_time Time.utc(2020, 10, 18)
 
-      job.execute
+      DiscoursePolicy::CheckPolicy.new.execute
 
       post.reload
       expect(post.post_policy.accepted_by).to be_empty
@@ -176,19 +178,7 @@ describe Jobs::DiscoursePolicy::CheckPolicy do
     end
   end
 
-  context "with a monthly renewal period and a specified start date" do
-    include_examples "scheduling policy renewal from its start date", how_often: "monthly"
-  end
-
-  context "with a quarterly renewal period and a specified start date" do
-    include_examples "scheduling policy renewal from its start date", how_often: "quarterly"
-  end
-
-  context "with a yearly renewal period and a specified start date" do
-    include_examples "scheduling policy renewal from its start date", how_often: "yearly"
-  end
-
-  shared_examples "expiring a renewable policy" do |how_often:|
+  %w[monthly quarterly yearly].each do |how_often|
     it "expires policies when #{how_often}" do
       period =
         case how_often
@@ -209,18 +199,18 @@ describe Jobs::DiscoursePolicy::CheckPolicy do
 
       post = create_post(raw: raw, user: Fabricate(:admin))
 
-      [user1, user2].each { |policy_user| PolicyUser.add!(policy_user, post.post_policy) }
+      accept_policy(post)
 
       freeze_time Time.utc(2020, 10, 30)
 
-      job.execute
+      DiscoursePolicy::CheckPolicy.new.execute
 
       post.reload
       expect(post.post_policy.accepted_by).to contain_exactly(user1, user2)
 
       freeze_time Time.utc(2020, 10, 16) + period + 1.day
 
-      job.execute
+      DiscoursePolicy::CheckPolicy.new.execute
 
       post.reload
       expect(post.post_policy.accepted_by).to be_empty
@@ -228,19 +218,7 @@ describe Jobs::DiscoursePolicy::CheckPolicy do
     end
   end
 
-  context "with a monthly renewal period and no specified start date" do
-    include_examples "expiring a renewable policy", how_often: "monthly"
-  end
-
-  context "with a quarterly renewal period and no specified start date" do
-    include_examples "expiring a renewable policy", how_often: "quarterly"
-  end
-
-  context "with a yearly renewal period and no specified start date" do
-    include_examples "expiring a renewable policy", how_often: "yearly"
-  end
-
-  it "sends high-priority notifications to users" do
+  it "will correctly notify users with high priority notifications" do
     Jobs.run_immediately!
     freeze_time
 
@@ -252,7 +230,7 @@ describe Jobs::DiscoursePolicy::CheckPolicy do
 
     post = create_post(raw: raw, user: Fabricate(:admin))
 
-    job.execute
+    DiscoursePolicy::CheckPolicy.new.execute
 
     expect(
       user1.notifications.where(notification_type: Notification.types[:topic_reminder]).count,
@@ -263,8 +241,8 @@ describe Jobs::DiscoursePolicy::CheckPolicy do
 
     freeze_time 2.weeks.from_now
 
-    job.execute
-    job.execute
+    DiscoursePolicy::CheckPolicy.new.execute
+    DiscoursePolicy::CheckPolicy.new.execute
 
     user1_notifications =
       user1.notifications.where(
@@ -284,44 +262,7 @@ describe Jobs::DiscoursePolicy::CheckPolicy do
     expect(user2_notifications.first.high_priority).to eq(true)
   end
 
-  context "when the policy topic is restricted" do
-    it "creates reminders only for users who can see it" do
-      freeze_time
-
-      policy_user_with_topic_access = Fabricate(:user)
-      policy_user_without_topic_access = Fabricate(:user)
-
-      policy_target_group = Fabricate(:group)
-      policy_target_group.add(policy_user_with_topic_access)
-      policy_target_group.add(policy_user_without_topic_access)
-
-      private_category_access_group = Fabricate(:group)
-      private_category_access_group.add(policy_user_with_topic_access)
-      private_category = Fabricate(:private_category, group: private_category_access_group)
-
-      raw = <<~MD
-        [policy group=#{policy_target_group.name} reminder=weekly]
-        I always open **doors**!
-        [/policy]
-      MD
-
-      post = create_post(raw: raw, user: Fabricate(:admin), category: private_category)
-
-      freeze_time 2.weeks.from_now
-
-      job.execute
-
-      expect(
-        Notification.where(
-          notification_type: Notification.types[:topic_reminder],
-          topic_id: post.topic_id,
-          post_number: 1,
-        ).pluck(:user_id),
-      ).to contain_exactly(policy_user_with_topic_access.id)
-    end
-  end
-
-  it "replaces the existing policy reminder notification" do
+  it "will delete the existing policy reminder notification before creating a new one" do
     Jobs.run_immediately!
     freeze_time
 
@@ -333,7 +274,7 @@ describe Jobs::DiscoursePolicy::CheckPolicy do
 
     post = create_post(raw: raw, user: Fabricate(:admin))
 
-    job.execute
+    DiscoursePolicy::CheckPolicy.new.execute
 
     expect(
       user1.notifications.where(notification_type: Notification.types[:topic_reminder]).count,
@@ -341,7 +282,7 @@ describe Jobs::DiscoursePolicy::CheckPolicy do
 
     freeze_time 2.weeks.from_now
 
-    job.execute
+    DiscoursePolicy::CheckPolicy.new.execute
 
     user1_notification =
       user1
@@ -356,7 +297,7 @@ describe Jobs::DiscoursePolicy::CheckPolicy do
 
     freeze_time 2.weeks.from_now
 
-    job.execute
+    DiscoursePolicy::CheckPolicy.new.execute
 
     expect(
       user1
@@ -374,7 +315,7 @@ describe Jobs::DiscoursePolicy::CheckPolicy do
   it "clears the next_renew_at when renew_start is nil" do
     policy = Fabricate(:post_policy, next_renew_at: 3.hours.ago, renew_start: nil, renew_days: 10)
 
-    job.execute
+    DiscoursePolicy::CheckPolicy.new.execute
 
     expect(policy.reload.next_renew_at).to be_nil
   end

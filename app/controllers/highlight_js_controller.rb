@@ -13,10 +13,7 @@ class HighlightJsController < ApplicationController
   def show
     no_cookies
 
-    RailsMultisite::ConnectionManagement.with_hostname(
-      params[:hostname],
-      raise_on_missing: false,
-    ) do
+    RailsMultisite::ConnectionManagement.with_hostname(params[:hostname]) do
       current_version = HighlightJs.version(SiteSetting.highlighted_languages)
 
       return redirect_to path(HighlightJs.path) if current_version != params[:version]

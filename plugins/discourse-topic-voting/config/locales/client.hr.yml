@@ -10,25 +10,22 @@ hr:
       sort_options:
         votes: "Glasovi"
     topic_voting:
+      reached_limit: "Ponestalo vam je glasova, uklonite postojeći glas!"
+      list_votes: "Prikažite svoje glasove"
+      votes_nav_help: "teme s najviše glasova"
       voted: "Glasali ste na ovoj temi"
+      allow_topic_voting: "Dopusti korisnicima da glasaju na temama u ovoj kategoriji?"
       vote_title: "Glasaj"
       vote_title_plural: "Glasovi"
-      votes:
-        one: "%{count} glas"
-        few: "%{count} glasa"
-        other: "%{count} glasova"
+      voted_title: "Glasovao"
+      voting_closed_title: "Zatvoreno"
+      voting_limit: "Limit"
+      anonymous_button:
+        one: "Glas"
+        few: "Glasa"
+        other: "Glasova"
       remove_vote: "Ukloni glas"
-      and_more_voters: "i %{count} više..."
-      show_voters: "Pokažite tko je glasao"
-      vote_count_thousands: "%{count}tis."
-      no_votes_title_self: "Još niste glasali niti za jednu temu"
-      no_votes_title_others: "%{username} još nije glasao/la niti za jednu temu"
     filters:
       votes:
         title: "Glasovi"
-      my_votes:
-        title: "Moji glasovi"
-        help: "teme o kojima ste glasali"
-    discourse_workflows:
-      topic_received_vote:
-        tag_names: "Oznake"
+        help: "teme s najviše glasova"

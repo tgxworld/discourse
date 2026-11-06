@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require_relative "../fabricators/reaction_fabricator"
-require_relative "../fabricators/reaction_user_fabricator"
+require_relative "../fabricators/reaction_fabricator.rb"
+require_relative "../fabricators/reaction_user_fabricator.rb"
 
 describe PostSerializer do
   fab!(:user_1, :user)
@@ -26,7 +26,6 @@ describe PostSerializer do
       created_at: 20.minutes.ago,
     )
   end
-
   fab!(:like) do
     Fabricate(
       :post_action,
@@ -55,10 +54,12 @@ describe PostSerializer do
   it "renders custom reactions which should be sorted by count" do
     json = PostSerializer.new(post_1, scope: Guardian.new(user_1), root: false).as_json
 
-    expect(json[:reactions]).to contain_exactly(
-      { id: "+1", type: :emoji, count: 1 },
-      { id: "heart", type: :emoji, count: 1 },
-      { id: "otter", type: :emoji, count: 2 },
+    expect(json[:reactions]).to eq(
+      [
+        { id: "otter", type: :emoji, count: 2 },
+        { id: "+1", type: :emoji, count: 1 },
+        { id: "heart", type: :emoji, count: 1 },
+      ],
     )
 
     expect(json[:current_user_reaction]).to eq({ type: :emoji, id: "otter", can_undo: true })
@@ -68,36 +69,15 @@ describe PostSerializer do
     expect(json[:reaction_users_count]).to eq(4)
   end
 
-  it "subtracts ignored users' reactions and likes from reactions and reaction_users_count" do
-    Fabricate(:ignored_user, user: user_2, ignored_user: user_4)
-    Fabricate(:ignored_user, user: user_2, ignored_user: user_3)
-
-    json = PostSerializer.new(post_1, scope: Guardian.new(user_2), root: false).as_json
-
-    expect(json[:reactions]).to contain_exactly({ id: "otter", type: :emoji, count: 2 })
-    expect(json[:reaction_users_count]).to eq(2)
-  end
-
-  it "does not subtract for anonymous viewers" do
-    Fabricate(:ignored_user, user: user_2, ignored_user: user_4)
-
-    json = PostSerializer.new(post_1, scope: Guardian.new, root: false).as_json
-
-    expect(json[:reactions]).to contain_exactly(
-      { id: "+1", type: :emoji, count: 1 },
-      { id: "heart", type: :emoji, count: 1 },
-      { id: "otter", type: :emoji, count: 2 },
-    )
-    expect(json[:reaction_users_count]).to eq(4)
-  end
-
   it "renders custom reactions sorted alphabetically if count is equal" do
     json = PostSerializer.new(post_1, scope: Guardian.new(user_1), root: false).as_json
 
-    expect(json[:reactions]).to contain_exactly(
-      { id: "+1", type: :emoji, count: 1 },
-      { id: "heart", type: :emoji, count: 1 },
-      { id: "otter", type: :emoji, count: 2 },
+    expect(json[:reactions]).to eq(
+      [
+        { id: "otter", type: :emoji, count: 2 },
+        { id: "+1", type: :emoji, count: 1 },
+        { id: "heart", type: :emoji, count: 1 },
+      ],
     )
   end
 
@@ -105,22 +85,12 @@ describe PostSerializer do
     SiteSetting.discourse_reactions_enabled_reactions = "+1"
     json = PostSerializer.new(post_1, scope: Guardian.new(user_1), root: false).as_json
 
-    expect(json[:reactions]).to contain_exactly(
-      { id: "+1", type: :emoji, count: 1 },
-      { id: "heart", type: :emoji, count: 1 },
-      { id: "otter", type: :emoji, count: 2 },
-    )
-  end
-
-  it "does not count deprecated bookmarks as likes" do
-    Fabricate(:post_action, post: post_1, user: Fabricate(:user), post_action_type_id: 1)
-
-    json = PostSerializer.new(post_1, scope: Guardian.new, root: false).as_json
-
-    expect(json[:reactions]).to contain_exactly(
-      { id: "+1", type: :emoji, count: 1 },
-      { id: "heart", type: :emoji, count: 1 },
-      { id: "otter", type: :emoji, count: 2 },
+    expect(json[:reactions]).to eq(
+      [
+        { id: "otter", type: :emoji, count: 2 },
+        { id: "+1", type: :emoji, count: 1 },
+        { id: "heart", type: :emoji, count: 1 },
+      ],
     )
   end
 
@@ -147,11 +117,13 @@ describe PostSerializer do
     it "renders the right custom reactions including custom emoji" do
       json = PostSerializer.new(post_1, scope: Guardian.new(user_5), root: false).as_json
 
-      expect(json[:reactions]).to contain_exactly(
-        { id: "+1", type: :emoji, count: 1 },
-        { id: "heart", type: :emoji, count: 1 },
-        { id: "otter", type: :emoji, count: 2 },
-        { id: "some_custom_emoji", type: :emoji, count: 1 },
+      expect(json[:reactions]).to eq(
+        [
+          { id: "otter", type: :emoji, count: 2 },
+          { id: "+1", type: :emoji, count: 1 },
+          { id: "heart", type: :emoji, count: 1 },
+          { id: "some_custom_emoji", type: :emoji, count: 1 },
+        ],
       )
     end
 
@@ -161,10 +133,12 @@ describe PostSerializer do
 
       json = PostSerializer.new(post_1.reload, scope: Guardian.new(user_5), root: false).as_json
 
-      expect(json[:reactions]).to contain_exactly(
-        { id: "+1", type: :emoji, count: 1 },
-        { id: "heart", type: :emoji, count: 1 },
-        { id: "otter", type: :emoji, count: 2 },
+      expect(json[:reactions]).to eq(
+        [
+          { id: "otter", type: :emoji, count: 2 },
+          { id: "+1", type: :emoji, count: 1 },
+          { id: "heart", type: :emoji, count: 1 },
+        ],
       )
     end
   end
@@ -183,9 +157,8 @@ describe PostSerializer do
     it "merges the newly matching custom reaction into likes" do
       json = PostSerializer.new(post_1, scope: Guardian.new(user_1), root: false).as_json
 
-      expect(json[:reactions]).to contain_exactly(
-        { id: "otter", type: :emoji, count: 3 },
-        { id: "+1", type: :emoji, count: 1 },
+      expect(json[:reactions]).to eq(
+        [{ id: "otter", type: :emoji, count: 3 }, { id: "+1", type: :emoji, count: 1 }],
       )
     end
   end

@@ -1,45 +1,49 @@
-import Component from "@glimmer/component";
-import { tracked } from "@glimmer/tracking";
+/* eslint-disable ember/no-classic-components */
+import Component from "@ember/component";
 import { action } from "@ember/object";
-import DButton from "discourse/ui-kit/d-button";
-import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
+import { tagName } from "@ember-decorators/component";
+import DButton from "discourse/components/d-button";
+import concatClass from "discourse/helpers/concat-class";
 
+@tagName("")
 export default class Collapser extends Component {
-  @tracked collapsed = false;
+  collapsed = false;
+  header = null;
+  onToggle = null;
 
   @action
   open() {
-    this.collapsed = false;
-    this.args.onToggle?.(false);
+    this.set("collapsed", false);
+    this.onToggle?.(false);
   }
 
   @action
   close() {
-    this.collapsed = true;
-    this.args.onToggle?.(true);
+    this.set("collapsed", true);
+    this.onToggle?.(true);
   }
 
   <template>
     <div class="chat-message-collapser-header">
-      {{@header}}
+      {{this.header}}
 
       {{#if this.collapsed}}
         <DButton
-          class="chat-message-collapser-button chat-message-collapser-closed"
           @action={{this.open}}
-          @icon="angle-right"
+          @icon="caret-right"
+          class="chat-message-collapser-button chat-message-collapser-closed"
         />
       {{else}}
         <DButton
-          class="chat-message-collapser-button chat-message-collapser-opened"
           @action={{this.close}}
-          @icon="angle-down"
+          @icon="caret-down"
+          class="chat-message-collapser-button chat-message-collapser-opened"
         />
       {{/if}}
     </div>
 
     <div
-      class={{dConcatClass
+      class={{concatClass
         "chat-message-collapser-body"
         (if this.collapsed "hidden")
       }}

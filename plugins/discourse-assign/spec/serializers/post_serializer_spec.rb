@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../support/assign_allowed_group"
+
 describe PostSerializer do
   fab!(:user)
   fab!(:topic)
@@ -10,7 +12,7 @@ describe PostSerializer do
 
   before do
     SiteSetting.assign_enabled = true
-    assign_allowed_group.add(user)
+    add_to_assign_allowed_group(user)
   end
 
   it "includes assigned user in serializer" do

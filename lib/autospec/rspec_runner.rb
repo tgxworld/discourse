@@ -26,7 +26,9 @@ module Autospec
 
     watch(%r{\Aspec/fabricators/.+_fabricator\.rb\z}) { "spec" }
 
-    watch(%r{\Afrontend/pretty-text/.*\.js\.es6\z}) { "spec/components/pretty_text_spec.rb" }
+    watch(%r{\Aapp/assets/javascripts/pretty-text/.*\.js\.es6\z}) do
+      "spec/components/pretty_text_spec.rb"
+    end
     watch(%r{\Aplugins/.*/discourse-markdown/.*\.js\.es6\z}) do
       "spec/components/pretty_text_spec.rb"
     end

@@ -1,9 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe ActiveSupportTypeExtensions::Array do
-  subject(:type) { described_class.new(compact_blank:) }
-
-  let(:compact_blank) { false }
+  subject(:type) { described_class.new }
 
   describe "#cast" do
     subject(:casted_value) { type.cast(value) }
@@ -69,24 +67,6 @@ RSpec.describe ActiveSupportTypeExtensions::Array do
 
       it "wraps it in a new array" do
         expect(casted_value).to eq([value])
-      end
-    end
-
-    context "when 'value' is an array containing falsy or empty values" do
-      let(:value) { [nil, "", false, []] }
-
-      context "when the `compact_blank` option is false" do
-        it "returns the original array" do
-          expect(casted_value).to eq(value)
-        end
-      end
-
-      context "when the `compact_blank` option is true" do
-        let(:compact_blank) { true }
-
-        it "cleans the array" do
-          expect(casted_value).to eq([])
-        end
       end
     end
   end

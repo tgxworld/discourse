@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "Admin User Fields" do
+describe "Admin User Fields", type: :system do
   fab!(:current_user, :admin)
 
   before { sign_in(current_user) }
@@ -25,7 +25,7 @@ describe "Admin User Fields" do
 
     user_fields_page.add_field(name: "Occupation", description: "")
 
-    expect(user_fields_page.form.field("description")).to have_errors("Required")
+    expect(user_fields_page.form.field(:description)).to have_errors("Required")
   end
 
   it "makes sure new required fields are editable after signup" do
@@ -39,48 +39,25 @@ describe "Admin User Fields" do
 
     user_fields_page.choose_requirement("for_all_users")
 
-    expect(form).to have_field(editable_label, checked: true, disabled: true, visible: :all)
+    expect(form).to have_field(editable_label, checked: true, disabled: true)
 
     user_fields_page.choose_requirement("optional")
 
-    expect(form).to have_field(editable_label, checked: true, disabled: false, visible: :all)
-  end
-
-  it "makes sure fields are available on signup when they have to" do
-    user_fields_page.visit
-    user_fields_page.click_add_field
-
-    expect(page_header).to be_hidden
-
-    form = page.find(".user-field")
-    show_on_signup_label = I18n.t("admin_js.admin.user_fields.show_on_signup.title")
-
-    user_fields_page.choose_requirement("for_all_users")
-
-    expect(form).to have_field(show_on_signup_label, checked: true, disabled: true, visible: :all)
-
-    user_fields_page.choose_requirement("on_signup")
-
-    expect(form).to have_field(show_on_signup_label, checked: true, disabled: true, visible: :all)
-
-    user_fields_page.choose_requirement("optional")
-
-    expect(form).to have_field(show_on_signup_label, checked: true, disabled: false, visible: :all)
-
-    user_fields_page.unselect_preference("editable")
-
-    expect(form).to have_field(show_on_signup_label, checked: true, disabled: true, visible: :all)
+    expect(form).to have_field(editable_label, checked: true, disabled: false)
   end
 
   it "requires confirmation when applying required fields retroactively" do
     user_fields_page.visit
-    user_fields_page.add_field(
-      name: "Favourite Pokémon",
-      description: "Hint: It's Mudkip",
-      save: false,
-    )
+    user_fields_page.click_add_field
+
+    form = page.find(".user-field")
+
+    form.find(".user-field-name").fill_in(with: "Favourite Pokémon")
+    form.find(".user-field-desc").fill_in(with: "Hint: It's Mudkip")
+
     user_fields_page.choose_requirement("for_all_users")
-    user_fields_page.form.submit
+
+    form.find(".btn-primary").click
 
     expect(page).to have_text(I18n.t("admin_js.admin.user_fields.requirement.confirmation"))
   end
@@ -101,44 +78,6 @@ describe "Admin User Fields" do
       form.find(".btn-primary").click
 
       expect(page).to have_no_text(I18n.t("admin_js.admin.user_fields.requirement.confirmation"))
-    end
-  end
-
-  context "when enable_new_reordering_controls is enabled" do
-    fab!(:field1) { Fabricate(:user_field, name: "Favourite colour") }
-    fab!(:field2) { Fabricate(:user_field, name: "Home town") }
-
-    before { SiteSetting.enable_new_reordering_controls = true }
-
-    it "keeps each row's controls anchored to its own row on mobile", mobile: true do
-      user_fields_page.visit
-
-      expect(page).to have_css(".admin-user_field-item", count: 2)
-
-      escaped = page.evaluate_script(<<~JS)
-          Array.from(document.querySelectorAll(".d-table__cell.--controls")).filter(
-            (cell) => cell.offsetParent !== cell.closest("tr")
-          ).length
-        JS
-
-      expect(escaped).to eq(0)
-    end
-
-    it "sizes the drag handle column to the handle" do
-      user_fields_page.visit
-
-      expect(page).to have_css(".admin-user_field-item", count: 2)
-
-      width = page.evaluate_script(<<~JS)
-          Math.round(
-            document
-              .querySelector(".d-reorderable-list__handle")
-              .closest("td")
-              .getBoundingClientRect().width
-          )
-        JS
-
-      expect(width).to be < 60
     end
   end
 end

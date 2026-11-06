@@ -2,12 +2,13 @@ import Component from "@glimmer/component";
 import { fn } from "@ember/helper";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
+import { not } from "truth-helpers";
+import DButton from "discourse/components/d-button";
 import EmojiPicker from "discourse/components/emoji-picker";
 import Form from "discourse/components/form";
+import replaceEmoji from "discourse/helpers/replace-emoji";
 import { ajax } from "discourse/lib/ajax";
 import { popupAjaxError } from "discourse/lib/ajax-error";
-import DButton from "discourse/ui-kit/d-button";
-import dReplaceEmoji from "discourse/ui-kit/helpers/d-replace-emoji";
 import { i18n } from "discourse-i18n";
 import ChatChannelChooser from "discourse/plugins/chat/discourse/components/chat-channel-chooser";
 
@@ -45,7 +46,7 @@ export default class ChatIncomingWebhookEditForm extends Component {
         });
 
         this.toasts.success({
-          duration: "short",
+          duration: 3000,
           data: {
             message: i18n("chat.incoming_webhooks.saved"),
           },
@@ -57,7 +58,7 @@ export default class ChatIncomingWebhookEditForm extends Component {
         });
 
         this.toasts.success({
-          duration: "short",
+          duration: 3000,
           data: {
             message: i18n("chat.incoming_webhooks.created"),
           },
@@ -82,62 +83,57 @@ export default class ChatIncomingWebhookEditForm extends Component {
       <form.Field
         @name="name"
         @title={{i18n "chat.incoming_webhooks.name"}}
-        @type="input"
         @validation="required"
         as |field|
       >
-        <field.Control />
+        <field.Input />
       </form.Field>
 
       <form.Field
         @name="description"
         @title={{i18n "chat.incoming_webhooks.description"}}
-        @type="textarea"
         as |field|
       >
-        <field.Control />
+        <field.Textarea />
       </form.Field>
 
       <form.Field
-        @description={{i18n "chat.incoming_webhooks.username_instructions"}}
         @name="username"
         @title={{i18n "chat.incoming_webhooks.username"}}
-        @type="input"
+        @description={{i18n "chat.incoming_webhooks.username_instructions"}}
         as |field|
       >
-        <field.Control />
+        <field.Input />
       </form.Field>
 
       <form.Field
         @name="chat_channel_id"
         @title={{i18n "chat.incoming_webhooks.post_to"}}
-        @type="custom"
         @validation="required"
         as |field|
       >
-        <field.Control>
+        <field.Custom>
           <ChatChannelChooser
             @content={{@chatChannels}}
-            @onChange={{field.set}}
             @value={{field.value}}
+            @onChange={{field.set}}
           />
-        </field.Control>
+        </field.Custom>
       </form.Field>
 
       <form.Field
-        @description={{i18n "chat.incoming_webhooks.emoji_instructions"}}
         @name="emoji"
-        @size="large"
         @title={{i18n "chat.incoming_webhooks.emoji"}}
-        @type="custom"
+        @description={{i18n "chat.incoming_webhooks.emoji_instructions"}}
+        @size="large"
         as |field|
       >
-        <field.Control>
+        <field.Custom>
           {{#if field.value}}
             {{i18n "chat.incoming_webhooks.current_emoji"}}
 
             <span class="incoming-chat-webhooks-current-emoji">
-              {{dReplaceEmoji field.value}}
+              {{replaceEmoji field.value}}
             </span>
           {{/if}}
 
@@ -147,21 +143,21 @@ export default class ChatIncomingWebhookEditForm extends Component {
             </row.Col>
             <row.Col @size={{6}}>
               <DButton
-                class="admin-chat-webhooks-clear-emoji"
+                @label="chat.incoming_webhooks.reset_emoji"
                 @action={{fn this.resetEmoji form.set}}
                 @disabled={{not field.value}}
-                @label="chat.incoming_webhooks.reset_emoji"
+                class="admin-chat-webhooks-clear-emoji"
               />
             </row.Col>
           </form.Row>
-        </field.Control>
+        </field.Custom>
       </form.Field>
 
       {{#if @webhook.url}}
         <form.Container
           @name="url"
-          @subtitle={{i18n "chat.incoming_webhooks.url_instructions"}}
           @title={{i18n "chat.incoming_webhooks.url"}}
+          @subtitle={{i18n "chat.incoming_webhooks.url_instructions"}}
         >
           <code>{{@webhook.url}}</code>
         </form.Container>

@@ -9,8 +9,6 @@ class ThemeSettingsSerializer < ApplicationSerializer
              :description,
              :valid_values,
              :list_type,
-             :disallowed_groups,
-             :resolve_group_membership,
              :textarea,
              :json_schema,
              :objects_schema
@@ -32,7 +30,7 @@ class ThemeSettingsSerializer < ApplicationSerializer
   end
 
   def value
-    object.value_for_editing
+    object.value
   end
 
   def description
@@ -52,13 +50,7 @@ class ThemeSettingsSerializer < ApplicationSerializer
   end
 
   def valid_values
-    choices = object.choices
-    labels = choice_labels
-
-    choices.map do |choice|
-      label = labels[choice.to_s]
-      label ? { name: label, value: choice } : choice
-    end
+    object.choices
   end
 
   def include_valid_values?
@@ -75,14 +67,6 @@ class ThemeSettingsSerializer < ApplicationSerializer
 
   def include_list_type?
     object.type == ThemeSetting.types[:list]
-  end
-
-  def disallowed_groups
-    object.disallowed_groups
-  end
-
-  def include_disallowed_groups?
-    object.disallowed_groups.present?
   end
 
   def textarea
@@ -107,29 +91,5 @@ class ThemeSettingsSerializer < ApplicationSerializer
 
   def include_json_schema?
     object.type == ThemeSetting.types[:string] && object.json_schema.present?
-  end
-
-  def resolve_group_membership
-    object.resolve_group_membership?
-  end
-
-  def include_resolve_group_membership?
-    object.type == ThemeSetting.types[:list] && object.list_type == "group"
-  end
-
-  private
-
-  def choice_labels
-    labels = {}
-    key_prefix = "theme_metadata.settings.#{setting}.choices."
-
-    object.theme.internal_translations.each do |translation|
-      if translation.key.start_with?(key_prefix)
-        choice_key = translation.key.delete_prefix(key_prefix)
-        labels[choice_key] = translation.value
-      end
-    end
-
-    labels
   end
 end

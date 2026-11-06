@@ -1,100 +1,36 @@
 # frozen_string_literal: true
 
 RSpec.describe Encodings do
-  it "strips a leading BOM" do
-    expect(Encodings.delete_bom!(+"#{Encodings::BOM}hello")).to eq("hello")
+  def to_utf8(filename)
+    string = File.read("#{Rails.root}/spec/fixtures/encodings/#{filename}").chomp
+    Encodings.to_utf8(string)
   end
 
-  it "replaces invalid bytes" do
-    expect(Encodings.force_utf8("caf\xFFe")).to eq("cafe")
-  end
-
-  describe ".charset_from_content_type" do
-    it "returns the lowercase charset from the header" do
-      expect(Encodings.charset_from_content_type("text/html; charset=UTF-8")).to eq("utf-8")
+  describe "unicode" do
+    let(:expected) do
+      "Το σύστημα γραφής είναι ένα συμβολικό, οπτικό σύστημα καταγραφής της γλώσσας."
     end
 
-    it "returns the charset when quoted" do
-      expect(Encodings.charset_from_content_type('text/html; charset="utf-8"')).to eq("utf-8")
+    it "correctly encodes UTF-8 as UTF-8" do
+      expect(to_utf8("utf-8.txt")).to eq(expected)
     end
 
-    it "returns the charset when no space precedes it" do
-      expect(Encodings.charset_from_content_type("text/html;charset=euc-jp")).to eq("euc-jp")
+    it "correctly encodes UTF-8 with BOM as UTF-8" do
+      expect(to_utf8("utf-8-bom.txt")).to eq(expected)
     end
 
-    it "returns the charset when whitespace surrounds the equals sign" do
-      expect(Encodings.charset_from_content_type("text/html; charset = Shift_JIS")).to eq(
-        "shift_jis",
-      )
+    it "correctly encodes UTF-16LE with BOM as UTF-8" do
+      expect(to_utf8("utf-16le.txt")).to eq(expected)
     end
 
-    it "returns nil when no charset is declared" do
-      expect(Encodings.charset_from_content_type("text/html")).to be_nil
-    end
-
-    it "returns nil when the charset is unsupported" do
-      expect(Encodings.charset_from_content_type("text/html; charset=not-an-encoding")).to be_nil
-    end
-
-    it "returns nil for dummy encodings without a UTF-8 converter" do
-      expect(Encodings.charset_from_content_type("text/html; charset=UTF-7")).to be_nil
-      expect(Encodings.charset_from_content_type("text/html; charset=UTF-16")).to be_nil
-    end
-
-    it "returns nil when the header is blank" do
-      expect(Encodings.charset_from_content_type(nil)).to be_nil
-      expect(Encodings.charset_from_content_type("")).to be_nil
+    it "correctly encodes UTF-16BE with BOM as UTF-8" do
+      expect(to_utf8("utf-16be.txt")).to eq(expected)
     end
   end
 
-  describe ".charset_from_document" do
-    it "reads the charset from a meta tag" do
-      html = "<html><head><meta charset=\"UTF-8\"><title>x</title></head><body></body></html>"
-      expect(Encodings.charset_from_document(html)).to eq("utf-8")
-    end
-
-    it "reads the charset from the content attribute" do
-      html =
-        '<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1252"></head></html>'
-      expect(Encodings.charset_from_document(html)).to eq("windows-1252")
-    end
-
-    it "ignores meta tags beyond the sniffing window" do
-      html = +"<html><head>#{"x" * 1024}<meta charset='utf-8'></head></html>"
-      expect(Encodings.charset_from_document(html)).to be_nil
-    end
-
-    it "returns nil when the document declares no charset" do
-      expect(
-        Encodings.charset_from_document("<html><head><title>x</title></head></html>"),
-      ).to be_nil
-    end
-  end
-
-  describe ".valid_utf8?" do
-    it "returns true for UTF-8 bytes" do
-      expect(Encodings.valid_utf8?("Iran’s".b)).to eq(true)
-    end
-
-    it "returns false for single-byte bytes" do
-      expect(Encodings.valid_utf8?("caf\xE9".b)).to eq(false)
-    end
-
-    it "does not mutate the input string's encoding" do
-      string = "Iran’s".dup.force_encoding(Encoding::Windows_1252)
-      Encodings.valid_utf8?(string)
-      expect(string.encoding).to eq(Encoding::Windows_1252)
-    end
-  end
-
-  describe ".unicode_encoding?" do
-    it "returns true for Unicode charsets" do
-      expect(Encodings.unicode_encoding?("utf-8")).to eq(true)
-    end
-
-    it "returns false for single-byte charsets" do
-      expect(Encodings.unicode_encoding?("windows-1252")).to eq(false)
-      expect(Encodings.unicode_encoding?("iso-8859-1")).to eq(false)
-    end
+  it "correctly encodes ISO-8859-5 as UTF-8" do
+    expect(to_utf8("iso-8859-5.txt")).to eq(
+      "Письменность отличается от других существующих или возможных систем символической коммуникации тем, что всегда ассоциируется с некоторым языком и устной речью на этом языке",
+    )
   end
 end

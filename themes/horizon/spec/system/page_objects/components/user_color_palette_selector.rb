@@ -44,9 +44,11 @@ module PageObjects
       end
 
       def has_computed_color?(color)
-        expect(
-          find("li.sidebar-section-link-wrapper[data-list-item-name='everything'] .active"),
-        ).to have_computed_style(backgroundColor: color)
+        computed_background_color =
+          page.evaluate_script(
+            "getComputedStyle(document.querySelector(\"li.sidebar-section-link-wrapper[data-list-item-name='everything'] .active\")).backgroundColor",
+          )
+        computed_background_color == color
       end
     end
   end

@@ -1,8 +1,8 @@
 import Component from "@glimmer/component";
 import { service } from "@ember/service";
-import DModal from "discourse/ui-kit/d-modal";
+import DModal from "discourse/components/d-modal";
 import { i18n } from "discourse-i18n";
-import FilterableList from "../filterable-list.gjs";
+import FilterableList from "../filterable-list";
 
 export default class Form extends Component {
   @service appEvents;
@@ -23,15 +23,15 @@ export default class Form extends Component {
 
   <template>
     <DModal
-      class="d-templates d-templates-modal"
       @closeModal={{@closeModal}}
       @title={{i18n "templates.insert_template"}}
+      class="d-templates d-templates-modal"
     >
       <:body>
         <FilterableList
-          @onAfterInsertTemplate={{@closeModal}}
-          @onInsertTemplate={{@model.onInsertTemplate}}
           @textarea={{@model.textarea}}
+          @onInsertTemplate={{@model.onInsertTemplate}}
+          @onAfterInsertTemplate={{@closeModal}}
         />
       </:body>
     </DModal>

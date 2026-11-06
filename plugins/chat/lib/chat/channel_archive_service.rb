@@ -114,11 +114,8 @@ module Chat
 
         chat_channel
           .chat_messages
-          .find_in_batches(
-            batch_size: ARCHIVED_MESSAGES_PER_POST,
-            cursor: %i[created_at id],
-            order: :asc,
-          ) do |message_batch|
+          .order("created_at ASC")
+          .find_in_batches(batch_size: ARCHIVED_MESSAGES_PER_POST) do |message_batch|
             thread_ids = message_batch.map(&:thread_id).compact.uniq
             threads =
               chat_channel
@@ -131,17 +128,11 @@ module Chat
                       .group(:thread_id)
                       .having("count(*) > 1"),
                 )
-                .order("created_at ASC, id ASC")
+                .order("created_at ASC")
                 .to_a
 
             full_batch = (buffer + message_batch + threads).uniq { |msg| msg.id }
-
-            # Namespacing the key prevents collisions between chat_message id and chat_thread id.
-            message_chunk =
-              full_batch
-                .group_by { |msg| msg.thread_id ? [:thread, msg.thread_id] : [:message, msg.id] }
-                .values
-                .flatten
+            message_chunk = full_batch.group_by { |msg| msg.thread_id || msg.id }.values.flatten
 
             buffer.clear
 

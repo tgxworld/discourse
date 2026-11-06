@@ -1,9 +1,9 @@
-import AdSlot from "./ad-slot.gjs";
+import AdSlot from "./ad-slot";
 
 const PostBottomAd = <template>
   <AdSlot
-    @category={{@model.topic.category.slug}}
     @placement="post-bottom"
+    @category={{@model.topic.category.slug}}
     @postNumber={{@model.post_number}}
   />
 </template>;

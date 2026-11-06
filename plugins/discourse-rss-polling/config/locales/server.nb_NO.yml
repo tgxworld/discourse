@@ -5,3 +5,5 @@
 # https://translate.discourse.org/
 
 nb_NO:
+  site_settings:
+    rss_polling_frequency: "[RSS Polling] Frekvens for strømspørring (i minutter)"

@@ -10,7 +10,6 @@ sk:
       logs:
         staff_actions:
           actions:
-            update_automation: aktualizácia automatizácie
             delete_automation: vymazať automatizáciu
     discourse_automation:
       title: Automatizácia
@@ -61,17 +60,13 @@ sk:
             label: Telo
           delay:
             label: Oneskorenie (minúty)
+          prefers_encrypt:
+            label: Šifruje PM, ak je k dispozícii
         group:
           label: Skupina
         text:
           label: Text
       triggerables:
-        post_flag_created:
-          fields:
-            categories:
-              label: Kategórie
-            tags:
-              label: Značky
         not_found: Nepodarilo sa nájsť spúšťač `%{trigger}` pre automatizáciu `%{automation}`, skontrolujte, či je nainštalovaný priradený plugin
         user_badge_granted:
           fields:
@@ -207,6 +202,9 @@ sk:
               description: "Voliteľné, obmedziť spúšťanie len na príspevky s týmito funkciami"
           created: Vytvorené
           edited: Upravené
+          topics: Všetky témy
+          personal_messages: Osobné správy
+          public_topics: Verejné témy (vylúčte všetky zabezpečené kategórie)
           with_images: Obrázky
           with_links: Odkazy
           with_code: Kód
@@ -426,8 +424,6 @@ sk:
           fields:
             custom_field_name:
               label: "Názov vlastného poľa používateľa"
-        set_topic_timer:
-          title: Nastavenie časovača témy
       unnamed_automation: "Nemenovaná automatizácia"
       models:
         script:
@@ -452,6 +448,8 @@ sk:
             label: Verzia
           status:
             label: Stav
+          enabled:
+            label: Povolené
           disabled:
             label: Vypnuté
           placeholders:

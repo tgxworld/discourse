@@ -1,5 +1,3 @@
-@use "lib/viewport";
-
 :root {
   --message-left-width: 42px;
   --full-page-border-radius: 12px;
@@ -15,25 +13,6 @@
 // it sometimes prefer to appear on top of the textarea, making any gesture very complicated
 html.ios-device.keyboard-visible body #main-outlet .full-page-chat {
   padding-bottom: 0.2rem;
-}
-
-html.ios-device:not(.ipados-device:not(.keyboard-visible)).composer-open body {
-  overflow: hidden;
-}
-
-html.ios-device.has-full-page-chat body {
-  position: fixed;
-  overflow: hidden;
-}
-
-html.ios-device.has-full-page-chat body #main-outlet {
-  .c-routes {
-    &.--channel-info,
-    &.--browse {
-      @include chat-height;
-      overflow-y: auto;
-    }
-  }
 }
 
 .uppy-is-drag-over .chat-composer .drop-a-file {
@@ -96,18 +75,23 @@ html.ios-device.has-full-page-chat body #main-outlet {
 
 .header-dropdown-toggle.chat-header-icon .icon {
   .chat-channel-unread-indicator {
-    // match the urgent badge's box (1em height + 0.2em padding top/bottom)
-    --d-new-indicator-size: 1.4em;
     border: 2px solid var(--header_background);
     position: absolute;
-    top: var(--d-header-badge-top);
-    right: var(--d-header-badge-right);
-    z-index: 1;
+    top: 0;
+    right: 2px;
+
+    @include chat-unread-indicator;
 
     &.-urgent {
       display: flex;
       align-items: center;
       justify-content: center;
+      width: auto;
+      height: 1em;
+      min-width: 0.6em;
+      padding: 0.21em 0.42em;
+      top: -1px;
+      right: 0;
     }
   }
 
@@ -138,20 +122,12 @@ html.ios-device.has-full-page-chat body #main-outlet {
 }
 
 .chat-messages-container {
-  overflow-wrap: break-word;
+  word-wrap: break-word;
   white-space: normal;
   position: relative;
 
   .chat-message-container {
     display: grid;
-    position: relative;
-
-    // A chained message's author stays clipped while focused, so the message shows where
-    // focus is on its behalf.
-    &:has(.chat-message-info.-author-only :focus-visible) {
-      outline: 2px solid var(--tertiary);
-      outline-offset: -2px;
-    }
 
     &.-selectable {
       grid-template-columns: 1.5em 1fr;
@@ -163,11 +139,11 @@ html.ios-device.has-full-page-chat body #main-outlet {
       margin: 0;
     }
   }
-}
 
-.chat-time {
-  color: var(--primary-high);
-  font-size: var(--font-down-2);
+  .chat-time {
+    color: var(--primary-high);
+    font-size: var(--font-down-2);
+  }
 }
 
 .chat-emoji-avatar {
@@ -207,53 +183,19 @@ body.has-full-page-chat {
 }
 
 .full-page-chat {
-  --chat-content-offset: var(--admin-onboarding-banner-height, 0px);
   display: grid;
   grid-template-columns: var(--full-page-sidebar-width) 1fr;
   background: var(--d-content-background);
 
   .c-navbar-container {
     position: sticky;
-    top: 0;
+    top: var(--main-outlet-offset);
     z-index: 1;
   }
 
   .chat-messages-scroller {
     box-sizing: border-box;
     height: 100%;
-  }
-}
-
-// a zero-height region right above the message list: whatever it holds flows
-// in normal order below the status, filter and pinned bars, and overflows
-// downward over the list, which keeps its full height underneath
-.chat-channel__overlays {
-  position: relative;
-
-  // what the notices stacked at before they moved in here
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  flex: 0 0 0px;
-  min-height: 0;
-
-  .admin-onboarding-banner {
-    padding: var(--space-4) var(--space-6);
-    pointer-events: none;
-
-    @include viewport.until(sm) {
-      padding: var(--space-2);
-    }
-  }
-
-  .admin-onboarding-banner__wrap {
-    pointer-events: auto;
-    background: var(--secondary);
-    transition: box-shadow 150ms ease;
-  }
-
-  &.--over-content .admin-onboarding-banner__wrap {
-    box-shadow: var(--shadow-card);
   }
 }
 
@@ -272,10 +214,6 @@ body.has-full-page-chat {
 
   > p:last-of-type {
     margin-bottom: 0.1em;
-  }
-
-  iframe.reddit-onebox {
-    margin: var(--space-2) 0;
   }
 }
 
@@ -328,7 +266,6 @@ html.has-full-page-chat {
         min-height: 0;
         max-width: 100vw;
         box-sizing: border-box;
-        container-type: inline-size;
       }
     }
   }
@@ -348,10 +285,8 @@ html.has-full-page-chat {
       min-height: 0;
     }
   }
-}
 
-.sidebar-section-link-wrapper[data-list-item-name="new-chat-dm"] {
-  .prefix-icon {
-    color: var(--tertiary);
+  [data-popper-reference-hidden] {
+    visibility: hidden;
   }
 }

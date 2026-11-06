@@ -7,7 +7,7 @@ export default apiInitializer((api) => {
     "topic-list-item-class",
     ({ value, context }) => {
       const shouldShow =
-        gistService.currentPreference === "table-ai" && gistService.showToggle;
+        gistService.preference === "table-ai" && gistService.shouldShow;
 
       if (context.topic.get("ai_topic_gist") && shouldShow) {
         value.push("excerpt-expanded");

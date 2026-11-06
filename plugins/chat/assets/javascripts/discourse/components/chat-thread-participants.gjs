@@ -47,10 +47,10 @@ export default class ChatThreadParticipants extends Component {
         <div class="chat-thread-participants__avatar-group">
           {{#each this.participantsUsers as |user|}}
             <ChatUserAvatar
-              @avatarSize="tiny"
-              @interactive={{false}}
-              @showPresence={{false}}
               @user={{user}}
+              @avatarSize="tiny"
+              @showPresence={{false}}
+              @interactive={{false}}
             />
           {{/each}}
         </div>

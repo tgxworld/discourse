@@ -20,7 +20,6 @@ module Chat
 
     params do
       attribute :thread_id, :integer
-      attribute :channel_id, :integer
       # If this is not present, then we just fetch messages with page_size
       # and direction.
       attribute :target_message_id, :integer # (optional)
@@ -31,7 +30,7 @@ module Chat
       attribute :fetch_from_first_message, :boolean # (optional)
       attribute :target_date, :string # (optional)
 
-      validates :thread_id, :channel_id, presence: true
+      validates :thread_id, presence: true
       validates :page_size,
                 numericality: {
                   greater_than_or_equal_to: 1,
@@ -57,8 +56,6 @@ module Chat
 
     model :thread
     policy :can_view_thread
-    policy :threading_enabled_for_channel
-    policy :original_message_not_deleted
     model :membership, optional: true
     model :target_message_id, optional: true
     policy :target_message_exists, class_name: Chat::Thread::Policy::MessageExistence
@@ -68,26 +65,11 @@ module Chat
     private
 
     def fetch_thread(params:)
-      ::Chat::Thread
-        .strict_loading
-        .includes(:original_message, channel: :chatable)
-        .find_by(id: params.thread_id, channel_id: params.channel_id)
+      ::Chat::Thread.strict_loading.includes(channel: :chatable).find_by(id: params.thread_id)
     end
 
     def can_view_thread(guardian:, thread:)
-      return true if guardian.user == Discourse.system_user
-
-      guardian.can_join_chat_channel?(thread.channel) ||
-        guardian.can_preview_anonymous_public_chat_channel?(thread.channel)
-    end
-
-    def threading_enabled_for_channel(thread:)
-      thread.channel.threading_enabled || thread.force
-    end
-
-    def original_message_not_deleted(thread:, guardian:)
-      thread.original_message.deleted_at.blank? ||
-        guardian.can_moderate_chat?(thread.channel.chatable)
+      guardian.user == Discourse.system_user || guardian.can_preview_chat_channel?(thread.channel)
     end
 
     def fetch_membership(thread:, guardian:)
@@ -117,23 +99,13 @@ module Chat
       )
     end
 
-    def fetch_messages(metadata:, guardian:)
-      messages = [
+    def fetch_messages(metadata:)
+      [
         metadata[:messages],
         metadata[:past_messages]&.reverse,
         metadata[:target_message],
         metadata[:future_messages],
       ].flatten.compact
-
-      if guardian.user.blank?
-        messages.each do |message|
-          association = message.association(:bookmarks)
-          association.target = []
-          association.loaded!
-        end
-      end
-
-      messages
     end
   end
 end

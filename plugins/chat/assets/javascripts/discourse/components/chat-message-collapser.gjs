@@ -1,41 +1,23 @@
 import Component from "@glimmer/component";
-import { schedule } from "@ember/runloop";
 import { service } from "@ember/service";
-import { trustHTML } from "@ember/template";
+import { htmlSafe } from "@ember/template";
 import { modifier } from "ember-modifier";
+import { and } from "truth-helpers";
+import DecoratedHtml from "discourse/components/decorated-html";
 import domFromString from "discourse/lib/dom-from-string";
-import applyLightbox from "discourse/lib/lightbox";
 import { escapeExpression } from "discourse/lib/utilities";
-import DDecoratedHtml from "discourse/ui-kit/d-decorated-html";
 import { i18n } from "discourse-i18n";
 import ChatUpload from "discourse/plugins/chat/discourse/components/chat-upload";
 import Collapser from "discourse/plugins/chat/discourse/components/collapser";
-import LazyVideo from "discourse/plugins/discourse-lazy-videos/discourse/components/lazy-video" with {
-  discourseImport: "optional",
-};
-import getVideoAttributes from "discourse/plugins/discourse-lazy-videos/lib/lazy-video-attributes" with {
-  discourseImport: "optional",
-};
+import lightbox from "../lib/lightbox";
 
 export default class ChatMessageCollapser extends Component {
   @service siteSettings;
 
   lightbox = modifier((element) => {
-    let cancelled = false;
-
-    schedule("afterRender", () => {
-      if (cancelled || this.args.uploads.length === 0 || !element.isConnected) {
-        return;
-      }
-
-      if (element.querySelector(".lightbox")) {
-        applyLightbox(element);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
+    if (this.args.uploads.length > 0) {
+      lightbox(element.querySelectorAll("img.chat-img-upload"));
+    }
   });
 
   get hasUploads() {
@@ -43,28 +25,17 @@ export default class ChatMessageCollapser extends Component {
   }
 
   get uploadsHeader() {
-    let name;
+    let name = "";
     if (this.args.uploads.length === 1) {
-      const upload = this.args.uploads[0];
-      name =
-        upload.optimized_video?.original_filename || upload.original_filename;
+      name = this.args.uploads[0].original_filename;
     } else {
       name = i18n("chat.uploaded_files", { count: this.args.uploads.length });
     }
-    return trustHTML(
+    return htmlSafe(
       `<span class="chat-message-collapser-link-small">${escapeExpression(
         name
       )}</span>`
     );
-  }
-
-  get uploadsRenderContext() {
-    return [
-      {
-        signature: uploadSignature(this.args.uploads),
-        uploads: this.args.uploads,
-      },
-    ];
   }
 
   get cookedBodies() {
@@ -91,15 +62,25 @@ export default class ChatMessageCollapser extends Component {
     return [];
   }
 
+  get lazyVideoComponent() {
+    const path =
+      "discourse/plugins/discourse-lazy-videos/discourse/components/lazy-video";
+    return require.has(path) && require(path).default;
+  }
+
   lazyVideoCooked(elements) {
     return elements.reduce((acc, e) => {
       if (this.siteSettings.lazy_videos_enabled && lazyVideoPredicate(e)) {
+        const getVideoAttributes = requirejs(
+          "discourse/plugins/discourse-lazy-videos/lib/lazy-video-attributes"
+        ).default;
+
         const videoAttributes = getVideoAttributes(e);
 
         if (this.siteSettings[`lazy_${videoAttributes.providerName}_enabled`]) {
           const link = escapeExpression(videoAttributes.url);
-          const title = escapeExpression(videoAttributes.title);
-          const header = trustHTML(
+          const title = videoAttributes.title;
+          const header = htmlSafe(
             `<a target="_blank" class="chat-message-collapser-link" rel="noopener noreferrer" href="${link}">${title}</a>`
           );
 
@@ -127,11 +108,8 @@ export default class ChatMessageCollapser extends Component {
           : e.firstElementChild.href;
 
         link = escapeExpression(link);
-        const title = youtubeThumbnailOneboxPredicate(e)
-          ? i18n("chat.youtube")
-          : link;
-        const header = trustHTML(
-          `<a target="_blank" class="chat-message-collapser-link-small" rel="noopener noreferrer" href="${link}">${title}</a>`
+        const header = htmlSafe(
+          `<a target="_blank" class="chat-message-collapser-link-small" rel="noopener noreferrer" href="${link}">${link}</a>`
         );
         acc.push({ header, body: e.outerHTML, needsCollapser: true });
       } else {
@@ -146,7 +124,7 @@ export default class ChatMessageCollapser extends Component {
       if (imagePredicate(e)) {
         const link = escapeExpression(e.firstElementChild.src);
         const alt = escapeExpression(e.firstElementChild.alt);
-        const header = trustHTML(
+        const header = htmlSafe(
           `<a target="_blank" class="chat-message-collapser-link-small" rel="noopener noreferrer" href="${link}">${
             alt || link
           }</a>`
@@ -167,7 +145,7 @@ export default class ChatMessageCollapser extends Component {
           e.firstElementChild.firstElementChild.textContent
         );
         e.firstElementChild.removeChild(e.firstElementChild.firstElementChild);
-        const header = trustHTML(
+        const header = htmlSafe(
           `<a target="_blank" class="chat-message-collapser-link-small" rel="noopener noreferrer" href="${link}">${title}</a>`
         );
         acc.push({ header, body: e.outerHTML, needsCollapser: true });
@@ -181,23 +159,21 @@ export default class ChatMessageCollapser extends Component {
   <template>
     <div class="chat-message-collapser">
       {{#if this.hasUploads}}
-        <DDecoratedHtml
-          @className="chat-cooked"
+        <DecoratedHtml
+          @html={{htmlSafe @cooked}}
           @decorate={{@decorate}}
-          @html={{trustHTML @cooked}}
+          @className="chat-cooked"
         />
 
         <Collapser
           @header={{this.uploadsHeader}}
           @onToggle={{@onToggleCollapse}}
         >
-          {{#each this.uploadsRenderContext key="signature" as |uploadContext|}}
-            <div class="chat-uploads" {{this.lightbox}}>
-              {{#each uploadContext.uploads key="@index" as |upload|}}
-                <ChatUpload @upload={{upload}} />
-              {{/each}}
-            </div>
-          {{/each}}
+          <div class="chat-uploads" {{this.lightbox}}>
+            {{#each @uploads as |upload|}}
+              <ChatUpload @upload={{upload}} />
+            {{/each}}
+          </div>
         </Collapser>
       {{else}}
         {{#each this.cookedBodies as |cooked|}}
@@ -206,23 +182,25 @@ export default class ChatMessageCollapser extends Component {
               @header={{cooked.header}}
               @onToggle={{@onToggleCollapse}}
             >
-              {{#if (and cooked.videoAttributes LazyVideo)}}
+              {{#if (and cooked.videoAttributes this.lazyVideoComponent)}}
                 <div class="chat-message-collapser-lazy-video">
-                  <LazyVideo @videoAttributes={{cooked.videoAttributes}} />
+                  <this.lazyVideoComponent
+                    @videoAttributes={{cooked.videoAttributes}}
+                  />
                 </div>
               {{else}}
-                <DDecoratedHtml
-                  @className="chat-cooked"
+                <DecoratedHtml
+                  @html={{htmlSafe cooked.body}}
                   @decorate={{@decorate}}
-                  @html={{trustHTML cooked.body}}
+                  @className="chat-cooked"
                 />
               {{/if}}
             </Collapser>
           {{else}}
-            <DDecoratedHtml
-              @className="chat-cooked"
+            <DecoratedHtml
+              @html={{htmlSafe cooked.body}}
               @decorate={{@decorate}}
-              @html={{trustHTML cooked.body}}
+              @className="chat-cooked"
             />
           {{/if}}
         {{/each}}
@@ -262,36 +240,12 @@ function imageOneboxPredicate(e) {
   return animatedImagePredicate(e) || externalImageOnebox(e);
 }
 
-function youtubeThumbnailOneboxPredicate(e) {
-  return (
-    externalImageOnebox(e) &&
-    e.firstElementChild.firstElementChild.classList.contains(
-      "youtube-thumbnail"
-    )
-  );
-}
-
 function hasImageOnebox(elements) {
   return elements.some((e) => imageOneboxPredicate(e));
 }
 
 function hasUploads(uploads) {
   return uploads?.length > 0;
-}
-
-function uploadSignature(uploads = []) {
-  return uploads
-    .map((upload) => {
-      return [
-        upload.id,
-        upload.url,
-        upload.thumbnail?.url,
-        upload.short_path,
-        upload.width,
-        upload.height,
-      ].join(":");
-    })
-    .join("|");
 }
 
 function imagePredicate(e) {

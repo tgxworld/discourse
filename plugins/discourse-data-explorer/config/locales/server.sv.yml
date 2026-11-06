@@ -5,5 +5,5 @@
 # https://translate.discourse.org/
 
 sv:
-  data_explorer:
-    admin_dashboard_label: "Datautforskaren"
+  site_settings:
+    data_explorer_enabled: "Aktivera Datautforskaren på /admin/plugins/explorer"

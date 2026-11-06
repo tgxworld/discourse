@@ -5,17 +5,10 @@
 # https://translate.discourse.org/
 
 es:
-  admin_js:
-    admin:
-      site_settings:
-        categories:
-          styleguide: "Guía de estilo de Discourse"
   js:
     styleguide:
       title: "Guía de estilos"
-      example:
-        kind:
-          component: "Componente"
+      welcome: "Para empezar, elige una sección en el menú de la izquierda."
       categories:
         syntax: Sintaxis
         atoms: Átomos
@@ -32,28 +25,12 @@ es:
           title: "Campos de entrada de fecha/hora"
         menus:
           title: "Menús"
-        context_menu:
-          actions:
-            duplicate: "Duplicar"
-            delete: "Eliminar"
-        multi_select:
-          title: "Selección múltiple"
-        reorderable_list:
-          policies_pinned: "Anclado"
-          policies_required: "Obligatorio"
-          table_field: "Campo"
-          table_type: "Tipo"
-          cross_list_primary: "Principal"
         toasts:
           title: "Ventanas emergentes"
         font_scale:
           title: "Sistema de fuentes"
         colors:
           title: "Colores"
-        dialog:
-          title: "Diálogo"
-        drag_and_drop:
-          locked: "Bloqueado"
         icons:
           title: "Iconos"
           full_list: "Ver la lista completa de iconos de Font Awesome"
@@ -76,7 +53,7 @@ es:
         categories_list:
           title: "Lista de categorías"
         topic_link:
-          title: "Enlace y estado de tema"
+          title: "Enlace al tema"
         topic_list_item:
           title: "Elemento de la lista de temas"
         topic_statuses:
@@ -85,6 +62,8 @@ es:
           title: "Lista de temas"
         basic_topic_list:
           title: "Lista básica de temas"
+        footer_message:
+          title: "Mensaje de pie de página"
         signup_cta:
           title: "Llamada a la acción para registrarse"
         topic_timer_info:
@@ -99,39 +78,14 @@ es:
           title: "Lista de publicaciones"
           empty_example: "<PostList /> estado vacío"
           populated_example: "<PostList /> estado poblado"
-        post_oneboxes:
-          title: "Oneboxes publicadas"
         topic_map:
           title: "Mapa del tema"
         site_header:
           title: "Encabezado del sitio"
-        more_topics:
-          title: "Más temas"
+        suggested_topics:
+          title: "Temas sugeridos"
         post_menu:
           title: "Menú de la publicación"
-        roving_focus:
-          toolbar:
-            copy: "Copiar"
-          tags:
-            remove: "Quitar %{tag}"
-            design: "Diseño"
-            support: "Soporte"
-          adjacent:
-            label: "Filtros"
-            field: "Buscar"
-            placeholder: "Buscar temas"
-            open: "Abierto"
-            recent: "Recientes"
-          listbox:
-            apple: "Apple"
-          combobox:
-            daily: "Diariamente"
-            weekly: "Semanalmente"
-            monthly: "Mensualmente"
-            never: "Nunca"
-          tree:
-            components: "Componentes"
-            select: "Seleccionar"
         modal:
           title: "Modal"
           header: "Título de la ventana modal"
@@ -142,8 +96,6 @@ es:
           title: "Iconos de encabezado"
         spinners:
           title: "Indicadores de carga"
-        otp:
-          title: "OTP"
         empty_state:
           title: "Estado vacío"
         tooltips:
@@ -154,5 +106,3 @@ es:
         char_counter:
           title: "Contador de caracteres"
           placeholder: "Introduce aquí tu texto..."
-        segmented_control:
-          title: "Control segmentado (grupo de botones de alternancia)"

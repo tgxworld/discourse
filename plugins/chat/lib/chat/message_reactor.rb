@@ -13,7 +13,6 @@ module Chat
     end
 
     def react!(message_id:, react_action:, emoji:)
-      emoji = Emoji.unicode_replacements[emoji] || emoji
       @guardian.ensure_can_join_chat_channel!(@chat_channel)
       @guardian.ensure_can_react!
       validate_channel_status!
@@ -23,7 +22,7 @@ module Chat
 
       reaction = nil
       ActiveRecord::Base.transaction do
-        enforce_channel_membership!(react_action)
+        enforce_channel_membership!
         reaction = create_reaction(message, react_action, emoji)
       end
 
@@ -46,14 +45,8 @@ module Chat
       end
     end
 
-    def enforce_channel_membership!(action)
-      return if action == REMOVE_REACTION || @chat_channel.membership_for(@user)&.following
-
-      raise Discourse::InvalidAccess.new(
-              nil,
-              nil,
-              custom_message: "chat.errors.user_not_in_channel",
-            )
+    def enforce_channel_membership!
+      Chat::ChannelMembershipManager.new(@chat_channel).follow(@user)
     end
 
     def validate_channel_status!

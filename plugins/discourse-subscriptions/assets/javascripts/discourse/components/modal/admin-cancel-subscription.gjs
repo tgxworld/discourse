@@ -2,8 +2,8 @@ import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
 import { Input } from "@ember/component";
 import { fn, hash } from "@ember/helper";
-import DButton from "discourse/ui-kit/d-button";
-import DModal from "discourse/ui-kit/d-modal";
+import DButton from "discourse/components/d-button";
+import DModal from "discourse/components/d-modal";
 import { i18n } from "discourse-i18n";
 
 export default class AdminCancelSubscription extends Component {
@@ -11,18 +11,18 @@ export default class AdminCancelSubscription extends Component {
 
   <template>
     <DModal
-      @closeModal={{@closeModal}}
       @title={{i18n
         "discourse_subscriptions.user.subscriptions.operations.destroy.confirm"
       }}
+      @closeModal={{@closeModal}}
     >
       <:body>
-        <Input @checked={{this.refund}} @type="checkbox" />
+        <Input @type="checkbox" @checked={{this.refund}} />
         {{i18n "discourse_subscriptions.admin.ask_refund"}}
       </:body>
       <:footer>
         <DButton
-          class="btn-danger"
+          @label="yes_value"
           @action={{fn
             @model.cancelSubscription
             (hash
@@ -33,9 +33,9 @@ export default class AdminCancelSubscription extends Component {
           }}
           @icon="xmark"
           @isLoading={{@model.subscription.loading}}
-          @label="yes_value"
+          class="btn-danger"
         />
-        <DButton @action={{@closeModal}} @label="no_value" />
+        <DButton @label="no_value" @action={{@closeModal}} />
       </:footer>
     </DModal>
   </template>

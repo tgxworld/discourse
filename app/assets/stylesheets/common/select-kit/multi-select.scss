@@ -16,7 +16,7 @@
 
     &.is-disabled {
       .multi-select-header {
-        background: var(--d-input-bg-color--disabled);
+        background: var(--primary-low);
         border-color: var(--primary-low-mid);
         color: var(--primary-medium);
 
@@ -52,7 +52,7 @@
 
     .multi-select-header {
       background: var(--secondary);
-      border-color: var(--input-border-color);
+      border-color: var(--primary-400);
 
       .formatted-selection {
         margin: 0;
@@ -66,15 +66,13 @@
         display: flex;
         flex-wrap: wrap;
         margin: -0.35em;
+        margin-left: -0.25em;
         position: relative;
-        align-items: center;
-        gap: var(--space-1);
 
         .selected-choice {
-          height: min-content;
-          padding: var(--space-1);
+          margin: 0.125em 0.25em 0.125em 0;
+          padding: 0.2em 0.3em;
           font-size: var(--font-down-1);
-          border-radius: var(--d-border-radius);
 
           &.selected-choice-color {
             border-bottom: 2px solid transparent;

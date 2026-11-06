@@ -1,4 +1,11 @@
-@use "lib/viewport";
+// Styles for the drafts dropdown menu
+.topic-drafts-menu-trigger {
+  margin-left: -0.3em;
+}
+
+.topic-drafts-menu-content {
+  margin-top: -0.4em;
+}
 
 .topic-drafts-menu-content .dropdown-menu {
   .btn .d-button-label {
@@ -12,10 +19,5 @@
     span:first-child {
       color: var(--primary-high);
     }
-  }
-
-  @include viewport.from(sm) {
-    max-width: 350px;
-    min-width: 275px;
   }
 }

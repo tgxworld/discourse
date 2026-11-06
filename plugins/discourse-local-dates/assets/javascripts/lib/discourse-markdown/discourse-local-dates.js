@@ -1,10 +1,6 @@
 moment.tz.link(["Asia/Kolkata|IST", "Asia/Seoul|KST", "Asia/Tokyo|JST"]);
 const timezoneNames = moment.tz.names();
 
-function normalizeDateString(dateStr) {
-  return moment(dateStr, "YYYY-M-D").format("YYYY-MM-DD");
-}
-
 function addLocalDate(attributes, state, buffer, applyDataAttributes) {
   if (attributes.timezone) {
     if (!timezoneNames.includes(attributes.timezone)) {
@@ -25,14 +21,6 @@ function addLocalDate(attributes, state, buffer, applyDataAttributes) {
       .join("|");
   }
 
-  if (attributes._default) {
-    attributes._default = normalizeDateString(attributes._default);
-  }
-
-  if (attributes.date) {
-    attributes.date = normalizeDateString(attributes.date);
-  }
-
   const dateTime = moment.tz(
     [attributes._default || attributes.date, attributes.time]
       .filter(Boolean)
@@ -49,10 +37,7 @@ function addLocalDate(attributes, state, buffer, applyDataAttributes) {
 
   let token = new state.Token("span_open", "span", 1);
   token.attrs = [["class", "discourse-local-date"]];
-
-  // applyDataAttributes will handle all data-* attributes including data-ics
   applyDataAttributes(token, attributes, "date");
-
   buffer.push(token);
 
   token = new state.Token("text", "", 0);
@@ -121,7 +106,6 @@ export function setup(helper) {
     "span[data-displayed-timezone]",
     "span[data-email-preview]",
     "span[data-format]",
-    "span[data-ics]",
     "span[data-recurring]",
     "span[data-time]",
     "span[data-timezone]",

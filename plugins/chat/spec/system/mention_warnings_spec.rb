@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "Mentions warnings" do
+RSpec.describe "Mentions warnings", type: :system do
   fab!(:current_user, :user)
   fab!(:channel_1, :chat_channel)
   fab!(:channel_2, :chat_channel)
@@ -93,20 +93,14 @@ RSpec.describe "Mentions warnings" do
     context "when channel has allow_channel_wide_mentions disabled" do
       before { channel_1.update(allow_channel_wide_mentions: false) }
 
-      it "displays a warning for @here" do
-        chat_page.visit_channel(channel_1)
-        channel_page.type_in_composer("@here")
+      %w[@here @all].each do |mention_text|
+        it "displays a warning" do
+          chat_page.visit_channel(channel_1)
+          channel_page.type_in_composer(mention_text)
 
-        expect(page).to have_css(".chat-mention-warnings")
-        expect(page.find(".chat-mention-warnings-list__simple")).to be_present
-      end
-
-      it "displays a warning for @all" do
-        chat_page.visit_channel(channel_1)
-        channel_page.type_in_composer("@all")
-
-        expect(page).to have_css(".chat-mention-warnings")
-        expect(page.find(".chat-mention-warnings-list__simple")).to be_present
+          expect(page).to have_css(".chat-mention-warnings")
+          expect(page.find(".chat-mention-warnings-list__simple")).to be_present
+        end
       end
 
       it "retains warnings when loading drafts or changing channels with no draft" do

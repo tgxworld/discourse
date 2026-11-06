@@ -14,11 +14,11 @@ da:
         countdown:
           passed: dato er passeret
       title: Indsæt dato / tid
-      edit_date: Rediger %{date}
       create:
         form:
           insert: Indsæt
-          save: Gem
+          advanced_mode: Avanceret tilstand
+          simple_mode: Enkel tilstand
           format_description: "Format, der bruges til at vise datoen for brugeren. Brug Z til at vise forskydningen og zz for tidszonenavnet."
           timezones_title: Tidszoner, der skal vises
           timezones_description: Tidszoner vil blive brugt til at vise datoer i forhåndsvisning og fallback.

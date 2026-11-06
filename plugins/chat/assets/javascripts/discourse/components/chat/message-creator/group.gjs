@@ -1,9 +1,10 @@
 import Component from "@glimmer/component";
 import { service } from "@ember/service";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
+import icon from "discourse/helpers/d-icon";
 import { i18n } from "discourse-i18n";
 
 export default class ChatableGroup extends Component {
+  @service currentUser;
   @service siteSettings;
 
   group_with_too_many_members = i18n(
@@ -28,7 +29,7 @@ export default class ChatableGroup extends Component {
       data-disabled={{this.isDisabled}}
     >
       <div class="chat-message-creator__group-icon">
-        {{dIcon "user-group"}}
+        {{icon "user-group"}}
       </div>
       <div class="chat-message-creator__group-name">
         {{@item.model.name}}

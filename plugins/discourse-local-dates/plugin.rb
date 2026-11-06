@@ -11,12 +11,12 @@ register_asset "moment-timezone.js", :vendored_core_pretty_text
 
 enabled_site_setting :discourse_local_dates_enabled
 
-module ::DiscourseLocalDates
-  PLUGIN_NAME = "discourse-local-dates"
-  POST_CUSTOM_FIELD = "local_dates"
-end
-
 after_initialize do
+  module ::DiscourseLocalDates
+    PLUGIN_NAME = "discourse-local-dates".freeze
+    POST_CUSTOM_FIELD = "local_dates".freeze
+  end
+
   require_relative "lib/discourse_local_dates/engine"
 
   register_post_custom_field_type(DiscourseLocalDates::POST_CUSTOM_FIELD, :json)

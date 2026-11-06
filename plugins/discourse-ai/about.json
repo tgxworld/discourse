@@ -2,8 +2,7 @@
   "tests": {
     "requiredPlugins": [
       "https://github.com/discourse/discourse-prometheus",
-      "discourse-solved",
-      "chat"
+      "https://github.com/discourse/discourse-solved.git"
     ]
   }
 }

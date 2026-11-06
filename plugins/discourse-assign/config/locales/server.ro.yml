@@ -9,6 +9,6 @@ ro:
     reminders_frequency:
       never: "niciodată"
       daily: "Zilnic"
-      weekly: "săptămânal"
+      weekly: "Săptămânal"
       monthly: "lunar"
       quarterly: "trimestrial"

@@ -5,3 +5,5 @@
 # https://translate.discourse.org/
 
 tr_TR:
+  site_settings:
+    rss_polling_frequency: "[RSS Polling] Besleme yoklama sıklığı (dakika cinsinden)"

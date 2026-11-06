@@ -8,7 +8,7 @@ module Jobs
       return if topic_id.blank?
 
       topic = Topic.find_by(id: topic_id)
-      topic.presence&.remove_banner!(Discourse.system_user)
+      topic.remove_banner!(Discourse.system_user) if topic.present?
     end
   end
 end

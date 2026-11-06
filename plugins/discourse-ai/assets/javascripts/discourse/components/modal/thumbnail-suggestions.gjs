@@ -1,18 +1,14 @@
 import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
 import { action } from "@ember/object";
+import ConditionalLoadingSpinner from "discourse/components/conditional-loading-spinner";
+import DButton from "discourse/components/d-button";
+import DModal from "discourse/components/d-modal";
+import DModalCancel from "discourse/components/d-modal-cancel";
 import { ajax } from "discourse/lib/ajax";
 import { popupAjaxError } from "discourse/lib/ajax-error";
-import DButton from "discourse/ui-kit/d-button";
-import DConditionalLoadingSpinner from "discourse/ui-kit/d-conditional-loading-spinner";
-import DModal from "discourse/ui-kit/d-modal";
-import DModalCancel from "discourse/ui-kit/d-modal-cancel";
 import { i18n } from "discourse-i18n";
-import {
-  isAiCreditLimitError,
-  popupAiCreditLimitError,
-} from "../../lib/ai-errors.js";
-import ThumbnailSuggestionItem from "../thumbnail-suggestion-item.gjs";
+import ThumbnailSuggestionItem from "../thumbnail-suggestion-item";
 
 export default class ThumbnailSuggestions extends Component {
   @tracked loading = false;
@@ -43,12 +39,7 @@ export default class ThumbnailSuggestions extends Component {
 
       this.thumbnails = thumbnails.thumbnails;
     } catch (error) {
-      if (isAiCreditLimitError(error)) {
-        this.args.closeModal();
-        popupAiCreditLimitError(error);
-      } else {
-        popupAjaxError(error);
-      }
+      popupAjaxError(error);
     } finally {
       this.loading = false;
     }
@@ -85,48 +76,34 @@ export default class ThumbnailSuggestions extends Component {
     this.args.closeModal();
   }
 
-  @action
-  regenerateThumbnails() {
-    this.selectedImages = [];
-    this.thumbnails = null;
-    this.findThumbnails();
-  }
-
   <template>
     <DModal
       class="thumbnail-suggestions-modal"
-      @closeModal={{@closeModal}}
       @title={{i18n "discourse_ai.ai_helper.thumbnail_suggestions.title"}}
+      @closeModal={{@closeModal}}
     >
       <:body>
-        <DConditionalLoadingSpinner @condition={{this.loading}}>
+        <ConditionalLoadingSpinner @condition={{this.loading}}>
           <div class="ai-thumbnail-suggestions">
             {{#each this.thumbnails as |thumbnail|}}
               <ThumbnailSuggestionItem
+                @thumbnail={{thumbnail}}
                 @addSelection={{this.addSelection}}
                 @removeSelection={{this.removeSelection}}
-                @thumbnail={{thumbnail}}
               />
             {{/each}}
           </div>
-        </DConditionalLoadingSpinner>
+        </ConditionalLoadingSpinner>
       </:body>
 
       <:footer>
         <DButton
-          class="btn-primary create"
           @action={{this.appendSelectedImages}}
-          @disabled={{this.isDisabled}}
           @label="save"
+          @disabled={{this.isDisabled}}
+          class="btn-primary create"
         />
         <DModalCancel @close={{@closeModal}} />
-        <DButton
-          class="regenerate"
-          @action={{this.regenerateThumbnails}}
-          @disabled={{this.loading}}
-          @icon="arrows-rotate"
-          @label="discourse_ai.ai_helper.thumbnail_suggestions.try_again"
-        />
       </:footer>
     </DModal>
   </template>

@@ -33,8 +33,7 @@ class DirectoryItemSerializer < ApplicationSerializer
     end
 
     def include_user_fields?
-      @options[:user_custom_field_map].present? && scope.public_can_see_profiles? &&
-        !scope.restrict_user_fields?(object)
+      @options[:user_custom_field_map].present?
     end
   end
 

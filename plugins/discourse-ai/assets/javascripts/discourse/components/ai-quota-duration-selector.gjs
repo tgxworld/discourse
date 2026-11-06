@@ -2,8 +2,8 @@ import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
-import ComboBox from "discourse/select-kit/components/combo-box";
 import { i18n } from "discourse-i18n";
+import ComboBox from "select-kit/components/combo-box";
 
 const DURATION_PRESETS = [
   {
@@ -84,21 +84,21 @@ export default class DurationSelector extends Component {
   }
 
   <template>
-    <div class="duration-selector" ...attributes>
+    <div class="duration-selector">
       <ComboBox
-        class="duration-selector__preset"
         @content={{this.presetOptions}}
-        @onChange={{this.onPresetChange}}
         @value={{this.selectedPresetId}}
+        @onChange={{this.onPresetChange}}
+        class="duration-selector__preset"
       />
 
       {{#if this.isCustom}}
         <div class="duration-selector__custom">
           <input
-            class="duration-selector__hours-input"
-            min="1"
             type="number"
             value={{this.customHours}}
+            class="duration-selector__hours-input"
+            min="1"
             {{on "input" this.onCustomHoursChange}}
           />
           <span class="duration-selector__hours-label">

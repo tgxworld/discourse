@@ -5,16 +5,18 @@ import { setupRenderingTest } from "discourse/tests/helpers/component-test";
 import Header from "discourse/plugins/chat/discourse/components/chat/thread/header";
 import ChatFabricators from "discourse/plugins/chat/discourse/lib/fabricators";
 
-module("Component | ChatThreadHeader", function (hooks) {
+module("Discourse Chat | Component | chat-thread-header", function (hooks) {
   setupRenderingTest(hooks);
 
   test("it safely renders title", async function (assert) {
+    const self = this;
+
     const title = "<style>body { background: red;}</style>";
     this.thread = new ChatFabricators(getOwner(this)).thread({ title });
 
     await render(
       <template>
-        <Header @channel={{this.thread.channel}} @thread={{this.thread}} />
+        <Header @thread={{self.thread}} @channel={{self.thread.channel}} />
       </template>
     );
 

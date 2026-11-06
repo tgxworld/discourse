@@ -1,17 +1,15 @@
-import { cached, tracked } from "@glimmer/tracking";
+import { tracked } from "@glimmer/tracking";
 import { action } from "@ember/object";
 import { getOwner, setOwner } from "@ember/owner";
 import { service } from "@ember/service";
 import { isSkinTonableEmoji } from "pretty-text/emoji";
 import EmojiPickerDetached from "discourse/components/emoji-picker/detached";
-import AnonymousFlagModal from "discourse/components/modal/anonymous-flag";
 import BookmarkModal from "discourse/components/modal/bookmark";
 import FlagModal from "discourse/components/modal/flag";
-import ReportIllegalContentModal from "discourse/components/modal/report-illegal-content";
 import { popupAjaxError } from "discourse/lib/ajax-error";
 import { BookmarkFormData } from "discourse/lib/bookmark-form-data";
 import { bind } from "discourse/lib/decorators";
-import getURL, { getAbsoluteURL } from "discourse/lib/get-url";
+import getURL from "discourse/lib/get-url";
 import { clipboardCopy } from "discourse/lib/utilities";
 import Bookmark from "discourse/models/bookmark";
 import { DEFAULT_DIVERSITY } from "discourse/services/emoji-store";
@@ -33,8 +31,9 @@ export function resetRemovedChatComposerSecondaryActions() {
   removedSecondaryActions.clear();
 }
 
-export default class ChatMessageInteractor {
+export default class ChatemojiReactions {
   @service appEvents;
+  @service dialog;
   @service chat;
   @service chatChannelComposer;
   @service chatThreadComposer;
@@ -43,6 +42,7 @@ export default class ChatMessageInteractor {
   @service chatApi;
   @service currentUser;
   @service site;
+  @service router;
   @service modal;
   @service capabilities;
   @service siteSettings;
@@ -54,9 +54,6 @@ export default class ChatMessageInteractor {
   @tracked message = null;
   @tracked context = null;
 
-  #quickReactionEmojis;
-  #placeholderReactions = new Map();
-
   constructor(owner, message, context) {
     setOwner(this, owner);
 
@@ -64,21 +61,45 @@ export default class ChatMessageInteractor {
     this.context = context;
   }
 
-  // Reacting re-sorts the frequency-ordered quick reactions, so the emoji are resolved
-  // once and held: the controls must not move under a user who is still interacting
-  // with them. An interactor is built per open actions menu, which scopes the freeze.
-  get quickReactionEmojis() {
-    this.#quickReactionEmojis ??= this.#computeQuickReactionEmojis();
-    return this.#quickReactionEmojis;
-  }
-
-  @cached
   get emojiReactions() {
-    return this.quickReactionEmojis.map(
-      (emoji) =>
-        this.message.reactions.find((reaction) => reaction.emoji === emoji) ||
-        this.#placeholderReaction(emoji)
-    );
+    const userQuickReactionsCustom = (
+      (this.currentUser.user_option.chat_quick_reaction_type === "custom" &&
+        this.currentUser.user_option.chat_quick_reactions_custom) ||
+      ""
+    )
+      .split("|")
+      .filter(Boolean);
+
+    const frequentReactions = this.emojiStore.favoritesForContext("chat");
+
+    const defaultReactions = this.siteSettings.default_emoji_reactions
+      .split("|")
+      .map((emoji) => {
+        if (
+          this.emojiStore.diversity !== DEFAULT_DIVERSITY &&
+          isSkinTonableEmoji(emoji)
+        ) {
+          return `${emoji}:t${this.emojiStore.diversity}`;
+        }
+
+        return emoji;
+      });
+
+    const allReactionsInOrder = userQuickReactionsCustom
+      .concat(frequentReactions)
+      .concat(defaultReactions);
+
+    return allReactionsInOrder
+      .filter((item, index) => {
+        return allReactionsInOrder.indexOf(item) === index;
+      })
+      .filter(Boolean)
+      .slice(0, 3)
+      .map(
+        (emoji) =>
+          this.message.reactions.find((reaction) => reaction.emoji === emoji) ||
+          ChatMessageReactionModel.create({ emoji })
+      );
   }
 
   get pane() {
@@ -97,10 +118,8 @@ export default class ChatMessageInteractor {
 
   get canInteractWithMessage() {
     return (
-      this.#canParticipate &&
       !this.message?.deletedAt &&
-      this.message?.channel?.canModifyMessages(this.currentUser) &&
-      this.message?.channel?.isFollowing
+      this.message?.channel?.canModifyMessages(this.currentUser)
     );
   }
 
@@ -108,7 +127,6 @@ export default class ChatMessageInteractor {
     return (
       this.message?.deletedAt &&
       (this.currentUser.staff ||
-        this.message?.channel?.canModerate ||
         (this.message?.user?.id === this.currentUser.id &&
           this.message?.deletedById === this.currentUser.id)) &&
       this.message.channel?.canModifyMessages?.(this.currentUser)
@@ -116,10 +134,7 @@ export default class ChatMessageInteractor {
   }
 
   get canBookmark() {
-    return (
-      this.#canParticipate &&
-      this.message?.channel?.canModifyMessages?.(this.currentUser)
-    );
+    return this.message?.channel?.canModifyMessages?.(this.currentUser);
   }
 
   get canReply() {
@@ -129,28 +144,10 @@ export default class ChatMessageInteractor {
   }
 
   get canReact() {
-    // Reactions are emoji, so there's nothing to react with while they're disabled.
-    return this.canInteractWithMessage && this.siteSettings.enable_emoji;
-  }
-
-  get canReportMessage() {
-    return (
-      this.canFlagMessage ||
-      (this.siteSettings.dsa_reporting_enabled &&
-        !this.message?.chatWebhookEvent &&
-        !this.message?.deletedAt)
-    );
+    return this.canInteractWithMessage;
   }
 
   get canFlagMessage() {
-    if (!this.currentUser) {
-      return (
-        this.siteSettings.allow_all_users_to_flag_illegal_content &&
-        !this.message?.chatWebhookEvent &&
-        !this.message?.deletedAt
-      );
-    }
-
     return (
       this.currentUser.id !== this.message?.user?.id &&
       this.message?.userFlagStatus === undefined &&
@@ -158,13 +155,6 @@ export default class ChatMessageInteractor {
       !this.message?.chatWebhookEvent &&
       !this.message?.deletedAt
     );
-  }
-
-  get canPinMessage() {
-    if (!this.siteSettings.chat_pinned_messages) {
-      return false;
-    }
-    return this.message.channel?.canManagePins;
   }
 
   get canRebakeMessage() {
@@ -195,10 +185,6 @@ export default class ChatMessageInteractor {
   }
 
   get secondaryActions() {
-    if (!this.#canParticipate) {
-      return this.#readOnlySecondaryActions;
-    }
-
     const buttons = [];
 
     buttons.push({
@@ -231,23 +217,7 @@ export default class ChatMessageInteractor {
       });
     }
 
-    if (this.canPinMessage && !this.message.pinned) {
-      buttons.push({
-        id: "pin",
-        name: i18n("chat.pin_message"),
-        icon: "thumbtack",
-      });
-    }
-
-    if (this.canPinMessage && this.message.pinned) {
-      buttons.push({
-        id: "unpin",
-        name: i18n("chat.unpin_message"),
-        icon: "thumbtack",
-      });
-    }
-
-    if (this.canReportMessage) {
+    if (this.canFlagMessage) {
       buttons.push({
         id: "flag",
         name: i18n("chat.flag"),
@@ -279,32 +249,7 @@ export default class ChatMessageInteractor {
       });
     }
 
-    return buttons.filter((button) => !removedSecondaryActions.has(button.id));
-  }
-
-  // Visitors and silenced users can't post, but can still link to and report messages.
-  get #canParticipate() {
-    return this.currentUser && this.chat.userCanInteractWithChat;
-  }
-
-  get #readOnlySecondaryActions() {
-    const buttons = [
-      { id: "copyLink", name: i18n("chat.copy_link"), icon: "link" },
-    ];
-
-    if (this.site.mobileView) {
-      buttons.push({
-        id: "copyText",
-        name: i18n("chat.copy_text"),
-        icon: "clipboard",
-      });
-    }
-
-    if (this.canReportMessage) {
-      buttons.push({ id: "flag", name: i18n("chat.flag"), icon: "flag" });
-    }
-
-    return buttons.filter((button) => !removedSecondaryActions.has(button.id));
+    return buttons.reject((button) => removedSecondaryActions.has(button.id));
   }
 
   select(checked = true) {
@@ -389,9 +334,6 @@ export default class ChatMessageInteractor {
         emoji,
         reactAction
       )
-      .then(() => {
-        this.emojiStore.trackEmojiForContext(emoji, "chat");
-      })
       .catch((errResult) => {
         popupAjaxError(errResult);
         this.message.react(
@@ -443,22 +385,11 @@ export default class ChatMessageInteractor {
 
   @action
   flag() {
-    if (!this.currentUser && this.siteSettings.dsa_reporting_enabled) {
-      this.modal.show(ReportIllegalContentModal, {
-        model: { contentUrl: getAbsoluteURL(this.message.url) },
-      });
-      return;
-    }
-
     const model = new ChatMessage(this.message.channel, this.message);
-    if (!this.canFlagMessage) {
-      model.availableFlags = [];
-    }
     model.username = this.message.user?.username;
     model.user_id = this.message.user?.id;
-    this.modal.show(this.currentUser ? FlagModal : AnonymousFlagModal, {
+    this.modal.show(FlagModal, {
       model: {
-        allowIllegalContentReport: true,
         flagTarget: new ChatMessageFlag(getOwner(this)),
         flagModel: model,
         setHidden: () => model.set("hidden", true),
@@ -485,41 +416,6 @@ export default class ChatMessageInteractor {
     return this.chatApi
       .rebakeMessage(this.message.channel.id, this.message.id)
       .catch(popupAjaxError);
-  }
-
-  @action
-  pin() {
-    this.message.pinned = true;
-    this.message.channel.pinnedMessagesCount++;
-    this.message.channel.pendingOptimisticPins.add(this.message.id);
-
-    return this.chatApi
-      .pinMessage(this.message.channel.id, this.message.id)
-      .catch((error) => {
-        this.message.pinned = false;
-        this.message.channel.pinnedMessagesCount--;
-        this.message.channel.pendingOptimisticPins.delete(this.message.id);
-        popupAjaxError(error);
-      });
-  }
-
-  @action
-  unpin() {
-    this.message.pinned = false;
-    this.message.channel.pinnedMessagesCount = Math.max(
-      0,
-      this.message.channel.pinnedMessagesCount - 1
-    );
-    this.message.channel.pendingOptimisticUnpins.add(this.message.id);
-
-    return this.chatApi
-      .unpinMessage(this.message.channel.id, this.message.id)
-      .catch((error) => {
-        this.message.pinned = true;
-        this.message.channel.pinnedMessagesCount++;
-        this.message.channel.pendingOptimisticUnpins.delete(this.message.id);
-        popupAjaxError(error);
-      });
   }
 
   @action
@@ -570,54 +466,5 @@ export default class ChatMessageInteractor {
   @action
   handleSecondaryActions(id) {
     this[id](this.message);
-  }
-
-  #computeQuickReactionEmojis() {
-    const userQuickReactionsCustom = (
-      (this.currentUser.user_option.chat_quick_reaction_type === "custom" &&
-        this.currentUser.user_option.chat_quick_reactions_custom) ||
-      ""
-    )
-      .split("|")
-      .filter(Boolean);
-
-    const frequentReactions = this.emojiStore.favoritesForContext("chat");
-
-    const defaultReactions = this.siteSettings.default_emoji_reactions
-      .split("|")
-      .map((emoji) => {
-        if (
-          this.emojiStore.diversity !== DEFAULT_DIVERSITY &&
-          isSkinTonableEmoji(emoji)
-        ) {
-          return `${emoji}:t${this.emojiStore.diversity}`;
-        }
-
-        return emoji;
-      });
-
-    const allReactionsInOrder = userQuickReactionsCustom
-      .concat(frequentReactions)
-      .concat(defaultReactions);
-
-    return allReactionsInOrder
-      .filter((item, index) => {
-        return allReactionsInOrder.indexOf(item) === index;
-      })
-      .filter(Boolean)
-      .slice(0, 3);
-  }
-
-  // An emoji with no reaction yet still needs a model to render against, and it has to
-  // keep its identity across re-renders or the control it backs is torn down.
-  #placeholderReaction(emoji) {
-    let reaction = this.#placeholderReactions.get(emoji);
-
-    if (!reaction) {
-      reaction = ChatMessageReactionModel.create({ emoji });
-      this.#placeholderReactions.set(emoji, reaction);
-    }
-
-    return reaction;
   }
 }

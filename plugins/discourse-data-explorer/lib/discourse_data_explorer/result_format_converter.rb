@@ -1,8 +1,8 @@
 # frozen_string_literal: true
-module DiscourseDataExplorer
+module ::DiscourseDataExplorer
   class ResultFormatConverter
     def self.convert(file_type, result, opts = {})
-      new(result, opts).send("to_#{file_type}")
+      self.new(result, opts).send("to_#{file_type}")
     end
 
     def initialize(result, opts)
@@ -25,7 +25,7 @@ module DiscourseDataExplorer
 
     def to_csv
       require "csv"
-      CSV.generate(+Encodings::BOM) do |csv|
+      CSV.generate do |csv|
         csv << cols
         pg_result.values.each { |row| csv << row }
       end
@@ -36,7 +36,7 @@ module DiscourseDataExplorer
         success: true,
         errors: [],
         duration: (result[:duration_secs].to_f * 1000).round(1),
-        result_count: pg_result.ntuples,
+        result_count: pg_result.values.length || 0,
         params: opts[:query_params],
         columns: cols,
         default_limit: SiteSetting.data_explorer_query_result_limit,
@@ -44,11 +44,9 @@ module DiscourseDataExplorer
       json[:explain] = result[:explain] if opts[:explain]
 
       if !opts[:download]
-        guardian = Guardian.new(opts[:current_user])
-        relations, colrender, hidden = DataExplorer.add_extra_data(pg_result, guardian:)
+        relations, colrender = DataExplorer.add_extra_data(pg_result)
         json[:relations] = relations
         json[:colrender] = colrender
-        json[:hidden_relations] = hidden
       end
 
       json[:rows] = pg_result.values

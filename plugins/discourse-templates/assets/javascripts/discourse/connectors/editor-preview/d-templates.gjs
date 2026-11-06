@@ -1,22 +1,25 @@
-import Component from "@glimmer/component";
-import { tracked } from "@glimmer/tracking";
+/* eslint-disable ember/no-classic-components */
+import Component from "@ember/component";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
-import DButton from "discourse/ui-kit/d-button";
-import FilterableList from "../../components/d-templates/filterable-list.gjs";
+import { classNames } from "@ember-decorators/component";
+import DButton from "discourse/components/d-button";
+import FilterableList from "../../components/d-templates/filterable-list";
 
 const SELECTOR_EDITOR_PREVIEW =
   "#reply-control .d-editor-preview-wrapper > .d-editor-preview";
 
+@classNames("d-templates")
 export default class DTemplatesEditorPreview extends Component {
   static shouldRender(args, context) {
     return !context.site.mobileView;
   }
 
   @service appEvents;
+  @service site;
 
-  @tracked templatesVisible = false;
-  @tracked onInsertTemplate;
+  templatesVisible = false;
+  onInsertTemplate;
 
   constructor() {
     super(...arguments);
@@ -39,8 +42,8 @@ export default class DTemplatesEditorPreview extends Component {
       elemEditorPreview.style.display = "none";
     }
 
-    this.onInsertTemplate = onInsertTemplate;
-    this.templatesVisible = true;
+    this.set("onInsertTemplate", onInsertTemplate);
+    this.set("templatesVisible", true);
   }
 
   @action
@@ -50,24 +53,22 @@ export default class DTemplatesEditorPreview extends Component {
       elemEditorPreview.style.display = "";
     }
 
-    this.templatesVisible = false;
+    this.set("templatesVisible", false);
   }
 
   <template>
-    <div class="d-templates" ...attributes>
-      {{#if this.templatesVisible}}
-        <div class="d-templates-container">
-          <DButton
-            class="modal-close close btn-flat"
-            @action={{this.hide}}
-            @icon="xmark"
-          />
-          <FilterableList
-            @onAfterInsertTemplate={{this.hide}}
-            @onInsertTemplate={{this.onInsertTemplate}}
-          />
-        </div>
-      {{/if}}
-    </div>
+    {{#if this.templatesVisible}}
+      <div class="d-templates-container">
+        <DButton
+          @action={{this.hide}}
+          @icon="xmark"
+          class="modal-close close btn-flat"
+        />
+        <FilterableList
+          @onInsertTemplate={{this.onInsertTemplate}}
+          @onAfterInsertTemplate={{this.hide}}
+        />
+      </div>
+    {{/if}}
   </template>
 }

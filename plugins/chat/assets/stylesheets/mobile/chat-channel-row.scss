@@ -31,7 +31,7 @@
     transition: border-radius 0.25s ease-in-out;
 
     // for sliding delete animation
-    background: var(--secondary);
+    background: var(--primary-very-low);
     height: 100%;
 
     &.-animate-reset {
@@ -74,16 +74,8 @@
     bottom: 0;
     right: 0;
     left: 0;
-
-    &.--remove {
-      background: var(--danger);
-      color: var(--primary-very-low);
-    }
-
-    &.--clear {
-      background: var(--tertiary);
-      color: var(--secondary);
-    }
+    background: var(--danger);
+    color: var(--primary-very-low);
 
     .d-icon {
       transform-origin: 50% 50%;

@@ -6,7 +6,7 @@ task "assets:precompile:build" do
 
     raise "Unknown ember version '#{ember_version}'" if !%w[5].include?(ember_version)
 
-    compile_command = "EMBER_ENV=production #{Rails.root.join("script/assemble_ember_build.rb")}"
+    compile_command = "EMBER_ENV=production #{Rails.root}/script/assemble_ember_build.rb"
 
     only_ember_precompile_build_remaining = (ARGV.last == "assets:precompile:build")
     only_assets_precompile_remaining = (ARGV.last == "assets:precompile")
@@ -18,13 +18,9 @@ task "assets:precompile:build" do
       exec "#{compile_command} && SKIP_EMBER_CLI_COMPILE=1 bin/rake assets:precompile"
     else
       system compile_command, exception: true
-      EmberAssets.clear_cache!
+      EmberCli.clear_cache!
     end
   end
-end
-
-task "assets:precompile:build_plugins": "environment" do
-  Plugin::JsManager.new.compile!
 end
 
 task "assets:precompile:before": %w[environment assets:precompile:build]
@@ -56,18 +52,25 @@ task "assets:precompile:css" => "environment" do
 end
 
 task "assets:flush_sw" => "environment" do
-  hostname = Discourse.current_hostname
-  default_port = SiteSetting.force_https? ? 443 : 80
-  port = SiteSetting.port.to_i > 0 ? SiteSetting.port : default_port
-  STDERR.puts "Flushing service worker script"
-  `curl -s -m 1 --resolve '#{hostname}:#{port}:127.0.0.1' #{Discourse.base_url}/service-worker.js > /dev/null`
-  STDERR.puts "done"
-rescue StandardError
-  STDERR.puts "Warning: unable to flush service worker script"
+  begin
+    hostname = Discourse.current_hostname
+    default_port = SiteSetting.force_https? ? 443 : 80
+    port = SiteSetting.port.to_i > 0 ? SiteSetting.port : default_port
+    STDERR.puts "Flushing service worker script"
+    `curl -s -m 1 --resolve '#{hostname}:#{port}:127.0.0.1' #{Discourse.base_url}/service-worker.js > /dev/null`
+    STDERR.puts "done"
+  rescue StandardError
+    STDERR.puts "Warning: unable to flush service worker script"
+  end
 end
 
 def assets_path
-  "#{Rails.public_path.join("assets")}"
+  "#{Rails.root}/public/assets"
+end
+
+def gzip(path)
+  cmd = "gzip -f -c -9 #{path} > #{path}.gz"
+  system cmd, exception: true
 end
 
 def brotli_command(path)
@@ -104,18 +107,19 @@ def log_task_duration(task_description, &task)
   task_start = current_timestamp
   task.call
   STDERR.puts "Done '#{task_description}' : #{(current_timestamp - task_start).round(2)} secs"
+  STDERR.puts
 end
 
 task "assets:precompile:compress_js": "environment" do
-  puts "Compressing JavaScript and WASM files"
+  puts "Compressing JavaScript files"
 
   load_path = Rails.application.assets.load_path
 
-  log_task_duration("Done compressing all JS and WASM files") do
+  log_task_duration("Done compressing all JS files") do
     concurrent? do |proc|
       load_path
         .assets
-        .select { |asset| %w[.js .wasm].include?(asset.logical_path.extname) }
+        .select { |asset| asset.logical_path.extname == ".js" }
         .each do |asset|
           digested_path = asset.digested_path.to_s
 
@@ -124,21 +128,21 @@ task "assets:precompile:compress_js": "environment" do
             next
           end
 
-          file_path = "public/assets/#{digested_path}"
-
-          if File.exist?("#{file_path}.br")
-            STDERR.puts "Already compressed: #{digested_path}"
-            next
+          proc.call do
+            log_task_duration(digested_path) do
+              STDERR.puts "Compressing: #{digested_path}"
+              file_path = "public/assets/#{digested_path}"
+              gzip(file_path)
+              brotli(file_path)
+            end
           end
-
-          proc.call { log_task_duration(digested_path) { brotli(file_path) } }
         end
     end
   end
 
   if GlobalSetting.fallback_assets_path.present?
     begin
-      FileUtils.cp_r("#{Rails.public_path.join("assets/.")}", GlobalSetting.fallback_assets_path)
+      FileUtils.cp_r("#{Rails.root}/public/assets/.", GlobalSetting.fallback_assets_path)
     rescue => e
       STDERR.puts "Failed to backup assets to #{GlobalSetting.fallback_assets_path}"
       STDERR.puts e
@@ -147,20 +151,12 @@ task "assets:precompile:compress_js": "environment" do
   end
 end
 
-task "assets:precompile:asset_processor": "environment" do
-  AssetProcessor.load_or_build_processor_source
-end
-
-task "assets:precompile:pretty_text": "environment" do
-  PrettyText.load_or_build_core_bundle
+task "assets:precompile:theme_transpiler": "environment" do
+  DiscourseJsProcessor::Transpiler.build_production_theme_transpiler
 end
 
 # Run these tasks **before** Rails' "assets:precompile" task
-task "assets:precompile": %w[
-       assets:precompile:before
-       assets:precompile:asset_processor
-       assets:precompile:pretty_text
-     ]
+task "assets:precompile": %w[assets:precompile:before assets:precompile:theme_transpiler]
 
 # Run these tasks **after** Rails' "assets:precompile" task
 Rake::Task["assets:precompile"].enhance do

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class CustomRenderer < AbstractController::Base
+  include ActiveSupport::Configurable
   include AbstractController::Rendering
   include AbstractController::Helpers
   include AbstractController::Translation

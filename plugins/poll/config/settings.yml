@@ -1,4 +1,4 @@
-poll:
+plugins:
   poll_enabled:
     default: true
     client: true

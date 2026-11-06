@@ -2,7 +2,6 @@ en:
   site_settings:
     policy_enabled: "Allow policies?"
     policy_restrict_to_staff_posts: "Policies may only appear on staff posts"
-    create_policy_allowed_groups: "Group membership required for adding policies to posts"
     policy_easy_revoke: "Show the accept and revoke buttons at the same time"
   discourse_policy:
     errors:
@@ -10,9 +9,6 @@ en:
       group_not_found: "Group not found for policy"
       no_policy: "No policy exists for post"
       staff_only: "Policies may only apply to staff posts"
-      policy_group_inaccessible: "This policy cannot be accepted at this time. Please contact a site administrator."
-      policy_cannot_be_wiki: "Posts with policies cannot be wiki posts."
-      no_policy_permission: "You do not have permission to modify policies in this post."
     error:
       no_permission: "Not authorized"
   reports:

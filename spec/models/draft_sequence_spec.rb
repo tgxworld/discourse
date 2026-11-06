@@ -6,12 +6,12 @@ RSpec.describe DraftSequence do
   let!(:topic_draft_key) { Draft::NEW_TOPIC + "_0001" }
 
   describe ".next" do
-    it "produces the next sequence for a key" do
+    it "should produce next sequence for a key" do
       expect(DraftSequence.next!(user, topic_draft_key)).to eq 1
       expect(DraftSequence.next!(user, topic_draft_key)).to eq 2
     end
 
-    it "does not produce a sequence for a non-human user" do
+    it "should not produce next sequence for non-human user" do
       user.id = -99_999
       2.times { expect(DraftSequence.next!(user, "test")).to eq(0) }
     end
@@ -43,16 +43,16 @@ RSpec.describe DraftSequence do
   end
 
   describe ".current" do
-    it "returns zero by default" do
+    it "should return 0 by default" do
       expect(DraftSequence.current(user, "test")).to eq 0
     end
 
-    it "returns nil for a non-human user" do
+    it "should return nil for non-human user" do
       user.id = -99_999
       expect(DraftSequence.current(user, "test")).to eq(0)
     end
 
-    it "returns the current sequence" do
+    it "should return the right sequence" do
       expect(DraftSequence.next!(user, "test")).to eq(1)
       expect(DraftSequence.current(user, "test")).to eq(1)
     end

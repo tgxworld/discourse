@@ -1,5 +1,3 @@
-@use "lib/viewport";
-
 .select-kit {
   &.combo-box {
     &.tag-drop {
@@ -10,29 +8,15 @@
         color: var(--primary-high);
       }
 
-      @include viewport.until(sm) {
-        .tag-drop-header {
-          font-size: var(--font-0);
-
-          .d-icon {
-            font-size: var(--font-0);
-          }
-        }
-      }
-
       .select-kit-row {
         &[data-value="all-tags"],
         &[data-value="no-tags"] {
           color: var(--tertiary);
           font-weight: 700;
         }
-
-        @include viewport.until(sm) {
-          font-weight: normal;
-        }
       }
 
-      .angle-icon {
+      .caret-icon {
         color: var(--primary-high);
       }
 

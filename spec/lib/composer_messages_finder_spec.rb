@@ -4,10 +4,6 @@
 require "composer_messages_finder"
 
 RSpec.describe ComposerMessagesFinder do
-  fab!(:group)
-  fab!(:private_category) { Fabricate(:private_category, group: group) }
-  fab!(:private_topic) { Fabricate(:topic, category: private_category) }
-
   describe "delegates work" do
     let(:user) { Fabricate.build(:user) }
     let(:finder) { ComposerMessagesFinder.new(user, composer_action: "createTopic") }
@@ -43,14 +39,14 @@ RSpec.describe ComposerMessagesFinder do
     end
 
     context "with private message" do
-      fab!(:topic) { Fabricate(:private_message_topic, user: user) }
+      fab!(:topic, :private_message_topic)
 
       context "when starting a new private message" do
         let(:finder) do
           ComposerMessagesFinder.new(user, composer_action: "createTopic", topic_id: topic.id)
         end
 
-        it "returns an empty string" do
+        it "should return an empty string" do
           expect(finder.check_education_message).to eq(nil)
         end
       end
@@ -60,7 +56,7 @@ RSpec.describe ComposerMessagesFinder do
           ComposerMessagesFinder.new(user, composer_action: "reply", topic_id: topic.id)
         end
 
-        it "returns an empty string" do
+        it "should return an empty string" do
           expect(finder.check_education_message).to eq(nil)
         end
       end
@@ -192,17 +188,6 @@ RSpec.describe ComposerMessagesFinder do
         end
       end
     end
-
-    it "returns no message when the user cannot see the topic" do
-      Fabricate(:post, topic: private_topic, user: user)
-      Fabricate(:post, topic: private_topic, user: user)
-      Fabricate(:post, topic: private_topic)
-
-      finder =
-        ComposerMessagesFinder.new(user, composer_action: "reply", topic_id: private_topic.id)
-
-      expect(finder.check_dominating_topic).to be_blank
-    end
   end
 
   describe "#dont_feed_the_trolls" do
@@ -297,22 +282,6 @@ RSpec.describe ComposerMessagesFinder do
       finder = ComposerMessagesFinder.new(user, composer_action: "reply", topic_id: nil)
       expect(finder.check_dont_feed_the_trolls).to be_blank
     end
-
-    it "returns no message when the user cannot see the topic" do
-      private_post = Fabricate(:post, topic: private_topic, user: author)
-      _flag = Fabricate(:flag_post_action, post: private_post, user: other_user)
-      SiteSetting.dont_feed_the_trolls_threshold = 1
-
-      finder =
-        ComposerMessagesFinder.new(
-          user,
-          composer_action: "reply",
-          topic_id: private_topic.id,
-          post_id: private_post.id,
-        )
-
-      expect(finder.check_dont_feed_the_trolls).to be_blank
-    end
   end
 
   describe ".check_get_a_room" do
@@ -404,7 +373,7 @@ RSpec.describe ComposerMessagesFinder do
         expect(finder.check_get_a_room(min_users_posted: 2)).to be_blank
       end
 
-      it "notifies the user if no notice was shown in the current topic" do
+      it "will notify you if it hasn't in the current topic" do
         UserHistory.create!(
           action: UserHistory.actions[:notified_about_get_a_room],
           target_user_id: user.id,
@@ -413,7 +382,7 @@ RSpec.describe ComposerMessagesFinder do
         expect(finder.check_get_a_room(min_users_posted: 2)).to be_present
       end
 
-      it "does not notify users with too few posts" do
+      it "won't notify you if you haven't had enough posts" do
         SiteSetting.get_a_room_threshold = 10
         expect(finder.check_get_a_room(min_users_posted: 2)).to be_blank
       end

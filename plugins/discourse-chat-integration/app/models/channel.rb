@@ -14,7 +14,7 @@ class DiscourseChatIntegration::Channel < DiscourseChatIntegration::PluginModel
   validate :provider_valid?, :data_valid?
 
   def self.key_prefix
-    "channel:"
+    "channel:".freeze
   end
 
   def rules
@@ -24,7 +24,7 @@ class DiscourseChatIntegration::Channel < DiscourseChatIntegration::PluginModel
   private
 
   def init_data
-    self.data = {} if data.nil?
+    self.data = {} if self.data.nil?
   end
 
   def destroy_rules
@@ -39,9 +39,9 @@ class DiscourseChatIntegration::Channel < DiscourseChatIntegration::PluginModel
 
   def data_valid?
     # If provider is invalid, don't try and check data
-    return if DiscourseChatIntegration::Provider.provider_names.exclude? provider
+    return if ::DiscourseChatIntegration::Provider.provider_names.exclude? provider
 
-    params = DiscourseChatIntegration::Provider.get_by_name(provider)::CHANNEL_PARAMETERS
+    params = ::DiscourseChatIntegration::Provider.get_by_name(provider)::CHANNEL_PARAMETERS
 
     unless params.map { |p| p[:key] }.sort == data.keys.sort
       errors.add(:data, "data does not match the required structure for provider #{provider}")
@@ -53,9 +53,7 @@ class DiscourseChatIntegration::Channel < DiscourseChatIntegration::PluginModel
 
     data.each do |key, value|
       regex_string = params.find { |p| p[:key] == key }[:regex]
-      if regex_string.present? && !Regexp.new(regex_string).match?(value)
-        errors.add(:data, "data.#{key} is invalid")
-      end
+      errors.add(:data, "data.#{key} is invalid") if !Regexp.new(regex_string).match(value)
 
       unique = params.find { |p| p[:key] == key }[:unique]
       if unique

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "mysql2"
-require_relative "base"
+require File.expand_path(File.dirname(__FILE__) + "/base.rb")
 
 class ImportScripts::Bbpress < ImportScripts::Base
   BB_PRESS_HOST = ENV["BBPRESS_HOST"] || "localhost"

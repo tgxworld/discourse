@@ -10,6 +10,11 @@ RSpec.describe QunitController do
     Rails.env.stubs(:production?).returns(true)
   end
 
+  # rubocop:disable RSpec/BeforeAfterAll
+  before(:all) { DiscourseJsProcessor::Transpiler.build_production_theme_transpiler }
+
+  after(:all) { File.delete(DiscourseJsProcessor::Transpiler::TRANSPILER_PATH) }
+
   it "hides page for regular users in production" do
     production_sign_in(Fabricate(:user))
     get "/theme-qunit"
@@ -26,17 +31,5 @@ RSpec.describe QunitController do
     production_sign_in(Fabricate(:admin))
     get "/theme-qunit"
     expect(response.status).to eq(200)
-  end
-
-  describe "#core" do
-    it "redirects the theme-qunit target to the theme tests page" do
-      get "/tests", params: { target: "theme-qunit" }
-      expect(response).to redirect_to("/theme-qunit")
-    end
-
-    it "returns 404 for an unknown target" do
-      get "/tests", params: { target: "missing-plugin" }
-      expect(response.status).to eq(404)
-    end
   end
 end

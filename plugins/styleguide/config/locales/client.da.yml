@@ -8,9 +8,7 @@ da:
   js:
     styleguide:
       title: "Styleguide"
-      example:
-        kind:
-          component: "Komponent"
+      welcome: "For at komme i gang, vælg en sektion fra menuen til venstre."
       categories:
         syntax: Syntaks
         atoms: Atomer
@@ -27,16 +25,6 @@ da:
           title: "Dato/klokkeslæt input"
         menus:
           title: "Menuer"
-        context_menu:
-          actions:
-            duplicate: "Dupliker"
-            delete: "Slet"
-        reorderable_list:
-          policies_pinned: "Fastgjort"
-          policies_required: "Obligatoriske"
-          table_field: "Felt"
-          table_type: "Type"
-          cross_list_primary: "Primær"
         font_scale:
           title: "Skrifttype"
         colors:
@@ -62,6 +50,8 @@ da:
           title: "Navigation overlappet"
         categories_list:
           title: "Kategorioversigt"
+        topic_link:
+          title: "Emne Link"
         topic_list_item:
           title: "Emnelisteelement"
         topic_statuses:
@@ -70,6 +60,8 @@ da:
           title: "Emneliste"
         basic_topic_list:
           title: "Grundlæggende Emneliste"
+        footer_message:
+          title: "Sidefod Besked"
         signup_cta:
           title: "Tilmeld CTA"
         topic_timer_info:
@@ -84,25 +76,10 @@ da:
           title: "Emnekort"
         site_header:
           title: "Sidehoved"
-        more_topics:
-          title: "Flere emner"
+        suggested_topics:
+          title: "Foreslåede emner"
         post_menu:
           title: "Send menu"
-        roving_focus:
-          toolbar:
-            copy: "Kopier"
-          adjacent:
-            field: "Søg"
-            open: "Åbn"
-            recent: "Nye"
-          combobox:
-            daily: "Dagligt"
-            weekly: "Ugentligt"
-            monthly: "Månedligt"
-            never: "Aldrig"
-          tree:
-            components: "komponenter"
-            select: "Vælg"
         modal:
           title: "Modal"
           header: "Modal titel"

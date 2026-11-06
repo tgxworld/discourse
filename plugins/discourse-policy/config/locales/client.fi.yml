@@ -38,7 +38,6 @@ fi:
         reminder:
           label: Muistutus
           description: Kuinka usein muistutus käytännön hyväksymisestä tulisi lähettää
-          no_reminder: (Ei muistutusta)
         accept:
           label: Hyväksy
           description: Hyväksymispainikkeessa käytettävä teksti
@@ -51,9 +50,6 @@ fi:
         send-email:
           label: Lähetetäänkö sähköposti?
           description: Ilmoita käyttäjille uudesta käytännöstä sähköpostitse
-        add-users-to-group:
-          label: Lisää käyttäjiä ryhmään
-          description: Lisää käyttäjät seuraavaan ryhmään, kun he hyväksyvät tämän käytännön
       preferences:
         title: Käytännöt
         policy_emails:

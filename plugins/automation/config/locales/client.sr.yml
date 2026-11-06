@@ -21,12 +21,6 @@ sr:
         group:
           label: Grupa
       triggerables:
-        post_flag_created:
-          fields:
-            categories:
-              label: Kategorije
-            tags:
-              label: Tagovi
         user_badge_granted:
           fields:
             badge:

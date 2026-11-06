@@ -5,7 +5,6 @@ module DiscourseAutomation
     self.table_name = "discourse_automation_stats"
 
     def self.log(automation_id, run_time = nil)
-      errored = false
       if block_given? && run_time.nil?
         start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         begin
@@ -14,12 +13,11 @@ module DiscourseAutomation
           result
         rescue => e
           run_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
-          errored = true
           raise e
         end
       end
     ensure
-      update_stats(automation_id, run_time || 0, errored:)
+      update_stats(automation_id, run_time || 0)
     end
 
     def self.fetch_period_summaries
@@ -49,7 +47,6 @@ module DiscourseAutomation
             automation_id,
             SUM(total_runs) AS total_runs,
             SUM(total_time) AS total_time,
-            SUM(total_errors) AS total_errors,
             CASE WHEN SUM(total_runs) > 0
               THEN SUM(total_time) / SUM(total_runs)
               ELSE 0
@@ -79,7 +76,6 @@ module DiscourseAutomation
           result[automation_id][period_name] = {
             total_runs: stat.total_runs,
             total_time: stat.total_time,
-            total_errors: stat.total_errors,
             average_run_time: stat.average_run_time,
             min_run_time: stat.min_run_time,
             max_run_time: stat.max_run_time,
@@ -90,26 +86,29 @@ module DiscourseAutomation
       result
     end
 
-    def self.update_stats(automation_id, run_time, errored: false)
+    def self.update_stats(automation_id, run_time)
       today = Date.current
       current_time = Time.now
-      error_increment = errored ? 1 : 0
 
       builder = DB.build <<~SQL
         INSERT INTO discourse_automation_stats
-        (automation_id, date, last_run_at, total_time, average_run_time, min_run_time, max_run_time, total_runs, total_errors)
-        VALUES (:automation_id, :date, :current_time, :run_time, :run_time, :run_time, :run_time, 1, :error_increment)
+        (automation_id, date, last_run_at, total_time, average_run_time, min_run_time, max_run_time, total_runs)
+        VALUES (:automation_id, :date, :current_time, :run_time, :run_time, :run_time, :run_time, 1)
         ON CONFLICT (automation_id, date) DO UPDATE SET
           last_run_at = :current_time,
           total_time = discourse_automation_stats.total_time + :run_time,
           total_runs = discourse_automation_stats.total_runs + 1,
-          total_errors = discourse_automation_stats.total_errors + :error_increment,
           average_run_time = (discourse_automation_stats.total_time + :run_time) / (discourse_automation_stats.total_runs + 1),
           min_run_time = LEAST(discourse_automation_stats.min_run_time, :run_time),
           max_run_time = GREATEST(discourse_automation_stats.max_run_time, :run_time)
       SQL
 
-      builder.exec(automation_id:, date: today, current_time:, run_time:, error_increment:)
+      builder.exec(
+        automation_id: automation_id,
+        date: today,
+        current_time: current_time,
+        run_time: run_time,
+      )
     end
   end
 end
@@ -119,15 +118,14 @@ end
 # Table name: discourse_automation_stats
 #
 #  id               :bigint           not null, primary key
-#  average_run_time :float            not null
+#  automation_id    :bigint           not null
 #  date             :date             not null
 #  last_run_at      :datetime         not null
-#  max_run_time     :float            not null
-#  min_run_time     :float            not null
-#  total_errors     :integer          default(0), not null
-#  total_runs       :integer          not null
 #  total_time       :float            not null
-#  automation_id    :bigint           not null
+#  average_run_time :float            not null
+#  min_run_time     :float            not null
+#  max_run_time     :float            not null
+#  total_runs       :integer          not null
 #
 # Indexes
 #

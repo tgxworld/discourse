@@ -10,8 +10,6 @@ class WebHookUserSerializer < UserSerializer
   %i[
     unconfirmed_emails
     can_edit
-    can_edit_avatar
-    can_upload_avatar
     can_edit_username
     can_edit_email
     can_edit_name
@@ -29,8 +27,6 @@ class WebHookUserSerializer < UserSerializer
     system_avatar_upload_id
     gravatar_avatar_upload_id
     custom_avatar_upload_id
-    associated_account_avatars
-    selected_user_associated_account_id
     can_change_bio
     can_change_location
     can_change_website

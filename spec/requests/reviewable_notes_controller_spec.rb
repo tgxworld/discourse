@@ -48,21 +48,6 @@ RSpec.describe ReviewableNotesController do
         expect(json["user"]["id"]).to eq(moderator.id)
       end
 
-      it "returns usernames that could not be notified along with the saved note" do
-        SiteSetting.enable_mentions = true
-
-        post "/review/#{reviewable.id}/notes.json",
-             params: {
-               reviewable_note: {
-                 content: "@#{user.username} @#{moderator.username}",
-               },
-             }
-
-        expect(response.status).to eq(200)
-        expect(response.parsed_body["unnotified_usernames"]).to eq([user.username])
-        expect(response.parsed_body["id"]).to eq(ReviewableNote.last.id)
-      end
-
       it "returns validation errors for invalid content" do
         post "/review/#{reviewable.id}/notes.json", params: { reviewable_note: { content: "" } }
 
@@ -101,55 +86,6 @@ RSpec.describe ReviewableNotesController do
 
       it "handles missing reviewable" do
         post "/review/999999/notes.json", params: { reviewable_note: { content: "Test note" } }
-
-        expect(response.status).to eq(404)
-      end
-    end
-
-    context "when user is a category group moderator" do
-      fab!(:group)
-      fab!(:category_a, :category)
-      fab!(:category_b, :category)
-      fab!(:reviewable_in_a) do
-        Fabricate(
-          :reviewable_flagged_post,
-          category: category_a,
-          topic: Fabricate(:topic, category: category_a),
-        )
-      end
-      fab!(:reviewable_in_b) do
-        Fabricate(
-          :reviewable_flagged_post,
-          category: category_b,
-          topic: Fabricate(:topic, category: category_b),
-        )
-      end
-
-      before do
-        SiteSetting.enable_category_group_moderation = true
-        Fabricate(:category_moderation_group, category: category_a, group:)
-        group.add(user)
-        sign_in(user)
-      end
-
-      it "can create notes on reviewables in their moderated category" do
-        post "/review/#{reviewable_in_a.id}/notes.json",
-             params: {
-               reviewable_note: {
-                 content: "Note on my category",
-               },
-             }
-
-        expect(response.status).to eq(200)
-      end
-
-      it "cannot create notes on reviewables in other categories" do
-        post "/review/#{reviewable_in_b.id}/notes.json",
-             params: {
-               reviewable_note: {
-                 content: "Should not work",
-               },
-             }
 
         expect(response.status).to eq(404)
       end

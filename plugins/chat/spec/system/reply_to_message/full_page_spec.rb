@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "Reply to message - channel - full page" do
+RSpec.describe "Reply to message - channel - full page", type: :system do
   let(:chat_page) { PageObjects::Pages::Chat.new }
   let(:channel_page) { PageObjects::Pages::ChatChannel.new }
   let(:thread_page) { PageObjects::Pages::ChatThread.new }
@@ -37,7 +37,6 @@ RSpec.describe "Reply to message - channel - full page" do
 
       expect(thread_page.messages).to have_message(text: "reply to message")
       expect(channel_page).to have_thread_indicator(original_message)
-      screenshot_marker(label: "chat-reply", only: "desktop")
     end
 
     context "when reloading after creating thread" do

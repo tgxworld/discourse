@@ -2,14 +2,16 @@ import Component from "@glimmer/component";
 import { cached } from "@glimmer/tracking";
 import { service } from "@ember/service";
 import { modifier as modifierFn } from "ember-modifier";
+import { eq } from "truth-helpers";
+import ConditionalLoadingSpinner from "discourse/components/conditional-loading-spinner";
 import { bind } from "discourse/lib/decorators";
 import isElementInViewport from "discourse/lib/is-element-in-viewport";
-import DConditionalLoadingSpinner from "discourse/ui-kit/d-conditional-loading-spinner";
 import { i18n } from "discourse-i18n";
 import ChatThreadListItem from "discourse/plugins/chat/discourse/components/chat/thread-list/item";
 import ChatTrackMessage from "discourse/plugins/chat/discourse/modifiers/chat/track-message";
 
 export default class ChatThreadList extends Component {
+  @service chat;
   @service chatApi;
   @service messageBus;
   @service chatTrackingStateManager;
@@ -59,6 +61,11 @@ export default class ChatThreadList extends Component {
   @cached
   get threadsCollection() {
     return this.chatApi.threads(this.args.channel.id, this.handleLoadedThreads);
+  }
+
+  @bind
+  loadThreads() {
+    this.threadsCollection.load({ limit: 10 });
   }
 
   get threadsManager() {
@@ -143,11 +150,6 @@ export default class ChatThreadList extends Component {
   }
 
   @bind
-  loadThreads() {
-    this.threadsCollection.load({ limit: 10 }).catch(() => {});
-  }
-
-  @bind
   onMessageBus(busData) {
     switch (busData.type) {
       case "delete":
@@ -160,8 +162,9 @@ export default class ChatThreadList extends Component {
   }
 
   handleDeleteMessage(data) {
-    const deletedOriginalMessageThread = this.threadsManager.threads.find(
-      (item) => item.originalMessage.id === data.deleted_id
+    const deletedOriginalMessageThread = this.threadsManager.threads.findBy(
+      "originalMessage.id",
+      data.deleted_id
     );
 
     if (!deletedOriginalMessageThread) {
@@ -172,8 +175,9 @@ export default class ChatThreadList extends Component {
   }
 
   handleRestoreMessage(data) {
-    const restoredOriginalMessageThread = this.threadsManager.threads.find(
-      (item) => item.originalMessage.id === data.chat_message.id
+    const restoredOriginalMessageThread = this.threadsManager.threads.findBy(
+      "originalMessage.id",
+      data.chat_message.id
     );
 
     if (!restoredOriginalMessageThread) {
@@ -220,7 +224,7 @@ export default class ChatThreadList extends Component {
             {{/if}}
           {{/each}}
 
-          <DConditionalLoadingSpinner
+          <ConditionalLoadingSpinner
             @condition={{this.threadsCollection.loading}}
           />
 

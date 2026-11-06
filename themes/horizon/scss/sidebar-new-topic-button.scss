@@ -1,4 +1,9 @@
-@use "lib/viewport";
+.navigation-controls {
+  .topic-drafts-menu-trigger,
+  .fk-d-button-tooltip {
+    display: none;
+  }
+}
 
 .has-ai-conversations-sidebar {
   .sidebar-new-topic-button__wrapper {
@@ -12,39 +17,6 @@
   &__wrapper {
     box-sizing: border-box;
     display: flex;
-    margin: var(--space-2) var(--space-6) 0 var(--space-2);
-    position: relative;
-
-    @include viewport.from(lg) {
-      &:not(:hover, :focus-visible) {
-        &::after {
-          content: "";
-          width: 100%;
-          height: var(--space-4);
-          position: absolute;
-          bottom: calc(var(--space-4) * -1);
-          background: linear-gradient(
-            to top,
-            transparent 0,
-            var(--background-color) 100%
-          );
-          z-index: 1;
-        }
-      }
-    }
-
-    &:focus-visible,
-    &:hover {
-      .discourse-no-touch & {
-        background-color: var(--button-box-shadow);
-        box-shadow: 0 0 0 4px var(--button-box-shadow);
-        color: var(--accent-text-color);
-
-        .d-icon {
-          color: var(--accent-text-color);
-        }
-      }
-    }
 
     .mobile-view & {
       margin: 0 0 1rem;
@@ -52,16 +24,9 @@
 
     &:has(.topic-drafts-menu-trigger) {
       .sidebar-new-topic-button {
-        &:focus-visible,
-        &:hover {
-          .discourse-no-touch & {
-            box-shadow: none;
-            background: light-dark(
-              oklch(from var(--accent-color) 40% c h),
-              oklch(from var(--accent-color) 50% c h)
-            );
-          }
-        }
+        border-radius: var(--d-button-border-radius) 0 0
+          var(--d-button-border-radius);
+        border-right: 1px solid var(--primary-300);
       }
     }
 
@@ -74,17 +39,6 @@
       margin: 0;
       border-radius: 0 var(--d-button-border-radius)
         var(--d-button-border-radius) 0;
-
-      &:focus-visible,
-      &:hover {
-        .discourse-no-touch & {
-          box-shadow: none;
-          background: light-dark(
-            oklch(from var(--accent-color) 40% c h),
-            oklch(from var(--accent-color) 50% c h)
-          );
-        }
-      }
     }
 
     .fk-d-button-tooltip:has(button[disabled]) {

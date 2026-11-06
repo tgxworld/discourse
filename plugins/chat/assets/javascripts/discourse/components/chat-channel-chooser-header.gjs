@@ -1,6 +1,6 @@
-import ComboBoxSelectBoxHeaderComponent from "discourse/select-kit/components/combo-box/combo-box-header";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
+import icon from "discourse/helpers/d-icon";
 import { i18n } from "discourse-i18n";
+import ComboBoxSelectBoxHeaderComponent from "select-kit/components/combo-box/combo-box-header";
 import ChannelTitle from "discourse/plugins/chat/discourse/components/channel-title";
 
 export default class ChatChannelChooserHeader extends ComboBoxSelectBoxHeaderComponent {
@@ -12,7 +12,7 @@ export default class ChatChannelChooserHeader extends ComboBoxSelectBoxHeaderCom
         {{i18n "chat.incoming_webhooks.channel_placeholder"}}
       {{/if}}
 
-      {{dIcon this.caretIcon class="angle-icon"}}
+      {{icon this.caretIcon class="caret-icon"}}
     </div>
   </template>
 }

@@ -10,7 +10,6 @@ ug:
       logs:
         staff_actions:
           actions:
-            update_automation: ئاپتوماتلاشتۇرۇشنى يېڭىلا
             delete_automation: ئاپتوماتلاشتۇرۇشنى ئۆچۈر
     discourse_automation:
       title: ئاپتوماتلاشتۇرۇش
@@ -59,17 +58,13 @@ ug:
             label: مەزمۇن
           delay:
             label: كېچىكىش (مىنۇت)
+          prefers_encrypt:
+            label: ئەگەر ئىشلەتكىلى بولسا شەخسىي ئۇچۇرنى شىفىرلايدۇ
         group:
           label: گۇرۇپپا
         text:
           label: تېكىست
       triggerables:
-        post_flag_created:
-          fields:
-            categories:
-              label: سەھىپە
-            tags:
-              label: بەلگە
         not_found: ئاپتوماتلاشتۇرۇشقا ئىشلىتىدىغان «%{automation}» نىڭ قوزغاتقۇچ «%{trigger}» نى تاپالمىدى، مۇناسىۋەتلىك قىستۇرمىنىڭ ئورنىتىلغانلىقىنى جەزملەڭ.
         user_badge_granted:
           fields:
@@ -205,6 +200,9 @@ ug:
               description: "تاللاشچان، پەقەت يازما بۇ ئىقتىدارلارغا ئىگە بولغاندىلا چەكلىك قوزغىتىلىدۇ"
           created: قۇرغان ۋاقتى
           edited: تەھرىرلەندى
+          topics: بارلىق تېما
+          personal_messages: شەخسىي ئۇچۇر
+          public_topics: ئاممىۋى تېما (بارلىق بىخەتەر سەھىپىنى ئۆز ئىچىگە ئالمايدۇ)
           with_images: سۈرەت
           with_links: ئۇلانما
           with_code: كود
@@ -381,10 +379,10 @@ ug:
             topic_id:
               label: تېما كىملىكى
             banner_until:
-              label: لەۋھە تېما دەپ تەڭشەيدىغان ۋاقىت
+              label: لوزۇنكا تېما دەپ تەڭشەيدىغان ۋاقىت
             user:
               label: ئىشلەتكۈچى
-              description: "لەۋھە قۇرغان ئىشلەتكۈچى (كۆڭۈلدىكى: سىستېما)"
+              description: "لوزۇنكا قۇرغان ئىشلەتكۈچى (كۆڭۈلدىكى: سىستېما)"
         flag_post_on_words:
           fields:
             words:
@@ -424,8 +422,6 @@ ug:
           fields:
             custom_field_name:
               label: "ئىشلەتكۈچى ئىختىيارى بۆلەك ئىسمى"
-        set_topic_timer:
-          title: تېما ۋاقىت خاتىرىلىگۈچ تەڭشىكى
       unnamed_automation: "ئاتسىز ئاپتوماتلاشتۇرۇش"
       models:
         script:
@@ -450,6 +446,8 @@ ug:
             label: نەشرى
           status:
             label: ھالەت
+          enabled:
+            label: قوزغىتىلدى
           disabled:
             label: چەكلەندى
           placeholders:

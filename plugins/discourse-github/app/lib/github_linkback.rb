@@ -20,8 +20,6 @@ class GithubLinkback
   end
 
   def should_enqueue?
-    return false if ignored_category?
-
     !!(
       SiteSetting.github_linkback_enabled? && SiteSetting.enable_discourse_github_plugin? &&
         @post.present? && @post.post_type == Post.types[:regular] && @post.raw =~ /github\.com/ &&
@@ -93,7 +91,6 @@ class GithubLinkback
 
   def create
     return [] if SiteSetting.github_linkback_access_token.blank?
-    return [] if client.backing_off?
 
     links = []
 
@@ -102,19 +99,14 @@ class GithubLinkback
       return [] if links.length() > SiteSetting.github_linkback_maximum_links
 
       links.each do |link|
-        begin
-          case link.type
-          when :commit
-            post_commit(link)
-          when :pr
-            post_pr_or_issue(link, :pr)
-          when :issue
-            post_pr_or_issue(link, :issue)
-          else
-            next
-          end
-        rescue Discourse::GithubApi::Error => e
-          Rails.logger.warn("Failed to post GitHub linkback for #{link.url}: #{e.message}")
+        case link.type
+        when :commit
+          post_commit(link)
+        when :pr
+          post_pr_or_issue(link, :pr)
+        when :issue
+          post_pr_or_issue(link, :issue)
+        else
           next
         end
 
@@ -133,17 +125,10 @@ class GithubLinkback
 
   private
 
-  def ignored_category?
-    return false if @post&.topic&.category_id.blank?
-
-    SiteSetting.github_linkback_ignored_categories_map.include?(@post.topic.category_id)
-  end
-
   def post_pr_or_issue(link, type)
     pr_or_issue_number = link.pr_number || link.issue_number
-
-    return if topic_already_linked_on_github?(link)
-
+    github_url =
+      "https://api.github.com/repos/#{link.project}/issues/#{pr_or_issue_number}/comments"
     comment =
       I18n.t(
         type == :pr ? "github_linkback.pr_template" : "github_linkback.issue_template",
@@ -151,11 +136,11 @@ class GithubLinkback
         post_url: "#{Discourse.base_url}#{@post.url}",
       )
 
-    client.post("/repos/#{link.project}/issues/#{pr_or_issue_number}/comments", { body: comment })
+    Excon.post(github_url, body: { body: comment }.to_json, headers: headers)
   end
 
   def post_commit(link)
-    return if topic_already_linked_on_github?(link)
+    github_url = "https://api.github.com/repos/#{link.project}/commits/#{link.sha}/comments"
 
     comment =
       I18n.t(
@@ -164,49 +149,14 @@ class GithubLinkback
         post_url: "#{Discourse.base_url}#{@post.url}",
       )
 
-    client.post("/repos/#{link.project}/commits/#{link.sha}/comments", { body: comment })
+    Excon.post(github_url, body: { body: comment }.to_json, headers: headers)
   end
 
-  def topic_already_linked_on_github?(link)
-    texts =
-      if link.type == :commit
-        fetch_commit_comment_texts(link.project, link.sha)
-      else
-        fetch_pr_or_issue_texts(link.project, link.pr_number || link.issue_number)
-      end
-
-    texts.any? { |text| text_links_to_topic?(text) }
-  rescue Discourse::GithubApi::Error
-    false
-  end
-
-  def fetch_commit_comment_texts(project, sha)
-    client
-      .get("/repos/#{project}/commits/#{sha}/comments", per_page: 100)
-      .map { |comment| comment["body"].to_s }
-  end
-
-  def fetch_pr_or_issue_texts(project, number)
-    [
-      client.get("/repos/#{project}/issues/#{number}")["body"].to_s,
-      *client
-        .get("/repos/#{project}/issues/#{number}/comments", per_page: 100)
-        .map { |comment| comment["body"].to_s },
-    ]
-  end
-
-  def text_links_to_topic?(text)
-    base_url = Discourse.base_url
-    text
-      .scan(%r{#{Regexp.escape(base_url)}/t/\S+})
-      .any? do |url|
-        route = Discourse.route_for(url)
-        route && route[:controller] == "topics" && route[:action] == "show" &&
-          (route[:id] || route[:topic_id]).to_i == @post.topic_id
-      end
-  end
-
-  def client
-    @client ||= Discourse::GithubApi.for(token: SiteSetting.github_linkback_access_token)
+  def headers
+    {
+      "Content-Type" => "application/json",
+      "Authorization" => "token #{SiteSetting.github_linkback_access_token}",
+      "User-Agent" => "Discourse-Github-Linkback",
+    }
   end
 end

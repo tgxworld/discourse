@@ -1,17 +1,14 @@
+import Component from "@glimmer/component";
 import { array } from "@ember/helper";
-import ChatChannel from "./chat-channel.gjs";
+import { service } from "@ember/service";
+import ChatChannel from "./chat-channel";
 
-const FullPageChat = <template>
-  {{#each (array @channel) as |channel|}}
-    <ChatChannel
-      @channel={{channel}}
-      @isFiltering={{@isFiltering}}
-      @onToggleFilter={{@onToggleFilter}}
-      @targetMessageId={{@targetMessageId}}
-    >
-      <:aboveMessages>{{yield to="aboveMessages"}}</:aboveMessages>
-    </ChatChannel>
-  {{/each}}
-</template>;
+export default class FullPageChat extends Component {
+  @service chat;
 
-export default FullPageChat;
+  <template>
+    {{#each (array @channel) as |channel|}}
+      <ChatChannel @channel={{channel}} @targetMessageId={{@targetMessageId}} />
+    {{/each}}
+  </template>
+}

@@ -5,11 +5,6 @@
 # https://translate.discourse.org/
 
 tr_TR:
-  admin_js:
-    admin:
-      site_settings:
-        categories:
-          discourse_local_dates: "Discourse Yerel Tarihleri"
   js:
     discourse_local_dates:
       relative_dates:
@@ -19,11 +14,11 @@ tr_TR:
         countdown:
           passed: tarih geçti
       title: Tarih / saat ekleyin
-      edit_date: 'Düzenle: %{date}'
       create:
         form:
           insert: Ekle
-          save: Kaydet
+          advanced_mode: Gelişmiş mod
+          simple_mode: Basit mod
           format_description: "Tarihi kullanıcıya göstermek için kullanılan format. Ofseti göstermek için Z ve saat dilimi adı için zz kullanın."
           timezones_title: Gösterilecek saat dilimleri
           timezones_description: Ön izleme ve geri dönüşte tarihleri göstermek için saat dilimleri kullanılır.

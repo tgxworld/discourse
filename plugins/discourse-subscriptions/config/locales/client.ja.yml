@@ -79,10 +79,10 @@ ja:
         select: サブスクリプションプランを選択する
         interval:
           adverb:
-            day: 毎日
-            week: 毎週
-            month: 毎月
-            year: 毎年
+            day: 日間
+            week: 週間
+            month: 月間
+            year: 年間
         payment_button: 購読
         success: ありがとうございました！サブスクリプションが作成されました。
         incomplete: お支払いは未完了です。あなたのサブスクリプションはお支払いが完了してから更新されます。
@@ -404,6 +404,8 @@ ja:
         confirm_payment: 支払いを確認
         success: 戻る
       admin:
+        unconfigured: 'Stripe が正しく構成されていません。詳細は、Discourse メタをご覧ください。'
+        on_meta: メタの Discourse サブスクリプション
         dashboard:
           title: ダッシュボード
           table:

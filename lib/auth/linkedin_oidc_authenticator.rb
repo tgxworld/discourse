@@ -53,12 +53,8 @@ class Auth::LinkedInOidcAuthenticator < Auth::ManagedAuthenticator
     "https://www.linkedin.com"
   end
 
-  def enable_setting
-    :enable_linkedin_oidc_logins
-  end
-
-  def required_settings
-    %i[linkedin_oidc_client_id linkedin_oidc_client_secret]
+  def enabled?
+    SiteSetting.enable_linkedin_oidc_logins
   end
 
   def register_middleware(omniauth)
@@ -68,7 +64,6 @@ class Auth::LinkedInOidcAuthenticator < Auth::ManagedAuthenticator
                           strategy = env["omniauth.strategy"]
                           strategy.options[:client_id] = SiteSetting.linkedin_oidc_client_id
                           strategy.options[:client_secret] = SiteSetting.linkedin_oidc_client_secret
-                          strategy.options[:client_options][:auth_scheme] = :request_body
                         }
   end
 

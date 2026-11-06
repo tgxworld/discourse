@@ -10,7 +10,6 @@
 enabled_site_setting :discourse_automation_enabled
 
 register_asset "stylesheets/common/discourse-automation.scss"
-register_svg_icon "wand-magic-sparkles"
 
 module ::DiscourseAutomation
   PLUGIN_NAME = "automation"
@@ -29,83 +28,59 @@ module ::DiscourseAutomation
 
   AUTO_RESPONDER_TRIGGERED_IDS = "auto_responder_triggered_ids_json"
   USER_GROUP_MEMBERSHIP_THROUGH_BADGE_BULK_MODIFY_START_COUNT = 1000
-  REMOVE_UPLOAD_MARKUP_FROM_DELETED_POSTS_BATCH_SIZE = 1000
 
-  RECURSION_DEPTH_KEY = :discourse_automation_recursion_depth
-  SUPPRESSED_TRIGGERS_KEY = :discourse_automation_suppressed_triggers
-
-  def self.set_active_automation(_id)
-    deprecated_active_automation_api
+  def self.set_active_automation(id)
+    Thread.current[:active_automation_id] = id
   end
 
   def self.get_active_automation
-    deprecated_active_automation_api
+    Thread.current[:active_automation_id]
   end
-
-  def self.suppress_triggers
-    raise StandardError, "Expecting a block" if !block_given?
-
-    Thread.current[SUPPRESSED_TRIGGERS_KEY] = suppressed_triggers_count + 1
-    begin
-      yield
-    ensure
-      decrement_suppressed_triggers_count
-    end
-  end
-
-  def self.triggers_suppressed?
-    suppressed_triggers_count.positive?
-  end
-
-  def self.recursion_depth
-    Thread.current[RECURSION_DEPTH_KEY] || 0
-  end
-
-  def self.max_recursion_depth
-    SiteSetting.discourse_automation_max_recursion_depth
-  end
-
-  def self.increment_recursion_depth
-    Thread.current[RECURSION_DEPTH_KEY] = recursion_depth + 1
-  end
-
-  def self.decrement_recursion_depth
-    new_depth = recursion_depth - 1
-    Thread.current[RECURSION_DEPTH_KEY] = new_depth.positive? ? new_depth : nil
-  end
-
-  def self.suppressed_triggers_count
-    Thread.current[SUPPRESSED_TRIGGERS_KEY] || 0
-  end
-
-  def self.decrement_suppressed_triggers_count
-    new_count = suppressed_triggers_count - 1
-    Thread.current[SUPPRESSED_TRIGGERS_KEY] = new_count.positive? ? new_count : nil
-  end
-
-  def self.deprecated_active_automation_api
-    Discourse.deprecate(
-      "DiscourseAutomation.set_active_automation/get_active_automation are deprecated. " \
-        "Use DiscourseAutomation.suppress_triggers instead.",
-      since: "2026.6.0-latest",
-      drop_from: "2026.8.0-latest",
-      raise_error: true,
-    )
-  end
-  private_class_method :suppressed_triggers_count,
-                       :decrement_suppressed_triggers_count,
-                       :deprecated_active_automation_api
 end
 
 require_relative "lib/discourse_automation/engine"
 
 after_initialize do
-  Dir
-    .glob("./lib/discourse_automation/scripts/*.rb", base: __dir__)
-    .each { |file| require_relative file }
-  Dir
-    .glob("./lib/discourse_automation/triggers/*.rb", base: __dir__)
-    .each { |file| require_relative file }
+  %w[
+    lib/discourse_automation/scripts
+    lib/discourse_automation/scripts/add_user_to_group_through_custom_field
+    lib/discourse_automation/scripts/append_last_checked_by
+    lib/discourse_automation/scripts/append_last_edited_by
+    lib/discourse_automation/scripts/auto_responder
+    lib/discourse_automation/scripts/auto_tag_topic
+    lib/discourse_automation/scripts/banner_topic
+    lib/discourse_automation/scripts/close_topic
+    lib/discourse_automation/scripts/flag_post_on_words
+    lib/discourse_automation/scripts/gift_exchange
+    lib/discourse_automation/scripts/group_category_notification_default
+    lib/discourse_automation/scripts/pin_topic
+    lib/discourse_automation/scripts/post
+    lib/discourse_automation/scripts/topic
+    lib/discourse_automation/scripts/send_pms
+    lib/discourse_automation/scripts/suspend_user_by_email
+    lib/discourse_automation/scripts/topic_required_words
+    lib/discourse_automation/scripts/user_global_notice
+    lib/discourse_automation/scripts/user_group_membership_through_badge
+    lib/discourse_automation/scripts/zapier_webhook
+    lib/discourse_automation/triggers
+    lib/discourse_automation/triggers/after_post_cook
+    lib/discourse_automation/triggers/api_call
+    lib/discourse_automation/triggers/category_created_edited
+    lib/discourse_automation/triggers/pm_created
+    lib/discourse_automation/triggers/point_in_time
+    lib/discourse_automation/triggers/post_created_edited
+    lib/discourse_automation/triggers/recurring
+    lib/discourse_automation/triggers/stalled_topic
+    lib/discourse_automation/triggers/stalled_wiki
+    lib/discourse_automation/triggers/topic_tags_changed
+    lib/discourse_automation/triggers/topic
+    lib/discourse_automation/triggers/user_added_to_group
+    lib/discourse_automation/triggers/user_badge_granted
+    lib/discourse_automation/triggers/user_promoted
+    lib/discourse_automation/triggers/user_removed_from_group
+    lib/discourse_automation/triggers/user_first_logged_in
+    lib/discourse_automation/triggers/user_updated
+  ].each { |path| require_relative path }
 
   reloadable_patch do
     Post.prepend DiscourseAutomation::PostExtension
@@ -115,12 +90,11 @@ after_initialize do
   add_admin_route "discourse_automation.title", "automation", use_new_show_route: true
 
   add_api_key_scope(
-    :automation,
+    :automations_trigger,
     {
-      trigger_automation: {
+      post: {
         actions: %w[discourse_automation/automations#trigger],
         params: %i[context],
-        path_params: %i[id],
         formats: :json,
       },
     },
@@ -219,20 +193,12 @@ after_initialize do
     )
   end
 
-  on(:topic_closed) do |topic, status|
-    ::DiscourseAutomation::EventHandlers.handle_topic_closed(topic, status)
-  end
-
   on(:post_created) do |post|
     DiscourseAutomation::EventHandlers.handle_post_created_edited(post, :create)
   end
 
   on(:post_edited) do |post|
     DiscourseAutomation::EventHandlers.handle_post_created_edited(post, :edit)
-  end
-
-  on(:flag_created) do |post_action|
-    DiscourseAutomation::EventHandlers.handle_post_flag_created(post_action) if post_action.post
   end
 
   on(:category_created) do |category|
@@ -260,12 +226,4 @@ after_initialize do
   register_user_custom_field_type(DiscourseAutomation::AUTOMATION_IDS_CUSTOM_FIELD, :json)
   register_post_custom_field_type(DiscourseAutomation::AUTOMATION_IDS_CUSTOM_FIELD, :json)
   register_post_custom_field_type("stalled_wiki_triggered_at", :string)
-
-  register_stat("total", stat_type: :automations) { DiscourseAutomation::Statistics.total }
-  register_stat("created", stat_type: :automations) { DiscourseAutomation::Statistics.created }
-  register_stat("edited", stat_type: :automations) { DiscourseAutomation::Statistics.edited }
-  register_stat("executed", stat_type: :automations) { DiscourseAutomation::Statistics.executed }
-  register_stat("executions", stat_type: :automations) do
-    DiscourseAutomation::Statistics.executions
-  end
 end

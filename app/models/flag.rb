@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 class Flag < ActiveRecord::Base
+  # TODO(2025-01-15): krisk remove
+  self.ignored_columns = ["custom_type"]
+
   DEFAULT_VALID_APPLIES_TO = %w[Post Topic]
   MAX_SYSTEM_FLAG_ID = 1000
   MAX_NAME_LENGTH = 200
@@ -8,7 +11,6 @@ class Flag < ActiveRecord::Base
   scope :enabled, -> { where(enabled: true) }
   scope :system, -> { where("id < 1000") }
   scope :custom, -> { where("id >= 1000") }
-  scope :applicable_to, ->(type) { where("? = ANY(applies_to)", type) }
 
   before_save :set_position
   before_save :set_name_key
@@ -21,8 +23,8 @@ class Flag < ActiveRecord::Base
   end
 
   def used?
-    PostAction.exists?(post_action_type_id: id) ||
-      ReviewableScore.exists?(reviewable_score_type: id)
+    PostAction.exists?(post_action_type_id: self.id) ||
+      ReviewableScore.exists?(reviewable_score_type: self.id)
   end
 
   def self.valid_applies_to_types
@@ -49,11 +51,11 @@ class Flag < ActiveRecord::Base
   end
 
   def system?
-    id.present? && id < MAX_SYSTEM_FLAG_ID
+    self.id.present? && self.id < MAX_SYSTEM_FLAG_ID
   end
 
   def applies_to?(type)
-    applies_to.include?(type)
+    self.applies_to.include?(type)
   end
 
   private
@@ -63,25 +65,12 @@ class Flag < ActiveRecord::Base
   end
 
   def set_position
-    self.position = Flag.maximum(:position).to_i + 1 if !position
+    self.position = Flag.maximum(:position).to_i + 1 if !self.position
   end
 
   def set_name_key
-    return if name_key.present? && !will_save_change_to_name?
-
-    prefix = system? ? "" : "custom_"
-    slug = name.squeeze(" ").gsub(" ", "_").gsub(/[^\w]/, "").downcase
-    base = slug.present? ? "#{prefix}#{slug}" : "#{prefix}flag"
-
-    suffix = 1
-    candidate = base
-
-    while Flag.unscoped.where(name_key: candidate).where.not(id: id).exists?
-      suffix += 1
-      candidate = "#{base}_#{suffix}"
-    end
-
-    self.name_key = candidate
+    prefix = self.system? ? "" : "custom_"
+    self.name_key = "#{prefix}#{self.name.squeeze(" ").gsub(" ", "_").gsub(/[^\w]/, "").downcase}"
   end
 end
 
@@ -90,20 +79,16 @@ end
 # Table name: flags
 #
 #  id               :bigint           not null, primary key
-#  applies_to       :string           not null, is an Array
-#  auto_action_type :boolean          default(FALSE), not null
-#  description      :text
-#  enabled          :boolean          default(TRUE), not null
 #  name             :string
 #  name_key         :string
+#  description      :text
 #  notify_type      :boolean          default(FALSE), not null
-#  position         :integer          not null
+#  auto_action_type :boolean          default(FALSE), not null
 #  require_message  :boolean          default(FALSE), not null
-#  score_type       :boolean          default(FALSE), not null
+#  applies_to       :string           not null, is an Array
+#  position         :integer          not null
+#  enabled          :boolean          default(TRUE), not null
 #  created_at       :datetime         not null
 #  updated_at       :datetime         not null
-#
-# Indexes
-#
-#  index_flags_on_name_key  (name_key) UNIQUE
+#  score_type       :boolean          default(FALSE), not null
 #

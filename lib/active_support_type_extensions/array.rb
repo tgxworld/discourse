@@ -2,13 +2,6 @@
 
 module ActiveSupportTypeExtensions
   class Array < ActiveModel::Type::Value
-    attr_reader :compact_blank
-
-    def initialize(compact_blank: false)
-      super()
-      @compact_blank = compact_blank
-    end
-
     def serializable?(_)
       false
     end
@@ -21,7 +14,7 @@ module ActiveSupportTypeExtensions
         value.map { |item| Integer(item, exception: false) || item }
       else
         ::Array.wrap(value)
-      end.tap { it.compact_blank! if compact_blank }
+      end
     end
   end
 end

@@ -19,12 +19,9 @@ module PageObjects
       end
 
       def click_assign_post(post)
-        within_post(post) do
-          if has_css?(".post-controls .post-action-menu__show-more", wait: 0)
-            find(".post-controls .post-action-menu__show-more").click
-          end
-          find(".post-action-menu__assign-post").click
-        end
+        find_post_action_button(post, :show_more).click
+        assign_post = within_post(post) { find(".post-action-menu__assign-post") }
+        assign_post.click
       end
 
       def click_edit_topic_assignment

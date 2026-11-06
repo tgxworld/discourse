@@ -9,5 +9,4 @@ sq:
     discourse_local_dates:
       create:
         form:
-          save: Ruani
           time_title: Koha

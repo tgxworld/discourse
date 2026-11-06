@@ -7,49 +7,68 @@ import { i18n } from "discourse-i18n";
 import LeftGutter from "discourse/plugins/chat/discourse/components/chat/message/left-gutter";
 import ChatFabricators from "discourse/plugins/chat/discourse/lib/fabricators";
 
-module("Component | Chat::Message::LeftGutter", function (hooks) {
-  setupRenderingTest(hooks);
+module(
+  "Discourse Chat | Component | Chat::Message::LeftGutter",
+  function (hooks) {
+    setupRenderingTest(hooks);
 
-  test("default", async function (assert) {
-    this.message = new ChatFabricators(getOwner(this)).message();
+    test("default", async function (assert) {
+      const self = this;
 
-    await render(<template><LeftGutter @message={{this.message}} /></template>);
+      this.message = new ChatFabricators(getOwner(this)).message();
 
-    assert.dom(".chat-message-left-gutter__date").exists();
-  });
+      await render(
+        <template><LeftGutter @message={{self.message}} /></template>
+      );
 
-  test("with reviewable", async function (assert) {
-    this.message = new ChatFabricators(getOwner(this)).message({
-      reviewable_id: 1,
+      assert.dom(".chat-message-left-gutter__date").exists();
     });
 
-    await render(<template><LeftGutter @message={{this.message}} /></template>);
+    test("with reviewable", async function (assert) {
+      const self = this;
 
-    assert
-      .dom(".chat-message-left-gutter__flag .svg-icon-title")
-      .hasAttribute("title", i18n("chat.flagged"));
-  });
+      this.message = new ChatFabricators(getOwner(this)).message({
+        reviewable_id: 1,
+      });
 
-  test("with flag status", async function (assert) {
-    this.message = new ChatFabricators(getOwner(this)).message({
-      user_flag_status: 0,
+      await render(
+        <template><LeftGutter @message={{self.message}} /></template>
+      );
+
+      assert
+        .dom(".chat-message-left-gutter__flag .svg-icon-title")
+        .hasAttribute("title", i18n("chat.flagged"));
     });
 
-    await render(<template><LeftGutter @message={{this.message}} /></template>);
+    test("with flag status", async function (assert) {
+      const self = this;
 
-    assert
-      .dom(".chat-message-left-gutter__flag .svg-icon-title")
-      .hasAttribute("title", i18n("chat.you_flagged"));
-  });
+      this.message = new ChatFabricators(getOwner(this)).message({
+        user_flag_status: 0,
+      });
 
-  test("bookmark", async function (assert) {
-    this.message = new ChatFabricators(getOwner(this)).message({
-      bookmark: new CoreFabricators(getOwner(this)).bookmark(),
+      await render(
+        <template><LeftGutter @message={{self.message}} /></template>
+      );
+
+      assert
+        .dom(".chat-message-left-gutter__flag .svg-icon-title")
+        .hasAttribute("title", i18n("chat.you_flagged"));
     });
 
-    await render(<template><LeftGutter @message={{this.message}} /></template>);
+    test("bookmark", async function (assert) {
+      const self = this;
 
-    assert.dom(".chat-message-left-gutter__date").exists();
-    assert.dom(".chat-message-left-gutter__bookmark").exists();
-  });
-});
+      this.message = new ChatFabricators(getOwner(this)).message({
+        bookmark: new CoreFabricators(getOwner(this)).bookmark(),
+      });
+
+      await render(
+        <template><LeftGutter @message={{self.message}} /></template>
+      );
+
+      assert.dom(".chat-message-left-gutter__date").exists();
+      assert.dom(".chat-message-left-gutter__bookmark").exists();
+    });
+  }
+);

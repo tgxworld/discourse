@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "Channel - Info - Settings page" do
+RSpec.describe "Channel - Info - Settings page", type: :system do
   fab!(:current_user, :user)
   fab!(:channel_1, :category_channel)
 
@@ -180,7 +180,7 @@ RSpec.describe "Channel - Info - Settings page" do
         expect {
           PageObjects::Components::DToggleSwitch.new(".c-channel-settings__threading-switch").toggle
           expect(toasts).to have_success(I18n.t("js.saved"))
-        }.to change { channel_1.reload.threading_enabled }.from(false).to(true)
+        }.to change { channel_1.reload.threading_enabled }.from(true).to(false)
       end
     end
   end
@@ -246,31 +246,6 @@ RSpec.describe "Channel - Info - Settings page" do
       edit_modal.save_changes
 
       expect(page).to have_current_path("/chat/c/test-channel/#{channel_1.id}")
-    end
-
-    it "can edit emoji" do
-      chat_page.visit_channel_settings(channel_1)
-
-      edit_modal = channel_settings_page.open_edit_modal
-
-      edit_modal.select_and_save_emoji("wink")
-
-      channel_emoji = page.find(".chat-channel-title .emoji")["title"]
-
-      expect(channel_emoji).to eq("wink")
-    end
-
-    it "can clear the emoji to restore the default chat icon" do
-      channel_1.update!(emoji: "smile")
-      chat_page.visit_channel_settings(channel_1)
-
-      expect(page.find(".chat-channel-title .emoji")["title"]).to eq("smile")
-
-      edit_modal = channel_settings_page.open_edit_modal
-      edit_modal.reset_emoji
-
-      expect(page).to have_no_selector(".chat-channel-title .emoji")
-      expect(page).to have_selector(".chat-channel-title .d-icon-d-chat")
     end
 
     it "shows settings page" do

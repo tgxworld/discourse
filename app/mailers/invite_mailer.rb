@@ -25,7 +25,7 @@ class InviteMailer < ActionMailer::Base
       )
 
     # If they were invited to a topic
-    if invite_to_topic && first_topic.present? && invite.invited_by.guardian.can_see?(first_topic)
+    if invite_to_topic && first_topic.present?
       # get topic excerpt
       topic_excerpt = ""
       topic_excerpt = first_topic.excerpt.tr("\n", " ") if first_topic.excerpt
@@ -41,7 +41,7 @@ class InviteMailer < ActionMailer::Base
         template: sanitized_message ? "custom_invite_mailer" : "invite_mailer",
         inviter_name: inviter_name,
         site_domain_name: Discourse.current_hostname,
-        invite_link: invite.link(with_email_token: !Invite.email_code_enabled?),
+        invite_link: invite.link(with_email_token: true),
         topic_title: topic_title,
         topic_excerpt: topic_excerpt,
         site_description: SiteSetting.site_description,
@@ -49,18 +49,12 @@ class InviteMailer < ActionMailer::Base
         user_custom_message: sanitized_message,
       )
     else
-      template =
-        DiscoursePluginRegistry.apply_modifier(
-          :invite_forum_mailer_template,
-          "invite_forum_mailer",
-          invite,
-        )
       build_email(
         invite.email,
-        template: sanitized_message ? "custom_invite_forum_mailer" : template,
+        template: sanitized_message ? "custom_invite_forum_mailer" : "invite_forum_mailer",
         inviter_name: inviter_name,
         site_domain_name: Discourse.current_hostname,
-        invite_link: invite.link(with_email_token: !Invite.email_code_enabled?),
+        invite_link: invite.link(with_email_token: true),
         site_description: SiteSetting.site_description,
         site_title: SiteSetting.title,
         user_custom_message: sanitized_message,

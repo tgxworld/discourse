@@ -1,7 +1,7 @@
 {
   "additionalProperties": false,
   "properties": {
-    "upload_type": {
+    "type": {
       "type": "string",
       "enum": [
         "avatar",
@@ -25,6 +25,6 @@
     }
   },
   "required": [
-    "upload_type"
+    "type"
   ]
 }

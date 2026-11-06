@@ -5,33 +5,20 @@
 # https://translate.discourse.org/
 
 tr_TR:
-  admin_js:
-    admin:
-      api:
-        scopes:
-          descriptions:
-            automation:
-              trigger_automation: "API aracılığıyla bir otomasyonu tetikle"
   js:
     admin:
       logs:
         staff_actions:
           actions:
-            create_automation: otomasyon oluştur
-            update_automation: otomasyonu güncelle
             delete_automation: otomasyonu sil
     discourse_automation:
       title: Otomasyon
-      table_title: Otomasyonlar
-      create: Otomasyon ekle
-      update: Otomasyonu güncelle
       back: Geri
       edit: Düzenle
       select_script: Komut dosyası seçin
       select_trigger: Tetikleyici seçin
       confirm_automation_reset: Bu eylem komut dosyası ve tetikleyici seçeneklerini sıfırlar, yeni durum kaydedilir, devam etmek istiyor musunuz?
       confirm_automation_trigger: Bu eylem otomasyonu tetikler, devam etmek istiyor musunuz?
-      no_automation_yet: Şu anda yapılandırılmış otomasyon yok.
       filter_placeholder: Ada veya açıklamaya göre filtreleyin...
       edit_automation:
         trigger_section:
@@ -67,19 +54,13 @@ tr_TR:
             label: Gövde
           delay:
             label: Gecikme (dakika)
+          prefers_encrypt:
+            label: Mümkünse kişisel mesajı şifreler
         group:
           label: Grup
         text:
           label: Metin
       triggerables:
-        post_flag_created:
-          fields:
-            categories:
-              label: Kategoriler
-              description: Sadece işaretli konu bu kategorilerde olduğunda tetikleyin
-            tags:
-              label: Etiketler
-              description: Sadece işaretli konu bu etiketlerden herhangi birine sahip olduğunda tetikle
         not_found: Otomasyon `%{automation}` için `%{trigger}` tetikleyicisi bulunamadı, ilgili eklentinin kurulu olduğundan emin olun
         user_badge_granted:
           fields:
@@ -182,22 +163,8 @@ tr_TR:
               description: 'İsteğe bağlı, yalnızca gönderide şu etiketlerden herhangi biri varsa tetiklenir:'
             restricted_categories:
               label: Kategoriler
-              description: İsteğe bağlı, yalnızca gönderinin konusu bu kategorilerdeyse tetiklenir
-            exclude_subcategories:
-              label: Alt kategorileri hariç tut
-              description: İsteğe bağlı, yalnızca gönderinin konusu yukarıda belirtilen kategorilerdeyse tetiklenir
-            restricted_archetype:
-              label: Konu Türü
-              description: İsteğe bağlı, yalnızca konularda veya kişisel mesajlarda tetiklenmesine izin verin
-            restricted_groups:
-              label: Kısıtlı gruplar
-              description: İsteğe bağlı, yalnızca gönderi kullanıcısı bu gruplardan herhangi birindeyse tetiklenir
             restricted_inbox_groups:
-              label: Kısıtlı gelen kutusu grupları
               description: İsteğe bağlı, yalnızca gönderinin konusu grup gelen kutularından birindeki kişisel bir mesajsa tetiklenir
-            excluded_groups:
-              label: Hariç tutulan gruplar
-              description: İsteğe bağlı, gönderi kullanıcısı bu gruplardan herhangi birine aitse tetikleyiciyi atlayın
             ignore_automated:
               label: Otomatikleştirmeyi yok say
               description: Gönderenin noreply e-postası varsa veya otomatik bir kaynaktan geliyorsa tetikleyiciyi atla. Yalnızca e-posta yoluyla oluşturulan gönderiler için geçerlidir
@@ -210,16 +177,10 @@ tr_TR:
             skip_via_email:
               label: "E-posta yoluyla atla"
               description: "Gönderi e-posta yoluyla oluşturulmuşsa tetikleyiciyi atla"
-            post_features:
-              label: Gönderi özellikleri
-              description: "İsteğe bağlı, tetiklemeyi yalnızca bu özelliklere sahip gönderilerle sınırlayın"
           created: Oluşturulma
           edited: Düzenlendi
-          topics: Konular (tüm kategoriler)
-          personal_messages: Yalnızca kişisel mesajlar
-          public_topics: Konular (sadece herkese açık kategoriler)
-          with_images: Görüntüler
-          with_links: Bağlantılar
+          with_images: Resimler
+          with_links: Bağlantı
           with_code: Kod
           with_uploads: Yüklemeler
         user_updated:
@@ -290,14 +251,6 @@ tr_TR:
               label: Etiketler
               description: 'İsteğe bağlı, yalnızca gönderide şu etiketlerden herhangi biri varsa tetiklenir:'
       scriptables:
-        email_on_flagged_post:
-          fields:
-            email_template:
-              label: E-posta şablonu
-              description: Otomasyon yer tutucularını destekler
-            recipients:
-              label: Alıcılar
-              description: Bildirilecek kullanıcılar veya e-posta adresleri
         not_found: Otomasyon `%{automation}` için `%{script}` komut dosyası bulunamadı, ilgili eklentinin kurulu olduğundan emin olun
         zapier_webhook:
           fields:
@@ -320,12 +273,6 @@ tr_TR:
             tags:
               label: Etiketler
               description: Konuya eklenecek etiketlerin listesi.
-            closed_automatically:
-              label: Otomatik olarak kapatılan konular
-              description: Otomatik olarak kapatılan konulara etiket ekleyin.
-            closed_manually:
-              label: Elle kapatılan konular
-              description: Manuel olarak kapatılan başlıklara etiket ekleyin.
         post:
           fields:
             creator:
@@ -436,7 +383,6 @@ tr_TR:
               label: Kişisel mesajlar
             sender:
               label: Kişisel mesajı gönderen
-              description: "Gönderenin alıcıya kişisel mesaj göndermek için doğru izinlere sahip olduğundan emin olun"
         close_topic:
           fields:
             topic:
@@ -451,13 +397,6 @@ tr_TR:
           fields:
             custom_field_name:
               label: "Kullanıcı Özel Alan adı"
-        set_topic_timer:
-          title: Konu Zamanlayıcısını ayarla
-          fields:
-            type:
-              label: Zamanlayıcı Türü
-            duration:
-              label: Zamanlayıcı Süresi
       unnamed_automation: "Adsız otomasyon"
       models:
         script:
@@ -467,14 +406,6 @@ tr_TR:
           name:
             label: Tetikleyici
         automation:
-          runs_today: "Bugün %{count}"
-          runs_this_week: "Bu hafta %{count}"
-          runs_this_month: "Bu ay %{count}"
-          recent_errors:
-            one: "Son zamanlarda %{count} hata"
-            other: "Son zamanlarda %{count} hata"
-          runs:
-            label: Çalıştırma sayısı
           name:
             label: Ad
           trigger:
@@ -486,15 +417,12 @@ tr_TR:
           status:
             label: Durum
           enabled:
-            label: "Otomasyonu etkinleştirin"
+            label: Etkin
           disabled:
             label: Devre Dışı
           placeholders:
             label: Yer Tutucular
           last_updated_at:
             label: Son güncelleme
-          last_run:
-            label: Son çalıştırma
           last_updated_by:
             label: 'Güncelleyen:'
-          enable_toggle_disabled: "Gerekli tüm alanlar tamamlandıktan sonra bu otomasyonu etkinleştirebilirsiniz."

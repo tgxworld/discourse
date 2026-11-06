@@ -14,11 +14,6 @@
 .spoiler-blurred {
   @include unselectable;
   cursor: pointer;
-
-  // Allow text selection in cooked post content for quoting
-  .cooked & {
-    user-select: text;
-  }
   filter: blur(0.5em);
 
   a,
@@ -58,16 +53,11 @@
   }
 }
 
-.ProseMirror .spoiled {
-  padding-inline: var(--space-1);
-
-  &:not(.spoiler-blurred) {
-    border-radius: var(--d-border-radius);
+.ProseMirror {
+  .spoiled:not(.spoiler-blurred) {
     box-shadow: 0 0 4px 4px rgb(var(--primary-rgb), 0.2);
-    max-width: 100%;
-  }
-
-  &.spoiler-blurred {
-    user-select: auto;
+    inline-size: max-content;
+    padding-left: 2px;
+    padding-right: 2px;
   }
 }

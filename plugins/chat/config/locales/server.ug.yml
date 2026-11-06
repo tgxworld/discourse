@@ -9,6 +9,8 @@ ug:
     chat_separate_sidebar_mode: "مۇنبەر ۋە سۆھبەتكە ئايرىم يان بالداق ھالىتىنى كۆرسىتىدۇ."
     chat_enabled: "سۆھبەتنى قوزغىتىدۇ."
     enable_public_channels: "سەھىپە ئاساسىدىكى ئاممىۋى قانال قوزغىتىلدى."
+    chat_allowed_groups: "بۇ گۇرۇپپىدىكى ئىشلەتكۈچىلەر سۆھبەتلىشەلەيدۇ. دىققەت باشقۇرغۇچى ۋە رىياسەتچىلەر ھەمىشە سۆھبەتنى زىيارەت قىلالايدۇ."
+    chat_channel_retention_days: "ئادەتتىكى قانالدىكى سۆھبەت ئۇچۇرى بۇ كۈنلەردە ساقلىنىدۇ. «0» گە تەڭشەلسە ئۇچۇرلار مەڭگۈلۈك ساقلىنىدۇ."
     chat_dm_retention_days: "شەخسىي سۆھبەت قانىلىدىكى سۆھبەت ئۇچۇرى بۇ كۈنلەردە ساقلىنىدۇ. «0» گە تەڭشەلسە ئۇچۇرلار مەڭگۈلۈك ساقلىنىدۇ."
     chat_auto_silence_duration: "ئىشلەتكۈچى سۆھبەت ئۇچۇرى قۇرۇش چېكىدىن ھالقىغاندا ئۈنسىزلەيدىغان مىنۇت سانى. «0» گە تەڭشەلسە ئۆزلۈكىدىكى ئۈنسىزلەشنى چەكلەيدۇ."
     chat_allowed_messages_for_trust_level_0: "ئىشەنچ دەرىجىسى 0 بولغان ئىشلەتكۈچىنىڭ 30 سېكۇنتتا يوللىيالايدىغان ئۇچۇر سانى. «0» گە تەڭشەلسە چەكلىمە بولمايدۇ."
@@ -28,6 +30,7 @@ ug:
     chat_editing_grace_period_max_diff_low_trust: "سۆھبەتنى تەھرىرلەش سۈرۈك ۋاقتىدا ئۆزگەرتىشكە يول قويىدىغان ئەڭ كۆپ ھەرپ سانى، ئەگەر بۇ قىممەتتىن ئېشىپ كەتسە سۆھبەت يىنىدا (تەھرىرلەنگەن) بەلگە كۆرۈنىدۇ (ئىشەنچلىك دەرىجىسى 0 ۋە 1)."
     chat_editing_grace_period_max_diff_high_trust: "سۆھبەتنى تەھرىرلەش سۈرۈك ۋاقتىدا ئۆزگەرتىشكە يول قويىدىغان ئەڭ كۆپ ھەرپ سانى، ئەگەر بۇ قىممەتتىن ئېشىپ كەتسە سۆھبەت يىنىدا (تەھرىرلەنگەن) بەلگە كۆرۈنىدۇ (ئىشەنچلىك دەرىجىسى2 ۋە ئۇنىڭدىن يۇقىرى)."
     chat_preferred_index: "يۈكلىگەندىكى/سۆھبەتلەشكەندىكى ياقتۇرىدىغان بەتكۈچ."
+    allow_chat_in_anonymous_mode: "بۇ تەڭشەك قوزغىتىلسا تور بېكىتىڭىزنى نامسىز نامسىز زىيارەت قىلغان ئىشلەتكۈچى سۆھبەتلىشىشنى ئىشلىتەلەيدۇ. بۇ تەڭشەك «نامسىز ھالەتكە يول قوي» تەڭشىنىڭ قوزغىتىلىشىنى تەلەپ قىلىدۇ."
     errors:
       chat_default_channel: "سۈكۈتتىكى سۆھبەت قانىلى چوقۇم ئاممىۋى قانال بولۇشى كېرەك."
       direct_message_enabled_groups_invalid: "بۇ تەڭشەك ئۈچۈن كەم دېگەندە بىر گۇرۇپپىنى بەلگىلىشىڭىز كېرەك. ئەگەر باشقۇرغۇچىلاردىن باشقا ھېچكىمنىڭ بىۋاسىتە ئۇچۇر ئەۋەتىشىنى خالىمىسىڭىز، باشقۇرغۇچى گۇرۇپپىسىنى تاللاڭ."
@@ -55,17 +58,7 @@ ug:
 
         قايتا سىناش ئۈچۈن %{channel_url} قانالنى زىيارەت قىلىڭ.
   chat:
-    design_wizard_homepage_name: "سۆھبەت"
     deleted_chat_username: ئۆچۈرۈلدى
-    crawler:
-      directory_title: "سۆھبەت قانىلى"
-      nav_title: "سۆھبەت"
-      members_count:
-        one: "%{count} ئەزا"
-        other: "%{count} ئەزا"
-      thread_replies:
-        one: "%{count} جاۋاب"
-        other: "%{count} جاۋاب"
     errors:
       users_cant_be_added_to_channel: "ئىشلەتكۈچىنى بۇ قانالغا قوشقىلى بولمايدۇ."
       user_cant_be_removed_from_channel: "ئىشلەتكۈچىنى بۇ قانالدىن چىقىرىۋەتكىلى بولمايدۇ"
@@ -113,14 +106,6 @@ ug:
     reviewables:
       message_already_handled: "رەھمەت، ئەمما بىز بۇ ئۇچۇرنى تەكشۈرگەن ھەمدە ئۇنى قايتا پاش قىلىشنىڭ ھاجىتى يوق قارىغان."
       actions:
-        no_action_message:
-          title: "تەدبىر قوللانمىغان"
-        delete_message:
-          title: "ئۇچۇر ئۆچۈر"
-          description: "ئۇچۇرنى مەڭگۈلۈك ئۆچۈرىدۇ."
-        restore_message:
-          title: "ئۇچۇرنى ئەسلىگە كەلتۈر"
-          description: "ئۇچۇرنى ئىشلەتكۈچى كۆرەلەيدىغان ھالەتتە ئەسلىگە كەلتۈرىدۇ."
         agree:
           title: "قوشۇل…"
         agree_and_keep_message:
@@ -142,10 +127,16 @@ ug:
           title: "ئۇچۇر ئۆچۈر"
           description: "ئۇچۇرنى ئۆچۈرىدۇ شۇڭا ئىشلەتكۈچى ئۇنى كۆرەلمەيدۇ."
         delete_and_agree:
+          title: "پاش قىلىشقا پەرۋا قىلماي ئۇچۇرنى ئۆچۈرىدۇ"
           description: "پاش قىلىشقا پەرۋا قىلماي ئۇنى پاش قىلىش قاتارىدىن چىقىرىۋېتىپ ئۇچۇرنى ئۆچۈرىدۇ."
         disagree_and_restore:
           title: "قوشۇلماي ئۇچۇرنى ئەسلىگە كەلتۈر"
           description: "ئۇچۇرنى ھەممە ئىشلەتكۈچى كۆرەلەيدىغان ھالەتتە ئەسلىگە كەلتۈرىدۇ."
+        disagree:
+          title: "قوشۇلما"
+        ignore:
+          title: "ھېچ ئىش قىلما"
+          description: "پاش قىلىشنى ئۆچرەتتىن چىقىرىۋېتىپ پەرۋا قىلماي، ھېچقانداق مەشغۇلات قىلمايدۇ."
       direct_messages:
         transcript_title: "%{channel_name} دىكى ئىلگىرىكى ئۇچۇرنىڭ مەزمۇنى"
         transcript_body: "تېخىمۇ كۆپ ئارقا كۆرۈنۈش مەزمۇنى بىلەن تەمىنلەش ئۈچۈن، بۇ سۆھبەتتە ئالدىنقى ئۇچۇرنىڭ مەزمۇنلىرىنىمۇ قوشتۇق (ئەڭ كۆپ بولغاندا 10):\n\n%{transcript}"
@@ -192,7 +183,7 @@ ug:
         slug_contains_non_ascii_chars: "ascii بولمىغان ھەرپلەر بار"
         is_already_in_use: "ئىشلىتىلىۋاتىدۇ"
     bookmarkable:
-      notification_title_channel: "%{channel_name} دىكى ئۇچۇر"
+      notification_title: "%{channel_name} دىكى ئۇچۇر"
     personal_chat: "شەخسىي سۆھبەت"
     onebox:
       inline_to_message: "%{username} – #%{chat_channel} نىڭ #%{message_id} ئۇچۇرى"
@@ -220,17 +211,10 @@ ug:
         other_type: "%{username} شەخسىي سۆھبەتتە %{identifier} ئاتالدى"
       new_chat_message: '%{username}] «%{channel}» دا ئۇچۇر يوللىدى'
       new_direct_chat_message: "%{username} شەخسىي سۆھبەتتە ئۇچۇر يوللىدى"
-    actions:
-      chat_reply:
-        title: جاۋاب
   discourse_automation:
     scriptables:
       send_chat_message:
         title: سۆھبەت ئۇچۇرى يوللا
-  discourse_workflows:
-    chat_approval:
-      default_approve_label: "تەستىقلا"
-      default_deny_label: "رەت قىل"
   reviewable_score_types:
     needs_review:
       title: "تەستىقلاش كېرەك"
@@ -257,14 +241,19 @@ ug:
         watched_thread:
           one: "[%{site_name}] نىڭ %{channel} دىكى يېڭى سۆزلىشىش ئۇچۇرى"
           other: "[%{site_name}] نىڭ %{channel} دىكى يېڭى سۆزلىشىش ئۇچۇرى"
+        watched_threads:
+          one: "%{site_name} تىكى %{channel} ۋە باشقا %{count} يېڭى تېما ئۇچۇرى"
+          other: "%{site_name} تىكى %{channel} ۋە باشقا %{count} يېڭى تېما ئۇچۇرى"
         chat_dm_1:
           one: "[%{site_name}] %{name} دىن كەلگەن يېڭى ئۇچۇر"
           other: "[%{site_name}] %{name} دىن كەلگەن يېڭى ئۇچۇر"
         chat_dm_2: "[%{site_name}] %{name_1} ۋە %{name_2} دىن كەلگەن يېڭى ئۇچۇر"
+        chat_dm_3_or_more: "[%{site_name}] %{name} ۋە باشقا %{count} ئىشلەتكۈچىدىن كەلگەن يېڭى ئۇچۇر"
         chat_channel_1:
           one: "[%{site_name}] %{channel} دىكى يېڭى ئۇچۇر"
           other: "[%{site_name}] %{channel} دىكى يېڭى ئۇچۇر"
         chat_channel_2: "[%{site_name}] %{channel_1} ۋە %{channel_2} دىكى يېڭى ئۇچۇر"
+        chat_channel_3_or_more: "[%{site_name}] %{channel} ۋە باشقا %{count} دىكى يېڭى ئۇچۇر"
         chat_channel_and_dm: "[%{site_name}] %{channel} ۋە %{name} دىن كەلگەن يېڭى ئۇچۇر"
       unsubscribe: "سىز ئايرىلغاندا %{site_link} دىن بۇ سۆھبەتنىڭ خۇلاسىسى ئەۋەتىلدى. %{email_preferences_link} نى ئۆزگەرتىڭ ياكى %{unsubscribe_link} مۇشتەرىلىكتىن چېكىنىڭ."
       unsubscribe_no_link: "سىز ئايرىلغاندا %{site_link} دىن بۇ سۆھبەتنىڭ خۇلاسىسى ئەۋەتىلدى. %{email_preferences_link} نى ئۆزگەرتىڭ."
@@ -274,8 +263,10 @@ ug:
       view_more:
         one: "باشقا %{count} ئۇچۇرنى كۆرسەت"
         other: "باشقا %{count} ئۇچۇرنى كۆرسەت"
+      your_chat_settings: "سۆھبەت ئېلخەت چاستوتا مايىللىقى"
   unsubscribe:
     chat_summary:
+      select_title: "سۆھبەت خۇلاسە ئېلخەت چاستوتا تەڭشىكى:"
       never: ھەرگىز
       when_away: ئايرىلغاندىلا
   category:

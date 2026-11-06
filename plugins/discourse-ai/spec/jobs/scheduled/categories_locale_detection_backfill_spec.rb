@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
 describe Jobs::CategoriesLocaleDetectionBackfill do
-  subject(:job) { described_class.new }
-
   fab!(:category) { Fabricate(:category, locale: nil) }
+  subject(:job) { described_class.new }
 
   before do
     assign_fake_provider_to(:ai_default_llm_model)
@@ -11,8 +10,6 @@ describe Jobs::CategoriesLocaleDetectionBackfill do
     SiteSetting.ai_translation_enabled = true
     SiteSetting.ai_translation_backfill_hourly_rate = 100
     SiteSetting.content_localization_supported_locales = "en"
-    SiteSetting.ai_translation_category_scope = "include"
-    SiteSetting.ai_translation_categories = category.id.to_s
   end
 
   it "does nothing when AI is disabled" do
@@ -43,27 +40,20 @@ describe Jobs::CategoriesLocaleDetectionBackfill do
     job.execute({})
   end
 
-  it "does nothing when no categories are included" do
-    SiteSetting.ai_translation_category_scope = "include"
-    SiteSetting.ai_translation_categories = ""
-    DiscourseAi::Translation::CategoryLocaleDetector.expects(:detect_locale).never
-
-    job.execute({})
-  end
-
-  it "detects locale for selected categories with nil locale" do
-    unselected = Fabricate(:category, locale: nil)
-    SiteSetting.ai_translation_category_scope = "include"
-    SiteSetting.ai_translation_categories = category.id.to_s
-
-    DiscourseAi::Translation::CategoryLocaleDetector.expects(:detect_locale).with(category).once
-
-    DiscourseAi::Translation::CategoryLocaleDetector.expects(:detect_locale).with(unselected).never
+  it "detects locale for categories with nil locale" do
+    DiscourseAi::Translation::CategoryLocaleDetector
+      .expects(:detect_locale)
+      .with(is_a(Category))
+      .times(Category.count)
 
     job.execute({})
   end
 
   it "handles detection errors gracefully" do
+    DiscourseAi::Translation::CategoryLocaleDetector
+      .expects(:detect_locale)
+      .with(is_a(Category))
+      .at_least_once
     DiscourseAi::Translation::CategoryLocaleDetector
       .expects(:detect_locale)
       .with(category)
@@ -76,17 +66,51 @@ describe Jobs::CategoriesLocaleDetectionBackfill do
   it "logs a summary after running" do
     DiscourseAi::Translation::CategoryLocaleDetector.stubs(:detect_locale)
     DiscourseAi::Translation::VerboseLogger.expects(:log).with(
-      includes("Detected 1 category locales"),
+      includes("Detected #{Category.count} category locales"),
     )
 
     job.execute({})
   end
 
+  describe "with public content limitation" do
+    fab!(:private_category) { Fabricate(:private_category, group: Group[:staff], locale: nil) }
+
+    before do
+      # catch-all for other categories
+      DiscourseAi::Translation::CategoryLocaleDetector
+        .expects(:detect_locale)
+        .with(is_a(Category))
+        .at_least_once
+
+      SiteSetting.ai_translation_backfill_limit_to_public_content = true
+    end
+
+    it "only processes public categories" do
+      DiscourseAi::Translation::CategoryLocaleDetector.expects(:detect_locale).with(category).once
+      DiscourseAi::Translation::CategoryLocaleDetector
+        .expects(:detect_locale)
+        .with(private_category)
+        .never
+
+      job.execute({})
+    end
+
+    it "processes all categories when setting is disabled" do
+      SiteSetting.ai_translation_backfill_limit_to_public_content = false
+
+      DiscourseAi::Translation::CategoryLocaleDetector.expects(:detect_locale).with(category).once
+      DiscourseAi::Translation::CategoryLocaleDetector
+        .expects(:detect_locale)
+        .with(private_category)
+        .once
+
+      job.execute({})
+    end
+  end
+
   it "limits processing to the backfill rate" do
     SiteSetting.ai_translation_backfill_hourly_rate = 1
-    extra = Fabricate(:category, locale: nil)
-    SiteSetting.ai_translation_category_scope = "include"
-    SiteSetting.ai_translation_categories = "#{category.id}|#{extra.id}"
+    Fabricate(:category, locale: nil)
 
     DiscourseAi::Translation::CategoryLocaleDetector.expects(:detect_locale).once
 

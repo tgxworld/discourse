@@ -1,22 +1,16 @@
 # frozen_string_literal: true
 
 class Stat
-  def initialize(name, expose_via_api: false, stat_type: nil, &block)
+  def initialize(name, expose_via_api: false, &block)
     @name = name
     @expose_via_api = expose_via_api
     @block = block
-    @stat_type = stat_type
-    validate_stat_type
   end
 
-  attr_reader :name, :expose_via_api, :stat_type
+  attr_reader :name, :expose_via_api
 
   def calculate
-    if @stat_type
-      { stat_type.to_sym => @block.call.transform_keys { |key| build_key(key) } }
-    else
-      @block.call.transform_keys { |key| build_key(key) }
-    end
+    @block.call.transform_keys { |key| build_key(key) }
   rescue StandardError => err
     Discourse.warn_exception(err, message: "Unexpected error when collecting #{@name} About stats.")
     {}
@@ -32,18 +26,8 @@ class Stat
 
   private
 
-  def validate_stat_type
-    return if !@stat_type
-    if !@stat_type.is_a?(Symbol) || !@stat_type.match?(/^[a-z0-9_]+$/) || @stat_type.length > 20
-      raise ArgumentError,
-            "Stat type (#{@stat_type}) must be a valid symbol, is all lowercase, only contains letters and numbers, and is < 20 characters"
-    end
-  end
-
-  # The key vars here are the keys in the result of the stat block,
-  # e.g. 7_days, 30_days, count
   def build_key(key)
-    :"#{@name}_#{key}"
+    "#{@name}_#{key}".to_sym
   end
 
   def self._all_stats
@@ -51,7 +35,7 @@ class Stat
   end
 
   def self.calculate(stats)
-    stats.map { |stat| stat.calculate }.reduce({}) { |memo, result| memo.deep_merge(result) }
+    stats.map { |stat| stat.calculate }.reduce(Hash.new, :merge)
   end
 
   def self.core_stats
@@ -62,14 +46,6 @@ class Stat
       Stat.new("active_users", expose_via_api: true) { Statistics.active_users },
       Stat.new("likes", expose_via_api: true) { Statistics.likes },
       Stat.new("participating_users", expose_via_api: true) { Statistics.participating_users },
-      # Deliberately not exposed via the API: these describe how the site's own
-      # admin set the site up, which is of no interest to its members.
-      Stat.new("steps", stat_type: :onboarding) { Statistics.onboarding_steps },
-      Stat.new("panel", stat_type: :onboarding) { Statistics.onboarding_panel },
-      Stat.new("minutes_to", stat_type: :onboarding) { Statistics.onboarding_minutes_to },
-      Stat.new("categories", stat_type: :category_types) do
-        Categories::TypeRegistry.configured_counts
-      end,
     ]
 
     if SiteSetting.display_eu_visitor_stats

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "AI Tool Management" do
+describe "AI Tool Management", type: :system do
   fab!(:admin)
   let(:page_header) { PageObjects::Components::DPageHeader.new }
 
@@ -42,9 +42,11 @@ describe "AI Tool Management" do
     tool_presets = PageObjects::Components::DMenu.new(find(".ai-tool-list-editor__new-button"))
     tool_presets.option(".btn[data-option='exchange_rate']").click
 
-    form = PageObjects::Components::FormKit.new(".ai-tool-editor")
-    expect(form.collection_field("parameters", 0, "required")).to be_checked
-    expect(form.collection_field("parameters", 0, "isEnum")).to be_unchecked
+    required_toggle_css = "#control-parameters-0-required .form-kit__control-checkbox"
+    enum_toggle_css = "#control-parameters-0-isEnum .form-kit__control-checkbox"
+
+    expect(page.find(required_toggle_css).checked?).to eq(true)
+    expect(page.find(enum_toggle_css).checked?).to eq(false)
 
     # not allowed to test yet
     expect(page).not_to have_button(".ai-tool-editor__test-button")
@@ -59,10 +61,10 @@ describe "AI Tool Management" do
 
     ensure_can_run_test
 
-    expect(form.collection_field("parameters", 0, "required")).to be_checked
-    expect(form.collection_field("parameters", 0, "isEnum")).to be_unchecked
+    expect(page.first(required_toggle_css).checked?).to eq(true)
+    expect(page.first(enum_toggle_css).checked?).to eq(false)
 
-    visit "/admin/plugins/discourse-ai/ai-agents/new"
+    visit "/admin/plugins/discourse-ai/ai-personas/new"
 
     tool_id = AiTool.order("id desc").limit(1).pluck(:id).first
     tool_selector = PageObjects::Components::SelectKit.new("#control-tools .select-kit")

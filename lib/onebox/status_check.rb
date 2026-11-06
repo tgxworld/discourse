@@ -35,7 +35,7 @@ module Onebox
     private
 
     def check
-      status, _headers = FinalDestination.new(@url).small_get({})
+      status, headers = FinalDestination.new(@url).small_get({})
       @status = status
     rescue Timeout::Error, Errno::ECONNREFUSED, Net::HTTPError, SocketError
       @status = 0

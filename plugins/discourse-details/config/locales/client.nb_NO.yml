@@ -6,6 +6,8 @@
 
 nb_NO:
   js:
+    details:
+      title: Skjul Detaljer
     composer:
       details_title: Sammendrag
       details_text: "Denne teksten vil skjules"

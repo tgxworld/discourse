@@ -21,15 +21,14 @@ class TopicList
     @preload.each { |preload| preload.call(topics, object) } if @preload
   end
 
-  def self.on_preload_user_ids(enabled: -> { true }, &block)
-    (@preload_user_ids ||= Set.new) << { block:, enabled: }
+  def self.on_preload_user_ids(&blk)
+    (@preload_user_ids ||= Set.new) << blk
   end
 
   def self.preload_user_ids(topics, user_ids, object)
     if @preload_user_ids
       @preload_user_ids.each do |preload_user_ids|
-        next unless preload_user_ids[:enabled].call
-        user_ids = preload_user_ids[:block].call(topics, user_ids, object)
+        user_ids = preload_user_ids.call(topics, user_ids, object)
       end
     end
     user_ids
@@ -47,7 +46,6 @@ class TopicList
     :category,
     :publish_read_state,
     :filter_option_info,
-    :filter_new_topic_ids,
   )
 
   def initialize(filter, current_user, topics, opts = nil)
@@ -107,7 +105,7 @@ class TopicList
     group_ids = []
     @topics.each do |ft|
       user_ids << ft.user_id << ft.last_post_user_id << ft.featured_user_ids << ft.allowed_user_ids
-      group_ids |= ft.allowed_group_ids || []
+      group_ids |= (ft.allowed_group_ids || [])
     end
 
     user_ids = TopicList.preload_user_ids(@topics, user_ids, self)
@@ -135,18 +133,13 @@ class TopicList
       ft.topic_list = self
     end
 
-    category_associations = [:parent_category]
-    category_associations << :localizations if SiteSetting.content_localization_enabled
-
     topic_preloader_associations = [
       :image_upload,
       { topic_thumbnails: :optimized_image },
-      { category: category_associations },
+      { category: :parent_category },
     ]
 
     topic_preloader_associations << :localizations if SiteSetting.content_localization_enabled
-
-    topic_preloader_associations << :first_post
 
     DiscoursePluginRegistry.topic_preloader_associations.each do |a|
       fields = a[:fields]
@@ -180,10 +173,12 @@ class TopicList
 
   def category_user_lookup
     @category_user_lookup ||=
-      if @current_user
-        CategoryUser.lookup_for(@current_user, @topics.map(&:category_id).uniq)
-      else
-        []
+      begin
+        if @current_user
+          CategoryUser.lookup_for(@current_user, @topics.map(&:category_id).uniq)
+        else
+          []
+        end
       end
   end
 end

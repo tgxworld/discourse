@@ -11,7 +11,7 @@ export default class AiEmbedding extends RestModel {
       "tokenizer_class",
       "dimensions",
       "url",
-      "ai_secret_id",
+      "api_key",
       "max_sequence_length",
       "provider_params",
       "pg_function",
@@ -30,7 +30,6 @@ export default class AiEmbedding extends RestModel {
 
   async testConfig() {
     return await ajax(`/admin/plugins/discourse-ai/ai-embeddings/test.json`, {
-      type: "POST",
       data: { ai_embedding: this.createProperties() },
     });
   }

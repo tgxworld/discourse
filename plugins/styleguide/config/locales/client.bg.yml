@@ -8,14 +8,6 @@ bg:
   js:
     styleguide:
       sections:
-        context_menu:
-          actions:
-            delete: "Изтрий"
-        reorderable_list:
-          policies_pinned: "Закована"
-          policies_required: "Задъжителни"
-          table_type: "Тип"
-          cross_list_primary: "Основен"
         colors:
           title: "Цветове"
         icons:
@@ -28,20 +20,8 @@ bg:
           title: "Списък с категории"
         post:
           title: "Публикация"
-        more_topics:
-          title: "Още теми"
-        roving_focus:
-          toolbar:
-            copy: "Копирай"
-          adjacent:
-            field: "Търсене"
-            open: "Отвори"
-            recent: "Скорошни"
-          combobox:
-            daily: "Дневно"
-            weekly: "Седмично"
-            monthly: "Месечно"
-            never: "Никога"
+        suggested_topics:
+          title: "Подобни теми"
         tooltips:
           description: "Описание"
           header: "Хедър"

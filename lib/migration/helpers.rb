@@ -3,7 +3,13 @@
 module Migration
   module Helpers
     def self.site_created_at
-      Discourse.site_creation_date
+      result = DB.query_single <<~SQL
+        SELECT created_at
+        FROM schema_migration_details
+        ORDER BY created_at
+        LIMIT 1
+      SQL
+      result.first
     end
 
     def self.existing_site?
@@ -11,7 +17,7 @@ module Migration
     end
 
     def self.new_site?
-      !existing_site?
+      !old_site?
     end
   end
 end

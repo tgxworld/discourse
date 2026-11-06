@@ -18,8 +18,7 @@ ar:
       builder:
         title: السياسة
         attach: إنشاء سياسة
-        save: حفظ التغييرات
-        edit: تعديل إعدادات السياسة
+        save: احفظ التغييرات
         insert: إدراج
         errors:
           group: المجموعة مطلوبة
@@ -39,7 +38,6 @@ ar:
         reminder:
           label: تذكير
           description: عدد المرات التي يجب فيها إرسال إشعار التذكير بقبول السياسة
-          no_reminder: (لا يوجد تذكير)
         accept:
           label: قبول
           description: النص المستخدم على زر القبول
@@ -52,9 +50,6 @@ ar:
         send-email:
           label: هل تريد إرسال رسالة إلكترونية؟
           description: إرسال إشعار بالسياسة الجديدة إلى المستخدمين عبر البريد الإلكتروني
-        add-users-to-group:
-          label: إضافة مستخدمين إلى المجموعة
-          description: أضف المستخدمين إلى المجموعة التالية عند قبولهم لهذه السياسة
       preferences:
         title: السياسات
         policy_emails:

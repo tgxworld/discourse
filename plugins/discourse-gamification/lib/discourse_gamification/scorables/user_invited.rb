@@ -1,13 +1,17 @@
 # frozen_string_literal: true
 
-module DiscourseGamification
+module ::DiscourseGamification
   class UserInvited < Scorable
-    def self.query(leaderboard: nil)
+    def self.score_multiplier
+      SiteSetting.user_invited_score_value
+    end
+
+    def self.query
       <<~SQL
         SELECT
           inv.invited_by_id AS user_id,
           date_trunc('day', inv.created_at) AS date,
-          SUM(inv.redemption_count * #{score_multiplier(leaderboard:)}) AS points
+          SUM(inv.redemption_count * #{score_multiplier}) AS points
         FROM
           invites AS inv
         WHERE

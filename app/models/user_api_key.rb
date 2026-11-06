@@ -2,6 +2,7 @@
 
 class UserApiKey < ActiveRecord::Base
   self.ignored_columns = [
+    "scopes", # TODO: Remove when 20240212034010_drop_deprecated_columns has been promoted to pre-deploy
     "client_id", # TODO: Add post-migration to remove column after 3.4.0 stable release (not before early 2025)
     "application_name", # TODO: Add post-migration to remove column after 3.4.0 stable release (not before early 2025)
   ]
@@ -12,14 +13,13 @@ class UserApiKey < ActiveRecord::Base
   belongs_to :client, class_name: "UserApiKeyClient", foreign_key: "user_api_key_client_id"
   has_many :scopes, class_name: "UserApiKeyScope", dependent: :destroy
 
-  scope :active,
-        -> { where(revoked_at: nil).where("expires_at IS NULL OR expires_at > ?", Time.zone.now) }
+  scope :active, -> { where(revoked_at: nil) }
   scope :with_key, ->(key) { where(key_hash: ApiKey.hash_key(key)) }
 
   after_initialize :generate_key
 
   def generate_key
-    if !key_hash
+    if !self.key_hash
       @key ||= SecureRandom.hex
       self.key_hash = ApiKey.hash_key(@key)
     end
@@ -42,12 +42,15 @@ class UserApiKey < ActiveRecord::Base
 
   def update_last_used(client_id)
     update_args = { last_used_at: Time.zone.now }
-    if client_id.present? && client_id != client.client_id
+    if client_id.present? && client_id != self.client.client_id
       new_client =
-        UserApiKeyClient.create!(client_id: client_id, application_name: client.application_name)
+        UserApiKeyClient.create!(
+          client_id: client_id,
+          application_name: self.client.application_name,
+        )
       update_args[:user_api_key_client_id] = new_client.id
     end
-    update_columns(**update_args)
+    self.update_columns(**update_args)
   end
 
   # Scopes allowed to be requested by external services
@@ -62,25 +65,6 @@ class UserApiKey < ActiveRecord::Base
   def has_push?
     scopes.any? { |s| s.name == "push" || s.name == "notifications" } && push_url.present? &&
       SiteSetting.allowed_user_api_push_urls.include?(push_url)
-  end
-
-  def expired?
-    expires_at.present? && expires_at <= Time.zone.now
-  end
-
-  def self.push_clients_for(user)
-    return [] if SiteSetting.allow_user_api_key_scopes.split("|").exclude?("push")
-    return [] if SiteSetting.allowed_user_api_push_urls.blank?
-
-    user
-      .user_api_keys
-      .active
-      .joins(:scopes, :client)
-      .where("user_api_key_scopes.name IN ('push', 'notifications')")
-      .where("push_url IS NOT NULL AND push_url <> ''")
-      .where("position(push_url IN ?) > 0", SiteSetting.allowed_user_api_push_urls)
-      .order("user_api_key_clients.client_id ASC")
-      .pluck("user_api_key_clients.client_id, user_api_keys.push_url")
   end
 
   def allow?(env)
@@ -103,15 +87,14 @@ end
 # Table name: user_api_keys
 #
 #  id                     :integer          not null, primary key
-#  expires_at             :datetime
-#  key_hash               :string           not null
-#  last_used_at           :datetime         not null
+#  user_id                :integer          not null
 #  push_url               :string
-#  revoked_at             :datetime
 #  created_at             :datetime         not null
 #  updated_at             :datetime         not null
+#  revoked_at             :datetime
+#  last_used_at           :datetime         not null
+#  key_hash               :string           not null
 #  user_api_key_client_id :bigint
-#  user_id                :integer          not null
 #
 # Indexes
 #

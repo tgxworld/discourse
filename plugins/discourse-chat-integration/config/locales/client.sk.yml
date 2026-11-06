@@ -14,14 +14,16 @@ sk:
     chat_integration:
       menu_title: "Integrácie chatu"
       settings: "Nastavení"
-      more_providers: "Viac"
-      channels_title: "Kanály"
+      no_providers: "Musíte povoliť niektorích poskytovateľov v nastavení zásuvných modulov"
       channels_with_errors: "Pri poslednom odosielaní správ zlyhali niektoré kanály pre tohto poskytovateľa. Kliknutím na ikonu(y) chyby sa dozviete viac."
+      channel_exception: "Pri poslednom odoslaní správy na tento kanál došlo k neznámej chybe."
       group_mention_template: "Zmienky o: @%{name}"
       group_message_template: "Správy pre: @%{name}"
-      choose_group: "(Vyberte skupinu)"
-      all_categories: "(Všetky kategórie)"
-      all_tags: "(Všetky značky)"
+      choose_group: "(vyberte skupinu)"
+      all_categories: "(všetky kategórie)"
+      all_tags: "(všetky štítky)"
+      create_rule: "Vytvoriť pravidlo"
+      create_channel: "Vytvoriť kanál"
       delete_channel: "Odstrániť"
       test_channel: "Test"
       edit_channel: "Upraviť"
@@ -29,10 +31,14 @@ sk:
       test_modal:
         title: "Odoslať testovaciu správu"
         topic: "Téma"
+        send: "Odoslať testovaciu správu"
         close: "Zatvoriť"
+        error: "Pri odosielaní správy sa vyskytla neznáma chyba. Ďalšie informácie nájdete v protokoloch stránky."
         success: "Správa úspešne odoslaná"
       type:
         normal: Bežné
+        group_message: Skupinová správa
+        group_mention: Skupinová zmienka
       filter:
         mute: 'Ignorovať'
         follow: 'Len prvý príspevok'
@@ -53,6 +59,8 @@ sk:
           ok: "Platné"
           fail: "Nesprávny formát"
       edit_rule_modal:
+        title: Upraviť pravidlo
+        save: Uložiť pravidlo
         cancel: Zrušiť
         provider: Poskytovateľ
         type: Typ
@@ -73,8 +81,10 @@ sk:
           param:
             identifier:
               title: Kanál
+              help: "napr. #kanál, @používateľské_meno"
           errors:
             action_prohibited: "Bot nemá povolenie na odosielanie príspevkov do tohto kanála"
+            channel_not_found: "Zadaný kanál na Slacku neexistuje."
         telegram:
           title: "Telegram"
           param:
@@ -95,6 +105,7 @@ sk:
               help: "Názov popisujúci kanál. Nepoužíva sa na pripojenie k Discordu."
             webhook_url:
               title: Webová adresa URL
+              help: Adresa URL webhooku vytvorená v nastaveniach servera Discord
         guilded:
           title: "Guildovaný"
           param:
@@ -109,6 +120,7 @@ sk:
           param:
             identifier:
               title: Kanál
+              help: "napr. #kanál, @používateľské_meno"
           errors:
             channel_not_found: "Zvolený kanál neexistuje na Mattermoste."
         matrix:
@@ -119,6 +131,7 @@ sk:
               help: "Názov, ktorý opisuje kanál. Nepoužíva sa pre pripojenie k Matrixu."
             room_id:
               title: "ID miestnosti"
+              help: "„Súkromný identifikátor“ miestnosti. Mal by vyzerať nejako takto !abcdefg:matrix.org"
           errors:
             unknown_token: "Prístupový token je neplatný"
             unknown_room: "ID miestnosti je neplatné"
@@ -138,6 +151,7 @@ sk:
           param:
             identifier:
               title: Kanál
+              help: "napr. #kanál, @používateľské_meno"
           errors:
             invalid_channel: "Tento kanál na Rocket Chat neexistuje"
         gitter:
@@ -145,9 +159,16 @@ sk:
           param:
             name:
               title: "Meno"
+              help: "Názov miestnosti Gitter, napr. gitterHQ/services."
             webhook_url:
               title: "Webová adresa URL"
               help: "Adresa URL poskytnutá pri vytváraní novej integrácie v miestnosti Gitter."
+        flowdock:
+          title: "Flowdock"
+          param:
+            flow_token:
+              title: "Token toku"
+              help: "Token toku poskytnutý po vytvorení zdroja toku, do ktorého chcete posielať správy."
         groupme:
           title: "GroupMe"
           param:
@@ -219,8 +240,3 @@ sk:
               description: "Názov kanála nájdete v nastaveniach integrácie chatu"
             provider:
               label: Poskytovateľ
-    discourse_workflows:
-      send_chat_integration_message:
-        channel_id: "Kanál"
-        configure: "Konfigurovať"
-        message: "Správa"

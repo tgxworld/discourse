@@ -1,18 +1,8 @@
-@use "lib/viewport";
-
 .form-kit__container {
   display: flex;
   gap: 0.25rem;
   flex-direction: column;
   align-items: flex-start;
-
-  &.--full {
-    width: 100%;
-  }
-
-  @include viewport.until(sm) {
-    width: 100%;
-  }
 
   &.--column {
     .form-kit__container-content {
@@ -25,8 +15,9 @@
     gap: 0.25em;
     margin: 0;
     font-size: var(--font-down-1-rem);
-    color: var(--primary);
-    font-weight: 600 !important;
+    color: var(--primary-high);
+    font-weight: bold;
+    padding-bottom: 0.25em;
   }
 
   &-subtitle {
@@ -35,7 +26,8 @@
     gap: 0.25em;
     margin: 0;
     font-size: var(--font-down-1-rem);
-    color: var(--primary-medium);
+    color: var(--primary-high);
+    padding-bottom: 0.25em;
 
     > * {
       margin: 0;
@@ -54,53 +46,11 @@
     flex-direction: row;
     align-items: flex-start;
     max-width: 100%;
-    width: var(--form-kit-medium-input);
 
-    @include viewport.until(sm) {
-      width: 100%;
-    }
-  }
-}
-
-.form-kit__container-title,
-.form-kit__container-description,
-.form-kit__container-content {
-  .--small & {
-    width: var(--form-kit-small-input);
-  }
-
-  @include viewport.from(sm) {
-    .--medium & {
-      width: var(--form-kit-medium-input);
+    &.--small {
+      width: var(--form-kit-small-input) !important;
     }
 
-    .--large & {
-      width: var(--form-kit-large-input);
-    }
-
-    .--max & {
-      max-width: var(--form-kit-max-input);
-      width: 100%;
-    }
-
-    .--full & {
-      width: 100%;
-      min-width: var(--form-kit-small-input);
-    }
-  }
-}
-
-// Override: child has its own modifier from @titleFormat / @descriptionFormat.
-// Lives in a separate block AFTER the cascade so on equal specificity, source
-// order makes the explicit override win. Yes, this one sucks a bit. I know.
-.form-kit__container-title,
-.form-kit__container-description,
-.form-kit__container-content {
-  &.--small {
-    width: var(--form-kit-small-input);
-  }
-
-  @include viewport.from(sm) {
     &.--medium {
       width: var(--form-kit-medium-input);
     }
@@ -109,14 +59,8 @@
       width: var(--form-kit-large-input);
     }
 
-    &.--max {
-      max-width: var(--form-kit-max-input);
-      width: 100%;
-    }
-
     &.--full {
-      width: 100%;
-      min-width: var(--form-kit-small-input);
+      width: 100% !important;
     }
   }
 }

@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 RSpec.describe Jobs::PublishTopicToCategory do
-  fab!(:admin)
   fab!(:category)
   fab!(:another_category, :category)
 
@@ -12,7 +11,6 @@ RSpec.describe Jobs::PublishTopicToCategory do
       :topic_timer,
       status_type: TopicTimer.types[:publish_to_category],
       category_id: another_category.id,
-      user: admin,
       topic: topic,
       execute_at: 1.minute.ago,
       created_at: 5.minutes.ago,
@@ -24,7 +22,7 @@ RSpec.describe Jobs::PublishTopicToCategory do
   end
 
   describe "when topic has been deleted" do
-    it "does not publish the topic to the new category" do
+    it "should not publish the topic to the new category" do
       created_at = freeze_time 1.hour.ago
       topic
 
@@ -39,7 +37,7 @@ RSpec.describe Jobs::PublishTopicToCategory do
     end
   end
 
-  it "publishes the topic to the new category" do
+  it "should publish the topic to the new category" do
     freeze_time 1.hour.ago do
       topic.update!(visible: false)
     end
@@ -62,58 +60,15 @@ RSpec.describe Jobs::PublishTopicToCategory do
     end
   end
 
-  it "keeps the publishing timer when the destination rejects a topic tag" do
-    user = Fabricate(:trust_level_4)
-
-    forbidden_tag = Fabricate(:tag)
-    allowed_tag = Fabricate(:tag)
-    allowed_tag_group = Fabricate(:tag_group, tags: [allowed_tag])
-    another_category.update!(tag_groups: [allowed_tag_group])
-
-    topic.update!(user: user, tags: [forbidden_tag], visible: false, created_at: 1.hour.ago)
-    timer = topic.public_topic_timer
-    timer.update!(user: user)
-    timestamp_attributes = %w[created_at bumped_at updated_at last_posted_at]
-    original_timestamps = topic.reload.attributes.slice(*timestamp_attributes)
-
-    expect { described_class.new.execute(topic_timer_id: timer.id) }.to raise_error(
-      ActiveRecord::RecordInvalid,
-    )
-
-    topic.reload
-    expect(topic.category).to eq(category)
-    expect(topic).not_to be_visible
-    expect(topic.attributes.slice(*timestamp_attributes)).to eq(original_timestamps)
-    expect(topic.public_topic_timer).to eq(timer)
-    expect(
-      UserHistory.exists?(
-        action: UserHistory.actions[:topic_published],
-        acting_user_id: user.id,
-        topic_id: topic.id,
-      ),
-    ).to eq(false)
-  end
-
-  it "publishes when the topic is already in the destination category" do
-    topic.update!(visible: false)
-    timer = topic.public_topic_timer
-    timer.update!(category_id: category.id)
-
-    described_class.new.execute(topic_timer_id: timer.id)
-
-    topic.reload
-    expect(topic.category).to eq(category)
-    expect(topic).to be_visible
-    expect(topic.public_topic_timer).to be_nil
-  end
-
   describe "when topic is a private message" do
-    it "publishes the topic to the new category" do
+    it "should publish the topic to the new category" do
       freeze_time 1.hour.ago do
         expect { topic.convert_to_private_message(Discourse.system_user) }.to change {
           topic.private_message?
         }.to(true)
       end
+
+      topic.allowed_users << topic.public_topic_timer.user
 
       now = freeze_time
 
@@ -128,13 +83,6 @@ RSpec.describe Jobs::PublishTopicToCategory do
       expect(topic.category).to eq(another_category)
       expect(topic.visible).to eq(true)
       expect(topic.private_message?).to eq(false)
-      expect(
-        UserHistory.exists?(
-          action: UserHistory.actions[:topic_published],
-          acting_user_id: admin.id,
-          topic_id: topic.id,
-        ),
-      ).to eq(true)
 
       %w[created_at bumped_at updated_at last_posted_at].each do |attribute|
         expect(topic.public_send(attribute)).to eq_time(now)
@@ -154,7 +102,7 @@ RSpec.describe Jobs::PublishTopicToCategory do
       expect(topic.category).not_to eq(another_category)
     end
 
-    it "does nothing if the user can't convert the PM" do
+    it "works if the user can see the PM" do
       tl4_user = Fabricate(:trust_level_4)
       topic.convert_to_private_message(Discourse.system_user)
 
@@ -166,13 +114,13 @@ RSpec.describe Jobs::PublishTopicToCategory do
       described_class.new.execute(topic_timer_id: topic.public_topic_timer.id)
 
       topic.reload
-      expect(topic.private_message?).to eq(true)
-      expect(topic.category).not_to eq(another_category)
+      expect(topic.private_message?).to eq(false)
+      expect(topic.category).to eq(another_category)
     end
   end
 
   describe "when new category has a default auto-close" do
-    it "applies the auto-close timer when publishing" do
+    it "should apply the auto-close timer upon publishing" do
       freeze_time
 
       another_category.update!(auto_close_hours: 5)

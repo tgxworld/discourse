@@ -4,16 +4,9 @@ module DiscourseWebauthn
   ACCEPTABLE_REGISTRATION_TYPE = "webauthn.create"
   ACCEPTABLE_AUTHENTICATION_TYPE = "webauthn.get"
 
-  SUPPORTED_ALGORITHMS = [
-    -7, # ES256
-    -8, # EdDSA
-    -35, # ES384
-    -36, # ES512
-    -37, # PS256
-    -38, # PS384
-    -39, # PS512
-    -257, # RS256 (via freedom patch)
-  ].freeze
+  # -7   - ES256
+  # -257 - RS256 (Windows Hello supported alg.)
+  SUPPORTED_ALGORITHMS = COSE::Algorithm.registered_algorithm_ids.freeze
   VALID_ATTESTATION_FORMATS = %w[none packed fido-u2f].freeze
   CHALLENGE_EXPIRY = 5.minutes
 
@@ -74,45 +67,35 @@ module DiscourseWebauthn
   # credentials.
   #
   # @param user [User] the user to stage the challenge for
-  # @param server_session [ServerSession] the session to store the challenge in
-  def self.stage_challenge(user, server_session)
+  # @param secure_session [SecureSession] the session to store the challenge in
+  def self.stage_challenge(user, secure_session)
     ::DiscourseWebauthn::ChallengeGenerator.generate.commit_to_session(
-      server_session,
+      secure_session,
       user,
       expires: CHALLENGE_EXPIRY,
     )
   end
 
   ##
-  # Clears the challenge from the user's server session.
+  # Clears the challenge from the user's secure session.
   #
   # @param user [User] the user to clear the challenge for
-  # @param server_session [ServerSession] the session to clear the challenge from
-  def self.clear_challenge(user, server_session)
-    server_session.delete(session_challenge_key(user))
+  # @param secure_session [SecureSession] the session to clear the challenge from
+  def self.clear_challenge(user, secure_session)
+    secure_session[self.session_challenge_key(user)] = nil
   end
 
-  # Returns separate allow-lists per WebAuthn ceremony: `allowed_credential_ids`
-  # for second-factor security keys (user verification discouraged) and
-  # `passkey_allowed_credential_ids` for passkeys used as 2FA (user
-  # verification required). Both ceremonies share the same staged challenge;
-  # the server validates the asserted credential against the intended ceremony.
-  def self.allowed_credentials(user, server_session, include_passkeys: false)
-    has_security_keys = user.security_keys_enabled?
-    has_passkeys = include_passkeys && user.passkeys_available_as_second_factor?
-    return {} if !has_security_keys && !has_passkeys
+  def self.allowed_credentials(user, secure_session)
+    return {} if !user.security_keys_enabled?
 
-    response = {}
-    if has_security_keys
-      response[:allowed_credential_ids] = user.second_factor_security_key_credential_ids
-    end
-    response[:passkey_allowed_credential_ids] = user.passkey_credential_ids if has_passkeys
-    response[:challenge] = challenge(user, server_session)
-    response
+    {
+      allowed_credential_ids: user.second_factor_security_key_credential_ids,
+      challenge: self.challenge(user, secure_session),
+    }
   end
 
-  def self.challenge(user, server_session)
-    server_session[session_challenge_key(user)]
+  def self.challenge(user, secure_session)
+    secure_session[self.session_challenge_key(user)]
   end
 
   def self.rp_id
@@ -122,9 +105,10 @@ module DiscourseWebauthn
   def self.origin
     case Rails.env
     when "development"
+      # defaults to the Ember CLI local port
       # you might need to change this and the rp_id above
       # if you are using a non-default port/hostname locally
-      "http://localhost:3000"
+      "http://localhost:4200"
     else
       Discourse.base_url_no_prefix
     end

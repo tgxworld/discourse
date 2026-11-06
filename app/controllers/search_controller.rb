@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 class SearchController < ApplicationController
-  before_action :ensure_can_search, only: %i[show query]
-  before_action :block_crawler, only: :show
   before_action :cancel_overloaded_search, only: [:query]
   skip_before_action :check_xhr, only: :show
   after_action :add_noindex_header
@@ -21,8 +19,7 @@ class SearchController < ApplicationController
     # eg: ?q[foo]=bar
     raise Discourse::InvalidParameters.new(:q) if params[:q].present? && !@search_term.present?
 
-    if @search_term.present? && @search_term.length < SiteSetting.min_search_term_length &&
-         !Search.min_length_bypass?(@search_term)
+    if @search_term.present? && @search_term.length < SiteSetting.min_search_term_length
       raise Discourse::InvalidParameters.new(:q)
     end
 
@@ -55,7 +52,6 @@ class SearchController < ApplicationController
     search_args[:search_type] = :full_page
     search_args[:ip_address] = request.remote_ip
     search_args[:user_agent] = request.user_agent
-    search_args[:session_id] = pageview_session_id
     search_args[:user_id] = current_user.id if current_user.present?
 
     if rate_limit_search
@@ -78,8 +74,7 @@ class SearchController < ApplicationController
       result.find_user_data(guardian) if result
     end
 
-    serializer =
-      serialize_data(result, GroupedSearchResultSerializer, result: result, scope: guardian)
+    serializer = serialize_data(result, GroupedSearchResultSerializer, result: result)
 
     respond_to do |format|
       format.html { store_preloaded("search", MultiJson.dump(serializer)) }
@@ -111,7 +106,6 @@ class SearchController < ApplicationController
     search_args[:search_type] = :header
     search_args[:ip_address] = request.remote_ip
     search_args[:user_agent] = request.user_agent
-    search_args[:session_id] = pageview_session_id
     search_args[:user_id] = current_user.id if current_user.present?
     search_args[:restrict_to_archetype] = params[:restrict_to_archetype] if params[
       :restrict_to_archetype
@@ -167,22 +161,8 @@ class SearchController < ApplicationController
 
   protected
 
-  def ensure_can_search
-    return if guardian.can_search?
-
-    if request.format.html?
-      redirect_to_login
-    else
-      ensure_logged_in
-    end
-  end
-
-  def pageview_session_id
-    request.headers["HTTP_DISCOURSE_PAGEVIEW_SESSION_ID"]
-  end
-
   def site_overloaded?
-    queue_time = request.env[Middleware::ProcessingRequest::REQUEST_QUEUE_SECONDS_ENV_KEY]
+    queue_time = request.env["REQUEST_QUEUE_SECONDS"]
     if queue_time
       threshold = GlobalSetting.disable_search_queue_threshold.to_f
       threshold > 0 && queue_time > threshold
@@ -232,26 +212,6 @@ class SearchController < ApplicationController
     false
   end
 
-  def block_crawler
-    if use_crawler_layout?
-      crawler_html = <<~HTML
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <meta name='robots' content='noindex'>
-            </head>
-            <body>
-              <p><em>*waves hand*</em> This is not the content you are looking for</p>
-            </body>
-          </html>
-        HTML
-
-      response.headers["X-Robots-Tag"] = "noindex"
-
-      render html: crawler_html.html_safe, layout: false, content_type: "text/html"
-    end
-  end
-
   def cancel_overloaded_search
     render_json_error I18n.t("search.extreme_load_error"), status: 409 if site_overloaded?
   end
@@ -260,10 +220,6 @@ class SearchController < ApplicationController
     return if params[:skip_context] == "true"
 
     search_context = params[:search_context]
-    if search_context && !search_context.is_a?(ActionController::Parameters)
-      raise Discourse::InvalidParameters.new(:search_context)
-    end
-
     unless search_context
       if (context = params[:context]) && (id = params[:context_id])
         search_context = { type: context, id: id, name: id }

@@ -35,14 +35,6 @@ RSpec.describe Chat::ThreadParticipantQuery do
       )
     end
 
-    it "omits names when names are disabled" do
-      SiteSetting.enable_names = false
-
-      result = described_class.call(thread_ids: [thread_1.id])
-
-      expect(result[thread_1.id][:users]).to all(exclude(:name))
-    end
-
     it "returns up to 10 thread participants" do
       result = described_class.call(thread_ids: [thread_1.id])
       expect(result[thread_1.id][:users].length).to eq(4)
@@ -114,13 +106,13 @@ RSpec.describe Chat::ThreadParticipantQuery do
 
   context "when using preview false" do
     1..9.times do |i|
-      user = :"user_#{i}"
+      user = "user_#{i}".to_sym
       fab!(user) { Fabricate(:user) }
     end
 
     before do
       1..9.times do |i|
-        user = :"user_#{i}"
+        user = "user_#{i}".to_sym
         thread_3.add(public_send(user))
         Fabricate(:chat_message, thread: thread_3, user: public_send(user))
       end

@@ -98,8 +98,9 @@ class Populate < Thor
       puts post_creator.errors.full_messages, ""
       raise StandardError.new(post_creator.errors.full_messages)
     end
-
-    first_post.topic
+    topic = first_post.topic
+    start_post = 2
+    topic
   end
 
   def create_post(users, topic)

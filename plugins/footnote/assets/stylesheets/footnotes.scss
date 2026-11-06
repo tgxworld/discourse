@@ -16,10 +16,6 @@
     }
   }
 
-  .inline-footnote {
-    display: inline-block;
-  }
-
   // This is hack to work with lazy-loading, we will trick the browser
   // to believe the image is in the DOM and can be loaded
   .footnotes-list,
@@ -43,8 +39,8 @@
   overflow-wrap: break-word;
   font-size: var(--font-down-1);
 
-  .fk-d-tooltip__inner-content {
-    flex-direction: column;
+  .footnote-backref {
+    display: none;
   }
 
   img {
@@ -54,8 +50,6 @@
 
   p {
     margin: 0;
-    min-width: 0;
-    max-width: 100%;
   }
 }
 
@@ -78,10 +72,7 @@
 
   .footnote-tooltip {
     cursor: auto;
-
-    // Position is fixed to be relative to the .ProseMirror editor
-    // See https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Display/Containing_block#identifying_the_containing_block
-    position: fixed;
+    position: absolute;
     max-height: 40%;
     overflow: auto;
     left: 0;

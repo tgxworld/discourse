@@ -1,11 +1,11 @@
 import Component from "@glimmer/component";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
+import icon from "discourse/helpers/d-icon";
 import { i18n } from "discourse-i18n";
 import {
   CHANNEL_STATUSES,
   channelStatusIcon,
 } from "discourse/plugins/chat/discourse/models/chat-channel";
-import ChatChannelArchiveStatus from "./chat-channel-archive-status.gjs";
+import ChatChannelArchiveStatus from "./chat-channel-archive-status";
 
 export default class ChatChannelStatus extends Component {
   LONG_FORMAT = "long";
@@ -66,7 +66,7 @@ export default class ChatChannelStatus extends Component {
   <template>
     {{#if this.shouldRender}}
       <div class="chat-channel-status">
-        {{dIcon this.channelStatusIcon}}
+        {{icon this.channelStatusIcon}}
         <span>{{this.channelStatusMessage}}</span>
         <ChatChannelArchiveStatus @channel={{@channel}} />
       </div>

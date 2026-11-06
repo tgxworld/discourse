@@ -16,16 +16,11 @@ id:
         bool:
           yes: "Ya"
           no: "Tidak"
+      export: "Ekspor"
+      save: "Simpan perubahan"
+      edit: "Ubah"
       delete: "Hapus"
-      chart:
-        form:
-          bar: "Batang"
-      name: "Nama"
       query_groups: "Grup"
-      query_tags: "Label"
       query_description: "Deskripsi"
       reset_params: "Reset"
-    discourse_workflows:
-      sql:
-        output:
-          results: "Hasil"
+      search_placeholder: "Cari..."

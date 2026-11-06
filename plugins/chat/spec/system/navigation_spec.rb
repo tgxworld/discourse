@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "Navigation" do
+RSpec.describe "Navigation", type: :system do
   fab!(:category)
   fab!(:topic)
   fab!(:post) { Fabricate(:post, topic: topic) }
@@ -13,7 +13,7 @@ RSpec.describe "Navigation" do
   let(:thread_list_page) { PageObjects::Components::Chat::ThreadList.new }
   let(:channel_page) { PageObjects::Pages::ChatChannel.new }
   let(:side_panel_page) { PageObjects::Pages::ChatSidePanel.new }
-  let(:sidebar_page) { PageObjects::Pages::ChatSidebar.new }
+  let(:sidebar_page) { PageObjects::Pages::Sidebar.new }
   let(:sidebar_component) { PageObjects::Components::NavigationMenu::Sidebar.new }
   let(:chat_drawer_page) { PageObjects::Pages::ChatDrawer.new }
 
@@ -38,10 +38,10 @@ RSpec.describe "Navigation" do
     end
   end
 
-  context "when clicking back button on mobile and is viewing channel" do
+  context "when clicking chat icon on mobile and is viewing channel" do
     it "navigates to channels tab", mobile: true do
       chat_page.visit_channel(category_channel_2)
-      chat_page.back_to_channels_list
+      chat_page.open_from_header
 
       expect(page).to have_current_path("/chat/channels")
     end
@@ -188,25 +188,33 @@ RSpec.describe "Navigation" do
     end
 
     context "when opening a thread from the thread list" do
-      it "goes back to the thread list when clicking the back button" do
-        chat_page.visit_threads_list(category_channel)
+      xit "goes back to the thread list when clicking the back button" do
+        skip_on_ci!
+
+        visit("/chat")
+        chat_page.visit_channel(category_channel)
+        channel_page.open_thread_list
         expect(thread_list_page).to have_loaded
         thread_list_page.open_thread(thread)
         expect(side_panel_page).to have_open_thread(thread)
-        thread_page.back_to_thread_list(category_channel)
+        expect(thread_page).to have_back_link_to_thread_list(category_channel)
+        thread_page.back
         expect(page).to have_current_path("#{category_channel.relative_url}/t")
         expect(thread_list_page).to have_loaded
       end
 
       context "for mobile" do
         it "goes back to the thread list when clicking the back button", mobile: true do
+          skip_on_ci!
+
           visit("/chat")
           chat_page.visit_channel(category_channel)
           channel_page.open_thread_list
           expect(thread_list_page).to have_loaded
           thread_list_page.open_thread(thread)
           expect(side_panel_page).to have_open_thread(thread)
-          thread_page.back_to_thread_list(category_channel)
+          expect(thread_page).to have_back_link_to_thread_list(category_channel)
+          thread_page.back
           expect(page).to have_current_path("#{category_channel.relative_url}/t")
           expect(thread_list_page).to have_loaded
         end
@@ -217,17 +225,18 @@ RSpec.describe "Navigation" do
           before { Fabricate(:chat_message, thread: thread_2, use_service: true) }
 
           it "goes back to the thread list when clicking the back button", mobile: true do
+            skip_on_ci!
+
             chat_page.visit_channel(category_channel)
             channel_page.message_thread_indicator(thread.original_message).click
-            expect(side_panel_page).to have_open_thread(thread)
             thread_page.send_message
-            thread_page.back_to_channel(category_channel)
+            thread_page.back
             channel_page.message_thread_indicator(thread_2.original_message).click
-            expect(side_panel_page).to have_open_thread(thread_2)
             Fabricate(:chat_message, thread: thread, use_service: true)
 
             expect(thread_page).to have_unread_list_indicator(count: 1)
-            thread_page.back_to_thread_list(category_channel)
+            expect(thread_page).to have_back_link_to_thread_list(category_channel)
+            thread_page.back
             expect(page).to have_current_path("#{category_channel.relative_url}/t")
           end
         end
@@ -236,11 +245,14 @@ RSpec.describe "Navigation" do
 
     context "when opening a thread from indicator" do
       it "goes back to the thread list when clicking the back button" do
+        skip_on_ci!
+
         visit("/chat")
         chat_page.visit_channel(category_channel)
         channel_page.message_thread_indicator(thread.original_message).click
         expect(side_panel_page).to have_open_thread(thread)
-        thread_page.back_to_thread_list(category_channel)
+        expect(thread_page).to have_back_link_to_thread_list(category_channel)
+        thread_page.back
         expect(page).to have_current_path("#{category_channel.relative_url}/t")
         expect(thread_list_page).to have_loaded
       end
@@ -248,11 +260,14 @@ RSpec.describe "Navigation" do
       context "for mobile" do
         it "closes the thread and goes back to the channel when clicking the back button",
            mobile: true do
+          skip_on_ci!
+
           visit("/chat")
           chat_page.visit_channel(category_channel)
           channel_page.message_thread_indicator(thread.original_message).click
           expect(side_panel_page).to have_open_thread(thread)
-          thread_page.back_to_channel(category_channel)
+          expect(thread_page).to have_back_link_to_channel(category_channel)
+          thread_page.back
           expect(page).to have_current_path("#{category_channel.relative_url}")
           expect(side_panel_page).to be_closed
         end

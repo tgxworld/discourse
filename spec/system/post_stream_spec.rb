@@ -1,79 +1,60 @@
 # frozen_string_literal: true
 
-describe "Post stream" do
+describe "Post stream", type: :system do
   fab!(:user)
   fab!(:admin)
 
-  context "when posting" do
-    let(:topic) { Fabricate(:topic, user: user) }
-    let(:post) { Fabricate(:post, topic: topic, user: user) }
+  %w[enabled disabled].each do |value|
+    before { SiteSetting.glimmer_post_stream_mode = value }
 
-    let(:topic_page) { PageObjects::Pages::Topic.new }
-    let(:composer) { PageObjects::Components::Composer.new }
+    context "when glimmer_post_stream_mode=#{value}" do
+      context "when posting" do
+        let(:topic) { Fabricate(:topic, user: user) }
+        let(:post) { Fabricate(:post, topic: topic, user: user) }
 
-    before do
-      SiteSetting.post_menu_hidden_items = ""
+        let(:topic_page) { PageObjects::Pages::Topic.new }
+        let(:composer) { PageObjects::Components::Composer.new }
 
-      sign_in(admin)
-    end
+        before do
+          SiteSetting.post_menu_hidden_items = ""
 
-    it "can reply to a post and edit the reply" do
-      # Visit topic and initiate reply
-      topic_page.visit_topic(post.topic)
-      topic_page.click_post_action_button(post, :reply)
-      expect(composer).to be_opened
+          sign_in(admin)
+        end
 
-      # Create initial reply
-      composer.type_content("This is a reply")
-      composer.submit
-      expect(composer).to be_closed
+        it "can reply to a post and edit the reply" do
+          # Visit topic and initiate reply
+          topic_page.visit_topic(post.topic)
+          topic_page.click_post_action_button(post, :reply)
+          expect(composer).to be_opened
 
-      # Verify initial reply
-      reply = Post.last
-      expect(topic_page).to have_post_number(reply.post_number)
-      expect(topic_page).to have_post_content(
-        post_number: reply.post_number,
-        content: "This is a reply",
-      )
+          # Create initial reply
+          composer.type_content("This is a reply")
+          composer.submit
+          expect(composer).to be_closed
 
-      # Edit the reply
-      expect(topic_page).to have_post_action_button(reply, :edit)
-      topic_page.click_post_action_button(reply, :edit)
-      expect(composer).to be_opened
-      composer.type_content("This is an edited reply")
-      composer.submit
+          # Verify initial reply
+          reply = Post.last
+          expect(topic_page).to have_post_number(reply.post_number)
+          expect(topic_page).to have_post_content(
+            post_number: reply.post_number,
+            content: "This is a reply",
+          )
 
-      # Verify edited reply
-      expect(topic_page).to have_post_action_button(reply, :edit)
-      expect(topic_page).to have_post_content(
-        post_number: reply.post_number,
-        content: "This is an edited reply",
-      )
-    end
-  end
+          # Edit the reply
+          expect(topic_page).to have_post_action_button(reply, :edit)
+          topic_page.click_post_action_button(reply, :edit)
+          expect(composer).to be_opened
+          composer.type_content("This is an edited reply")
+          composer.submit
 
-  context "when hiding scrollable content" do
-    let!(:topic) { Fabricate(:topic) }
-    let!(:posts) { Fabricate.times(60, :post, topic: topic) }
-    let(:topic_page) { PageObjects::Pages::Topic.new }
-
-    before { sign_in(user) }
-
-    it "hides and shows content above the post stream based on loaded posts" do
-      topic_page.visit_topic(topic, post_number: 30)
-      expect(page).to have_css("[data-post-number='30']")
-      expect(page).to have_no_css("#main-container")
-
-      topic_page.visit_topic(topic, post_number: 1)
-      expect(page).to have_css("[data-post-number='1']")
-      expect(page).to have_css("#main-container")
-
-      topic_page.visit_topic(topic, post_number: 30)
-      expect(page).to have_css("[data-post-number='30']")
-      expect(page).to have_no_css("#main-container")
-
-      visit "/"
-      expect(page).to have_css("#main-container")
+          # Verify edited reply
+          expect(topic_page).to have_post_action_button(reply, :edit)
+          expect(topic_page).to have_post_content(
+            post_number: reply.post_number,
+            content: "This is an edited reply",
+          )
+        end
+      end
     end
   end
 
@@ -81,7 +62,10 @@ describe "Post stream" do
     let!(:topic) { Fabricate(:topic) }
     let!(:posts) { Fabricate.times(20, :post, topic: topic) }
 
-    before { sign_in(user) }
+    before do
+      sign_in(user)
+      SiteSetting.glimmer_post_stream_mode = "enabled"
+    end
 
     it "cloaks posts that are far from the viewport" do
       # Visit the topic page
@@ -174,43 +158,6 @@ describe "Post stream" do
       expect(post_stream).to have_css("#{post2_selector} aside.quote[data-expanded='true']")
       blockquote = post_stream.find("#{post2_selector} aside.quote blockquote")
       expect(blockquote).to have_content(first_post.raw)
-    end
-  end
-
-  context "when cloaking a small action in a personal message" do
-    let!(:pm) { Fabricate(:private_message_topic, user: user) }
-    let!(:first_post) { Fabricate(:post, topic: pm, user: user) }
-    let!(:small_action) do
-      Fabricate(:small_action, topic: pm, user: user, action_code: "closed.enabled")
-    end
-    let!(:replies) do
-      Fabricate.times(10, :post, topic: pm, user: user, raw: "Hello world\n\n" * 20)
-    end
-
-    before { sign_in(user) }
-
-    def space_taken(selector)
-      page.evaluate_script(<<~JS)
-        (() => {
-          const el = document.querySelector(#{selector.to_json});
-          return el.nextElementSibling.getBoundingClientRect().top - el.getBoundingClientRect().top;
-        })()
-      JS
-    end
-
-    # A placeholder that takes up less space than the post it replaces shifts the
-    # page, which can push the post back across the cloaking boundary in a loop.
-    it "keeps the same space taken by the post when it is cloaked" do
-      visit "/t/#{pm.slug}/#{pm.id}/1"
-
-      selector = ".post-stream > [data-post-number='#{small_action.post_number}']"
-      expect(page).to have_css("#{selector} .small-action")
-      uncloaked_space = space_taken(selector)
-
-      send_keys(:end)
-
-      expect(page).to have_css("#{selector}.post-stream--cloaked")
-      expect(space_taken(selector)).to be_within(0.5).of(uncloaked_space)
     end
   end
 end

@@ -10,9 +10,7 @@
 }
 
 .powered-by-discourse {
-  z-index: calc(
-    z("base") + 2
-  ); // has to top experimental framing inset elements of Horizon
+  z-index: 400;
 }
 
 .boxed.white {
@@ -23,8 +21,8 @@
   background-color: transparent;
 }
 
-.admin-report .chart__body .report-alert.no-data,
-.admin-report .chart__body .report-alert.rate-limited {
+.admin-report .main .report-alert.no-data,
+.admin-report .main .report-alert.rate-limited {
   background-color: var(--d-content-background);
 }
 
@@ -38,6 +36,14 @@
 .fk-d-menu__inner-content,
 .menu-panel {
   background-color: var(--d-content-background);
+}
+
+.fk-d-menu .btn {
+  border-radius: 0;
+}
+
+.open .grippie {
+  background-color: var(--accent-color);
 }
 
 .d-editor-textarea-wrapper.in-focus,
@@ -59,6 +65,10 @@ input[type="color"]:focus,
 .select-kit.multi-select .multi-select-header:focus {
   border-color: var(--accent-color);
   outline: 2px solid var(--accent-color);
+}
+
+#reply-control {
+  background-color: var(--background-color);
 }
 
 @include viewport.until(sm) {
@@ -96,10 +106,6 @@ input[type="color"]:focus,
 
 .period-chooser-header {
   border-radius: 0;
-}
-
-.upcoming-change__badge-info {
-  padding-right: var(--space-2);
 }
 
 // compatibility with the top contributors sidebar theme component

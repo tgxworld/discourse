@@ -1,14 +1,14 @@
 import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
-import { fn } from "@ember/helper";
+import { Input } from "@ember/component";
+import { fn, hash } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
-import { TOAST } from "discourse/float-kit/lib/constants";
-import withEventValue from "discourse/helpers/with-event-value";
-import DButton from "discourse/ui-kit/d-button";
-import DIconGridPicker from "discourse/ui-kit/d-icon-grid-picker";
-import DToggleSwitch from "discourse/ui-kit/d-toggle-switch";
+import DButton from "discourse/components/d-button";
+import DToggleSwitch from "discourse/components/d-toggle-switch";
+import IconPicker from "select-kit/components/icon-picker";
+import { TOAST } from "float-kit/lib/constants";
 import DummyComponent from "discourse/plugins/styleguide/discourse/components/dummy-component";
 import StyleguideComponent from "discourse/plugins/styleguide/discourse/components/styleguide/component";
 import Controls from "discourse/plugins/styleguide/discourse/components/styleguide/controls";
@@ -86,12 +86,13 @@ export default class Toasts extends Component {
   }
 
   <template>
+    {{! template-lint-disable no-potential-path-strings }}
     <StyleguideExample @title="Toasts service">
       <StyleguideComponent @tag="default">
         <:actions>
           <DButton
-            @action={{fn this.showToast "default"}}
             @translatedLabel="Show default toast"
+            @action={{fn this.showToast "default"}}
           />
         </:actions>
       </StyleguideComponent>
@@ -99,8 +100,8 @@ export default class Toasts extends Component {
       <StyleguideComponent @tag="success">
         <:actions>
           <DButton
-            @action={{fn this.showToast "success"}}
             @translatedLabel="Show success toast"
+            @action={{fn this.showToast "success"}}
           />
         </:actions>
       </StyleguideComponent>
@@ -108,8 +109,8 @@ export default class Toasts extends Component {
       <StyleguideComponent @tag="warning">
         <:actions>
           <DButton
-            @action={{fn this.showToast "warning"}}
             @translatedLabel="Show warning toast"
+            @action={{fn this.showToast "warning"}}
           />
         </:actions>
       </StyleguideComponent>
@@ -117,8 +118,8 @@ export default class Toasts extends Component {
       <StyleguideComponent @tag="info">
         <:actions>
           <DButton
-            @action={{fn this.showToast "info"}}
             @translatedLabel="Show info toast"
+            @action={{fn this.showToast "info"}}
           />
         </:actions>
       </StyleguideComponent>
@@ -126,8 +127,8 @@ export default class Toasts extends Component {
       <StyleguideComponent @tag="error">
         <:actions>
           <DButton
-            @action={{fn this.showToast "error"}}
             @translatedLabel="Show error toast"
+            @action={{fn this.showToast "error"}}
           />
         </:actions>
       </StyleguideComponent>
@@ -135,8 +136,8 @@ export default class Toasts extends Component {
       <StyleguideComponent @tag="custom component">
         <:actions>
           <DButton
-            @action={{this.showCustomComponentToast}}
             @translatedLabel="Show toast"
+            @action={{this.showCustomComponentToast}}
           />
         </:actions>
       </StyleguideComponent>
@@ -156,41 +157,27 @@ export default class Toasts extends Component {
         </Row>
         {{#if this.autoClose}}
           <Row @name="[@options.duration] ms">
-            <input
-              type="number"
-              value={{this.duration}}
-              {{on "input" (withEventValue (fn (mut this.duration)))}}
-            />
+            <Input @value={{this.duration}} @type="number" />
           </Row>
         {{/if}}
         <Row @name="[@options.class]">
-          <input
-            type="text"
-            value={{this.class}}
-            {{on "input" (withEventValue (fn (mut this.class)))}}
-          />
+          <Input @value={{this.class}} />
         </Row>
         <Row>
           <b>Model props for default:</b>
         </Row>
         <Row @name="[@options.data.title]">
-          <input
-            type="text"
-            value={{this.title}}
-            {{on "input" (withEventValue (fn (mut this.title)))}}
-          />
+          <Input @value={{this.title}} />
         </Row>
         <Row @name="[@options.data.message]">
-          <input
-            type="text"
-            value={{this.message}}
-            {{on "input" (withEventValue (fn (mut this.message)))}}
-          />
+          <Input @value={{this.message}} />
         </Row>
         <Row @name="[@options.data.icon]">
-          <DIconGridPicker
-            @onChange={{fn (mut this.icon)}}
+          <IconPicker
+            @name="icon"
             @value={{this.icon}}
+            @options={{hash maximum=1}}
+            @onChange={{fn (mut this.icon)}}
           />
         </Row>
         <Row @name="With an action">

@@ -1,12 +1,7 @@
 import Component from "@glimmer/component";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
-import { AUTO_GROUPS } from "discourse/lib/constants";
-import GroupChooser from "discourse/select-kit/components/group-chooser";
-
-const AUTOMATIC_GROUP_IDS = new Set(
-  Object.values(AUTO_GROUPS).map((g) => g.id)
-);
+import GroupChooser from "select-kit/components/group-chooser";
 
 export default class PolicyGroupInput extends Component {
   @service site;
@@ -17,13 +12,10 @@ export default class PolicyGroupInput extends Component {
 
   get availableGroups() {
     return (this.site.groups || [])
-      .map((g) => {
-        if (this.args.excludeAutomaticGroups) {
-          return g.automatic || AUTOMATIC_GROUP_IDS.has(g.id) ? null : g.name;
-        }
-
-        return g.id === AUTO_GROUPS.everyone.id ? null : g.name;
-      })
+      .map((g) =>
+        // prevents group "everyone" to be listed
+        g.id === 0 ? null : g.name
+      )
       .filter(Boolean);
   }
 
@@ -35,10 +27,10 @@ export default class PolicyGroupInput extends Component {
   <template>
     <GroupChooser
       @content={{this.availableGroups}}
-      @nameProperty={{null}}
-      @onChange={{this.onChange}}
-      @value={{this.selectedGroups}}
       @valueProperty={{null}}
+      @nameProperty={{null}}
+      @value={{this.selectedGroups}}
+      @onChange={{this.onChange}}
     />
   </template>
 }

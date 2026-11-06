@@ -9,33 +9,24 @@ class GroupTagNotificationDefault < ActiveRecord::Base
   end
 
   def self.lookup(group, level)
-    where(group: group, notification_level: notification_levels[level])
-  end
-
-  def self.resolve_tag_ids(tag_names)
-    return [] if tag_names.blank?
-
-    Tag
-      .where_name(tag_names)
-      .pluck(:id, :target_tag_id)
-      .map { |id, target_id| target_id || id }
-      .uniq
+    self.where(group: group, notification_level: notification_levels[level])
   end
 
   def self.batch_set(group, level, tag_names)
     tag_names ||= []
     changed = false
 
-    records = where(group: group, notification_level: notification_levels[level])
+    records = self.where(group: group, notification_level: notification_levels[level])
     old_ids = records.pluck(:tag_id)
 
-    tag_ids = resolve_tag_ids(tag_names)
+    tag_ids = tag_names.empty? ? [] : Tag.where_name(tag_names).pluck(:id)
 
-    if where(group:, tag_id: tag_ids)
-         .where.not(notification_level: notification_levels[level])
-         .update_all(notification_level: notification_levels[level]) > 0
-      changed = true
-    end
+    Tag
+      .where_name(tag_names)
+      .joins(:target_tag)
+      .each { |tag| tag_ids[tag_ids.index(tag.id)] = tag.target_tag_id }
+
+    tag_ids.uniq!
 
     remove = (old_ids - tag_ids)
     if remove.present?
@@ -62,9 +53,9 @@ end
 # Table name: group_tag_notification_defaults
 #
 #  id                 :bigint           not null, primary key
-#  notification_level :integer          not null
 #  group_id           :integer          not null
 #  tag_id             :integer          not null
+#  notification_level :integer          not null
 #
 # Indexes
 #

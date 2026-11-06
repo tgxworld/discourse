@@ -3,20 +3,19 @@
 module DiscourseAi
   module Discord
     class BotController < ::ApplicationController
-      requires_plugin PLUGIN_NAME
+      requires_plugin ::DiscourseAi::PLUGIN_NAME
 
       skip_before_action :verify_authenticity_token
 
       def interactions
-        body = request.raw_post
-
         # Request signature verification
         begin
-          verify_request!(body)
+          verify_request!
         rescue Ed25519::VerifyError
           return head :unauthorized
         end
 
+        body = request.body.read
         interaction = JSON.parse(body, object_class: OpenStruct)
 
         if interaction.type == 1
@@ -37,10 +36,10 @@ module DiscourseAi
 
       private
 
-      def verify_request!(body)
+      def verify_request!
         signature = request.headers["X-Signature-Ed25519"]
         timestamp = request.headers["X-Signature-Timestamp"]
-        verify_key.verify([signature].pack("H*"), "#{timestamp}#{body}")
+        verify_key.verify([signature].pack("H*"), "#{timestamp}#{request.raw_post}")
       end
 
       def verify_key

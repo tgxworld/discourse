@@ -4,21 +4,13 @@ module DiscourseSubscriptions
   module Stripe
     extend ActiveSupport::Concern
 
-    def self.request_opts
-      { api_key: SiteSetting.discourse_subscriptions_secret_key }
-    end
-
-    def self.configured?
-      SiteSetting.discourse_subscriptions_public_key.present? &&
-        SiteSetting.discourse_subscriptions_secret_key.present?
-    end
-
-    def stripe_request_opts
-      DiscourseSubscriptions::Stripe.request_opts
+    def set_api_key
+      ::Stripe.api_key = SiteSetting.discourse_subscriptions_secret_key
     end
 
     def is_stripe_configured?
-      DiscourseSubscriptions::Stripe.configured?
+      SiteSetting.discourse_subscriptions_public_key.present? &&
+        SiteSetting.discourse_subscriptions_secret_key.present?
     end
   end
 end

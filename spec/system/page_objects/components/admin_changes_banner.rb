@@ -20,7 +20,7 @@ module PageObjects
       end
 
       def click_discard
-        element.find(".btn-default").click
+        element.find(".btn-secondary").click
       end
 
       def has_label?(label)

@@ -18,40 +18,6 @@ RSpec.describe Upload do
 
   it { is_expected.to have_many(:badges).dependent(:nullify) }
 
-  describe ".fetch_from" do
-    subject(:record) { described_class.fetch_from(sha1:, url:) }
-
-    fab!(:upload)
-
-    let(:url) { upload.url }
-
-    context "when sha1 is present" do
-      context "when there is a matching upload for this SHA1" do
-        let(:sha1) { upload.sha1 }
-
-        it "returns the record" do
-          expect(record).to eq(upload)
-        end
-      end
-
-      context "when there is no matching upload for this SHA1" do
-        let(:sha1) { "non-existent" }
-
-        it "fetches the record using the provided URL" do
-          expect(record).to eq(upload)
-        end
-      end
-    end
-
-    context "when sha1 is blank" do
-      let(:sha1) { "" }
-
-      it "fetches the record using the provided URL" do
-        expect(record).to eq(upload)
-      end
-    end
-  end
-
   describe ".with_no_non_post_relations" do
     it "does not find non-post related uploads" do
       post_upload = Fabricate(:upload)
@@ -78,139 +44,6 @@ RSpec.describe Upload do
 
       upload_ids = Upload.by_users.with_no_non_post_relations.pluck(:id)
       expect(upload_ids).to eq([post_upload.id])
-    end
-  end
-
-  describe "video conversion" do
-    let(:user) { Fabricate(:user) }
-
-    before do
-      # Add mp4 to authorized extensions for video uploads
-      extensions = SiteSetting.authorized_extensions.split("|")
-      SiteSetting.authorized_extensions = (extensions | ["mp4"]).join("|")
-
-      SiteSetting.video_conversion_service = "aws_mediaconvert"
-      SiteSetting.mediaconvert_role_arn = "arn:aws:iam::123456789012:role/MediaConvertRole"
-      SiteSetting.enable_s3_uploads = true
-      SiteSetting.s3_use_iam_profile = true
-      SiteSetting.video_conversion_enabled = true
-    end
-
-    context "when video conversion is enabled" do
-      it "enqueues a convert_video job for supported video files on create" do
-        allow(FileHelper).to receive(:is_supported_video?).with("small.mp4").and_return(true)
-
-        upload = nil
-        expect_enqueued_with(job: :convert_video, args: {}) do
-          upload = Fabricate(:upload, original_filename: "small.mp4", extension: "mp4", user: user)
-        end
-        expect_job_enqueued(job: :convert_video, args: { upload_id: upload.id })
-      end
-
-      it "does not enqueue a convert_video job for unsupported video files" do
-        allow(FileHelper).to receive(:is_supported_video?).with("small.mp4").and_return(false)
-
-        expect_not_enqueued_with(job: :convert_video) do
-          Fabricate(:upload, original_filename: "small.mp4", extension: "mp4", user: user)
-        end
-      end
-
-      it "does not enqueue a convert_video job when video conversion is disabled" do
-        SiteSetting.video_conversion_enabled = false
-        allow(FileHelper).to receive(:is_supported_video?).with("small.mp4").and_return(true)
-
-        expect_not_enqueued_with(job: :convert_video) do
-          Fabricate(:upload, original_filename: "small.mp4", extension: "mp4", user: user)
-        end
-      end
-
-      it "does not enqueue a convert_video job when S3 uploads are disabled" do
-        SiteSetting.enable_s3_uploads = false
-        allow(FileHelper).to receive(:is_supported_video?).with("small.mp4").and_return(true)
-
-        expect_not_enqueued_with(job: :convert_video) do
-          Fabricate(:upload, original_filename: "small.mp4", extension: "mp4", user: user)
-        end
-      end
-
-      it "does not enqueue a convert_video job for non-video files" do
-        expect_not_enqueued_with(job: :convert_video) do
-          Fabricate(:upload, original_filename: "image.png", extension: "png", user: user)
-        end
-      end
-
-      it "does not enqueue a convert_video job if OptimizedVideo already exists" do
-        allow(FileHelper).to receive(:is_supported_video?).with("small.mp4").and_return(true)
-        allow(FileHelper).to receive(:is_supported_video?).with("video_converted.mp4").and_return(
-          true,
-        )
-
-        # Create original upload
-        upload = Fabricate(:upload, original_filename: "small.mp4", extension: "mp4", user: user)
-
-        # Create OptimizedVideo record for the original upload
-        optimized_video = Fabricate(:optimized_video, upload: upload)
-
-        # Update the original upload to trigger after_commit
-        expect_not_enqueued_with(job: :convert_video) { upload.update!(filesize: 12_345) }
-      end
-
-      it "does not enqueue a convert_video job on update, only on create" do
-        allow(FileHelper).to receive(:is_supported_video?).with("small.mp4").and_return(true)
-
-        upload = Fabricate(:upload, original_filename: "small.mp4", extension: "mp4", user: user)
-
-        # Update the upload - should not trigger video conversion since it's after_create, not after_update
-        expect_not_enqueued_with(job: :convert_video) { upload.update!(filesize: 12_345) }
-      end
-
-      it "does not enqueue a convert_video job for optimized video uploads to prevent infinite loop" do
-        allow(FileHelper).to receive(:is_supported_video?).with("small.mp4").and_return(true)
-        allow(FileHelper).to receive(:is_supported_video?).with("video_converted.mp4").and_return(
-          true,
-        )
-
-        # Create original upload
-        upload = Fabricate(:upload, original_filename: "small.mp4", extension: "mp4", user: user)
-
-        # Use OptimizedVideo.create_for to simulate the real flow
-        # This creates the optimized upload and then the OptimizedVideo record
-        optimized_video = nil
-        optimized_upload = nil
-        expect_not_enqueued_with(job: :convert_video) do
-          optimized_video =
-            OptimizedVideo.create_for(
-              upload,
-              "video_converted.mp4",
-              user.id,
-              filesize: 1000,
-              sha1: "abcdef1234567890",
-              url: "https://example.com/video_converted.mp4",
-              adapter: "aws_mediaconvert",
-            )
-        end
-
-        expect(optimized_video).not_to be_nil
-      end
-
-      it "enqueues a convert_video job for user uploads with _converted in filename" do
-        allow(FileHelper).to receive(:is_supported_video?).with(
-          "my_video_converted.mp4",
-        ).and_return(true)
-
-        # User uploads a file with "_converted" in the name - should still be converted
-        upload = nil
-        expect_enqueued_with(job: :convert_video, args: {}) do
-          upload =
-            Fabricate(
-              :upload,
-              original_filename: "my_video_converted.mp4",
-              extension: "mp4",
-              user: user,
-            )
-        end
-        expect_job_enqueued(job: :convert_video, args: { upload_id: upload.id })
-      end
     end
   end
 
@@ -262,57 +95,6 @@ RSpec.describe Upload do
     expect(upload.thumbnail_height).to eq(500)
   end
 
-  describe "#fix_dimensions!" do
-    shared_examples "SVG dimension repair" do |expected_zero_dimensions|
-      it "persists SVG dimensions and thumbnail dimensions" do
-        upload = Fabricate(:upload, extension: "svg", width: nil, height: nil)
-        file = file_from_fixtures("tiny.svg")
-        upload.update!(url: Discourse.store.store_upload(file, upload))
-
-        upload.fix_dimensions!
-
-        expect(
-          upload.reload.attributes.slice("width", "height", "thumbnail_width", "thumbnail_height"),
-        ).to eq("width" => 115, "height" => 86, "thumbnail_width" => 115, "thumbnail_height" => 86)
-      end
-
-      it "stores the detected dimensions for a zero-sized SVG" do
-        upload = Fabricate(:upload, extension: "svg", width: nil, height: nil)
-        file = file_from_fixtures("zero_sized.svg")
-        upload.update!(url: Discourse.store.store_upload(file, upload))
-
-        upload.fix_dimensions!
-
-        expect([upload.reload.width, upload.height]).to eq(expected_zero_dimensions)
-        expect([upload.thumbnail_width, upload.thumbnail_height]).to eq(expected_zero_dimensions)
-      end
-
-      it "stores zero dimensions when SVG dimension detection fails" do
-        upload = Fabricate(:upload, extension: "svg", width: nil, height: nil)
-        file = file_from_contents("invalid SVG", "invalid.svg")
-        upload.update!(url: Discourse.store.store_upload(file, upload))
-
-        upload.fix_dimensions!
-
-        expect(
-          upload.reload.attributes.slice("width", "height", "thumbnail_width", "thumbnail_height"),
-        ).to eq("width" => 0, "height" => 0, "thumbnail_width" => 0, "thumbnail_height" => 0)
-      end
-    end
-
-    context "with libvips disabled" do
-      before { global_setting :enable_vips_image_processing, false }
-
-      include_examples "SVG dimension repair", [120, 90]
-    end
-
-    context "with libvips enabled" do
-      before { global_setting :enable_vips_image_processing, true }
-
-      include_examples "SVG dimension repair", [0, 0]
-    end
-  end
-
   it "dimension calculation returns nil on missing image" do
     SiteSetting.max_image_megapixels = 85
     upload = UploadCreator.new(huge_image, "image.png").create_for(user_id)
@@ -324,12 +106,25 @@ RSpec.describe Upload do
     expect(upload.thumbnail_width).to eq(nil)
   end
 
+  it "returns error when image resolution is to big" do
+    SiteSetting.max_image_megapixels = 10
+    upload = UploadCreator.new(huge_image, "image.png").create_for(user_id)
+    expect(upload.persisted?).to eq(false)
+    expect(upload.errors.messages[:base].first).to eq(
+      I18n.t(
+        "upload.images.larger_than_x_megapixels",
+        max_image_megapixels: 10,
+        original_filename: upload.original_filename,
+      ),
+    )
+  end
+
   it "extracts file extension" do
     created_upload = UploadCreator.new(image, image_filename).create_for(user_id)
     expect(created_upload.extension).to eq("png")
   end
 
-  it "creates an invalid upload when the filename is blank" do
+  it "should create an invalid upload when the filename is blank" do
     SiteSetting.authorized_extensions = "*"
     created_upload = UploadCreator.new(attachment, nil).create_for(user_id)
     expect(created_upload.valid?).to eq(false)
@@ -338,7 +133,7 @@ RSpec.describe Upload do
   describe ".extract_url" do
     let(:url) { "https://example.com/uploads/default/original/1X/d1c2d40ab994e8410c.png" }
 
-    it "extracts the original upload path" do
+    it "should return the right part of url" do
       expect(Upload.extract_url(url).to_s).to eq("/original/1X/d1c2d40ab994e8410c.png")
     end
   end
@@ -357,12 +152,12 @@ RSpec.describe Upload do
         upload.reload
       end
 
-      it "finds the upload by its extensionless URL" do
+      it "should return the right upload" do
         expect(Upload.get_from_url(upload.url)).to eq(upload)
       end
     end
 
-    it "finds an upload only when its full path matches" do
+    it "should return the right upload as long as the upload's URL matches" do
       upload.update!(url: "/uploads/default/12345/971308e535305c51.png")
 
       expect(Upload.get_from_url(upload.url)).to eq(upload)
@@ -378,21 +173,23 @@ RSpec.describe Upload do
         )
       end
 
-      it "finds the upload by its nested directory URL" do
+      it "should return the right upload" do
         expect(Upload.get_from_url(upload.url)).to eq(upload)
       end
     end
 
     it "works when using a cdn" do
-      original_asset_host = Rails.configuration.action_controller.asset_host
-      Rails.configuration.action_controller.asset_host = "http://my.cdn.com"
+      begin
+        original_asset_host = Rails.configuration.action_controller.asset_host
+        Rails.configuration.action_controller.asset_host = "http://my.cdn.com"
 
-      expect(Upload.get_from_url(URI.join("http://my.cdn.com", upload.url).to_s)).to eq(upload)
-    ensure
-      Rails.configuration.action_controller.asset_host = original_asset_host
+        expect(Upload.get_from_url(URI.join("http://my.cdn.com", upload.url).to_s)).to eq(upload)
+      ensure
+        Rails.configuration.action_controller.asset_host = original_asset_host
+      end
     end
 
-    it "finds the upload by its full URL" do
+    it "should return the right upload when using the full URL" do
       expect(
         Upload.get_from_url(URI.join("http://discourse.some.com:3000/", upload.url).to_s),
       ).to eq(upload)
@@ -416,7 +213,7 @@ RSpec.describe Upload do
         expect(upload.content).to eq("hello")
       end
 
-      it "finds the S3 upload by its base URL" do
+      it "should return the right upload when using base url (not CDN) for s3" do
         upload
         expect(Upload.get_from_url(upload.url)).to eq(upload)
       end
@@ -426,7 +223,7 @@ RSpec.describe Upload do
 
         before { SiteSetting.s3_cdn_url = s3_cdn_url }
 
-        it "finds the matching upload" do
+        it "should return the right upload" do
           upload
           expect(Upload.get_from_url(URI.join(s3_cdn_url, path).to_s)).to eq(upload)
         end
@@ -434,23 +231,25 @@ RSpec.describe Upload do
         describe "when upload bucket contains subfolder" do
           before { SiteSetting.s3_upload_bucket = "s3-upload-bucket/path/path2" }
 
-          it "finds the matching upload" do
+          it "should return the right upload" do
             upload
             expect(Upload.get_from_url(URI.join(s3_cdn_url, path).to_s)).to eq(upload)
           end
         end
       end
 
-      it "finds the upload when S3 and assets share a CDN" do
-        original_asset_host = Rails.configuration.action_controller.asset_host
-        cdn_url = "http://my.cdn.com"
-        Rails.configuration.action_controller.asset_host = cdn_url
-        SiteSetting.s3_cdn_url = cdn_url
-        upload
+      it "should return the right upload when using one CDN for both s3 and assets" do
+        begin
+          original_asset_host = Rails.configuration.action_controller.asset_host
+          cdn_url = "http://my.cdn.com"
+          Rails.configuration.action_controller.asset_host = cdn_url
+          SiteSetting.s3_cdn_url = cdn_url
+          upload
 
-        expect(Upload.get_from_url(URI.join(cdn_url, path).to_s)).to eq(upload)
-      ensure
-        Rails.configuration.action_controller.asset_host = original_asset_host
+          expect(Upload.get_from_url(URI.join(cdn_url, path).to_s)).to eq(upload)
+        ensure
+          Rails.configuration.action_controller.asset_host = original_asset_host
+        end
       end
     end
   end
@@ -483,14 +282,16 @@ RSpec.describe Upload do
     end
 
     it "works when using a CDN" do
-      original_asset_host = Rails.configuration.action_controller.asset_host
-      Rails.configuration.action_controller.asset_host = "http://my.cdn.com"
+      begin
+        original_asset_host = Rails.configuration.action_controller.asset_host
+        Rails.configuration.action_controller.asset_host = "http://my.cdn.com"
 
-      expect(
-        Upload.get_from_urls([URI.join("http://my.cdn.com", upload.url).to_s]),
-      ).to contain_exactly(upload)
-    ensure
-      Rails.configuration.action_controller.asset_host = original_asset_host
+        expect(
+          Upload.get_from_urls([URI.join("http://my.cdn.com", upload.url).to_s]),
+        ).to contain_exactly(upload)
+      ensure
+        Rails.configuration.action_controller.asset_host = original_asset_host
+      end
     end
 
     it "works with full URLs" do
@@ -506,13 +307,13 @@ RSpec.describe Upload do
   end
 
   describe ".generate_digest" do
-    it "returns the upload's digest" do
+    it "should return the right digest" do
       expect(Upload.generate_digest(image.path)).to eq("bc975735dfc6409c1c2aa5ebf2239949bcbdbd65")
     end
   end
 
   describe ".short_url" do
-    it "generates the short URL" do
+    it "should generate a correct short url" do
       upload = Upload.new(sha1: "bda2c513e1da04f7b4e99230851ea2aafeb8cc4e", extension: "png")
       expect(upload.short_url).to eq("upload://r3AYqESanERjladb4vBB7VsMBm6.png")
 
@@ -522,7 +323,7 @@ RSpec.describe Upload do
   end
 
   describe ".sha1_from_short_url" do
-    it "looks up the SHA1" do
+    it "should be able to look up sha1" do
       sha1 = "bda2c513e1da04f7b4e99230851ea2aafeb8cc4e"
 
       expect(Upload.sha1_from_short_url("upload://r3AYqESanERjladb4vBB7VsMBm6.png")).to eq(sha1)
@@ -530,14 +331,14 @@ RSpec.describe Upload do
       expect(Upload.sha1_from_short_url("r3AYqESanERjladb4vBB7VsMBm6")).to eq(sha1)
     end
 
-    it "looks up the SHA1 with leading zeros" do
+    it "should be able to look up sha1 even with leading zeros" do
       sha1 = "0000c513e1da04f7b4e99230851ea2aafeb8cc4e"
       expect(Upload.sha1_from_short_url("upload://1Eg9p8rrCURq4T3a6iJUk0ri6.png")).to eq(sha1)
     end
   end
 
   describe ".sha1_from_long_url" do
-    it "extracts the SHA1 from a regular upload URL" do
+    it "should be able to get the sha1 from a regular upload URL" do
       expect(
         Upload.sha1_from_long_url(
           "https://cdn.test.com/test/original/4X/7/6/5/1b6453892473a467d07372d45eb05abc2031647a.png",
@@ -545,7 +346,7 @@ RSpec.describe Upload do
       ).to eq("1b6453892473a467d07372d45eb05abc2031647a")
     end
 
-    it "extracts the SHA1 from a secure upload URL" do
+    it "should be able to get the sha1 from a secure upload URL" do
       expect(
         Upload.sha1_from_long_url(
           "#{Discourse.base_url}\/secure-uploads/original/1X/1b6453892473a467d07372d45eb05abc2031647a.png",
@@ -563,14 +364,14 @@ RSpec.describe Upload do
   end
 
   describe "#base62_sha1" do
-    it "encodes the SHA1 in base 62" do
+    it "should return the right value" do
       upload.update!(sha1: "0000c513e1da04f7b4e99230851ea2aafeb8cc4e")
       expect(upload.base62_sha1).to eq("1Eg9p8rrCURq4T3a6iJUk0ri6")
     end
   end
 
   describe ".sha1_from_short_path" do
-    it "looks up the SHA1 from a short path with or without an extension" do
+    it "should be able to lookup sha1" do
       path = "/uploads/short-url/3UjQ4jHoyeoQndk5y3qHzm3QVTQ.png"
       sha1 = "1b6453892473a467d07372d45eb05abc2031647a"
 
@@ -580,13 +381,13 @@ RSpec.describe Upload do
   end
 
   describe "#to_s" do
-    it "returns the upload URL" do
+    it "should return the right value" do
       expect(upload.to_s).to eq(upload.url)
     end
   end
 
   describe ".migrate_to_new_scheme" do
-    it "does not migrate system uploads" do
+    it "should not migrate system uploads" do
       SiteSetting.migrate_to_new_scheme = true
 
       expect { Upload.migrate_to_new_scheme }.to_not change { Upload.pluck(:url) }
@@ -769,101 +570,6 @@ RSpec.describe Upload do
         end
       end
     end
-
-    context "with optimized videos" do
-      before do
-        extensions = SiteSetting.authorized_extensions.split("|")
-        SiteSetting.authorized_extensions = (extensions | %w[mp4 mov avi mkv]).join("|")
-        enable_secure_uploads
-      end
-
-      it "syncs optimized video secure status when original upload secure status changes from false to true" do
-        original_upload = Fabricate(:upload, secure: false)
-        optimized_video = Fabricate(:optimized_video, upload: original_upload)
-        optimized_upload = optimized_video.optimized_upload
-        optimized_upload.update!(secure: false)
-
-        FileStore::S3Store.any_instance.expects(:update_upload_access_control).with(original_upload)
-        FileStore::S3Store
-          .any_instance
-          .expects(:update_upload_access_control)
-          .with(optimized_upload)
-
-        original_upload.update!(access_control_post: Fabricate(:private_message_post))
-        original_upload.update_secure_status
-
-        expect(original_upload.reload.secure).to eq(true)
-        expect(optimized_upload.reload.secure).to eq(true)
-      end
-
-      it "syncs optimized video secure status when original upload secure status changes from true to false" do
-        original_upload =
-          Fabricate(:upload, secure: true, access_control_post: Fabricate(:private_message_post))
-        optimized_video = Fabricate(:optimized_video, upload: original_upload)
-        optimized_upload = optimized_video.optimized_upload
-        optimized_upload.update!(secure: true)
-
-        FileStore::S3Store.any_instance.expects(:update_upload_access_control).with(original_upload)
-        FileStore::S3Store
-          .any_instance
-          .expects(:update_upload_access_control)
-          .with(optimized_upload)
-
-        original_upload.update!(access_control_post: Fabricate(:post))
-        original_upload.update_secure_status
-
-        expect(original_upload.reload.secure).to eq(false)
-        expect(optimized_upload.reload.secure).to eq(false)
-      end
-
-      it "does not update optimized video secure status if it already matches" do
-        original_upload =
-          Fabricate(:upload, secure: true, access_control_post: Fabricate(:private_message_post))
-        optimized_video = Fabricate(:optimized_video, upload: original_upload)
-        optimized_upload = optimized_video.optimized_upload
-        optimized_upload.update!(secure: true)
-
-        FileStore::S3Store
-          .any_instance
-          .expects(:update_upload_access_control)
-          .with(original_upload)
-          .never
-
-        original_upload.update_secure_status
-
-        expect(original_upload.reload.secure).to eq(true)
-        expect(optimized_upload.reload.secure).to eq(true)
-      end
-
-      it "syncs multiple optimized videos when original upload secure status changes" do
-        original_upload = Fabricate(:upload, secure: false)
-        optimized_video1 =
-          Fabricate(:optimized_video, upload: original_upload, adapter: "aws_mediaconvert")
-        optimized_video2 =
-          Fabricate(:optimized_video, upload: original_upload, adapter: "other_adapter")
-        optimized_upload1 = optimized_video1.optimized_upload
-        optimized_upload2 = optimized_video2.optimized_upload
-        optimized_upload1.update!(secure: false)
-        optimized_upload2.update!(secure: false)
-
-        FileStore::S3Store.any_instance.expects(:update_upload_access_control).with(original_upload)
-        FileStore::S3Store
-          .any_instance
-          .expects(:update_upload_access_control)
-          .with(optimized_upload1)
-        FileStore::S3Store
-          .any_instance
-          .expects(:update_upload_access_control)
-          .with(optimized_upload2)
-
-        original_upload.update!(access_control_post: Fabricate(:private_message_post))
-        original_upload.update_secure_status
-
-        expect(original_upload.reload.secure).to eq(true)
-        expect(optimized_upload1.reload.secure).to eq(true)
-        expect(optimized_upload2.reload.secure).to eq(true)
-      end
-    end
   end
 
   describe ".extract_upload_ids" do
@@ -889,13 +595,6 @@ RSpec.describe Upload do
       base62 = Upload.base62_sha1(upload.sha1).delete_prefix("0")
       ids = Upload.extract_upload_ids("This URL /#{base62} is an upload")
       expect(ids).to contain_exactly(upload.id)
-    end
-  end
-
-  describe ".sha1_from_base62_encoded" do
-    it "rejects base62 strings that are too long" do
-      long_base62 = "A" * 1000
-      expect(Upload.sha1_from_base62_encoded(long_base62)).to be_nil
     end
   end
 
@@ -981,18 +680,6 @@ RSpec.describe Upload do
     let(:white_image) { Fabricate(:image_upload, color: "white") }
     let(:red_image) { Fabricate(:image_upload, color: "red") }
     let(:high_color_image) { Fabricate(:image_upload, color: "#000A00F00", color_depth: 16) }
-    let(:tiny_image) do
-      upload = Fabricate(:upload, extension: "png")
-      file = file_from_fixtures("cropped.png")
-      upload.update!(url: Discourse.store.store_upload(file, upload))
-      upload
-    end
-    let(:ico_image) do
-      upload = Fabricate(:upload, extension: "ico")
-      file = file_from_fixtures("smallest.ico")
-      upload.update!(url: Discourse.store.store_upload(file, upload))
-      upload
-    end
     let(:not_an_image) do
       upload = Fabricate(:upload)
 
@@ -1014,9 +701,7 @@ RSpec.describe Upload do
       upload
     end
 
-    it "correctly identifies and stores an image's dominant color with ImageMagick" do
-      global_setting :enable_vips_image_processing, false
-
+    it "correctly identifies and stores an image's dominant color" do
       expect(white_image.dominant_color).to eq(nil)
       expect(white_image.dominant_color(calculate_if_missing: true)).to eq("FFFFFF")
       expect(white_image.dominant_color).to eq("FFFFFF")
@@ -1032,46 +717,6 @@ RSpec.describe Upload do
       # EF is closer to F00 than F0
       expect(high_color_image.dominant_color(calculate_if_missing: true)).to eq("009FEF")
       expect(high_color_image.dominant_color).to eq("009FEF")
-
-      uncached_tiny_color = tiny_image.dominant_color
-
-      expect(uncached_tiny_color).to eq(nil)
-
-      calculated_tiny_color = tiny_image.dominant_color(calculate_if_missing: true)
-
-      expect(calculated_tiny_color).to eq("524F40")
-
-      cached_tiny_color = tiny_image.dominant_color
-
-      expect(cached_tiny_color).to eq(calculated_tiny_color)
-    end
-
-    it "uses libvips to calculate the dominant color when enabled" do
-      global_setting :enable_vips_image_processing, true
-
-      expect(tiny_image.dominant_color(calculate_if_missing: true)).to eq("565342")
-    end
-
-    it "normalizes a 16-bit dominant color when libvips is enabled" do
-      global_setting :enable_vips_image_processing, true
-
-      color = high_color_image.dominant_color(calculate_if_missing: true)
-
-      expect(color).to eq("00A0F0")
-      expect(high_color_image.dominant_color).to eq(color)
-    end
-
-    it "stores an empty dominant color for ICO images" do
-      expect(ico_image.dominant_color(calculate_if_missing: true)).to eq("")
-      expect(ico_image.dominant_color).to eq("")
-    end
-
-    it "stores an empty dominant color after image processing fails" do
-      global_setting :enable_vips_image_processing, true
-      DiscourseVips.stubs(:dominant_color).raises(DiscourseVips::Error).then.returns("FFFFFF")
-
-      expect(white_image.dominant_color(calculate_if_missing: true)).to eq("")
-      expect(white_image.dominant_color(calculate_if_missing: true)).to eq("")
     end
 
     it "can be backfilled" do
@@ -1106,42 +751,27 @@ RSpec.describe Upload do
       expect(not_an_image.dominant_color).to eq("")
     end
 
-    it "stores an empty string when the file is missing from the store" do
-      File.delete(Discourse.store.path_for(white_image))
-
-      expect(white_image.dominant_color).to eq(nil)
-      expect(white_image.dominant_color(calculate_if_missing: true)).to eq("")
-      expect(white_image.dominant_color).to eq("")
-    end
-
     it "correctly handles invalid image files" do
       expect(invalid_image.dominant_color).to eq(nil)
       expect(invalid_image.dominant_color(calculate_if_missing: true)).to eq("")
       expect(invalid_image.dominant_color).to eq("")
     end
 
-    it "raises when ImageMagick returns an invalid dominant color" do
-      global_setting :enable_vips_image_processing, false
-      ImageMagick.stubs(:magick).returns("someinvalidoutput")
+    it "correctly handles unparsable ImageMagick output" do
+      Discourse::Utils.stubs(:execute_command).returns("someinvalidoutput")
 
       expect(invalid_image.dominant_color).to eq(nil)
+
       expect { invalid_image.dominant_color(calculate_if_missing: true) }.to raise_error(
         /Calculated dominant color but unable to parse output/,
       )
+
       expect(invalid_image.dominant_color).to eq(nil)
-    end
-
-    it "stores an empty string for an invalid dominant color response" do
-      global_setting :enable_vips_image_processing, true
-      DiscourseVips.stubs(:dominant_color).returns("invalid")
-
-      expect(white_image.dominant_color(calculate_if_missing: true)).to eq("")
-      expect(white_image.dominant_color).to eq("")
     end
 
     it "correctly handles error when file is too large to download" do
       white_image.stubs(:local?).returns(false)
-      FileHelper.stubs(:download).returns(nil)
+      FileStore::LocalStore.any_instance.stubs(:download).returns(nil).once
 
       expect(white_image.dominant_color).to eq(nil)
       expect(white_image.dominant_color(calculate_if_missing: true)).to eq("")
@@ -1150,7 +780,11 @@ RSpec.describe Upload do
 
     it "correctly handles error when file has HTTP error" do
       white_image.stubs(:local?).returns(false)
-      FileHelper.stubs(:download).raises(OpenURI::HTTPError.new("Error", nil))
+      FileStore::LocalStore
+        .any_instance
+        .stubs(:download)
+        .raises(OpenURI::HTTPError.new("Error", nil))
+        .once
 
       expect(white_image.dominant_color).to eq(nil)
       expect(white_image.dominant_color(calculate_if_missing: true)).to eq("")
@@ -1173,24 +807,8 @@ RSpec.describe Upload do
     end
   end
 
-  describe "#target_jpeg_image_quality" do
-    let(:local_path) { Rails.root.join("spec/fixtures/images/logo.jpg").to_s }
-
-    it "returns nil when the target quality is higher than the source quality" do
-      target_quality = upload.target_jpeg_image_quality(local_path, 100)
-
-      expect(target_quality).to eq(nil)
-    end
-
-    it "returns the target quality when it is lower than the source quality" do
-      target_quality = upload.target_jpeg_image_quality(local_path, 10)
-
-      expect(target_quality).to eq(10)
-    end
-  end
-
   describe ".mark_invalid_s3_uploads_as_missing" do
-    it "changes invalid_etag verification statuses to s3_file_missing" do
+    it "should update all upload records with a `verification_status` of `invalid_etag` to `s3_file_missing`" do
       upload_1 =
         Fabricate(:upload_s3, verification_status: Upload.verification_statuses[:invalid_etag])
 

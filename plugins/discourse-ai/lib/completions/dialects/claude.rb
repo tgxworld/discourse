@@ -54,24 +54,11 @@ module DiscourseAi
           tools = nil
           tools = tools_dialect.translated_tools if native_tool_support?
 
-          tools = (tools || []).concat(native_tools) if native_tools.present?
-
           ClaudePrompt.new(system_prompt.presence, interleving_messages, tools, tool_choice)
         end
 
-        def native_tools
-          tools = []
-          if prompt.native_tool?(DiscourseAi::Completions::NativeTools::WEB_SEARCH)
-            tools << { type: "web_search_20250305", name: "web_search" }
-          end
-          if prompt.native_tool?(DiscourseAi::Completions::NativeTools::WEB_FETCH)
-            tools << { type: "web_fetch_20260209", name: "web_fetch", allowed_callers: %w[direct] }
-          end
-          tools
-        end
-
         def max_prompt_tokens
-          max_prompt_tokens_with_reserved_output
+          llm_model.max_prompt_tokens
         end
 
         def native_tool_support?
@@ -99,37 +86,22 @@ module DiscourseAi
         end
 
         def model_msg(msg)
-          anthropic = anthropic_reasoning(msg)
-          if (content_blocks = anthropic&.dig(:content_blocks)).present?
-            content_blocks = content_blocks.deep_dup
-            if msg[:thinking] && anthropic[:signature] &&
-                 !content_blocks.any? { |block| content_block_type(block) == "thinking" }
-              content_blocks.unshift(
-                { type: "thinking", thinking: msg[:thinking], signature: anthropic[:signature] },
-              )
-            end
-            if anthropic[:redacted_signature] &&
-                 !content_blocks.any? { |block| content_block_type(block) == "redacted_thinking" }
-              content_blocks.unshift(
-                { type: "redacted_thinking", data: anthropic[:redacted_signature] },
-              )
-            end
-            return { role: "assistant", content: content_blocks }
-          end
-
           content_array = []
 
-          if anthropic.present?
-            if msg[:thinking] && anthropic[:signature]
+          if msg[:thinking] || msg[:redacted_thinking_signature]
+            if msg[:thinking]
               content_array << {
                 type: "thinking",
                 thinking: msg[:thinking],
-                signature: anthropic[:signature],
+                signature: msg[:thinking_signature],
               }
             end
 
-            if anthropic[:redacted_signature]
-              content_array << { type: "redacted_thinking", data: anthropic[:redacted_signature] }
+            if msg[:redacted_thinking_signature]
+              content_array << {
+                type: "redacted_thinking",
+                data: msg[:redacted_thinking_signature],
+              }
             end
           end
 
@@ -137,24 +109,13 @@ module DiscourseAi
           content_array =
             to_encoded_content_array(
               content: [content_array, msg[:content]].flatten,
-              upload_encoder: ->(_details) {},
+              image_encoder: ->(details) {},
               text_encoder: ->(text) { { type: "text", text: text } },
               other_encoder: ->(details) { details },
-              allow_images: false,
-              allow_documents: false,
+              allow_vision: false,
             )
 
           { role: "assistant", content: no_array_if_only_text(content_array) }
-        end
-
-        def content_block_type(block)
-          block[:type] || block["type"]
-        end
-
-        def anthropic_reasoning(message)
-          info = message[:thinking_provider_info]
-          return if info.blank?
-          info[:anthropic] || info["anthropic"]
         end
 
         def system_msg(msg)
@@ -169,20 +130,15 @@ module DiscourseAi
 
         def user_msg(msg)
           content_array = []
-          if (prefix = user_id_prefix(msg))
-            content_array << prefix
-          end
+          content_array << "#{msg[:id]}: " if msg[:id]
           content_array.concat([msg[:content]].flatten)
 
           content_array =
             to_encoded_content_array(
               content: content_array,
-              upload_encoder: ->(details) { upload_node(details) },
+              image_encoder: ->(details) { image_node(details) },
               text_encoder: ->(text) { { type: "text", text: text } },
-              allow_images: vision_support?,
-              allow_documents: true,
-              allowed_attachment_types: llm_model.allowed_attachment_types,
-              upload_filter: ->(encoded) { document_allowed?(encoded) },
+              allow_vision: vision_support?,
             )
 
           { role: "user", content: no_array_if_only_text(content_array) }
@@ -206,24 +162,6 @@ module DiscourseAi
             },
             type: "image",
           }
-        end
-
-        def upload_node(details)
-          return if details.blank?
-          return { type: "text", text: details[:text] } if details[:text].present?
-
-          if details[:kind] == :document || details[:mime_type] == "application/pdf"
-            {
-              type: "document",
-              source: {
-                type: "base64",
-                data: details[:base64],
-                media_type: details[:mime_type],
-              },
-            }
-          else
-            image_node(details)
-          end
         end
       end
     end

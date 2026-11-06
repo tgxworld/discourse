@@ -1,22 +1,6 @@
 # frozen_string_literal: true
 
 class ColorScheme < ActiveRecord::Base
-  NAMES_TO_ID_MAP = {
-    "Light" => -1,
-    "Dark" => -2,
-    "Neutral" => -3,
-    "Grey Amber" => -4,
-    "Shades of Blue" => -5,
-    "Latte" => -6,
-    "Summer" => -7,
-    "Dark Rose" => -8,
-    "WCAG" => -9,
-    "WCAG Dark" => -10,
-    "Dracula" => -11,
-    "Solarized Light" => -12,
-    "Solarized Dark" => -13,
-  }
-
   BUILT_IN_SCHEMES = {
     Dark: {
       "primary" => "dddddd",
@@ -293,35 +277,19 @@ class ColorScheme < ActiveRecord::Base
     },
   }
 
-  LIGHT_PALETTE_NAME = "Light"
-  COLORS_ORDER = %w[
-    primary
-    secondary
-    tertiary
-    quaternary
-    header_background
-    header_primary
-    selected
-    hover
-    highlight
-    danger
-    success
-    love
-  ].freeze
+  LIGHT_THEME_ID = "Light"
 
   def self.base_color_scheme_colors
     base_with_hash = []
 
     base_colors.each { |name, color| base_with_hash << { name: name, hex: "#{color}" } }
 
-    list = [
-      { id: NAMES_TO_ID_MAP[LIGHT_PALETTE_NAME], name: LIGHT_PALETTE_NAME, colors: base_with_hash },
-    ]
+    list = [{ id: LIGHT_THEME_ID, colors: base_with_hash }]
 
     BUILT_IN_SCHEMES.each do |k, v|
       colors = []
       v.each { |name, color| colors << { name: name, hex: "#{color}" } }
-      list.push(id: NAMES_TO_ID_MAP[k.to_s], name: k.to_s, colors: colors)
+      list.push(id: k.to_s, colors: colors)
     end
 
     list
@@ -331,22 +299,8 @@ class ColorScheme < ActiveRecord::Base
     @hex_cache ||= DistributedCache.new("scheme_hex_for_name")
   end
 
-  def self.valid_ids_cache
-    @valid_ids_cache ||= DistributedCache.new("color_scheme_valid_ids")
-  end
-
-  # Used on the hot anonymous cache path (Middleware::AnonymousCache), so the
-  # set of valid ids is cached in-process to avoid a DB query per request.
-  def self.valid_id(id)
-    id = Integer(id, exception: false)
-    id if id && valid_ids_cache.defer_get_set("ids") { pluck(:id).to_set }.include?(id)
-  end
-
-  default_scope { where(remote_copy: false) }
-
   attr_accessor :is_base
   attr_accessor :skip_publish
-  attr_accessor :is_builtin_default
 
   has_many :color_scheme_colors, -> { order("id ASC") }, dependent: :destroy
 
@@ -356,16 +310,19 @@ class ColorScheme < ActiveRecord::Base
   after_save_commit :publish_discourse_stylesheet, unless: :skip_publish
   after_save_commit :dump_caches
   after_destroy :dump_caches
-  after_destroy :destroy_remote_original
   belongs_to :theme
-  belongs_to :base_scheme, -> { unscope(where: :remote_copy) }, class_name: "ColorScheme"
 
-  validate :no_edits_for_remote_copies, on: :update
+  has_one :theme_color_scheme, dependent: :destroy
+  has_one :owning_theme, class_name: "Theme", through: :theme_color_scheme, source: :theme
+
+  scope :without_theme_owned_palettes,
+        -> { where("color_schemes.id NOT IN (SELECT color_scheme_id FROM theme_color_schemes)") }
+
   validates_associated :color_scheme_colors
 
-  BASE_COLORS_FILE = "#{Rails.root.join("app/assets/stylesheets/common/foundation/colors.scss")}"
+  BASE_COLORS_FILE = "#{Rails.root}/app/assets/stylesheets/common/foundation/colors.scss"
   COLOR_TRANSFORMATION_FILE =
-    "#{Rails.root.join("app/assets/stylesheets/common/foundation/color_transformations.scss")}"
+    "#{Rails.root}/app/assets/stylesheets/common/foundation/color_transformations.scss"
 
   @mutex = Mutex.new
 
@@ -405,29 +362,21 @@ class ColorScheme < ActiveRecord::Base
     base_color_scheme_colors.map do |hash|
       scheme =
         new(
-          id: hash[:id],
-          name: I18n.t("color_schemes.#{hash[:name].downcase.gsub(" ", "_")}"),
+          name: I18n.t("color_schemes.#{hash[:id].downcase.gsub(" ", "_")}"),
           base_scheme_id: hash[:id],
         )
       scheme.colors = hash[:colors].map { |k| { name: k[:name], hex: k[:hex] } }
       scheme.is_base = true
-      scheme.is_builtin_default = hash[:id] == NAMES_TO_ID_MAP[LIGHT_PALETTE_NAME]
       scheme
     end
   end
 
   def self.base
-    @base_color_scheme ||=
-      begin
-        scheme = new(id: NAMES_TO_ID_MAP[LIGHT_PALETTE_NAME], name: LIGHT_PALETTE_NAME)
-        scheme.colors = base_colors.map { |name, hex| { name: name, hex: hex } }
-        scheme.is_base = true
-        scheme.is_builtin_default = true
-        scheme.define_singleton_method(:name) do
-          I18n.t("admin_js.admin.customize.theme.default_light_scheme")
-        end
-        scheme
-      end
+    return @base_color_scheme if @base_color_scheme
+    @base_color_scheme = new(name: I18n.t("color_schemes.base_theme_name"))
+    @base_color_scheme.colors = base_colors.map { |name, hex| { name: name, hex: hex } }
+    @base_color_scheme.is_base = true
+    @base_color_scheme
   end
 
   def self.is_base?(scheme_name)
@@ -439,13 +388,12 @@ class ColorScheme < ActiveRecord::Base
     new_color_scheme = new(name: params[:name])
     new_color_scheme.via_wizard = true if params[:via_wizard]
     new_color_scheme.base_scheme_id = params[:base_scheme_id]
-
-    scheme_name = NAMES_TO_ID_MAP.invert[params[:base_scheme_id]]
+    new_color_scheme.user_selectable = true
 
     colors =
-      BUILT_IN_SCHEMES[scheme_name.to_sym]&.map { |name, hex| { name: name, hex: hex } } if params[
-      :base_scheme_id
-    ]
+      BUILT_IN_SCHEMES[params[:base_scheme_id].to_sym]&.map do |name, hex|
+        { name: name, hex: hex }
+      end if params[:base_scheme_id]
     colors ||= base.colors_hashes
 
     # Override base values
@@ -460,30 +408,33 @@ class ColorScheme < ActiveRecord::Base
     new_color_scheme
   end
 
-  def self.lookup_hex_for_name(name, scheme_id = nil)
+  def self.lookup_hex_for_name(name, scheme_id = nil, dark: false)
     enabled_color_scheme = find_by(id: scheme_id) if scheme_id
     enabled_color_scheme ||= Theme.where(id: SiteSetting.default_theme_id).first&.color_scheme
     color_record = (enabled_color_scheme || base).colors.find { |c| c.name == name }
     return if !color_record
-    color_record.hex
+    dark ? color_record.dark_hex || color_record.hex : color_record.hex
   end
 
-  def self.hex_for_name(name, scheme_id = nil)
+  def self.hex_for_name(name, scheme_id = nil, dark: false)
     cache_key = scheme_id ? "#{name}_#{scheme_id}" : name
-    hex_cache.defer_get_set(cache_key) { lookup_hex_for_name(name, scheme_id) }
+    cache_key += "_dark" if dark
+    hex_cache.defer_get_set(cache_key) { lookup_hex_for_name(name, scheme_id, dark:) }
   end
 
   def colors=(arr)
     @colors_by_name = nil
-    arr.each { |c| color_scheme_colors << ColorSchemeColor.new(name: c[:name], hex: c[:hex]) }
+    arr.each { |c| self.color_scheme_colors << ColorSchemeColor.new(name: c[:name], hex: c[:hex]) }
   end
 
   def colors_by_name
     @colors_by_name ||=
-      colors.inject({}) do |sum, c|
-        sum[c.name] = c
-        sum
-      end
+      self
+        .colors
+        .inject({}) do |sum, c|
+          sum[c.name] = c
+          sum
+        end
   end
 
   def clear_colors_cache
@@ -496,22 +447,20 @@ class ColorScheme < ActiveRecord::Base
 
   def base_colors
     colors = nil
-    colors = BUILT_IN_SCHEMES[NAMES_TO_ID_MAP.invert[base_scheme_id].to_sym] if base_scheme_id &&
-      base_scheme_id < 0 && base_scheme_id != NAMES_TO_ID_MAP[LIGHT_PALETTE_NAME]
-    colors ||=
-      base_scheme
-        &.colors
-        &.reduce({}) do |acc, color|
-          acc[color.name] = color.hex
-          acc
-        end if base_scheme_id
-    colors || (base_scheme_id ? {} : ColorScheme.base_colors)
+    colors = BUILT_IN_SCHEMES[base_scheme_id.to_sym] if base_scheme_id && base_scheme_id != "Light"
+    colors || ColorScheme.base_colors
   end
 
-  def resolved_colors
+  def resolved_colors(dark: false)
     from_base = ColorScheme.base_colors
     from_custom_scheme = base_colors
-    from_db = colors.map { |c| [c.name, c.hex] }.to_h
+    from_db =
+      colors
+        .map do |c|
+          hex = dark ? (c.dark_hex || c.hex) : c.hex
+          [c.name, hex]
+        end
+        .to_h
 
     resolved = from_base.merge(from_custom_scheme).except("hover", "selected").merge(from_db)
 
@@ -535,7 +484,7 @@ class ColorScheme < ActiveRecord::Base
   end
 
   def publish_discourse_stylesheet
-    self.class.publish_discourse_stylesheets!(id) if id
+    self.class.publish_discourse_stylesheets!(self.id) if self.id
   end
 
   def self.publish_discourse_stylesheets!(id = nil)
@@ -559,20 +508,13 @@ class ColorScheme < ActiveRecord::Base
     end
   end
 
-  def self.sort_colors(hash)
-    sorted = hash.slice(*COLORS_ORDER)
-    sorted.merge!(hash.except(*COLORS_ORDER)) if sorted.size < hash.size
-    sorted
-  end
-
   def dump_caches
     self.class.hex_cache.clear
-    self.class.valid_ids_cache.clear
     ApplicationSerializer.expire_cache_fragment!("user_color_schemes")
   end
 
   def bump_version
-    self.version += 1 if id
+    self.version += 1 if self.id
   end
 
   def is_dark?
@@ -585,55 +527,7 @@ class ColorScheme < ActiveRecord::Base
   end
 
   def is_wcag?
-    base_scheme_id == NAMES_TO_ID_MAP["WCAG"] || base_scheme_id == NAMES_TO_ID_MAP["WCAG Dark"]
-  end
-
-  def diverge_from_remote
-    new_scheme = dup
-    new_scheme.colors = colors_hashes
-    new_scheme.via_wizard = false
-    new_scheme.user_selectable = false
-    new_scheme.base_scheme_id = nil
-    new_scheme.skip_publish = true
-    new_scheme.remote_copy = true
-
-    DistributedMutex.synchronize("color_scheme_diverge_from_remote_#{id}") do
-      reload
-      if base_scheme.blank?
-        transaction do
-          new_scheme.save!
-          self.base_scheme_id = new_scheme.id
-          save!
-        end
-      end
-    end
-
-    self
-  end
-
-  private
-
-  def destroy_remote_original
-    return if theme_id.blank?
-    return if base_scheme_id.blank? || base_scheme_id < 0
-
-    ColorScheme
-      .unscoped
-      .where(theme_id: theme_id, id: base_scheme_id, remote_copy: true)
-      .destroy_all
-  end
-
-  def no_edits_for_remote_copies
-    if (will_save_change_to_remote_copy? && remote_copy_was) ||
-         (
-           remote_copy &&
-             (
-               will_save_change_to_base_scheme_id? || will_save_change_to_user_selectable? ||
-                 will_save_change_to_theme_id?
-             )
-         )
-      errors.add(:base, I18n.t("color_schemes.errors.cannot_edit_remote_copies"))
-    end
+    base_scheme_id&.start_with?("WCAG")
   end
 end
 
@@ -643,12 +537,11 @@ end
 #
 #  id              :integer          not null, primary key
 #  name            :string           not null
-#  remote_copy     :boolean          default(FALSE), not null
-#  user_selectable :boolean          default(FALSE), not null
 #  version         :integer          default(1), not null
-#  via_wizard      :boolean          default(FALSE), not null
 #  created_at      :datetime         not null
 #  updated_at      :datetime         not null
-#  base_scheme_id  :integer
+#  via_wizard      :boolean          default(FALSE), not null
+#  base_scheme_id  :string
 #  theme_id        :integer
+#  user_selectable :boolean          default(FALSE), not null
 #

@@ -63,7 +63,7 @@ module DiscourseAi
       # if the user filtered the results or index is a bit out of date
       OVER_SELECTION_FACTOR = 4
 
-      def search_for_topics(query, page = 1, hyde: true, private_messages: false)
+      def search_for_topics(query, page = 1, hyde: true)
         max_results_per_page = 100
         limit = [Search.per_filter, max_results_per_page].min + 1
         offset = (page - 1) * limit
@@ -73,7 +73,6 @@ module DiscourseAi
         if search_term.blank? || search_term.length < SiteSetting.min_search_term_length
           return Post.none
         end
-        return Post.none if private_messages && guardian.user.nil?
 
         search_embedding = nil
         if hyde
@@ -87,91 +86,98 @@ module DiscourseAi
         schema = DiscourseAi::Embeddings::Schema.for(Topic)
 
         candidate_topic_ids =
-          schema
-            .asymmetric_similarity_search(
-              search_embedding,
-              limit: over_selection_limit,
-              offset: offset,
-            ) do |builder|
-              builder.join("topics ON topics.id = #{Schema::TOPICS_TABLE}.topic_id")
-              builder.where("topics.deleted_at IS NULL AND topics.visible")
-
-              if private_messages
-                builder.where(
-                  <<~SQL,
-                  topics.archetype = :private_message
-                  AND (
-                    topics.id IN (#{Topic::PRIVATE_MESSAGES_SQL_USER})
-                    OR topics.id IN (#{Topic::PRIVATE_MESSAGES_SQL_GROUP})
-                  )
-                SQL
-                  private_message: Archetype.private_message,
-                  user_id: guardian.user.id,
-                )
-              else
-                builder.where(
-                  "topics.archetype <> :private_message",
-                  private_message: Archetype.private_message,
-                )
-              end
-            end
-            .map(&:topic_id)
+          schema.asymmetric_similarity_search(
+            search_embedding,
+            limit: over_selection_limit,
+            offset: offset,
+          ).map(&:topic_id)
 
         semantic_results =
           ::Post
             .where(post_type: ::Topic.visible_post_types(guardian.user))
-            .joins(:topic)
+            .public_posts
             .where("topics.visible")
-            .where(hidden: false)
             .where(topic_id: candidate_topic_ids, post_number: 1)
             .order("array_position(ARRAY#{candidate_topic_ids}, posts.topic_id)")
             .limit(limit)
 
-        semantic_results =
-          if private_messages
-            semantic_results.where(
-              topics: {
-                archetype: Archetype.private_message,
-              },
-            ).private_posts_for_user(guardian.user)
-          else
-            semantic_results.where.not(topics: { archetype: Archetype.private_message })
-          end
-
         query_filter_results = search.apply_filters(semantic_results)
 
-        if private_messages
-          query_filter_results
-        else
-          guardian.filter_allowed_categories(query_filter_results)
-        end
+        guardian.filter_allowed_categories(query_filter_results)
       end
 
-      def similar_topic_ids_to(query, candidates:)
-        # NOTE: candidates may be a very large relation, be deliberate that only first is selected
-        return [] if candidates.limit(1).empty?
+      def quick_search(query)
+        max_semantic_results_per_page = 100
+        search = Search.new(query, { guardian: guardian })
+        search_term = search.term
+        hyde_model_id = self.class.find_ai_hyde_model_id
 
-        over_selection_limit = ::Topic::SIMILAR_TOPIC_LIMIT * OVER_SELECTION_FACTOR
-        asymmetric = true
-        search_embedding = vector.vector_from(query, asymmetric)
+        return [] if search_term.nil? || search_term.length < SiteSetting.min_search_term_length
 
-        schema = DiscourseAi::Embeddings::Schema.for(Topic)
+        vector = DiscourseAi::Embeddings::Vector.instance
 
-        candidate_topic_ids =
-          schema.asymmetric_similarity_search(
-            search_embedding,
-            limit: over_selection_limit,
-            offset: 0,
-          ).map(&:topic_id)
+        digest = OpenSSL::Digest::SHA1.hexdigest(search_term)
 
-        candidates.where(id: candidate_topic_ids).pluck(:id)
+        embedding_key =
+          build_embedding_key(digest, hyde_model_id, SiteSetting.ai_embeddings_selected_model)
+
+        search_term_embedding =
+          Discourse
+            .cache
+            .fetch(embedding_key, expires_in: 1.week) do
+              vector.vector_from(search_term, asymmetric: true)
+            end
+
+        candidate_post_ids =
+          DiscourseAi::Embeddings::Schema
+            .for(Post)
+            .asymmetric_similarity_search(
+              search_term_embedding,
+              limit: max_semantic_results_per_page,
+              offset: 0,
+            )
+            .map(&:post_id)
+
+        semantic_results =
+          ::Post
+            .where(post_type: ::Topic.visible_post_types(guardian.user))
+            .public_posts
+            .where("topics.visible")
+            .where(id: candidate_post_ids)
+            .order("array_position(ARRAY#{candidate_post_ids}, posts.id)")
+
+        filtered_results = search.apply_filters(semantic_results)
+
+        rerank_posts_payload =
+          filtered_results
+            .map(&:cooked)
+            .map { Nokogiri::HTML5.fragment(_1).text }
+            .map { _1.truncate(2000, omission: "") }
+
+        reranked_results =
+          DiscourseAi::Inference::HuggingFaceTextEmbeddings.rerank(
+            search_term,
+            rerank_posts_payload,
+          )
+
+        reordered_ids = reranked_results.map { _1[:index] }.map { filtered_results[_1].id }.take(5)
+
+        reranked_semantic_results =
+          ::Post
+            .where(post_type: ::Topic.visible_post_types(guardian.user))
+            .public_posts
+            .where("topics.visible")
+            .where(id: reordered_ids)
+            .order("array_position(ARRAY#{reordered_ids}, posts.id)")
+
+        guardian.filter_allowed_categories(reranked_semantic_results)
       end
 
       def hypothetical_post_from(search_term)
         context =
-          DiscourseAi::Agents::BotContext.new(
+          DiscourseAi::Personas::BotContext.new(
             user: @guardian.user,
-            skip_show_thinking: true,
+            skip_tool_details: true,
             feature_name: "semantic_search_hyde",
             messages: [{ type: :user, content: search_term }],
           )
@@ -181,7 +187,7 @@ module DiscourseAi
 
         structured_output = nil
         raw_response = +""
-        hyde_schema_key = bot.agent.response_format&.first.to_h
+        hyde_schema_key = bot.persona.response_format&.first.to_h
 
         buffer_blk =
           Proc.new do |partial, _, type|
@@ -199,19 +205,25 @@ module DiscourseAi
       end
 
       # Priorities are:
-      #   1. Agent's default LLM
+      #   1. Persona's default LLM
       #   2. SiteSetting.ai_default_llm_model (or newest LLM if not set)
-      def find_ai_hyde_model(agent_klass)
-        model_id = agent_klass.default_llm_id || SiteSetting.ai_default_llm_model
+      def find_ai_hyde_model(persona_klass)
+        model_id = persona_klass.default_llm_id || SiteSetting.ai_default_llm_model
 
         model_id.present? ? LlmModel.find_by(id: model_id) : LlmModel.last
       end
 
       def self.find_ai_hyde_model_id
-        agent_llm_id =
-          AiAgent.find_by(id: SiteSetting.ai_embeddings_semantic_search_hyde_agent)&.default_llm_id
+        persona_llm_id =
+          AiPersona.find_by(
+            id: SiteSetting.ai_embeddings_semantic_search_hyde_persona,
+          )&.default_llm_id
 
-        agent_llm_id.presence || SiteSetting.ai_default_llm_model.to_i || LlmModel.last&.id
+        if persona_llm_id.present?
+          persona_llm_id
+        else
+          SiteSetting.ai_default_llm_model.to_i || LlmModel.last&.id
+        end
       end
 
       private
@@ -227,15 +239,15 @@ module DiscourseAi
       end
 
       def build_bot(user)
-        agent_id = SiteSetting.ai_embeddings_semantic_search_hyde_agent
+        persona_id = SiteSetting.ai_embeddings_semantic_search_hyde_persona
 
-        agent_klass = AiAgent.find_by(id: agent_id)&.class_instance
-        return if agent_klass.nil?
+        persona_klass = AiPersona.find_by(id: persona_id)&.class_instance
+        return if persona_klass.nil?
 
-        llm_model = find_ai_hyde_model(agent_klass)
+        llm_model = find_ai_hyde_model(persona_klass)
         return if llm_model.nil?
 
-        DiscourseAi::Agents::Bot.as(user, agent: agent_klass.new, model: llm_model)
+        DiscourseAi::Personas::Bot.as(user, persona: persona_klass.new, model: llm_model)
       end
     end
   end

@@ -24,15 +24,23 @@
   }
 }
 
+[data-content][data-identifier="chat-message-reaction-tooltip"] {
+  font-size: var(--font-down-1);
+
+  .fk-d-tooltip__inner-content {
+    display: block;
+  }
+
+  .emoji {
+    padding-left: 0.25rem;
+  }
+}
+
 .chat-message {
   align-items: flex-start;
   padding: 0.25em 0.5em 0.25em 0.75em;
   display: flex;
   min-width: 0;
-
-  .search-highlight {
-    background: var(--highlight-medium);
-  }
 
   .chat-message-reaction {
     @include chat-reaction;
@@ -63,24 +71,15 @@
     code {
       box-sizing: border-box;
       font-size: var(--font-down-1);
+      width: 100%;
     }
 
-    span.mention {
-      @include mention;
-    }
-
-    .mention,
+    a.mention,
     span.mention.--wide {
+      @include mention;
+
       &.highlighted {
         background: var(--tertiary-low);
-      }
-
-      .user-status-message {
-        margin-left: var(--space-1);
-
-        .emoji {
-          vertical-align: middle;
-        }
       }
     }
 
@@ -250,14 +249,5 @@
 
   .chat-message-reaction-list .chat-message-react-btn {
     visibility: hidden;
-  }
-
-  &.-not-interactive {
-    .chat-message-content a,
-    .chat-message-reaction-list,
-    .chat-message-thread-indicator,
-    .chat-message-info__date {
-      pointer-events: none;
-    }
   }
 }

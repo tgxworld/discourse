@@ -6,21 +6,18 @@ module DiscourseSubscriptions
       include DiscourseSubscriptions::Stripe
       include DiscourseSubscriptions::Group
 
-      requires_plugin PLUGIN_NAME
+      requires_plugin DiscourseSubscriptions::PLUGIN_NAME
+
+      before_action :set_api_key
 
       def index
-        promo_codes = nil
-
-        if is_stripe_configured?
-          promo_codes =
-            ::Stripe::PromotionCode.list({ limit: 100 }, stripe_request_opts)[
-              :data
-            ].select { |code| code[:coupon][:valid] == true }
+        begin
+          promo_codes = ::Stripe::PromotionCode.list({ limit: 100 })[:data]
+          promo_codes = promo_codes.select { |code| code[:coupon][:valid] == true }
+          render_json_dump promo_codes
+        rescue ::Stripe::InvalidRequestError => e
+          render_json_error e.message
         end
-
-        render_json_dump promo_codes
-      rescue ::Stripe::InvalidRequestError => e
-        render_json_error e.message
       end
 
       def create
@@ -36,12 +33,11 @@ module DiscourseSubscriptions
             coupon_params[:percent_off] = params[:discount]
           end
 
-          coupon = ::Stripe::Coupon.create(coupon_params, stripe_request_opts)
+          coupon = ::Stripe::Coupon.create(coupon_params)
 
           promo_code =
             ::Stripe::PromotionCode.create(
               { coupon: coupon[:id], code: params[:promo] },
-              stripe_request_opts,
             ) if coupon.present?
 
           render_json_dump promo_code
@@ -53,12 +49,7 @@ module DiscourseSubscriptions
       def update
         params.require(%i[id active])
         begin
-          promo_code =
-            ::Stripe::PromotionCode.update(
-              params[:id],
-              { active: params[:active] },
-              stripe_request_opts,
-            )
+          promo_code = ::Stripe::PromotionCode.update(params[:id], { active: params[:active] })
 
           render_json_dump promo_code
         rescue ::Stripe::InvalidRequestError => e
@@ -69,7 +60,7 @@ module DiscourseSubscriptions
       def destroy
         params.require(:coupon_id)
         begin
-          coupon = ::Stripe::Coupon.delete(params[:coupon_id], {}, stripe_request_opts)
+          coupon = ::Stripe::Coupon.delete(params[:coupon_id])
           render_json_dump coupon
         rescue ::Stripe::InvalidRequestError => e
           render_json_error e.message

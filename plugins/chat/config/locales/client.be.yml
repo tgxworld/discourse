@@ -12,22 +12,14 @@ be:
           always: "заўсёды"
           never: "ніколі"
     chat:
-      edit_category:
-        description: "Апісанне"
-        actions: "Дзеянні"
-        settings: "Налады"
       deleted_chat_username: аддалены
       dates:
         yesterday: "учора"
       create: "стварыць"
       cancel: "адмяніць"
-      pinned_bar:
-        title: "Замацаваныя"
-      pinned: "замацаваныя"
       channel_settings:
         edit: "рэдагаваць"
         add: "дадаць"
-        notification_settings_context: "Апавяшчэнні"
       close: "зачыніць"
       remove: "выдаліць"
       delete: "выдаляць"
@@ -43,19 +35,16 @@ be:
       edit: "рэдагаваць"
       bookmark_message: "закладка"
       save: "захаваць"
+      exit: "назад"
       channel_status:
         closed: "Закрыта"
       browse:
         back: "Назад"
         filter_all: Усё
         filter_closed: Закрыта
-        filter_joined_all: "Усе"
-        filter_joined_joined: "Далучыўся(-лася)"
       chat_message_separator:
         today: сёння
         yesterday: учора
-      search_view:
-        filter_placeholder: Пошук паведамленняў
       about_view:
         title: Загаловак
         name: імя
@@ -65,7 +54,6 @@ be:
         tabs:
           members: Удзельнікі
           settings: Налады
-          search: Пошук
         remove_member: "выдаліць"
       new_message_modal:
         filter: "Filter"
@@ -73,7 +61,6 @@ be:
         title: новае паведамленне
         prefix: "да:"
       create_channel:
-        description: "Апісанне"
         type: "тып"
         types:
           category: "катэгорыя"
@@ -96,16 +83,6 @@ be:
         category_label: "катэгорыя"
         history_label: "гісторыя"
         members_label: "Удзельнікі"
-      search:
-        short_title: Пошук
-        no_results: "Няма вынікаў"
-        sort:
-          latest: "апошняя"
-      channel_list:
-        options:
-          filter: "Фільтр"
-        filter:
-          mentions: "Згадкі"
       incoming_webhooks:
         back: "Назад"
         description: "Апісанне"
@@ -144,12 +121,3 @@ be:
           fields:
             message:
               label: Паказаць выдаленыя паведамленні...
-    discourse_workflows:
-      send_chat_message:
-        message: "Паведамленне"
-      chat_approval:
-        message: "Паведамленне"
-        value: "Значэнне"
-        style_default: "Прадвызначаная"
-        style_success: "Поспех"
-        icon: "Значок"

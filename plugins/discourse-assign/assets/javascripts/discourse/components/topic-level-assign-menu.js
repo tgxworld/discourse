@@ -1,22 +1,16 @@
-import { getOwner } from "@ember/owner";
-import { trustHTML } from "@ember/template";
+import { getOwner } from "@ember/application";
+import { htmlSafe } from "@ember/template";
+import { renderAvatar } from "discourse/helpers/user-avatar";
 import { iconHTML } from "discourse/lib/icon-library";
-import { escapeExpression } from "discourse/lib/utilities";
-import { renderAvatar } from "discourse/ui-kit/helpers/d-user-avatar";
 import { i18n } from "discourse-i18n";
-import EditTopicAssignments from "../components/modal/edit-topic-assignments.gjs";
+import EditTopicAssignments from "../components/modal/edit-topic-assignments";
 
 const DEPENDENT_KEYS = [
   "topic.assigned_to_user",
   "topic.assigned_to_group",
-  "topic.can_assign",
   "currentUser.can_assign",
   "topic.assigned_to_user.username",
 ];
-
-function canAssignTopic(context) {
-  return context.topic?.can_assign ?? context.currentUser?.can_assign;
-}
 
 export default {
   id: "reassign",
@@ -24,12 +18,13 @@ export default {
   classNames: ["reassign"],
 
   async action(id) {
-    if (!canAssignTopic(this)) {
+    if (!this.currentUser?.can_assign) {
       return;
     }
 
     const taskActions = getOwner(this).lookup("service:task-actions");
     const modal = getOwner(this).lookup("service:modal");
+    const firstPostId = this.topic.postStream.firstPostId;
 
     switch (id) {
       case "unassign": {
@@ -37,6 +32,8 @@ export default {
         this.topic.assigned_to_group = null;
 
         await taskActions.unassign(this.topic.id);
+        // TODO (glimmer-post-stream) the Glimmer Post Stream does not listen to this event
+        this.appEvents.trigger("post-stream:refresh", { id: firstPostId });
         break;
       }
       case "reassign-self": {
@@ -44,6 +41,8 @@ export default {
         this.topic.assigned_to_group = null;
 
         await taskActions.reassignUserToTopic(this.currentUser, this.topic);
+        // TODO (glimmer-post-stream) the Glimmer Post Stream does not listen to this event
+        this.appEvents.trigger("post-stream:refresh", { id: firstPostId });
         break;
       }
       case "reassign": {
@@ -51,6 +50,9 @@ export default {
           model: {
             topic: this.topic,
           },
+          onSuccess: () =>
+            // TODO (glimmer-post-stream) the Glimmer Post Stream does not listen to this event
+            this.appEvents.trigger("post-stream:refresh", { id: firstPostId }),
         });
         break;
       }
@@ -64,6 +66,8 @@ export default {
           // force the components tracking `topic.indirectly_assigned_to` to update
           // eslint-disable-next-line no-self-assign
           this.topic.indirectly_assigned_to = this.topic.indirectly_assigned_to;
+          // TODO (glimmer-post-stream) the Glimmer Post Stream does not listen to this event
+          this.appEvents.trigger("post-stream:refresh", { id: firstPostId });
         }
       }
     }
@@ -100,8 +104,8 @@ export default {
 
   displayed() {
     return (
-      canAssignTopic(this) &&
-      this.site.desktopView &&
+      this.currentUser?.can_assign &&
+      !this.site.mobileView &&
       (this.topic.isAssigned() || this.topic.hasAssignedPosts())
     );
   },
@@ -126,8 +130,8 @@ function editAssignmentsButton() {
   const label = i18n("discourse_assign.topic_level_menu.edit_assignments");
   return {
     id: "reassign",
-    name: trustHTML(label),
-    label: trustHTML(`${icon} ${label}`),
+    name: htmlSafe(label),
+    label: htmlSafe(`${icon} ${label}`),
   };
 }
 
@@ -136,8 +140,8 @@ function reassignToSelfButton() {
   const label = i18n("discourse_assign.topic_level_menu.reassign_topic_to_me");
   return {
     id: "reassign-self",
-    name: trustHTML(label),
-    label: trustHTML(`${icon} ${label}`),
+    name: htmlSafe(label),
+    label: htmlSafe(`${icon} ${label}`),
   };
 }
 
@@ -153,13 +157,13 @@ function unassignFromTopicButton(topic, prioritize_full_name_in_ux) {
     ? avatarHtml(topic.assigned_to_user, "small")
     : iconHTML("user-xmark");
   const label = i18n("discourse_assign.topic_level_menu.unassign_from_topic", {
-    username: escapeExpression(username),
+    username,
   });
 
   return {
     id: "unassign",
-    name: trustHTML(label),
-    label: trustHTML(`${icon} ${label}`),
+    name: htmlSafe(label),
+    label: htmlSafe(`${icon} ${label}`),
   };
 }
 
@@ -185,22 +189,21 @@ function unassignFromPostButton(postId, assignment) {
     icon = iconHTML("group-times");
   }
 
-  const escapedAssignee = escapeExpression(assignee);
   const label = i18n("discourse_assign.topic_level_menu.unassign_from_post", {
-    assignee: escapedAssignee,
+    assignee,
     post_number: assignment.post_number,
   });
   const dataName = i18n(
     "discourse_assign.topic_level_menu.unassign_from_post_help",
     {
-      assignee: escapedAssignee,
+      assignee,
       post_number: assignment.post_number,
     }
   );
   return {
     id: `unassign-from-post-${postId}`,
-    name: trustHTML(dataName),
-    label: trustHTML(`${icon} ${label}`),
+    name: htmlSafe(dataName),
+    label: htmlSafe(`${icon} ${label}`),
   };
 }
 
@@ -212,10 +215,10 @@ function topicLevelUnassignButton(assignees) {
 
   return {
     id: null,
-    name: trustHTML(
+    name: htmlSafe(
       i18n("discourse_assign.topic_level_menu.unassign_with_ellipsis")
     ),
-    label: trustHTML(`${avatars}${label}`),
+    label: htmlSafe(`${avatars}${label}`),
   };
 }
 

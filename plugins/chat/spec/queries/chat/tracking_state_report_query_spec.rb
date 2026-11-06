@@ -22,7 +22,6 @@ RSpec.describe Chat::TrackingStateReportQuery do
   let(:include_threads) { false }
   let(:include_read) { true }
   let(:include_last_reply_details) { false }
-
   context "when channel_ids empty" do
     it "returns empty object for channel_tracking" do
       expect(query.channel_tracking).to eq({})
@@ -81,7 +80,6 @@ RSpec.describe Chat::TrackingStateReportQuery do
 
     context "when include_threads is true" do
       let(:include_threads) { true }
-
       fab!(:thread_1) { Fabricate(:chat_thread, channel: channel_1) }
       fab!(:thread_2) { Fabricate(:chat_thread, channel: channel_2) }
 

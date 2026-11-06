@@ -3,16 +3,14 @@
 class AiSpamSerializer < ApplicationSerializer
   attributes :is_enabled,
              :llm_id,
-             :decision_model_id,
-             :available_decision_models,
              :custom_instructions,
              :available_llms,
              :stats,
              :flagging_username,
              :spam_score_type,
              :spam_scanning_user,
-             :ai_agent_id,
-             :available_agents
+             :ai_persona_id,
+             :available_personas
 
   def is_enabled
     object[:enabled]
@@ -22,19 +20,9 @@ class AiSpamSerializer < ApplicationSerializer
     settings&.llm_model&.id
   end
 
-  def decision_model_id
-    settings&.decision_model_id
-  end
-
-  def available_decision_models
-    DiscourseAi::Configuration::DecisionModelEnumerator.values.map do |hash|
-      { id: hash[:value], name: hash[:name] }
-    end
-  end
-
-  def ai_agent_id
-    settings&.ai_agent_id || settings&.ai_agent&.id ||
-      DiscourseAi::Agents::Agent.system_agents[DiscourseAi::Agents::SpamDetector]
+  def ai_persona_id
+    settings&.ai_persona&.id ||
+      DiscourseAi::Personas::Persona.system_personas[DiscourseAi::Personas::SpamDetector]
   end
 
   def custom_instructions
@@ -47,8 +35,10 @@ class AiSpamSerializer < ApplicationSerializer
     end
   end
 
-  def available_agents
-    DiscourseAi::Configuration::AgentEnumerator.values.map { |h| { id: h[:value], name: h[:name] } }
+  def available_personas
+    DiscourseAi::Configuration::PersonaEnumerator.values.map do |h|
+      { id: h[:value], name: h[:name] }
+    end
   end
 
   def flagging_username
@@ -75,6 +65,6 @@ class AiSpamSerializer < ApplicationSerializer
   def spam_scanning_user
     user = DiscourseAi::AiModeration::SpamScanner.flagging_user
 
-    user.presence&.serializable_hash(only: %i[id username name admin])
+    user.serializable_hash(only: %i[id username name admin]) if user.present?
   end
 end

@@ -6,16 +6,13 @@
 
 tr_TR:
   admin_js:
-    admin:
-      site_settings:
-        categories:
-          discourse_post_voting: "Discourd Gönderi Oylama"
+    site_settings:
+      categories:
+        post_voting: Gönderi Oylaması
   post_voting:
     reviewables:
       comment_already_handled: "Teşekkürler, ancak bu yorumu daha önce inceledik ve yeniden bayrak eklenmesine gerek olmadığına karar verdik."
   js:
-    discourse_post_voting:
-      title: "Gönderi oylaması"
     notifications:
       question_answer_user_commented: "<span>%{username}</span> %{description}"
       titles:
@@ -31,23 +28,15 @@ tr_TR:
         label: "Gönderi oylaması konusu oluşturun"
       composer_actions:
         create_as_post_voting:
-          label: "Gönderi oylamasını aç/kapat"
+          label: "Gönderi Oylamasını değiştir"
           desc: "Konu oylanabilir gönderilerle oluşturulacak"
         remove_as_post_voting:
-          label: "Gönderi oylamasını kaldır"
+          label: "Gönderi Oylamasını kaldır"
           desc: "Konu normal formatta oluşturulacak"
     vote:
       already_voted: "Her soru için yalnızca bir kez oy kullanabilirsiniz."
       user_over_limit: "Güven seviyenize uygun oy sayısını aşamazsınız."
       one_vote_per_post: "Her gönderi için yalnızca bir kez oy kullanabilirsiniz."
-      button:
-        upvote: "Beğen"
-        remove_upvote: "Beğenmeyi kaldır"
-        downvote: "Olumsuz oy"
-        remove_downvote: "Olumsuz oyu kaldır"
-      toggle_voters: "Oy verenleri göster"
-      upvotes: "Beğeniler"
-      downvotes: "Olumsuz oylar"
     last_answer_lowercase: son yanıt
     answer_lowercase:
       one: yanıt
@@ -69,10 +58,6 @@ tr_TR:
           edit: "düzenle"
           cancel: "iptal et"
           add: "Yorum ekle"
-          actions:
-            edit: "Yorumu düzenle"
-            delete: "Yorumu sil"
-            flag: "Yorumu işaretle"
           show:
             one: '%{count} yorum daha göster'
             other: '%{count} yorum daha göster'
@@ -126,9 +111,6 @@ tr_TR:
         answer_count:
           one: "%{count} Yanıt"
           other: "%{count} Yanıt"
-        voters_count_diff:
-          one: "ve %{count} kullanıcı daha..."
-          other: "ve %{count} kullanıcı daha..."
     review:
       transcript:
         view: "Önceki mesajların dökümünü görüntüle"

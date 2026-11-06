@@ -32,8 +32,6 @@ it:
         cta: "Crea la tua prima classifica"
         none: "Nessuna classifica ancora creata."
         confirm_destroy: "Vuoi cancellare questa classifica?"
-        section:
-          groups: "Gruppi"
         date:
           range: "Intervallo di date dal/al"
           from: "Dalla data"
@@ -48,9 +46,6 @@ it:
         default_period: "Periodo predefinito"
         default_period_help: "Imposta il periodo di tempo predefinito per visualizzare questa classifica."
         period_filter_disabled: "Disattiva il filtro del periodo di tempo"
-        weight:
-          post_created: "Messaggio creato"
-          solution: "Soluzione"
         period:
           all_time: "Di Sempre"
           yearly: "Annuale"
@@ -64,7 +59,9 @@ it:
       close: "Chiudi"
       delete: "Elimina"
       edit: "Modifica"
+      back: "Indietro"
       save: "Salva"
+      apply: "Applica"
       recalculate: "Ricalcola i punteggi"
       recalculating: "Ricalcolo dei punteggi..."
       completed: "Fatto! I punteggi sono stati ricalcolati correttamente."
@@ -83,11 +80,4 @@ it:
       admin:
         title: "Gamification"
         name: "Nome"
-        created_by: "Creato da"
         period: "Periodo"
-    discourse_workflows:
-      gamification_score:
-        username: "Utente"
-        date: "Data"
-        description: "Descrizione"
-        category_id: "Categoria"

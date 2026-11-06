@@ -1,6 +1,6 @@
 #frozen_string_literal: true
 
-describe "Admin Customize Emoji Page" do
+describe "Admin Customize Emoji Page", type: :system do
   fab!(:current_user, :admin)
 
   let(:emojis_page) { PageObjects::Pages::AdminEmojis.new }

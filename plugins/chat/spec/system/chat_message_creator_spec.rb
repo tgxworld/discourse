@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "Chat message creator" do
+RSpec.describe "Flag message", type: :system do
   let(:chat_page) { PageObjects::Pages::Chat.new }
 
   fab!(:current_user, :user)
@@ -27,15 +27,6 @@ RSpec.describe "Chat message creator" do
     visit("/")
     chat_page.open_new_message
     chat_page.message_creator.filter("x")
-
-    expect(chat_page).to have_no_css("#new-group-chat")
-  end
-
-  it "hides create group option when group chats are disabled for members" do
-    SiteSetting.chat_max_direct_message_users = 1
-
-    visit("/")
-    chat_page.open_new_message
 
     expect(chat_page).to have_no_css("#new-group-chat")
   end

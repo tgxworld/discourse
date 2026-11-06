@@ -15,14 +15,23 @@ register_svg_icon "far-square-check"
 
 enabled_site_setting :poll_enabled
 
-module ::DiscoursePoll
-  PLUGIN_NAME = "poll"
-end
-
-require_relative "lib/poll/engine"
-
 after_initialize do
-  require_relative "app/controllers/discourse_poll/polls_controller"
+  module ::DiscoursePoll
+    PLUGIN_NAME = "poll"
+    DATA_PREFIX = "data-poll-"
+    HAS_POLLS = "has_polls"
+    DEFAULT_POLL_NAME = "poll"
+
+    class Engine < ::Rails::Engine
+      engine_name PLUGIN_NAME
+      isolate_namespace DiscoursePoll
+    end
+
+    class Error < StandardError
+    end
+  end
+
+  require_relative "app/controllers/polls_controller"
   require_relative "app/models/poll_option"
   require_relative "app/models/poll_vote"
   require_relative "app/models/poll"
@@ -37,7 +46,15 @@ after_initialize do
   require_relative "lib/post_extension"
   require_relative "lib/user_extension"
 
-  Discourse::Application.routes.append { mount DiscoursePoll::Engine, at: "/polls" }
+  DiscoursePoll::Engine.routes.draw do
+    put "/vote" => "polls#vote"
+    delete "/vote" => "polls#remove_vote"
+    put "/toggle_status" => "polls#toggle_status"
+    get "/voters" => "polls#voters"
+    get "/grouped_poll_results" => "polls#grouped_poll_results"
+  end
+
+  Discourse::Application.routes.append { mount ::DiscoursePoll::Engine, at: "/polls" }
 
   allow_new_queued_post_payload_attribute("is_poll")
   register_post_custom_field_type(DiscoursePoll::HAS_POLLS, :boolean)
@@ -49,11 +66,11 @@ after_initialize do
   end
 
   validate(:post, :validate_polls) do |force = nil|
-    return unless raw_changed? || force
+    return unless self.raw_changed? || force
 
     validator = DiscoursePoll::PollsValidator.new(self)
     return unless (polls = validator.validate_polls)
-    return if polls.blank? && id.blank?
+    return if polls.blank? && self.id.blank?
 
     if polls.present?
       validator = DiscoursePoll::PostValidator.new(self)
@@ -61,7 +78,7 @@ after_initialize do
     end
 
     # are we updating a post?
-    if id.present?
+    if self.id.present?
       return if polls.blank? && ::Poll.where(post: self).empty?
 
       DiscoursePoll::PollsUpdater.update(self, polls)
@@ -99,16 +116,7 @@ after_initialize do
       fragment
         .css(".poll, [data-poll-name]")
         .each do |poll|
-          html = +""
-
-          if container = poll.at_css(".poll-container")
-            container.css("li").each { |li| li.remove_attribute("data-poll-option-id") }
-            html << container.inner_html
-          end
-
-          html << "<p><a href='#{post_url}'>#{I18n.t("poll.email.link_to_poll")}</a></p>"
-
-          poll.replace(html)
+          poll.replace "<p><a href='#{post_url}'>#{I18n.t("poll.email.link_to_poll")}</a></p>"
         end
     end
   end
@@ -116,47 +124,33 @@ after_initialize do
   on(:reduce_excerpt) do |doc, options|
     post = options[:post]
 
-    if post&.url.present?
-      replacement = "<a href='#{UrlHelper.normalized_encode(post.url)}'>#{I18n.t("poll.poll")}</a>"
-    else
-      replacement = I18n.t("poll.poll")
-    end
+    replacement =
+      (
+        if post&.url.present?
+          "<a href='#{UrlHelper.normalized_encode(post.url)}'>#{I18n.t("poll.poll")}</a>"
+        else
+          I18n.t("poll.poll")
+        end
+      )
 
     doc.css("div.poll").each { |poll| poll.replace(replacement) }
   end
 
-  # Drop content-bearing messages retained before invalidation-only broadcasts.
-  MessageBus.register_client_message_filter("/polls/") do |message|
-    message.data.keys.map(&:to_s) == ["post_id"]
-  end
-
-  on(:post_created) do |post, _opts, _user|
+  on(:post_created) do |post, _opts, user|
+    guardian = Guardian.new(user)
     DiscoursePoll::Poll.schedule_jobs(post)
 
     next if post.is_first_post?
     next if post.custom_fields[DiscoursePoll::HAS_POLLS].blank?
 
-    post.publish_poll_message!
-  end
-
-  on(:post_moved) do |new_post, _original_topic_id, old_post|
-    next if old_post.blank? || new_post.id == old_post.id
-
-    ActiveRecord::Base.transaction do
-      # Remove empty polls auto-created by PostCreator on the new post
-      # so the originals (with votes) can be moved without a unique constraint violation.
-      new_polls = Poll.where(post_id: new_post.id)
-      if new_polls.exists?
-        PollVote.where(poll_id: new_polls.select(:id)).delete_all
-        PollOption.where(poll_id: new_polls.select(:id)).delete_all
-        new_polls.delete_all
-      end
-
-      Poll.where(post_id: old_post.id).update_all(post_id: new_post.id)
-    end
-
-    DiscoursePoll::PollsUpdater.update_post_custom_fields(new_post)
-    DiscoursePoll::PollsUpdater.update_post_custom_fields(old_post)
+    polls =
+      ActiveModel::ArraySerializer.new(
+        post.polls,
+        each_serializer: PollSerializer,
+        root: false,
+        scope: guardian,
+      ).as_json
+    post.publish_message!("/polls/#{post.topic_id}", post_id: post.id, polls: polls)
   end
 
   on(:merging_users) do |source_user, target_user|
@@ -187,7 +181,7 @@ after_initialize do
           end
 
         if post_with_polls.present?
-          all_polls = Poll.includes(:poll_options, :closed_by).where(post_id: post_with_polls)
+          all_polls = Poll.includes(:poll_options).where(post_id: post_with_polls)
           Poll.preload!(all_polls, user_id: @user&.id)
           DiscoursePoll::Poll.preload_serialized_voters!(all_polls)
           all_polls.each do |p|
@@ -209,25 +203,19 @@ after_initialize do
       if @topic_view.present?
         @topic_view.polls[object.id]
       else
-        Poll.includes(:poll_options, :closed_by).where(post: object)
+        Poll.includes(:poll_options).where(post: object)
       end
   end
 
-  add_to_class(PostSerializer, :can_see_post_polls?) do
-    !object.hidden? || scope.can_see_hidden_post?(object)
+  add_to_serializer(:post, :polls, include_condition: -> { preloaded_polls.present? }) do
+    preloaded_polls.map { |p| PollSerializer.new(p, root: false, scope: self.scope) }
   end
-
-  add_to_serializer(
-    :post,
-    :polls,
-    include_condition: -> { preloaded_polls.present? && can_see_post_polls? },
-  ) { preloaded_polls.map { |p| PollSerializer.new(p, root: false, scope: scope) } }
 
   add_to_serializer(
     :post,
     :polls_votes,
     include_condition: -> do
-      scope.user&.id.present? && preloaded_polls.present? && can_see_post_polls? &&
+      scope.user&.id.present? && preloaded_polls.present? &&
         preloaded_polls.any? { |p| p.has_voted?(scope.user) }
     end,
   ) do
@@ -260,23 +248,5 @@ after_initialize do
     else
       posts
     end
-  end
-
-  # Only single-choice (regular) polls are supported for anonymous voting.
-  # Multi-choice and ranked-choice polls require accumulating selections
-  # client-side, which is out of scope for the current anonymous flow.
-  register_anonymous_action("vote_poll") do |user, params|
-    options = params["options"]
-    next if !options.is_a?(Array) || options.size != 1
-
-    DiscoursePoll::Poll.vote(user, params["post_id"], params["poll_name"], options)
-  rescue DiscoursePoll::Error
-    # Expected business-logic failures (poll closed, group-restricted, etc.)
-    # — silently drop. Unexpected exceptions still bubble to AnonymousAction.consume.
-  end
-
-  # Protect users who have cast poll votes from the inactive user cleanup job.
-  register_modifier(:clean_up_inactive_users_query) do |relation|
-    relation.where("NOT EXISTS (SELECT 1 FROM poll_votes WHERE poll_votes.user_id = users.id)")
   end
 end

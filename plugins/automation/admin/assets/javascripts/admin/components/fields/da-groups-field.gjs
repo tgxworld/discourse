@@ -3,10 +3,10 @@ import { hash } from "@ember/helper";
 import { action } from "@ember/object";
 import { isBlank } from "@ember/utils";
 import Group from "discourse/models/group";
-import GroupChooser from "discourse/select-kit/components/group-chooser";
-import BaseField from "./da-base-field.gjs";
-import DAFieldDescription from "./da-field-description.gjs";
-import DAFieldLabel from "./da-field-label.gjs";
+import GroupChooser from "select-kit/components/group-chooser";
+import BaseField from "./da-base-field";
+import DAFieldDescription from "./da-field-description";
+import DAFieldLabel from "./da-field-label";
 
 export default class GroupsField extends BaseField {
   @tracked allGroups = [];
@@ -17,7 +17,7 @@ export default class GroupsField extends BaseField {
     Group.findAll({
       ignore_automatic: this.args.field.extra.ignore_automatic ?? false,
     }).then((groups) => {
-      if (this.isDestroying) {
+      if (this.isDestroying || this.isDestroyed) {
         return;
       }
 
@@ -41,15 +41,15 @@ export default class GroupsField extends BaseField {
   <template>
     <section class="field group-field">
       <div class="control-group">
-        <DAFieldLabel @field={{@field}} @label={{@label}} />
+        <DAFieldLabel @label={{@label}} @field={{@field}} />
 
         <div class="controls">
           <GroupChooser
             @content={{this.allGroups}}
+            @value={{readonly @field.metadata.value}}
             @labelProperty="name"
             @onChange={{this.setGroupField}}
             @options={{hash maximum=this.maximum disabled=@field.isDisabled}}
-            @value={{readonly @field.metadata.value}}
           />
 
           <DAFieldDescription @description={{@description}} />

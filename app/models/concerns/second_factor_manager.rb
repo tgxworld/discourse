@@ -20,9 +20,11 @@ module SecondFactorManager
   def create_totp(opts = {})
     require_rotp
     UserSecondFactor.create!(
-      { user_id: id, method: UserSecondFactor.methods[:totp], data: ROTP::Base32.random }.merge(
-        opts,
-      ),
+      {
+        user_id: self.id,
+        method: UserSecondFactor.methods[:totp],
+        data: ROTP::Base32.random,
+      }.merge(opts),
     )
   end
 
@@ -32,11 +34,11 @@ module SecondFactorManager
   end
 
   def totp_provisioning_uri(data)
-    get_totp_object(data).provisioning_uri(email)
+    get_totp_object(data).provisioning_uri(self.email)
   end
 
   def authenticate_totp(token)
-    totps = user_second_factors&.totps
+    totps = self.user_second_factors&.totps
     authenticated = false
     totps.each do |totp|
       last_used = 0
@@ -44,7 +46,7 @@ module SecondFactorManager
       last_used = totp.last_used.to_i if totp.last_used
 
       authenticated =
-        token.present? &&
+        !token.blank? &&
           totp.totp_object.verify(
             token,
             drift_ahead: TOTP_ALLOWED_DRIFT_SECONDS,
@@ -61,30 +63,23 @@ module SecondFactorManager
   end
 
   def totp_enabled?
-    !SiteSetting.enable_discourse_connect && SiteSetting.enable_local_logins && totps.any?
+    !SiteSetting.enable_discourse_connect && SiteSetting.enable_local_logins &&
+      self.user_second_factors&.totps&.exists?
   end
 
   def backup_codes_enabled?
     !SiteSetting.enable_discourse_connect && SiteSetting.enable_local_logins &&
-      user_second_factors&.backup_codes&.exists?
+      self.user_second_factors&.backup_codes&.exists?
   end
 
   def security_keys_enabled?
     !SiteSetting.enable_discourse_connect && SiteSetting.enable_local_logins &&
-      security_key_factor_enabled?(UserSecurityKey.factor_types[:second_factor])
+      self
+        .security_keys
+        &.where(factor_type: UserSecurityKey.factor_types[:second_factor], enabled: true)
+        &.exists?
   end
 
-  def passkeys_available_as_second_factor?
-    SiteSetting.allow_passkeys_for_2fa && SiteSetting.enable_passkeys &&
-      !SiteSetting.enable_discourse_connect && SiteSetting.enable_local_logins &&
-      security_key_factor_enabled?(UserSecurityKey.factor_types[:first_factor])
-  end
-  alias_method :passkeys_for_2fa_enabled?, :passkeys_available_as_second_factor?
-
-  # Passkey-as-2FA (`passkeys_available_as_second_factor?`) is intentionally
-  # excluded: it only satisfies `/session/2fa`. Password login, email login,
-  # and password reset have no passkey UI yet, so counting passkeys here would
-  # make those flows skip 2FA for passkey-only users.
   def has_any_second_factor_methods_enabled?
     totp_enabled? || security_keys_enabled?
   end
@@ -106,15 +101,12 @@ module SecondFactorManager
   end
 
   def remaining_backup_codes
-    user_second_factors&.backup_codes&.count
+    self.user_second_factors&.backup_codes&.count
   end
 
-  def authenticate_second_factor(params, server_session)
+  def authenticate_second_factor(params, secure_session)
     ok_result = SecondFactorAuthenticationResult.new(true)
-    if !security_keys_enabled? && !totp_or_backup_codes_enabled? &&
-         (!passkeys_available_as_second_factor? || params[:second_factor_method].blank?)
-      return ok_result
-    end
+    return ok_result if !security_keys_enabled? && !totp_or_backup_codes_enabled?
 
     second_factor_token = params[:second_factor_token]
     second_factor_method = params[:second_factor_method]&.to_i
@@ -143,15 +135,8 @@ module SecondFactorManager
         return invalid_totp_or_backup_code_result
       end
     when UserSecondFactor.methods[:security_key]
-      if authenticate_security_key(server_session, second_factor_token)
+      if authenticate_security_key(secure_session, second_factor_token)
         ok_result.used_2fa_method = UserSecondFactor.methods[:security_key]
-        return ok_result
-      else
-        return invalid_security_key_result
-      end
-    when UserSecondFactor.methods[:passkey]
-      if authenticate_passkey(server_session, second_factor_token)
-        ok_result.used_2fa_method = UserSecondFactor.methods[:passkey]
         return ok_result
       else
         return invalid_security_key_result
@@ -173,27 +158,16 @@ module SecondFactorManager
       return backup_codes_enabled?
     when UserSecondFactor.methods[:security_key]
       return security_keys_enabled?
-    when UserSecondFactor.methods[:passkey]
-      return passkeys_available_as_second_factor?
     end
     false
   end
 
-  def authenticate_security_key(server_session, security_key_credential)
+  def authenticate_security_key(secure_session, security_key_credential)
     ::DiscourseWebauthn::AuthenticationService.new(
       self,
       security_key_credential,
-      session: server_session,
-      factor_type: [UserSecurityKey.factor_types[:second_factor]],
-    ).authenticate_security_key
-  end
-
-  def authenticate_passkey(server_session, security_key_credential)
-    ::DiscourseWebauthn::AuthenticationService.new(
-      self,
-      security_key_credential,
-      session: server_session,
-      factor_type: [UserSecurityKey.factor_types[:first_factor]],
+      session: secure_session,
+      factor_type: UserSecurityKey.factor_types[:second_factor],
     ).authenticate_security_key
   end
 
@@ -247,10 +221,10 @@ module SecondFactorManager
         { salt: salt, code_hash: hash_backup_code(code, salt) }
       end
 
-    if user_second_factors.backup_codes.empty?
+    if self.user_second_factors.backup_codes.empty?
       create_backup_codes(codes_json)
     else
-      user_second_factors.where(method: UserSecondFactor.methods[:backup_codes]).destroy_all
+      self.user_second_factors.where(method: UserSecondFactor.methods[:backup_codes]).destroy_all
       create_backup_codes(codes_json)
     end
 
@@ -260,7 +234,7 @@ module SecondFactorManager
   def create_backup_codes(codes)
     codes.each do |code|
       UserSecondFactor.create!(
-        user_id: id,
+        user_id: self.id,
         data: code.to_json,
         enabled: true,
         method: UserSecondFactor.methods[:backup_codes],
@@ -269,8 +243,8 @@ module SecondFactorManager
   end
 
   def authenticate_backup_code(backup_code)
-    if backup_code.present?
-      codes = user_second_factors&.backup_codes
+    if !backup_code.blank?
+      codes = self.user_second_factors&.backup_codes
 
       codes.each do |code|
         parsed_data = JSON.parse(code.data)
@@ -296,15 +270,5 @@ module SecondFactorManager
 
   def require_rotp
     require "rotp" if !defined?(ROTP)
-  end
-
-  private
-
-  def security_key_factor_enabled?(factor_type)
-    if security_keys.loaded?
-      security_keys.any? { |security_key| security_key.factor_type == factor_type }
-    else
-      security_keys.where(factor_type: factor_type).exists?
-    end
   end
 end

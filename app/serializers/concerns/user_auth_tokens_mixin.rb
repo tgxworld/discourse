@@ -5,10 +5,6 @@ module UserAuthTokensMixin
 
   included { attributes :id, :client_ip, :location, :browser, :device, :os, :icon, :created_at }
 
-  def include_client_ip?
-    can_see_ip_details?
-  end
-
   def client_ip
     object.client_ip.to_s
   end
@@ -20,7 +16,7 @@ module UserAuthTokensMixin
 
   def browser
     val = BrowserDetection.browser(object.user_agent)
-    I18n.t("browsers.#{val}")
+    I18n.t("user_auth_tokens.browser.#{val}")
   end
 
   def device
@@ -48,11 +44,5 @@ module UserAuthTokensMixin
     else
       "question"
     end
-  end
-
-  private
-
-  def can_see_ip_details?
-    scope&.can_see_ip? || (scope&.user.present? && scope.user.id == object.user_id)
   end
 end

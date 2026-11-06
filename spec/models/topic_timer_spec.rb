@@ -42,7 +42,7 @@ RSpec.describe TopicTimer, type: :model do
     end
 
     describe "#status_type" do
-      it "allows only one active public topic status update" do
+      it "should ensure that only one active public topic status update exists" do
         topic_timer.update!(topic: topic)
         Fabricate(:topic_timer, deleted_at: Time.zone.now, topic: topic)
 
@@ -52,11 +52,11 @@ RSpec.describe TopicTimer, type: :model do
 
     describe "#execute_at" do
       describe "when #execute_at is greater than #created_at" do
-        it "is valid" do
+        it "should be valid" do
           topic_timer =
             Fabricate.build(
               :topic_timer,
-              execute_at: 1.hour.from_now,
+              execute_at: Time.zone.now + 1.hour,
               user: Fabricate(:user),
               topic: Fabricate(:topic),
             )
@@ -66,11 +66,11 @@ RSpec.describe TopicTimer, type: :model do
       end
 
       describe "when #execute_at is smaller than #created_at" do
-        it "is invalid" do
+        it "should not be valid" do
           topic_timer =
             Fabricate.build(
               :topic_timer,
-              execute_at: 1.hour.ago,
+              execute_at: Time.zone.now - 1.hour,
               created_at: Time.zone.now,
               user: Fabricate(:user),
               topic: Fabricate(:topic),
@@ -84,7 +84,7 @@ RSpec.describe TopicTimer, type: :model do
     describe "#category_id" do
       describe "when #status_type is publish_to_category" do
         describe "when #category_id is not present" do
-          it "is invalid" do
+          it "should not be valid" do
             topic_timer =
               Fabricate.build(:topic_timer, status_type: TopicTimer.types[:publish_to_category])
 
@@ -94,7 +94,7 @@ RSpec.describe TopicTimer, type: :model do
         end
 
         describe "when #category_id is present" do
-          it "is valid" do
+          it "should be valid" do
             topic_timer =
               Fabricate.build(
                 :topic_timer,
@@ -113,7 +113,7 @@ RSpec.describe TopicTimer, type: :model do
 
   describe "Callbacks" do
     describe "when #execute_at and #user_id are not changed" do
-      it "does not schedule another topic update" do
+      it "should not schedule another to update topic" do
         Jobs.expects(:enqueue_at).never
 
         topic_timer.update!(topic: Fabricate(:topic))
@@ -128,7 +128,7 @@ RSpec.describe TopicTimer, type: :model do
 
       before { Jobs.run_immediately! }
 
-      it "closes the topic" do
+      it "should close the topic" do
         topic_timer.send(:schedule_auto_open_job)
         expect(topic.reload.closed).to eq(true)
       end
@@ -142,26 +142,18 @@ RSpec.describe TopicTimer, type: :model do
 
       before { Jobs.run_immediately! }
 
-      it "opens the topic" do
+      it "should open the topic" do
         topic_timer.send(:schedule_auto_close_job)
         expect(topic.reload.closed).to eq(false)
       end
     end
 
     describe "#public_type" do
-      it "is true for close" do
-        timer = Fabricate(:topic_timer, status_type: described_class.types[:close])
-        expect(timer.public_type).to eq(true)
-      end
-
-      it "is true for open" do
-        timer = Fabricate(:topic_timer, status_type: described_class.types[:open])
-        expect(timer.public_type).to eq(true)
-      end
-
-      it "is true for delete" do
-        timer = Fabricate(:topic_timer, status_type: described_class.types[:delete])
-        expect(timer.public_type).to eq(true)
+      %i[close open delete].each do |public_type|
+        it "is true for #{public_type}" do
+          timer = Fabricate(:topic_timer, status_type: described_class.types[public_type])
+          expect(timer.public_type).to eq(true)
+        end
       end
 
       it "is true for publish_to_category" do
@@ -174,23 +166,12 @@ RSpec.describe TopicTimer, type: :model do
         expect(timer.public_type).to eq(true)
       end
 
-      # rubocop:disable Discourse/NoIterationOverRSpecDefinitions
       described_class.private_types.keys.each do |private_type|
         it "is false for #{private_type}" do
           timer = Fabricate(:topic_timer, status_type: described_class.types[private_type])
           expect(timer.public_type).to be_falsey
         end
       end
-      # rubocop:enable Discourse/NoIterationOverRSpecDefinitions
-    end
-  end
-
-  describe "#enqueue_typed_job" do
-    it "does nothing for obsolete reminder timers" do
-      topic_timer.update!(status_type: described_class.types[:reminder])
-
-      expect { topic_timer.enqueue_typed_job }.not_to change { Sidekiq::Queues["default"].size }
-      expect(topic_timer.reload).not_to be_trashed
     end
   end
 
@@ -199,7 +180,7 @@ RSpec.describe TopicTimer, type: :model do
       topic_timer =
         Fabricate.build(
           :topic_timer,
-          execute_at: 1.hour.from_now,
+          execute_at: Time.zone.now + 1.hour,
           user: Fabricate(:user),
           topic: Fabricate(:topic),
         )
@@ -211,8 +192,8 @@ RSpec.describe TopicTimer, type: :model do
       topic_timer =
         Fabricate.create(
           :topic_timer,
-          execute_at: 1.hour.ago,
-          created_at: 2.hours.ago,
+          execute_at: Time.zone.now - 1.hour,
+          created_at: Time.zone.now - 2.hour,
           user: Fabricate(:user),
           topic: Fabricate(:topic),
         )
@@ -225,8 +206,8 @@ RSpec.describe TopicTimer, type: :model do
       topic_timer =
         Fabricate.build(
           :topic_timer,
-          execute_at: 1.hour.ago,
-          created_at: 2.hours.ago,
+          execute_at: Time.zone.now - 1.hour,
+          created_at: Time.zone.now - 2.hour,
           user: Fabricate(:user),
           topic: Fabricate(:topic),
         )

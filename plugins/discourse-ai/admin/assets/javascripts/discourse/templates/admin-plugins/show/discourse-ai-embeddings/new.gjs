@@ -1,9 +1,11 @@
-import AiEmbeddingsListEditor from "../../../../components/ai-embeddings-list-editor.gjs";
+import RouteTemplate from "ember-route-template";
+import AiEmbeddingsListEditor from "../../../../../discourse/components/ai-embeddings-list-editor";
 
-export default <template>
-  <AiEmbeddingsListEditor
-    @currentEmbedding={{@controller.model}}
-    @embeddings={{@controller.allEmbeddings}}
-    @preset={{@controller.preset}}
-  />
-</template>
+export default RouteTemplate(
+  <template>
+    <AiEmbeddingsListEditor
+      @embeddings={{@controller.allEmbeddings}}
+      @currentEmbedding={{@controller.model}}
+    />
+  </template>
+);

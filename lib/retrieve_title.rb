@@ -3,7 +3,6 @@
 module RetrieveTitle
   CRAWL_TIMEOUT = 1
   UNRECOVERABLE_ERRORS = [
-    Errno::ECONNRESET,
     Net::ReadTimeout,
     FinalDestination::SSRFError,
     FinalDestination::UrlEncodingError,
@@ -17,7 +16,7 @@ module RetrieveTitle
       headers: headers,
     )
   rescue *UNRECOVERABLE_ERRORS
-    nil
+    # ¯\_(ツ)_/¯
   end
 
   def self.extract_title(html, encoding = nil)
@@ -27,9 +26,8 @@ module RetrieveTitle
     doc = nil
     begin
       doc = Nokogiri.HTML5(html, encoding:)
-    rescue ArgumentError, EncodingError
-      # invalid HTML (Eg: too many attributes, status tree too deep) or an
-      # unsupported encoding - ignore
+    rescue ArgumentError
+      # invalid HTML (Eg: too many attributes, status tree too deep) - ignore
       # Error in nokogumbo is not specialized, uses generic ArgumentError
       # see: https://www.rubydoc.info/gems/nokogiri/Nokogiri/HTML5#label-Error+reporting
     end
@@ -103,7 +101,12 @@ module RetrieveTitle
           current = chunk
         end
 
-        encoding ||= Encodings.charset_from_content_type(_response["content-type"])
+        if !encoding && content_type = _response["content-type"]&.strip&.downcase
+          if content_type =~ /charset="?([a-z0-9_-]+)"?/
+            encoding = Regexp.last_match(1)
+            encoding = nil if !Encoding.list.map(&:name).map(&:downcase).include?(encoding)
+          end
+        end
 
         max_size = max_chunk_size(uri) * 1024
         title = extract_title(current, encoding)

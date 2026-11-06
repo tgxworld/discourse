@@ -225,30 +225,18 @@ class Demon::Base
 
   def monitor_parent
     Thread.new do
-      loop do
-        monitor_parent_tick
+      while true
+        begin
+          unless alive?(@parent_pid)
+            Process.kill "TERM", Process.pid
+            sleep 10
+            Process.kill "KILL", Process.pid
+          end
+        rescue => e
+          log("URGENT monitoring thread had an exception #{e}", level: :error)
+        end
         sleep 1
       end
-    end
-  end
-
-  def monitor_parent_tick
-    if !alive?(@parent_pid)
-      Process.kill "TERM", Process.pid
-      sleep 10
-      Process.kill "KILL", Process.pid
-    end
-  rescue Exception => e
-    log_error(e)
-  end
-
-  def log_error(e)
-    log("URGENT monitoring thread had an exception #{e.class}: #{e.message}", level: :error)
-  rescue Exception
-    # Fall back to STDERR if the logger is broken
-    begin
-      $stderr.puts("[#{self.class}##{Process.pid}] monitor-parent: #{e.class}: #{e.message}")
-    rescue StandardError
     end
   end
 
@@ -264,10 +252,12 @@ class Demon::Base
     Discourse.after_fork if defined?(Discourse)
 
     Signal.trap("HUP") do
-      delete_pid_file
-    ensure
-      # TERM is way cleaner than exit
-      Process.kill("TERM", Process.pid)
+      begin
+        delete_pid_file
+      ensure
+        # TERM is way cleaner than exit
+        Process.kill("TERM", Process.pid)
+      end
     end
 
     # keep stuff simple for now

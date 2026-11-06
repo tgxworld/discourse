@@ -13,9 +13,13 @@ module Chat
           {
             identifier: "u-#{user.id}",
             model:
-              ::Chat::ChatableUserSerializer.new(user, scope:, root: false, include_status: true),
+              ::Chat::ChatableUserSerializer.new(
+                user,
+                scope: scope,
+                root: false,
+                include_status: true,
+              ),
             type: "user",
-            match_quality: user.match_quality,
           }
         end
         .as_json
@@ -26,9 +30,8 @@ module Chat
         .map do |group|
           {
             identifier: "g-#{group.id}",
-            model: ::Chat::ChatableGroupSerializer.new(group, scope:, root: false),
+            model: ::Chat::ChatableGroupSerializer.new(group, scope: scope, root: false),
             type: "group",
-            match_quality: group.match_quality,
           }
         end
         .as_json
@@ -37,12 +40,16 @@ module Chat
     def direct_message_channels
       (object.direct_message_channels || [])
         .map do |channel|
-          membership = channel_membership(channel.id)
           {
             identifier: "c-#{channel.id}",
             type: "channel",
-            model: ::Chat::ChannelSerializer.new(channel, scope:, root: false, membership:),
-            match_quality: channel.match_quality,
+            model:
+              ::Chat::ChannelSerializer.new(
+                channel,
+                scope: scope,
+                root: false,
+                membership: channel_membership(channel.id),
+              ),
           }
         end
         .as_json
@@ -51,12 +58,16 @@ module Chat
     def category_channels
       (object.category_channels || [])
         .map do |channel|
-          membership = channel_membership(channel.id)
           {
             identifier: "c-#{channel.id}",
             type: "channel",
-            model: ::Chat::ChannelSerializer.new(channel, scope:, root: false, membership:),
-            match_quality: channel.match_quality,
+            model:
+              ::Chat::ChannelSerializer.new(
+                channel,
+                scope: scope,
+                root: false,
+                membership: channel_membership(channel.id),
+              ),
           }
         end
         .as_json

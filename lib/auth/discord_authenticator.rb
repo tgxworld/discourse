@@ -50,12 +50,8 @@ class Auth::DiscordAuthenticator < Auth::ManagedAuthenticator
     "https://discord.com"
   end
 
-  def enable_setting
-    :enable_discord_logins
-  end
-
-  def required_settings
-    %i[discord_client_id discord_secret]
+  def enabled?
+    SiteSetting.enable_discord_logins?
   end
 
   def register_middleware(omniauth)

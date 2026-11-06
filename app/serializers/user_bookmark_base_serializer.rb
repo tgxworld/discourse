@@ -24,6 +24,10 @@ class UserBookmarkBaseSerializer < ApplicationSerializer
     raise NotImplementedError
   end
 
+  def cooked
+    raise NotImplementedError
+  end
+
   def bookmarkable_url
     raise NotImplementedError
   end

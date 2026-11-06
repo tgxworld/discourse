@@ -42,19 +42,19 @@ module PageObjects
       end
 
       def has_no_filter?
-        has_no_css?(".d-filter-controls__input")
+        has_no_css?(".permalink-search")
       end
 
       def has_filter?
-        has_css?(".d-filter-controls__input")
+        has_css?(".permalink-search")
       end
 
       def filter(text)
-        find(".d-filter-controls__input").fill_in with: text
+        find(".permalink-search").fill_in with: text
       end
 
       def has_no_results?
-        has_css?(".d-filter-controls__no-results")
+        has_css?(".permalink-results__no-result")
       end
 
       def open_permalink_menu(url)

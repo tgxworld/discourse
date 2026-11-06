@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "minitest/autorun"
-require_relative "../create_title"
+require_relative "../create_title.rb"
 
 class TestCreateTitle < Minitest::Test
   def test_create_title_1

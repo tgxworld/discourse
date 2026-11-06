@@ -2,7 +2,7 @@
 
 require "nokogiri"
 require "optparse"
-require_relative "base"
+require File.expand_path(File.dirname(__FILE__) + "/base")
 
 class ImportScripts::Disqus < ImportScripts::Base
   # CHANGE THESE BEFORE RUNNING THE IMPORTER

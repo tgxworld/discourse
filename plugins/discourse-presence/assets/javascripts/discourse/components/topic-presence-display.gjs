@@ -1,9 +1,10 @@
 import Component from "@glimmer/component";
 import { cached, tracked } from "@glimmer/tracking";
 import { service } from "@ember/service";
+import { gt } from "truth-helpers";
+import UserLink from "discourse/components/user-link";
+import avatar from "discourse/helpers/avatar";
 import helperFn from "discourse/helpers/helper-fn";
-import DUserLink from "discourse/ui-kit/d-user-link";
-import dAvatar from "discourse/ui-kit/helpers/d-avatar";
 import { i18n } from "discourse-i18n";
 
 export default class TopicPresenceDisplay extends Component {
@@ -63,9 +64,9 @@ export default class TopicPresenceDisplay extends Component {
         <div class="presence-users">
           <div class="presence-avatars">
             {{#each this.users as |user|}}
-              <DUserLink @user={{user}}>
-                {{dAvatar user imageSize=@avatarSize}}
-              </DUserLink>
+              <UserLink @user={{user}}>
+                {{avatar user imageSize=@avatarSize}}
+              </UserLink>
             {{/each}}
           </div>
 

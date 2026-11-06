@@ -20,7 +20,7 @@ describe "AddUserToGroupThroughCustomField" do
   end
 
   context "with no matching user custom fields" do
-    it "leaves both users outside the target group" do
+    it "works" do
       expect(user_1.in_any_groups?([target_group.id])).to eq(false)
       expect(user_2.in_any_groups?([target_group.id])).to eq(false)
 
@@ -40,7 +40,7 @@ describe "AddUserToGroupThroughCustomField" do
       )
     end
 
-    it "adds only the matching user to the target group" do
+    it "works" do
       expect(user_1.in_any_groups?([target_group.id])).to eq(false)
       expect(user_2.in_any_groups?([target_group.id])).to eq(false)
 
@@ -70,7 +70,7 @@ describe "AddUserToGroupThroughCustomField" do
   context "when group is already present" do
     before { target_group.add(user_1) }
 
-    it "preserves existing group membership" do
+    it "works" do
       expect(user_1.in_any_groups?([target_group.id])).to eq(true)
       expect(user_2.in_any_groups?([target_group.id])).to eq(false)
 

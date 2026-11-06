@@ -10,12 +10,6 @@
       font-size: var(--font-down-1);
     }
 
-    &__errors {
-      display: block;
-      font-size: var(--font-down-1);
-      color: var(--danger);
-    }
-
     td[role="button"] {
       cursor: pointer;
     }
@@ -29,8 +23,8 @@
     margin-top: 1em;
   }
 
-  .d-table.automations {
-    .d-table__row {
+  .d-admin-table.automations {
+    .d-admin-row__content {
       @include viewport.until(md) {
         display: grid;
         grid-template-columns: 1fr;
@@ -38,31 +32,31 @@
       }
     }
 
-    .automations__name {
+    .d-admin-row__name {
       @include viewport.until(md) {
         order: 1;
       }
     }
 
-    .d-table__cell.--detail.automations__runs {
+    .d-admin-row__detail.automations__runs {
       @include viewport.until(md) {
         order: 2; // move below the name to avoid empty spacing
       }
     }
 
-    .d-table__cell.--detail.automations__updated-by {
+    .d-admin-row__detail.automations__updated-by {
       @include viewport.until(md) {
         order: 3;
       }
     }
 
-    .d-table__cell.--detail.automations__enabled {
+    .d-admin-row__detail.automations__enabled {
       @include viewport.until(md) {
         order: 5;
       }
     }
 
-    .d-table__cell.--controls.automations__controls {
+    .d-admin-row__controls.automations__controls {
       text-align: right;
       display: flex;
       flex-direction: row;
@@ -71,8 +65,6 @@
 
       @include viewport.until(md) {
         order: 6;
-        position: initial;
-        justify-content: space-between;
       }
     }
   }
@@ -143,16 +135,6 @@
 }
 
 .discourse-automation-form {
-  .automation-enabled-card {
-    margin-bottom: 1em;
-  }
-
-  .enabled-toggle-with-tooltip {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
   .scriptables,
   .triggerables {
     .select-kit-body {
@@ -285,11 +267,7 @@
       display: flex;
       align-items: center;
       justify-content: flex-start;
-      gap: 1em;
-
-      label {
-        margin: 0;
-      }
+      padding: 1em;
 
       .ember-checkbox {
         margin: 0 0 0 1em;

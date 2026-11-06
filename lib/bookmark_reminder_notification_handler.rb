@@ -9,17 +9,16 @@ class BookmarkReminderNotificationHandler
 
   def send_notification
     return if bookmark.blank?
-
     Bookmark.transaction do
-      if bookmark.registered_bookmarkable.can_send_reminder?(bookmark)
+      if !bookmark.registered_bookmarkable.can_send_reminder?(bookmark)
+        bookmark.clear_reminder!
+      else
         bookmark.registered_bookmarkable.send_reminder_notification(bookmark)
 
         if bookmark.auto_delete_when_reminder_sent?
           BookmarkManager.new(bookmark.user).destroy(bookmark.id)
-        else
-          bookmark.clear_reminder!
         end
-      else
+
         bookmark.clear_reminder!
       end
     end

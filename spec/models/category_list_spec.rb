@@ -22,7 +22,7 @@ RSpec.describe CategoryList do
 
     let(:admin_category_list) { CategoryList.new(Guardian.new(admin), include_topics: true) }
 
-    it "doesn't set has_children when an unprivileged user is querying" do
+    it "doesn't set has_children when an unpriveleged user is querying" do
       found = category_list.categories.find { |c| c.id == category.id }
       expect(found.has_children).to eq(false)
     end
@@ -191,7 +191,7 @@ RSpec.describe CategoryList do
       let(:topic) { Fabricate(:topic, category: topic_category) }
       let(:category) { category_list.categories.find { |c| c.id == topic_category.id } }
 
-      it "returns the topic's category" do
+      it "should return the category" do
         expect(category).to be_present
         expect(category.id).to eq(topic_category.id)
         expect(category.featured_topics.include?(topic)).to eq(true)
@@ -305,7 +305,7 @@ RSpec.describe CategoryList do
         cat4 = Fabricate(:category_with_definition, position: 3)
         cat5 = Fabricate(:category_with_definition, parent_category_id: cat2.id)
 
-        Fabricate(:topic, category_id: cat3.id, bumped_at: 1.minute.ago)
+        Fabricate(:topic, category_id: cat3.id, bumped_at: 1.minutes.ago)
         Fabricate(:topic, category_id: cat5.id, bumped_at: 2.minutes.ago)
         Fabricate(:topic, category_id: cat1.id, bumped_at: 3.minutes.ago)
         Fabricate(:topic, category_id: cat2.id, bumped_at: 5.minutes.ago)
@@ -329,7 +329,7 @@ RSpec.describe CategoryList do
         sub_cat_private.set_permissions(admins: :full)
         sub_cat_private.save
 
-        Fabricate(:topic, category: sub_cat_private, bumped_at: 1.minute.ago)
+        Fabricate(:topic, category: sub_cat_private, bumped_at: 1.minutes.ago)
         Fabricate(:topic, category: public_cat, bumped_at: 3.minutes.ago)
         Fabricate(:topic, category: public_cat2, bumped_at: 4.minutes.ago)
 
@@ -500,9 +500,7 @@ RSpec.describe CategoryList do
   end
 
   context "with content_localization_enabled enabled" do
-    fab!(:category) do
-      Fabricate(:category, name: "Original Name", description: "Original Desc", locale: "en")
-    end
+    fab!(:category) { Fabricate(:category, name: "Original Name", description: "Original Desc") }
     fab!(:category_localization) { Fabricate(:category_localization, category:, locale: "ja") }
 
     let(:locale) { "ja" }
@@ -516,21 +514,7 @@ RSpec.describe CategoryList do
       cl = CategoryList.new(Guardian.new)
       cat = cl.categories.find { |c| c.id == category.id }
       expect(cat.name).to eq(category_localization.name)
-      expect(cat.description).to eq(category_localization.description_first_paragraph)
-    end
-
-    it "only uses the first paragraph of a multi-paragraph localized description" do
-      category_localization.update!(description: "最初の段落\n\n二番目の段落")
-      cl = CategoryList.new(Guardian.new)
-      cat = cl.categories.find { |c| c.id == category.id }
-      expect(cat.description).to eq("最初の段落")
-    end
-
-    it "keeps the untranslated description when the localized description has no paragraph" do
-      category_localization.update!(description: "- 一つ\n- 二つ")
-      cl = CategoryList.new(Guardian.new)
-      cat = cl.categories.find { |c| c.id == category.id }
-      expect(cat.description).to eq("Original Desc")
+      expect(cat.description).to eq(category_localization.description)
     end
 
     it "falls back to the original name and description if no localization exists" do

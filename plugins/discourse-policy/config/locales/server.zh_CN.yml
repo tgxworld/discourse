@@ -8,7 +8,6 @@ zh_CN:
   site_settings:
     policy_enabled: "允许策略？"
     policy_restrict_to_staff_posts: "策略可能只适用于管理人员帖子"
-    create_policy_allowed_groups: "需要加入群组才能在帖子中添加政策"
     policy_easy_revoke: "同时显示接受和撤销按钮"
   discourse_policy:
     errors:
@@ -16,9 +15,6 @@ zh_CN:
       group_not_found: "找不到策略的群组"
       no_policy: "帖子没有策略"
       staff_only: "策略可能只适用于管理人员帖子"
-      policy_group_inaccessible: "目前无法接受此政策。请联系站点管理员。"
-      policy_cannot_be_wiki: "包含政策内容的帖子不能是维基百科帖子。"
-      no_policy_permission: "您无权修改此帖子中的政策。"
     error:
       no_permission: "未授权"
   reports:
@@ -38,6 +34,6 @@ zh_CN:
   unsubscribe:
     policy_emails:
       select_title: "将接收策略提醒电子邮件的频率设为："
-      never: 从不
+      never: 永不
       when_away: 仅在离开时
       always: 始终

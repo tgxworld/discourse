@@ -2,40 +2,41 @@ import Component from "@glimmer/component";
 import { fn } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
+import { not } from "truth-helpers";
+import DButton from "discourse/components/d-button";
 import withEventValue from "discourse/helpers/with-event-value";
-import DButton from "discourse/ui-kit/d-button";
 import { i18n } from "discourse-i18n";
 
 export default class AiHelperCustomPrompt extends Component {
   @action
-  handleSubmit(event) {
-    event.preventDefault();
-    if (!this.args.value?.length) {
+  sendInput(event) {
+    if (event.key !== "Enter") {
       return;
     }
-    this.args.submit(this.args.promptArgs);
+    return this.args.submit(this.args.promptArgs);
   }
 
   <template>
-    <form class="ai-custom-prompt" {{on "submit" this.handleSubmit}}>
+    <div class="ai-custom-prompt">
 
       <input
-        autofocus="autofocus"
-        class="ai-custom-prompt__input"
+        {{on "input" (withEventValue (fn (mut @value)))}}
+        {{on "keydown" this.sendInput}}
+        value={{@value}}
         placeholder={{i18n
           "discourse_ai.ai_helper.context_menu.custom_prompt.placeholder"
         }}
+        class="ai-custom-prompt__input"
         type="text"
-        value={{@value}}
-        {{on "input" (withEventValue (fn (mut @value)))}}
+        autofocus="autofocus"
       />
 
       <DButton
-        class="ai-custom-prompt__submit btn-primary"
+        @icon="discourse-sparkles"
         @action={{fn @submit @promptArgs}}
         @disabled={{not @value.length}}
-        @icon="discourse-sparkles"
+        class="ai-custom-prompt__submit btn-primary"
       />
-    </form>
+    </div>
   </template>
 }

@@ -1,86 +1,66 @@
 .ai-llm-quotas {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  width: 100%;
   margin: 1em 0;
 
-  > .form-kit__collection {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
+  &__table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1em;
   }
 
-  &__item {
-    padding: var(--space-3);
-    border: 1px solid var(--primary-low);
-    background: var(--secondary);
+  &__table-head {
+    background-color: var(--primary-very-low);
   }
 
-  &__item-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-    margin-bottom: var(--space-3);
-  }
-
-  &__group {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-width: 0;
-    margin: 0;
-  }
-
-  &__group-label {
-    color: var(--primary);
-    font-weight: 600;
-  }
-
-  &__group-name {
-    margin: 0;
-    overflow-wrap: anywhere;
-  }
-
-  &__group-link {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-
-    .d-icon {
-      flex: 0 0 auto;
-      color: var(--primary-medium);
+  .duration-selector {
+    .select-kit {
+      width: 150px;
     }
   }
 
-  &__limits {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
-    gap: var(--space-3);
-    align-items: start;
+  .duration-selector__custom {
+    margin-top: 8px;
+  }
 
-    .form-kit__field {
-      min-width: 0;
+  &__header {
+    text-align: left;
+    padding: 0.5em;
+    font-weight: bold;
+    border-bottom: 2px solid var(--primary-low);
+
+    &--actions {
+      width: 50px;
     }
+  }
 
-    .form-kit__container-content {
-      width: 100% !important;
-      min-width: 0 !important;
+  &__row {
+    border-bottom: 1px solid var(--primary-low);
+  }
+
+  &__cell {
+    vertical-align: middle;
+    align-items: center;
+
+    &--actions {
+      text-align: center;
     }
   }
 
   &__input[type="number"] {
-    width: 100%;
+    width: 200px;
+    padding: 0.5em;
     margin-bottom: 0;
   }
 
-  &__duration {
-    min-width: max-content;
+  &__group-select {
+    width: 200px;
   }
 
   &__delete-btn {
-    flex: 0 0 auto;
+    padding: 0.3em 0.5em;
+  }
+
+  &__add-btn {
+    padding: 0.3em 0.5em;
   }
 }
 

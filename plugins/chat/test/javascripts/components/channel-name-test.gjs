@@ -9,7 +9,7 @@ import { CHATABLE_TYPES } from "discourse/plugins/chat/discourse/models/chat-cha
 
 const CHANNEL_NAME_LABEL = ".chat-channel-name__label";
 
-module("Component | <ChannelName />", function (hooks) {
+module("Discourse Chat | Component | <ChannelName />", function (hooks) {
   setupRenderingTest(hooks);
 
   test("category channel - label", async function (assert) {
@@ -57,9 +57,7 @@ module("Component | <ChannelName />", function (hooks) {
 
     await render(<template><ChannelName @channel={{channel}} /></template>);
 
-    assert
-      .dom(CHANNEL_NAME_LABEL)
-      .hasText(users.map((item) => item.username).join(", "));
+    assert.dom(CHANNEL_NAME_LABEL).hasText(users.mapBy("username").join(", "));
   });
 
   test("dm channel - self", async function (assert) {
@@ -91,9 +89,7 @@ module("Component | <ChannelName />", function (hooks) {
 
     await render(<template><ChannelName @channel={{channel}} /></template>);
 
-    assert
-      .dom(CHANNEL_NAME_LABEL)
-      .hasText(users.map((item) => item.name).join(", "));
+    assert.dom(CHANNEL_NAME_LABEL).hasText(users.mapBy("name").join(", "));
   });
 
   test("unreadIndicator", async function (assert) {

@@ -17,11 +17,6 @@ uk:
         few: "редагують"
         many: "редагують"
         other: "редагують"
-      translating:
-        one: "переклад"
-        few: "переклади"
-        many: "переклади"
-        other: "переклади"
       replying_to_topic:
         one: "відповідає"
         few: "відповідаючи"

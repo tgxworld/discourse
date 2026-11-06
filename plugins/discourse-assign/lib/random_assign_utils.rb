@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative "discourse_assign/assignment_permissions"
-
 class RandomAssignUtils
   attr_reader :context, :fields, :automation, :topic, :group
 
@@ -109,7 +107,7 @@ class RandomAssignUtils
       .assign(assigned_user, allow_self_reassign: true)
       .then do |result|
         next if result[:success]
-        PostDestroyer.new(Discourse.system_user, post, context: "random assign rollback").destroy
+        PostDestroyer.new(Discourse.system_user, post).destroy
         no_one!
       end
   end
@@ -118,7 +116,7 @@ class RandomAssignUtils
     users =
       group
         .users
-        .where(id: DiscourseAssign::AssignmentPermissions.assignable_user_ids(topic))
+        .where(id: User.assign_allowed.select(:id))
         .where.not(
           id:
             User

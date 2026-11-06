@@ -39,7 +39,6 @@ RSpec.describe UploadSecurity do
         context "when uploading in public context" do
           describe "for a public type badge_image" do
             let(:type) { "badge_image" }
-
             it "returns false" do
               expect(security.should_be_secure?).to eq(false)
             end
@@ -47,7 +46,6 @@ RSpec.describe UploadSecurity do
 
           describe "for a public type group_flair" do
             let(:type) { "group_flair" }
-
             it "returns false" do
               expect(security.should_be_secure?).to eq(false)
             end
@@ -55,7 +53,6 @@ RSpec.describe UploadSecurity do
 
           describe "for a public type avatar" do
             let(:type) { "avatar" }
-
             it "returns false" do
               expect(security.should_be_secure?).to eq(false)
             end
@@ -63,7 +60,6 @@ RSpec.describe UploadSecurity do
 
           describe "for a public type custom_emoji" do
             let(:type) { "custom_emoji" }
-
             it "returns false" do
               expect(security.should_be_secure?).to eq(false)
             end
@@ -71,7 +67,6 @@ RSpec.describe UploadSecurity do
 
           describe "for a public type profile_background" do
             let(:type) { "profile_background" }
-
             it "returns false" do
               expect(security.should_be_secure?).to eq(false)
             end
@@ -79,7 +74,6 @@ RSpec.describe UploadSecurity do
 
           describe "for a public type category_logo" do
             let(:type) { "category_logo" }
-
             it "returns false" do
               expect(security.should_be_secure?).to eq(false)
             end
@@ -87,7 +81,6 @@ RSpec.describe UploadSecurity do
 
           describe "for a public type category_background" do
             let(:type) { "category_background" }
-
             it "returns false" do
               expect(security.should_be_secure?).to eq(false)
             end
@@ -162,7 +155,6 @@ RSpec.describe UploadSecurity do
 
       context "when uploading in the composer" do
         let(:type) { "composer" }
-
         it "returns true" do
           expect(security.should_be_secure?).to eq(true)
         end
@@ -170,7 +162,6 @@ RSpec.describe UploadSecurity do
 
       context "when uploading for a group message" do
         before { upload.stubs(:for_group_message).returns(true) }
-
         it "returns true" do
           expect(security.should_be_secure?).to eq(true)
         end
@@ -178,7 +169,6 @@ RSpec.describe UploadSecurity do
 
       context "when uploading for a PM" do
         before { upload.stubs(:for_private_message).returns(true) }
-
         it "returns true" do
           expect(security.should_be_secure?).to eq(true)
         end
@@ -186,7 +176,6 @@ RSpec.describe UploadSecurity do
 
       context "when upload is already secure" do
         before { upload.update(secure: true) }
-
         it "returns true" do
           expect(security.should_be_secure?).to eq(true)
         end
@@ -197,7 +186,6 @@ RSpec.describe UploadSecurity do
 
         context "when the access control post has_secure_uploads?" do
           before { upload.update(access_control_post: post_in_secure_context) }
-
           it "returns true" do
             expect(security.should_be_secure?).to eq(true)
           end
@@ -321,14 +309,6 @@ RSpec.describe UploadSecurity do
       describe "when the upload is first used for a UserAvatar" do
         it "returns false" do
           Fabricate(:user_avatar, custom_upload: upload)
-          create_secure_post_reference
-          expect(security.should_be_secure?).to eq(false)
-        end
-      end
-
-      describe "when the upload is first used for a UserAssociatedAccount avatar" do
-        it "returns false" do
-          Fabricate(:user_associated_account, avatar_upload: upload)
           create_secure_post_reference
           expect(security.should_be_secure?).to eq(false)
         end

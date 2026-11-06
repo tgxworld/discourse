@@ -1,8 +1,8 @@
 @use "lib/viewport";
 
 :root {
-  --d-sidebar-section-link-prefix-margin-right: var(--space-2);
-  --d-sidebar-section-link-prefix-width: var(--space-6);
+  --d-sidebar-section-link-prefix-margin-right: 0.75em;
+  --d-sidebar-section-link-prefix-width: 1.75rem;
   --d-sidebar-section-link-icon-size: 1em;
   --d-sidebar-section-link-emoji-size: 1em;
 }
@@ -11,7 +11,6 @@
   display: flex;
   align-items: center;
   position: relative;
-  scroll-margin-block: var(--space-6);
 
   &[data-list-item-name="all-categories"],
   &[data-list-item-name="all-tags"],
@@ -19,27 +18,13 @@
     font-size: var(--font-down-1-rem);
   }
 
-  &.--hovering .sidebar-section-link {
-    background: var(--d-sidebar-highlight-background);
-    color: var(--d-sidebar-highlight-color);
-
-    .prefix-text {
-      background: var(--d-sidebar-highlight-prefix-background);
-      color: var(--d-sidebar-highlight-prefix-color);
-    }
-
-    .sidebar-section-link-suffix.icon.unread svg {
-      color: var(--d-sidebar-highlight-suffix-color);
-    }
-  }
-
   .sidebar-section-link {
     display: inline-flex;
     width: 100%;
     align-items: center;
     color: var(--d-sidebar-link-color);
-    border-radius: var(--token-radius-normal);
-    gap: var(--d-sidebar-section-link-prefix-margin-right);
+    transition: background-color 0.25s;
+    border-radius: var(--d-border-radius);
 
     &:focus-visible,
     &:hover {
@@ -49,7 +34,6 @@
 
       .prefix-text {
         background: var(--d-sidebar-highlight-prefix-background);
-        color: var(--d-sidebar-highlight-prefix-color);
       }
 
       .sidebar-section-link-suffix.icon.unread svg {
@@ -58,8 +42,7 @@
     }
 
     &--active,
-    &.active,
-    &.exact-url-match {
+    &.active {
       background: var(--d-sidebar-active-background);
       color: var(--d-sidebar-active-color);
       font-weight: var(--d-sidebar-active-font-weight);
@@ -81,37 +64,40 @@
       .sidebar-section-link-suffix.icon.unread svg {
         color: var(--d-sidebar-active-suffix-color);
       }
+
+      .sidebar-section-link-hover:hover .sidebar-section-hover-button {
+        background-color: var(--d-sidebar-active-background);
+      }
     }
 
     &--muted {
-      &:not(.active) .sidebar-section-link-prefix {
-        opacity: 0.75;
+      opacity: 0.5;
+
+      .sidebar-section-link-prefix.icon .d-icon {
+        color: var(--primary-medium);
       }
 
-      --d-sidebar-link-color: var(--token-color-text-subtlest);
+      &.active {
+        .sidebar-section-link-prefix.icon .d-icon {
+          color: var(--primary-high);
+        }
+      }
     }
 
     .sidebar-section-link-content-badge {
+      @include ellipsis;
+      padding-left: 0.5em;
+      padding-right: 0.1em; // avoids some overflow cropping
+      text-align: right;
       color: var(--d-sidebar-link-badge-color);
       font-size: var(--font-down-2);
-      width: auto;
-      min-width: var(--font-down-1);
-      padding-inline: var(--space-1);
-      font-weight: var(--token-font-weight-regular);
-      flex-shrink: 0;
-      text-align: center;
-      max-width: 15ch;
-
-      @include ellipsis;
-
-      &:not(.icon) {
-        margin-left: auto;
-      }
+      font-weight: normal;
+      margin-left: auto;
     }
 
     .sidebar-section-link-suffix {
+      margin-left: 1em;
       font-size: var(--font-down-4);
-      flex-shrink: 0;
 
       &.icon {
         &.urgent svg {
@@ -126,16 +112,10 @@
 
     .sidebar-section-link-content-text {
       @include ellipsis;
-      min-width: 0;
-      flex: 0 1 auto;
-
-      .user-status-message {
-        vertical-align: -0.125em;
-      }
 
       .emoji {
-        width: 1em;
-        height: 1em;
+        width: 15px;
+        height: 15px;
         vertical-align: baseline;
       }
 
@@ -154,14 +134,27 @@
 
   &.dropdown-menu__item .sidebar-section-link,
   .dropdown-menu__item .sidebar-section-link {
-    height: var(--d-sidebar-row-height);
-    padding-inline: var(--d-sidebar-row-horizontal-padding);
-    border-radius: var(--token-radius-normal);
+    border-radius: 0;
   }
 
   .--link-button {
     border: none;
     background: inherit;
+  }
+
+  .sidebar-section-link[data-link-name="personal-messages-sent"],
+  .sidebar-section-link[data-link-name="personal-messages-new"],
+  .sidebar-section-link[data-link-name="personal-messages-archive"],
+  .sidebar-section-link[data-link-name="personal-messages-unread"],
+  .sidebar-section-link[data-link-name="group-messages-new"],
+  .sidebar-section-link[data-link-name="group-messages-unread"],
+  .sidebar-section-link[data-link-name="group-messages-archive"] {
+    .sidebar-section-link-content-text {
+      margin-left: calc(
+        var(--d-sidebar-section-link-prefix-margin-right) +
+          var(--d-sidebar-section-link-prefix-width)
+      );
+    }
   }
 
   .sidebar-section-link-review {
@@ -176,6 +169,8 @@
     justify-content: center;
     flex-shrink: 0;
     width: var(--d-sidebar-section-link-prefix-width);
+    height: var(--d-sidebar-section-link-prefix-width);
+    margin-right: var(--d-sidebar-section-link-prefix-margin-right);
 
     #sidebar-section-content-chat-dms & {
       @include viewport.from(sm) {
@@ -195,7 +190,7 @@
 
     &.image {
       img {
-        border-radius: var(--token-radius-full);
+        border-radius: 100%;
         aspect-ratio: auto 20 / 20;
         width: calc(var(--d-sidebar-section-link-prefix-width) - 2px);
         height: calc(var(--d-sidebar-section-link-prefix-width) - 2px);
@@ -219,7 +214,7 @@
       .prefix-badge {
         position: absolute;
         background-color: transparent;
-        border-radius: var(--token-radius-full);
+        border-radius: 50%;
         padding: 2px 2px 3px;
         color: var(--d-sidebar-link-color);
         height: 0.5rem;
@@ -238,7 +233,6 @@
     .prefix-square {
       width: 0.8em;
       height: 0.8em;
-      border-radius: var(--category-badge-border-radius);
     }
   }
 
@@ -246,7 +240,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: var(--token-radius-full);
+    border-radius: 100%;
     background: var(--d-sidebar-prefix-background);
     color: var(--d-sidebar-prefix-color);
     width: calc(var(--d-sidebar-section-link-prefix-width) - 2px);
@@ -258,47 +252,36 @@
     margin-left: auto;
 
     .sidebar-section-hover-button {
-      opacity: 0;
+      display: none;
       color: var(--d-sidebar-highlight-color);
       border: none;
+      background: transparent;
+      padding: 0 0 0 0.5em;
       height: 100%;
-      padding-inline: var(--space-1);
+      transition: background-color 0.25s;
 
       &:focus,
       .discourse-no-touch & {
         &:hover {
           color: var(--d-sidebar-highlight-color);
-          background: var(--d-sidebar-highlight-hover-background);
-
-          svg {
-            color: var(--d-sidebar-active-icon-color);
-          }
         }
       }
 
       svg {
         font-size: var(--font-down-1);
-        margin: 0;
-        color: var(--d-sidebar-highlight-color);
+      }
+    }
+
+    &:hover {
+      .sidebar-section-hover-button {
+        background: var(--d-sidebar-highlight-background);
       }
     }
   }
 
-  &.--hovering .sidebar-section-hover-button {
-    opacity: 1;
-  }
-
-  // the tracked hovering state is not set on touch-capable devices
-  @media (hover: hover) {
-    &:hover .sidebar-section-hover-button {
-      opacity: 1;
-    }
-  }
-
-  // devices without hover can't reveal the button, so it stays visible
-  @media (hover: none) {
+  &:hover {
     .sidebar-section-hover-button {
-      opacity: 1;
+      display: block;
     }
   }
 }

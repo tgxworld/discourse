@@ -110,11 +110,10 @@ RSpec.describe "category tag restrictions" do
       expect {
         create_post(category: category_with_tags, tags: [tag1.name, "newtag"])
       }.to raise_error(StandardError, msg)
-    end
 
-    it "lets admins post in a restricted category without raising on disallowed tags" do
-      post = create_post(category: category_with_tags, tags: [tag1.name, "newtag"], user: admin)
-      expect_same_tag_names(post.topic.tags, [tag1.name])
+      expect {
+        create_post(category: category_with_tags, tags: [tag1.name, "newtag"], user: admin)
+      }.to raise_error(StandardError, msg)
     end
 
     it "can create new tags in a non-restricted category" do

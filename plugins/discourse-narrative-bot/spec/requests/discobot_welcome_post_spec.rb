@@ -3,13 +3,10 @@
 RSpec.describe "Discobot welcome post" do
   let(:user) { Fabricate(:user) }
 
-  before do
-    SiteSetting.discourse_narrative_bot_enabled = true
-    SiteSetting.disable_discourse_narrative_bot_welcome_post = false
-  end
+  before { SiteSetting.discourse_narrative_bot_enabled = true }
 
   context "when discourse_narrative_bot_welcome_post_delay is 0" do
-    it "sends the welcome post immediately" do
+    it "should not delay the welcome post" do
       user
       expect { sign_in(user) }.to_not change { Jobs::NarrativeInit.jobs.count }
     end
@@ -19,7 +16,7 @@ RSpec.describe "Discobot welcome post" do
     before { SiteSetting.discourse_narrative_bot_welcome_post_delay = 5 }
 
     context "when user logs in normally" do
-      it "delays the welcome post until the user logs in" do
+      it "should delay the welcome post until user logs in" do
         expect { sign_in(user) }.to change { Jobs::NarrativeInit.jobs.count }.by(1)
         expect(Jobs::NarrativeInit.jobs.first["args"].first["user_id"]).to eq(user.id)
       end
@@ -30,11 +27,7 @@ RSpec.describe "Discobot welcome post" do
         Fabricate(:invite, invited_by: Fabricate(:admin), email: "testing@gmail.com")
       end
 
-      # Redeeming through the legacy form, which the email code flow replaces
-      # when enable_local_logins_via_code is on.
-      before { SiteSetting.enable_local_logins_via_code = false }
-
-      it "delays the welcome post until the user logs in" do
+      it "should delay the welcome post until the user logs in" do
         expect do
           put "/invites/show/#{invite.invite_key}.json",
               params: {
@@ -55,7 +48,7 @@ RSpec.describe "Discobot welcome post" do
 
     before { SiteSetting.discourse_narrative_bot_welcome_post_type = "welcome_message" }
 
-    it "does not send a welcome message" do
+    it "should not send welcome message" do
       expect { staged_user }.to_not change { Jobs::SendDefaultWelcomeMessage.jobs.count }
     end
   end

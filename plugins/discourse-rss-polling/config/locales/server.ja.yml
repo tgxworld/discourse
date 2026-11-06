@@ -5,3 +5,5 @@
 # https://translate.discourse.org/
 
 ja:
+  site_settings:
+    rss_polling_frequency: "[RSS Polling] フィードの更新間隔 (分)"

@@ -34,7 +34,6 @@ class Themes::BulkDestroy
   end
 
   model :themes
-  policy :can_edit_themes
 
   transaction do
     step :log_themes_destroy
@@ -45,13 +44,6 @@ class Themes::BulkDestroy
 
   def fetch_themes(params:)
     Theme.where(id: params.theme_ids)
-  end
-
-  # deleting a theme also removes it from the themes it's related to
-  def can_edit_themes(guardian:, themes:)
-    themes.all? do |theme|
-      guardian.can_edit_theme_relations?(theme, child_theme_ids: [], parent_theme_ids: [])
-    end
   end
 
   def log_themes_destroy(themes:, guardian:)

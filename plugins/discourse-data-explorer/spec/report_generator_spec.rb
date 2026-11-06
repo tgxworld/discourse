@@ -2,8 +2,8 @@
 
 describe DiscourseDataExplorer::ReportGenerator do
   fab!(:user)
-  fab!(:unauthorised_user, :user)
-  fab!(:unauthorised_group, :group)
+  fab!(:unauthorised_user) { Fabricate(:user) }
+  fab!(:unauthorised_group) { Fabricate(:group) }
   fab!(:group) { Fabricate(:group, users: [user]) }
 
   fab!(:query) { DiscourseDataExplorer::Query.find(-1) }
@@ -15,37 +15,7 @@ describe DiscourseDataExplorer::ReportGenerator do
     SiteSetting.authorized_extensions = "csv"
   end
 
-  def pm_body(recipient_name)
-    I18n.t(
-      "data_explorer.report_generator.private_message.body",
-      recipient_name:,
-      query_name: query.name,
-      table: "le table",
-      base_url: Discourse.base_url,
-      query_id: query.id,
-      created_at: Time.zone.now.strftime("%Y-%m-%d at %H:%M:%S"),
-      timezone: Time.zone.name,
-    )
-  end
-
-  def post_body
-    I18n.t(
-      "data_explorer.report_generator.post.body",
-      query_name: query.name,
-      table: "le table",
-      base_url: Discourse.base_url,
-      query_id: query.id,
-      created_at: Time.zone.now.strftime("%Y-%m-%d at %H:%M:%S"),
-      timezone: Time.zone.name,
-    )
-  end
-
   describe ".generate" do
-    before do
-      DiscourseDataExplorer::ResultToMarkdown.expects(:convert).returns("le table")
-      freeze_time
-    end
-
     it "returns [] if the recipient is not in query group" do
       Fabricate(:query_group, query: query, group: group)
       result =
@@ -59,8 +29,9 @@ describe DiscourseDataExplorer::ReportGenerator do
     end
 
     it "returns a list of pms for authorised users" do
-      Fabricate(:query_group, query: query, group: group)
       SiteSetting.personal_message_enabled_groups = group.id
+      DiscourseDataExplorer::ResultToMarkdown.expects(:convert).returns("le table")
+      freeze_time
 
       result = described_class.generate(query.id, query_params, [user.username])
 
@@ -73,7 +44,17 @@ describe DiscourseDataExplorer::ReportGenerator do
                 query_name: query.name,
               ),
             "target_usernames" => [user.username],
-            "raw" => pm_body(user.username),
+            "raw" =>
+              I18n.t(
+                "data_explorer.report_generator.private_message.body",
+                recipient_name: user.username,
+                query_name: query.name,
+                table: "le table",
+                base_url: Discourse.base_url,
+                query_id: query.id,
+                created_at: Time.zone.now.strftime("%Y-%m-%d at %H:%M:%S"),
+                timezone: Time.zone.name,
+              ),
           },
         ],
       )
@@ -81,7 +62,10 @@ describe DiscourseDataExplorer::ReportGenerator do
 
     it "still returns a list of pms if a group or user does not exist" do
       Fabricate(:query_group, query: query, group: group)
+
       SiteSetting.personal_message_enabled_groups = group.id
+      DiscourseDataExplorer::ResultToMarkdown.expects(:convert).returns("le table")
+      freeze_time
 
       result = described_class.generate(query.id, query_params, [group.name, "non-existent-group"])
       expect(result).to eq(
@@ -93,13 +77,26 @@ describe DiscourseDataExplorer::ReportGenerator do
                 query_name: query.name,
               ),
             "target_group_names" => [group.name],
-            "raw" => pm_body(group.name),
+            "raw" =>
+              I18n.t(
+                "data_explorer.report_generator.private_message.body",
+                recipient_name: group.name,
+                query_name: query.name,
+                table: "le table",
+                base_url: Discourse.base_url,
+                query_id: query.id,
+                created_at: Time.zone.now.strftime("%Y-%m-%d at %H:%M:%S"),
+                timezone: Time.zone.name,
+              ),
           },
         ],
       )
     end
 
     it "works with email recipients" do
+      DiscourseDataExplorer::ResultToMarkdown.expects(:convert).returns("le table")
+      freeze_time
+
       email = "john@doe.com"
       result = described_class.generate(query.id, query_params, [email])
 
@@ -112,14 +109,25 @@ describe DiscourseDataExplorer::ReportGenerator do
                 query_name: query.name,
               ),
             "target_emails" => [email],
-            "raw" => pm_body(email),
+            "raw" =>
+              I18n.t(
+                "data_explorer.report_generator.private_message.body",
+                recipient_name: email,
+                query_name: query.name,
+                table: "le table",
+                base_url: Discourse.base_url,
+                query_id: query.id,
+                created_at: Time.zone.now.strftime("%Y-%m-%d at %H:%M:%S"),
+                timezone: Time.zone.name,
+              ),
           },
         ],
       )
     end
 
     it "works with duplicate recipients" do
-      Fabricate(:query_group, query: query, group: group)
+      DiscourseDataExplorer::ResultToMarkdown.expects(:convert).returns("le table")
+      freeze_time
 
       result = described_class.generate(query.id, query_params, [user.username, user.username])
 
@@ -132,7 +140,17 @@ describe DiscourseDataExplorer::ReportGenerator do
                 query_name: query.name,
               ),
             "target_usernames" => [user.username],
-            "raw" => pm_body(user.username),
+            "raw" =>
+              I18n.t(
+                "data_explorer.report_generator.private_message.body",
+                recipient_name: user.username,
+                query_name: query.name,
+                table: "le table",
+                base_url: Discourse.base_url,
+                query_id: query.id,
+                created_at: Time.zone.now.strftime("%Y-%m-%d at %H:%M:%S"),
+                timezone: Time.zone.name,
+              ),
           },
         ],
       )
@@ -140,6 +158,7 @@ describe DiscourseDataExplorer::ReportGenerator do
 
     it "works with multiple recipient types" do
       Fabricate(:query_group, query: query, group: group)
+      DiscourseDataExplorer::ResultToMarkdown.expects(:convert).returns("le table")
 
       result =
         described_class.generate(
@@ -212,8 +231,9 @@ describe DiscourseDataExplorer::ReportGenerator do
     end
 
     it "works with attached csv file" do
-      Fabricate(:query_group, query: query, group: group)
       SiteSetting.personal_message_enabled_groups = group.id
+      DiscourseDataExplorer::ResultToMarkdown.expects(:convert).returns("le table")
+      freeze_time
 
       result =
         described_class.generate(query.id, query_params, [user.username], { attach_csv: true })
@@ -222,7 +242,16 @@ describe DiscourseDataExplorer::ReportGenerator do
         "#{query.slug}@#{Slug.for(Discourse.current_hostname, "discourse")}-#{Date.today}.dcqresult.csv"
 
       expect(result[0]["raw"]).to eq(
-        pm_body(user.username) + "\n\n" +
+        I18n.t(
+          "data_explorer.report_generator.private_message.body",
+          recipient_name: user.username,
+          query_name: query.name,
+          table: "le table",
+          base_url: Discourse.base_url,
+          query_id: query.id,
+          created_at: Time.zone.now.strftime("%Y-%m-%d at %H:%M:%S"),
+          timezone: Time.zone.name,
+        ) + "\n\n" +
           I18n.t(
             "data_explorer.report_generator.upload_appendix",
             filename: filename,
@@ -233,49 +262,50 @@ describe DiscourseDataExplorer::ReportGenerator do
   end
 
   describe ".generate_post" do
-    it "raises the query error" do
-      broken_query = Fabricate(:query, sql: "SELECT 1;")
+    it "works without attached csv file" do
+      DiscourseDataExplorer::ResultToMarkdown.expects(:convert).returns("le table")
+      freeze_time
 
-      expect { described_class.generate_post(broken_query.id, query_params) }.to raise_error(
-        DiscourseDataExplorer::ValidationError,
+      result = described_class.generate_post(query.id, query_params)
+
+      expect(result["raw"]).to eq(
+        I18n.t(
+          "data_explorer.report_generator.post.body",
+          query_name: query.name,
+          table: "le table",
+          base_url: Discourse.base_url,
+          query_id: query.id,
+          created_at: Time.zone.now.strftime("%Y-%m-%d at %H:%M:%S"),
+          timezone: Time.zone.name,
+        ),
       )
     end
 
-    context "with a runnable query" do
-      before do
-        DiscourseDataExplorer::ResultToMarkdown.expects(:convert).returns("le table")
-        freeze_time
-      end
+    it "works with attached csv file" do
+      DiscourseDataExplorer::ResultToMarkdown.expects(:convert).returns("le table")
+      freeze_time
 
-      it "works without attached csv file" do
-        result = described_class.generate_post(query.id, query_params)
+      result = described_class.generate_post(query.id, query_params, { attach_csv: true })
 
-        expect(result["raw"]).to eq(post_body)
-      end
+      filename =
+        "#{query.slug}@#{Slug.for(Discourse.current_hostname, "discourse")}-#{Date.today}.dcqresult.csv"
 
-      it "works with attached csv file" do
-        result = described_class.generate_post(query.id, query_params, { attach_csv: true })
-
-        filename =
-          "#{query.slug}@#{Slug.for(Discourse.current_hostname, "discourse")}-#{Date.today}.dcqresult.csv"
-
-        expect(result["raw"]).to eq(
-          post_body + "\n\n" +
-            I18n.t(
-              "data_explorer.report_generator.upload_appendix",
-              filename: filename,
-              short_url: Upload.find_by(original_filename: filename).short_url,
-            ),
-        )
-      end
-
-      it "omits the upload appendix when the upload is rejected" do
-        SiteSetting.authorized_extensions = "pdf"
-
-        result = described_class.generate_post(query.id, query_params, { attach_csv: true })
-
-        expect(result["raw"]).not_to include("Appendix")
-      end
+      expect(result["raw"]).to eq(
+        I18n.t(
+          "data_explorer.report_generator.post.body",
+          query_name: query.name,
+          table: "le table",
+          base_url: Discourse.base_url,
+          query_id: query.id,
+          created_at: Time.zone.now.strftime("%Y-%m-%d at %H:%M:%S"),
+          timezone: Time.zone.name,
+        ) + "\n\n" +
+          I18n.t(
+            "data_explorer.report_generator.upload_appendix",
+            filename: filename,
+            short_url: Upload.find_by(original_filename: filename).short_url,
+          ),
+      )
     end
   end
 

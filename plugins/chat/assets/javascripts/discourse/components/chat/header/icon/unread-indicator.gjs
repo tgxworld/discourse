@@ -5,7 +5,7 @@ import {
   HEADER_INDICATOR_PREFERENCE_DM_AND_MENTIONS,
   HEADER_INDICATOR_PREFERENCE_NEVER,
   HEADER_INDICATOR_PREFERENCE_ONLY_MENTIONS,
-} from "discourse/plugins/chat/discourse/lib/chat-constants";
+} from "discourse/plugins/chat/discourse/controllers/preferences-chat";
 
 const MAX_UNREAD_COUNT = 99;
 
@@ -15,30 +15,28 @@ export default class ChatHeaderIconUnreadIndicator extends Component {
 
   get urgentCount() {
     return (
-      this.args.urgentCount ??
-      this.chatTrackingStateManager.allChannelUrgentCount()
+      this.args.urgentCount ||
+      this.chatTrackingStateManager.allChannelUrgentCount
     );
   }
 
   get mentionCount() {
     return (
-      this.args.mentionCount ??
-      this.chatTrackingStateManager.allChannelMentionCount()
+      this.args.mentionCount ||
+      this.chatTrackingStateManager.allChannelMentionCount
     );
   }
 
   get unreadCount() {
     return (
-      this.args.unreadCount ??
-      this.chatTrackingStateManager.publicChannelUnreadCount()
+      this.args.unreadCount ||
+      this.chatTrackingStateManager.publicChannelUnreadCount
     );
   }
 
   get hasUnreads() {
     return (
-      this.unreadCount > 0 ||
-      (this.args.hasUnreadThreads ??
-        this.chatTrackingStateManager.hasUnreadThreads())
+      this.unreadCount > 0 || this.chatTrackingStateManager.hasUnreadThreads
     );
   }
 
@@ -94,17 +92,13 @@ export default class ChatHeaderIconUnreadIndicator extends Component {
 
   <template>
     {{#if this.showUrgentIndicator}}
-      <div class="c-unread-indicator chat-channel-unread-indicator -urgent">
-        <div
-          class="c-unread-indicator__number chat-channel-unread-indicator__number"
-        >
+      <div class="chat-channel-unread-indicator -urgent">
+        <div class="chat-channel-unread-indicator__number">
           {{this.urgentCountLabel}}
         </div>
       </div>
     {{else if this.showUnreadIndicator}}
-      <div
-        class="c-unread-indicator chat-channel-unread-indicator d-new-indicator"
-      ></div>
+      <div class="chat-channel-unread-indicator"></div>
     {{/if}}
   </template>
 }

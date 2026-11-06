@@ -3,8 +3,8 @@
 class PublishedPage < ActiveRecord::Base
   belongs_to :topic
 
-  validates :slug, presence: true
-  validates :slug, :topic_id, uniqueness: true
+  validates_presence_of :slug
+  validates_uniqueness_of :slug, :topic_id
 
   validate :slug_format
   def slug_format
@@ -54,11 +54,11 @@ end
 # Table name: published_pages
 #
 #  id         :bigint           not null, primary key
-#  public     :boolean          default(FALSE), not null
+#  topic_id   :bigint           not null
 #  slug       :string           not null
 #  created_at :datetime         not null
 #  updated_at :datetime         not null
-#  topic_id   :bigint           not null
+#  public     :boolean          default(FALSE), not null
 #
 # Indexes
 #

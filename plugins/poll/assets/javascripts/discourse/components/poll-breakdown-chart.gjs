@@ -1,15 +1,13 @@
-/* eslint-disable ember/no-classic-components, ember/require-tagless-components */
+/* eslint-disable ember/no-classic-components */
 import Component from "@ember/component";
-import { computed } from "@ember/object";
+import { mapBy } from "@ember/object/computed";
 import { next } from "@ember/runloop";
-import { trustHTML } from "@ember/template";
+import { htmlSafe } from "@ember/template";
 import { classNames } from "@ember-decorators/component";
-import loadChartJS, {
-  loadChartJSDatalabels,
-} from "discourse/lib/load-chart-js";
+import discourseComputed from "discourse/lib/decorators";
 import I18n from "discourse-i18n";
 import { getColors } from "discourse/plugins/poll/lib/chart-colors";
-import { PIE_CHART_TYPE } from "../components/modal/poll-ui-builder.gjs";
+import { PIE_CHART_TYPE } from "../components/modal/poll-ui-builder";
 
 @classNames("poll-breakdown-chart-container")
 export default class PollBreakdownChart extends Component {
@@ -20,12 +18,11 @@ export default class PollBreakdownChart extends Component {
   highlightedOption = null;
   setHighlightedOption = null;
 
+  @mapBy("options", "votes") data;
+
   _optionToSlice = null;
   _previousHighlightedSliceIndex = null;
   _previousDisplayMode = null;
-
-  /** @type {import("chart.js").Chart | null} */
-  _chart = null;
 
   init() {
     super.init(...arguments);
@@ -40,29 +37,38 @@ export default class PollBreakdownChart extends Component {
     }
   }
 
-  @computed("options.@each.votes")
-  get data() {
-    return this.options?.map?.((item) => item.votes) ?? [];
+  didInsertElement() {
+    super.didInsertElement(...arguments);
+
+    const canvas = this.element.querySelector("canvas");
+    this._chart = new window.Chart(canvas.getContext("2d"), this.chartConfig);
   }
 
-  @computed("optionColors", "index")
-  get colorStyle() {
-    return trustHTML(`background: ${this.optionColors[this.index]};`);
+  didReceiveAttrs() {
+    super.didReceiveAttrs(...arguments);
+
+    if (this._chart) {
+      this._updateDisplayMode();
+      this._updateHighlight();
+    }
   }
 
-  @computed("data", "displayMode")
-  get chartConfig() {
-    const data = this.data;
-    const displayMode = this.displayMode;
+  @discourseComputed("optionColors", "index")
+  colorStyle(optionColors, index) {
+    return htmlSafe(`background: ${optionColors[index]};`);
+  }
+
+  @discourseComputed("data", "displayMode")
+  chartConfig(data, displayMode) {
     const transformedData = [];
     let counter = 0;
 
-    this._optionToSlice = {}; // eslint-disable-line ember/no-side-effects
+    this._optionToSlice = {};
 
     data.forEach((votes, index) => {
       if (votes > 0) {
         transformedData.push(votes);
-        this._optionToSlice[index] = counter++; // eslint-disable-line ember/no-side-effects
+        this._optionToSlice[index] = counter++;
       }
     });
 
@@ -73,6 +79,7 @@ export default class PollBreakdownChart extends Component {
 
     return {
       type: PIE_CHART_TYPE,
+      plugins: [window.ChartDataLabels],
       data: {
         datasets: [
           {
@@ -140,30 +147,6 @@ export default class PollBreakdownChart extends Component {
         },
       },
     };
-  }
-
-  async didInsertElement() {
-    super.didInsertElement(...arguments);
-
-    const canvas = this.element.querySelector("canvas");
-
-    const [Chart, ChartDataLabelsPlugin] = await Promise.all([
-      loadChartJS(),
-      loadChartJSDatalabels(),
-    ]);
-    this._chart = new Chart(canvas.getContext("2d"), {
-      ...this.chartConfig,
-      plugins: [ChartDataLabelsPlugin],
-    });
-  }
-
-  didReceiveAttrs() {
-    super.didReceiveAttrs(...arguments);
-
-    if (this._chart) {
-      this._updateDisplayMode();
-      this._updateHighlight();
-    }
   }
 
   _updateDisplayMode() {

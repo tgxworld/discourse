@@ -16,12 +16,11 @@ th:
         bool:
           yes: "ใช่"
           no: "ไม่ใช่"
+      export: "ส่งออก"
+      save: "บันทึกการเปลี่ยนแปลง"
+      edit: "แก้ไข"
       delete: "ลบ"
-      name: "ชื่อ"
       query_groups: "กลุ่ม"
-      query_tags: "ป้าย"
       query_description: "รายละเอียด"
       query_user: "สร้างโดย"
-    discourse_workflows:
-      sql:
-        param_value: "ค่า"
+      search_placeholder: "ค้นหา..."

@@ -22,22 +22,9 @@ class EmailUpdater
     EmailValidator.new(attributes: :email).validate_each(self, :email, email)
     return if errors.present?
 
-    existing_user = User.find_by_email(email)
-    is_alias = false
-
-    # Uniqueness is enforced on the normalized address, so an alias of an address
-    # already in use has to be caught here rather than after the confirmation
-    # round-trip, where it would only surface as a failed save.
-    if existing_user.nil? && SiteSetting.normalize_emails?
-      existing_user = UserEmail.find_by_normalized(email)&.user
-      is_alias = existing_user.present?
-    end
-
-    if existing_user
-      if SiteSetting.hide_email_address_taken && existing_user != @user
+    if existing_user = User.find_by_email(email)
+      if SiteSetting.hide_email_address_taken
         Jobs.enqueue(:critical_user_email, type: "account_exists", user_id: existing_user.id)
-      elsif is_alias
-        errors.add(:base, I18n.t("change_email.error_alias"))
       else
         error_message = +"change_email.error"
         error_message << "_staged" if existing_user.staged?
@@ -63,7 +50,7 @@ class EmailUpdater
     @change_req =
       EmailChangeRequest.find_or_initialize_by(
         user_id: @user.id,
-        old_email: add ? nil : @user.email,
+        old_email: @user.email,
         new_email: email,
       )
 
@@ -152,7 +139,7 @@ class EmailUpdater
     end
     @user.reload
 
-    DiscourseEvent.trigger(:user_updated, @user, %w[email])
+    DiscourseEvent.trigger(:user_updated, @user)
     @user.set_automatic_groups
   end
 

@@ -1,15 +1,18 @@
 import Component from "@glimmer/component";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
-import DButton from "discourse/ui-kit/d-button";
-import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
+import DButton from "discourse/components/d-button";
+import concatClass from "discourse/helpers/concat-class";
 
 export default class PostVotingButton extends Component {
   get buttonClasses() {
-    let classes = this.args.direction === "up" ? "--upvote" : "--downvote";
+    let classes =
+      this.args.direction === "up"
+        ? "post-voting-button-upvote"
+        : "post-voting-button-downvote";
 
     if (this.args.voted) {
-      classes += " --voted";
+      classes += " post-voting-button-voted";
     }
 
     return classes;
@@ -20,19 +23,7 @@ export default class PostVotingButton extends Component {
   }
 
   get iconName() {
-    return this.args.voted ? "vote-up-filled" : "vote-up";
-  }
-
-  get ariaLabel() {
-    if (this.args.direction === "up") {
-      return this.args.voted
-        ? "vote.button.remove_upvote"
-        : "vote.button.upvote";
-    }
-
-    return this.args.voted
-      ? "vote.button.remove_downvote"
-      : "vote.button.downvote";
+    return this.args.direction === "up" ? "caret-up" : "caret-down";
   }
 
   @action
@@ -50,15 +41,10 @@ export default class PostVotingButton extends Component {
 
   <template>
     <DButton
-      class={{dConcatClass
-        "btn-transparent post-voting-button"
-        this.buttonClasses
-      }}
-      @ariaLabel={{this.ariaLabel}}
+      {{on "click" this.onClick}}
       @disabled={{this.disabled}}
       @icon={{this.iconName}}
-      @title={{this.ariaLabel}}
-      {{on "click" this.onClick}}
+      class={{concatClass "btn-flat post-voting-button" this.buttonClasses}}
     />
   </template>
 }

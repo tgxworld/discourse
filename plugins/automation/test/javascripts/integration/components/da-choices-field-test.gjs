@@ -6,7 +6,7 @@ import selectKit from "discourse/tests/helpers/select-kit-helper";
 import AutomationField from "discourse/plugins/automation/admin/components/automation-field";
 import AutomationFabricators from "discourse/plugins/automation/admin/lib/fabricators";
 
-module("Integration | Component | DaChoicesField", function (hooks) {
+module("Integration | Component | da-choices-field", function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function () {
@@ -14,6 +14,8 @@ module("Integration | Component | DaChoicesField", function (hooks) {
   });
 
   test("set value", async function (assert) {
+    const self = this;
+
     this.field = new AutomationFabricators(getOwner(this)).field({
       component: "choices",
       extra: { content: [{ name: "One", id: 1 }] },
@@ -22,8 +24,8 @@ module("Integration | Component | DaChoicesField", function (hooks) {
     await render(
       <template>
         <AutomationField
-          @automation={{this.automation}}
-          @field={{this.field}}
+          @automation={{self.automation}}
+          @field={{self.field}}
         />
       </template>
     );
@@ -35,6 +37,8 @@ module("Integration | Component | DaChoicesField", function (hooks) {
   });
 
   test("empty multiselect", async function (assert) {
+    const self = this;
+
     this.field = new AutomationFabricators(getOwner(this)).field({
       component: "choices",
       extra: { multiselect: true, content: [{ name: "One", id: 1 }] },
@@ -43,8 +47,8 @@ module("Integration | Component | DaChoicesField", function (hooks) {
     await render(
       <template>
         <AutomationField
-          @automation={{this.automation}}
-          @field={{this.field}}
+          @automation={{self.automation}}
+          @field={{self.field}}
         />
       </template>
     );

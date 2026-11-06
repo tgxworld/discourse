@@ -26,8 +26,6 @@ lt:
       cast-votes:
         title: "Apskaičiuoti tavo balsus"
         label: "Balsuoti dabar!"
-      keep-vote:
-        label: "Atgal"
       show-results:
         title: "Rodyti balsavimo rezultatus"
         label: "Rezultatai"
@@ -66,6 +64,7 @@ lt:
       error_while_fetching_voters: "Atsiprašome, rodant rinkėjus įvyko klaida."
       error_while_exporting_results: "Apgailestaujame, eksportuojant apklausos rezultatus įvyko klaida."
       ui_builder:
+        title: Kurti apklausą
         insert: Įterpti apklausą
         help:
           options_min_count: Įveskite bent 1 parinktį.
@@ -102,3 +101,5 @@ lt:
           add: Pridėti parinktį
         automatic_close:
           label: Automatiškai uždaryti apklausą
+        show_advanced: "Rodyti išplėstines parinktis"
+        hide_advanced: "Slėpti išplėstines parinktis"

@@ -17,10 +17,6 @@ acceptance("Mixed Ads", function (needs) {
     dfp_topic_list_top_ad_sizes: "728*90 - leaderboard",
     dfp_mobile_topic_list_top_code: "mobile_list_top_ad_unit",
     dfp_mobile_topic_list_top_ad_size: "300*250 - medium rectangle",
-    dfp_above_site_header_code: "above_site_header_ad_unit",
-    dfp_above_site_header_ad_sizes: "728*90 - leaderboard",
-    dfp_mobile_above_site_header_code: "mobile_above_site_header_ad_unit",
-    dfp_mobile_above_site_header_ad_sizes: "320*50 - mobile leaderboard",
     dfp_post_bottom_code: "post_bottom_ad_unit",
     dfp_post_bottom_ad_sizes: "728*90 - leaderboard",
     dfp_mobile_post_bottom_code: "mobile_post_bottom_ad_unit",
@@ -57,15 +53,11 @@ acceptance("Mixed Ads", function (needs) {
     await visit("/t/280"); // 20 posts
 
     assert.dom(".house-creative").exists({ count: 2 });
-    // 3 post-bottom ads + 1 above-site-header ad
-    assert.dom(".google-dfp-ad").exists({ count: 4 });
+    assert.dom(".google-dfp-ad").exists({ count: 3 });
 
     await visit("/latest");
     assert
       .dom(".h-topic-list-top, .dfp-ad-topic-list-top")
       .exists({ count: 1 }, "renders ad above topic list");
-    assert
-      .dom(".dfp-ad-above-site-header")
-      .exists({ count: 1 }, "renders ad above the site header");
   });
 });

@@ -42,6 +42,9 @@ class TopicTrackingState
   def self.publish_new(topic)
     return unless topic.regular?
 
+    tag_ids, tags = nil
+    tag_ids, tags = topic.tags.pluck(:id, :name).transpose if include_tags_in_report?
+
     payload = {
       last_read_post_number: nil,
       highest_post_number: 1,
@@ -51,7 +54,10 @@ class TopicTrackingState
       created_in_new_period: true,
     }
 
-    payload[:tags] = topic.tags.pluck(:id).map { |id| { id: id } } if include_tags_in_report?
+    if tags
+      payload[:tags] = tags
+      payload[:topic_tag_ids] = tag_ids
+    end
 
     message = { topic_id: topic.id, message_type: NEW_TOPIC_MESSAGE_TYPE, payload: payload }
 
@@ -61,31 +67,44 @@ class TopicTrackingState
     publish_read(topic.id, 1, topic.user)
   end
 
-  def self.publish_latest(topic)
+  def self.publish_latest(topic, whisper = false)
     return unless topic.regular?
 
-    payload = {
-      bumped_at: topic.bumped_at,
-      category_id: topic.category_id,
-      archetype: topic.archetype,
+    tag_ids, tags = nil
+    tag_ids, tags = topic.tags.pluck(:id, :name).transpose if include_tags_in_report?
+
+    message = {
+      topic_id: topic.id,
+      message_type: LATEST_MESSAGE_TYPE,
+      payload: {
+        bumped_at: topic.bumped_at,
+        category_id: topic.category_id,
+        archetype: topic.archetype,
+      },
     }
 
-    payload[:tags] = topic.tags.pluck(:id).map { |id| { id: id } } if include_tags_in_report?
+    if tags
+      message[:payload][:tags] = tags
+      message[:payload][:topic_tag_ids] = tag_ids
+    end
 
-    message = { topic_id: topic.id, message_type: LATEST_MESSAGE_TYPE, payload: }
-
-    group_ids = secure_category_group_ids(topic)
-    MessageBus.publish(LATEST_MESSAGE_BUS_CHANNEL, message.as_json, group_ids:)
+    group_ids =
+      if whisper
+        [Group::AUTO_GROUPS[:staff], *SiteSetting.whispers_allowed_groups_map].flatten
+      else
+        secure_category_group_ids(topic)
+      end
+    MessageBus.publish(LATEST_MESSAGE_BUS_CHANNEL, message.as_json, group_ids: group_ids)
   end
 
   def self.unread_channel_key(user_id)
     "/unread/#{user_id}"
   end
 
-  def self.publish_muted(topic, whisper:)
+  def self.publish_muted(topic)
     return unless topic.regular?
 
-    scope =
+    user_ids =
       topic
         .topic_users
         .where(notification_level: NotificationLevels.all[:muted])
@@ -93,7 +112,7 @@ class TopicTrackingState
         .where("users.last_seen_at > ?", 7.days.ago)
         .order("users.last_seen_at DESC")
         .limit(100)
-    user_ids = restrict_to_audience(scope, :user_id, topic, whisper:).pluck(:user_id)
+        .pluck(:user_id)
     return if user_ids.blank?
 
     message = { topic_id: topic.id, message_type: MUTED_MESSAGE_TYPE }
@@ -101,16 +120,16 @@ class TopicTrackingState
     MessageBus.publish(LATEST_MESSAGE_BUS_CHANNEL, message.as_json, user_ids: user_ids)
   end
 
-  def self.publish_unmuted(topic, whisper:)
+  def self.publish_unmuted(topic)
     return unless topic.regular?
 
-    scope =
+    user_ids =
       User
         .watching_topic(topic)
         .where("users.last_seen_at > ?", 7.days.ago)
         .order("users.last_seen_at DESC")
         .limit(100)
-    user_ids = restrict_to_audience(scope, :id, topic, whisper:).pluck(:id)
+        .pluck(:id)
     return if user_ids.blank?
 
     message = { topic_id: topic.id, message_type: UNMUTED_MESSAGE_TYPE }
@@ -120,23 +139,33 @@ class TopicTrackingState
 
   def self.publish_unread(post)
     return unless post.topic.regular?
-    return if post.small_action?
     # TODO at high scale we are going to have to defer this,
     #   perhaps cut down to users that are around in the last 7 days as well
+    tags = nil
+    tag_ids = nil
+    tag_ids, tags = post.topic.tags.pluck(:id, :name).transpose if include_tags_in_report?
 
     # We don't need to publish unread to the person who just made the post,
     # this is why they are excluded from the initial scope.
     scope =
       TopicUser.tracking(post.topic_id).includes(user: :user_stat).where.not(user_id: post.user_id)
-    scope =
-      DiscoursePluginRegistry.apply_modifier(
-        :topic_tracking_state_publish_unread_scope,
-        scope,
-        post,
-      )
 
-    user_ids =
-      restrict_to_audience(scope, :user_id, post.topic, whisper: post.whisper?).pluck(:user_id)
+    group_ids =
+      if post.post_type == Post.types[:whisper]
+        [Group::AUTO_GROUPS[:staff], *SiteSetting.whispers_allowed_groups_map].flatten
+      else
+        post.topic.category && post.topic.category.secure_group_ids
+      end
+
+    if group_ids.present?
+      scope =
+        scope.joins("INNER JOIN group_users gu ON gu.user_id = topic_users.user_id").where(
+          "gu.group_id IN (?)",
+          group_ids,
+        )
+    end
+
+    user_ids = scope.pluck(:user_id)
     return if user_ids.empty?
 
     payload = {
@@ -147,7 +176,10 @@ class TopicTrackingState
       archetype: post.topic.archetype,
     }
 
-    payload[:tags] = post.topic.tags.pluck(:id).map { |id| { id: id } } if include_tags_in_report?
+    if tags
+      payload[:tags] = tags
+      payload[:topic_tag_ids] = tag_ids
+    end
 
     message = { topic_id: post.topic_id, message_type: UNREAD_MESSAGE_TYPE, payload: payload }
 
@@ -162,35 +194,6 @@ class TopicTrackingState
     message = { topic_id: topic.id, message_type: RECOVER_MESSAGE_TYPE }
 
     MessageBus.publish(RECOVER_MESSAGE_BUS_CHANNEL, message.as_json, group_ids: group_ids)
-  end
-
-  # Called when a topic's category changes.
-  # If moving to a more restricted category, users who lost access need to
-  # have the topic removed from their tracking state.
-  def self.publish_category_change(topic, old_category)
-    return if !SiteSetting.experimental_topic_category_change_notification
-    return unless topic.regular?
-
-    old_restricted = old_category&.read_restricted?
-    new_restricted = topic.category&.read_restricted?
-
-    if !old_restricted && new_restricted
-      # Moving from public to restricted category
-      # First, notify ALL users to remove topic (those who lost access)
-      message = { topic_id: topic.id, message_type: DELETE_MESSAGE_TYPE }
-      MessageBus.publish(DELETE_MESSAGE_BUS_CHANNEL, message.as_json, group_ids: nil)
-
-      # Then, notify users who CAN see the new category with updated info
-      publish_latest(topic)
-    elsif old_restricted && !new_restricted
-      # Moving from restricted to public category
-      # Notify all users of the now-visible topic
-      publish_latest(topic)
-    elsif old_category&.id != topic.category_id
-      # Category changed but restriction level didn't change
-      # Just publish the updated category info
-      publish_latest(topic)
-    end
   end
 
   def self.publish_delete(topic)
@@ -214,9 +217,9 @@ class TopicTrackingState
   end
 
   def self.publish_read(topic_id, last_read_post_number, user, notification_level = nil)
-    publish_read_message(
+    self.publish_read_message(
       message_type: READ_MESSAGE_TYPE,
-      channel_name: unread_channel_key(user.id),
+      channel_name: self.unread_channel_key(user.id),
       topic_id: topic_id,
       user: user,
       last_read_post_number: last_read_post_number,
@@ -226,12 +229,12 @@ class TopicTrackingState
 
   def self.publish_dismiss_new(user_id, topic_ids: [])
     message = { message_type: DISMISS_NEW_MESSAGE_TYPE, payload: { topic_ids: topic_ids } }
-    MessageBus.publish(unread_channel_key(user_id), message.as_json, user_ids: [user_id])
+    MessageBus.publish(self.unread_channel_key(user_id), message.as_json, user_ids: [user_id])
   end
 
   def self.publish_dismiss_new_posts(user_id, topic_ids: [])
     message = { message_type: DISMISS_NEW_POSTS_MESSAGE_TYPE, payload: { topic_ids: topic_ids } }
-    MessageBus.publish(unread_channel_key(user_id), message.as_json, user_ids: [user_id])
+    MessageBus.publish(self.unread_channel_key(user_id), message.as_json, user_ids: [user_id])
   end
 
   def self.new_filter_sql
@@ -301,7 +304,6 @@ class TopicTrackingState
           min_new_topic_date: Time.at(SiteSetting.min_new_topics_time).to_datetime,
           max_topics: TopicTrackingState::MAX_TOPICS,
           user_first_unread_at: user.user_stat.first_unread_at,
-          logged_in_users: Group::AUTO_GROUPS[:logged_in_users],
         }.merge(treat_as_new_topic_params),
       )
 
@@ -342,10 +344,9 @@ class TopicTrackingState
           #{sql}
         )
         SELECT *, (
-          SELECT JSON_AGG(JSON_BUILD_OBJECT('id', tags.id))
-          FROM topic_tags
-          JOIN tags ON tags.id = topic_tags.tag_id
-          WHERE topic_id = tags_included_cte.topic_id
+          SELECT ARRAY_AGG(name) from topic_tags
+             JOIN tags on tags.id = topic_tags.tag_id
+             WHERE topic_id = tags_included_cte.topic_id
           ) tags
         FROM tags_included_cte
       SQL
@@ -432,10 +433,8 @@ class TopicTrackingState
            NOT c.read_restricted #{append} OR c.id IN (
               SELECT c2.id FROM categories c2
               JOIN category_groups cg ON cg.category_id = c2.id
-              WHERE c2.read_restricted AND (
-                cg.group_id IN (SELECT group_id FROM group_users WHERE user_id = :user_id)
-                OR cg.group_id = :logged_in_users
-              ))
+              JOIN group_users gu ON gu.user_id = :user_id AND cg.group_id = gu.group_id
+              WHERE c2.read_restricted )
           ) AND
         SQL
       end
@@ -471,24 +470,6 @@ class TopicTrackingState
       end
     end
 
-    exclude_muted_categories =
-      # If we're only gathering topics with unread posts, we've already included the condition
-      # (topic_users.last_read_post_number < topics.highest_post_number), but the muted categories conditions
-      # attempts to exclude rows where (topic_users.last_read_post_number IS NULL) but both can never be true
-      if !custom_state_filter && skip_new && !skip_unread
-        "1=1"
-      else
-        <<~SQL
-          NOT (
-            #{(skip_new && skip_unread) ? "" : "tu.last_read_post_number IS NULL AND"}
-            (
-              topics.category_id IN (#{CategoryUser.muted_category_ids_query(user, include_direct: true).select("categories.id").to_sql})
-              AND tu.notification_level <= #{TopicUser.notification_levels[:regular]}
-            )
-          )
-        SQL
-      end
-
     sql = +<<~SQL
       SELECT #{select_sql}
       FROM topics
@@ -506,7 +487,13 @@ class TopicTrackingState
             #{tags_filter}
             topics.deleted_at IS NULL AND
             #{category_filter}
-            #{exclude_muted_categories}
+            NOT (
+              #{(skip_new && skip_unread) ? "" : "last_read_post_number IS NULL AND"}
+              (
+                topics.category_id IN (#{CategoryUser.muted_category_ids_query(user, include_direct: true).select("categories.id").to_sql})
+                AND tu.notification_level <= #{TopicUser.notification_levels[:regular]}
+              )
+            )
     SQL
 
     sql << " AND topics.id = :topic_id" if topic_id
@@ -571,8 +558,8 @@ class TopicTrackingState
     groups.each do |group|
       member = group.members.include?(user_id)
 
-      member_writing = write_event && member
-      non_member_reading = !write_event && !member
+      member_writing = (write_event && member)
+      non_member_reading = (!write_event && !member)
       next if non_member_reading || member_writing
 
       groups_to_update << group
@@ -589,7 +576,7 @@ class TopicTrackingState
   def self.trigger_post_read_count_update(post, groups, last_read_post_number, user_id)
     return if !post
     return if groups.empty?
-    opts = { readers_count: post.readers_count }
+    opts = { readers_count: post.readers_count, reader_id: user_id }
     post.publish_change_to_clients!(:read, opts)
   end
 
@@ -617,13 +604,12 @@ class TopicTrackingState
         min_new_topic_date: Time.at(SiteSetting.min_new_topics_time).to_datetime,
         max_topics: TopicTrackingState::MAX_TOPICS,
         user_first_unread_at: user.user_stat.first_unread_at,
-        logged_in_users: Group::AUTO_GROUPS[:logged_in_users],
       }.merge(treat_as_new_topic_params),
     ).count
   end
 
   def self.report_totals(user)
-    if user.unified_new_enabled?
+    if user.new_new_view_enabled?
       { new: report(user).count }
     else
       new = report_count_by_type(user, type: "new")
@@ -646,20 +632,4 @@ class TopicTrackingState
     end
   end
   private_class_method :secure_category_group_ids
-
-  # A notification preference stays after the user loses access, so it does not give access.
-  def self.restrict_to_audience(scope, user_id_column, topic, whisper:)
-    scope = scope.where(user_id_column => User.whisperers.select(:id)) if whisper
-
-    group_ids = secure_category_group_ids(topic)
-    return scope if group_ids.nil? || group_ids.include?(Group::AUTO_GROUPS[:logged_in_users])
-
-    scope.where(user_id_column => members_of(group_ids))
-  end
-  private_class_method :restrict_to_audience
-
-  def self.members_of(group_ids)
-    GroupUser.where(group_id: group_ids).select(:user_id)
-  end
-  private_class_method :members_of
 end

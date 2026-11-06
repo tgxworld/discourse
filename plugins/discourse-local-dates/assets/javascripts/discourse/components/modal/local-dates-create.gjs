@@ -1,31 +1,28 @@
-/* eslint-disable ember/no-classic-components, ember/no-observers */
+/* eslint-disable ember/no-classic-components */
 import Component from "@ember/component";
 import { fn, hash } from "@ember/helper";
 import { on } from "@ember/modifier";
-import EmberObject, { action, computed } from "@ember/object";
+import EmberObject, { action } from "@ember/object";
+import { notEmpty } from "@ember/object/computed";
 import { schedule } from "@ember/runloop";
-import { trustHTML } from "@ember/template";
-import { isEmpty } from "@ember/utils";
-import { tagName } from "@ember-decorators/component";
+import { htmlSafe } from "@ember/template";
 import { observes } from "@ember-decorators/object";
-import AdvancedModeToggle from "discourse/components/advanced-mode-toggle";
-import { debounce } from "discourse/lib/decorators";
+import CalendarDateTimeInput from "discourse/components/calendar-date-time-input";
+import DButton from "discourse/components/d-button";
+import DModal from "discourse/components/d-modal";
+import TextField from "discourse/components/text-field";
+import icon from "discourse/helpers/d-icon";
+import { propertyNotEqual } from "discourse/lib/computed";
+import computed, { debounce } from "discourse/lib/decorators";
 import { INPUT_DELAY } from "discourse/lib/environment";
 import { applyLocalDates } from "discourse/lib/local-dates";
-import { deepEqual } from "discourse/lib/object";
 import { cook } from "discourse/lib/text";
-import ComboBox from "discourse/select-kit/components/combo-box";
-import MultiSelect from "discourse/select-kit/components/multi-select";
-import TimezoneInput from "discourse/select-kit/components/timezone-input";
-import DButton from "discourse/ui-kit/d-button";
-import DCalendarDateTimeInput from "discourse/ui-kit/d-calendar-date-time-input";
-import DModal from "discourse/ui-kit/d-modal";
-import DTextField from "discourse/ui-kit/d-text-field";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { i18n } from "discourse-i18n";
+import ComboBox from "select-kit/components/combo-box";
+import MultiSelect from "select-kit/components/multi-select";
+import TimezoneInput from "select-kit/components/timezone-input";
 import generateDateMarkup from "discourse/plugins/discourse-local-dates/lib/local-date-markup-generator";
 
-@tagName("")
 export default class LocalDatesCreate extends Component {
   timeFormat = "HH:mm:ss";
   dateFormat = "YYYY-MM-DD";
@@ -41,8 +38,11 @@ export default class LocalDatesCreate extends Component {
   timezone = null;
   fromSelected = null;
   toSelected = null;
-  countdown = null;
-  displayedTimezone = null;
+
+  @notEmpty("date") fromFilled;
+  @notEmpty("toDate") toFilled;
+  @propertyNotEqual("currentUserTimezone", "options.timezone")
+  timezoneIsDifferentFromUserTimezone;
 
   init() {
     super.init(...arguments);
@@ -57,59 +57,47 @@ export default class LocalDatesCreate extends Component {
       timezone: this.currentUserTimezone,
       date: moment().format(this.dateFormat),
     });
+  }
 
-    const { initialValues } = this.model;
+  didInsertElement() {
+    super.didInsertElement(...arguments);
+    this.send("focusFrom");
+  }
 
-    if (initialValues) {
-      this.setProperties(initialValues);
-      // open the advanced pane when the date carries an option only editable there
-      this.set(
-        "advancedMode",
-        !!(
-          initialValues.format ||
-          initialValues.recurring ||
-          initialValues.timezones?.length
-        )
-      );
+  @observes("computedConfig.{from,to,options}", "options", "isValid", "isRange")
+  configChanged() {
+    this._renderPreview();
+  }
+
+  @debounce(INPUT_DELAY)
+  async _renderPreview() {
+    if (this.markup) {
+      const result = await cook(this.markup);
+      this.set("currentPreview", result);
+
+      schedule("afterRender", () => {
+        applyLocalDates(
+          document.querySelectorAll(".preview .discourse-local-date"),
+          this.siteSettings
+        );
+      });
     }
-  }
-
-  get isEditing() {
-    return !!this.model.initialValues;
-  }
-
-  @computed("date")
-  get fromFilled() {
-    return !isEmpty(this.date);
-  }
-
-  @computed("toDate")
-  get toFilled() {
-    return !isEmpty(this.toDate);
-  }
-
-  @computed("currentUserTimezone", "options.timezone")
-  get timezoneIsDifferentFromUserTimezone() {
-    return !deepEqual(this.currentUserTimezone, this.options?.timezone);
   }
 
   @computed("date", "toDate", "toTime")
-  get isRange() {
-    return this.date && (this.toDate || this.toTime);
+  isRange(date, toDate, toTime) {
+    return date && (toDate || toTime);
   }
 
   @computed("computedConfig", "isRange")
-  get isValid() {
-    const fromConfig = this.computedConfig.from;
-    if (
-      !this.computedConfig.from.dateTime ||
-      !this.computedConfig.from.dateTime.isValid()
-    ) {
+  isValid(config, isRange) {
+    const fromConfig = config.from;
+    if (!config.from.dateTime || !config.from.dateTime.isValid()) {
       return false;
     }
 
-    if (this.isRange) {
-      const toConfig = this.computedConfig.to;
+    if (isRange) {
+      const toConfig = config.to;
 
       if (
         !toConfig.dateTime ||
@@ -124,11 +112,7 @@ export default class LocalDatesCreate extends Component {
   }
 
   @computed("date", "time", "isRange", "options.{format,timezone}")
-  get fromConfig() {
-    const date = this.date;
-    let time = this.time;
-    const isRange = this.isRange;
-    const options = this.options || {};
+  fromConfig(date, time, isRange, options = {}) {
     const timeInferred = time ? false : true;
 
     let dateTime;
@@ -143,7 +127,7 @@ export default class LocalDatesCreate extends Component {
     }
 
     let format = options.format;
-    if (timeInferred && (format === "LLL" || format === "LLLL")) {
+    if (timeInferred && this.formats.includes(format)) {
       format = "LL";
     }
 
@@ -157,11 +141,7 @@ export default class LocalDatesCreate extends Component {
   }
 
   @computed("toDate", "toTime", "isRange", "options.{timezone,format}")
-  get toConfig() {
-    let date = this.toDate;
-    let time = this.toTime;
-    const isRange = this.isRange;
-    const options = this.options || {};
+  toConfig(date, time, isRange, options = {}) {
     const timeInferred = time ? false : true;
 
     if (time && !date) {
@@ -180,7 +160,7 @@ export default class LocalDatesCreate extends Component {
     }
 
     let format = options.format;
-    if (timeInferred && (format === "LLL" || format === "LLLL")) {
+    if (timeInferred && this.formats.includes(format)) {
       format = "LL";
     }
 
@@ -193,60 +173,47 @@ export default class LocalDatesCreate extends Component {
     });
   }
 
-  @computed(
-    "recurring",
-    "timezones",
-    "timezone",
-    "format",
-    "countdown",
-    "displayedTimezone"
-  )
-  get options() {
+  @computed("recurring", "timezones", "timezone", "format")
+  options(recurring, timezones, timezone, format) {
     return EmberObject.create({
-      recurring: this.recurring,
-      timezones: this.timezones,
-      timezone: this.timezone,
-      format: this.format,
-      // no UI of their own: carried through so editing a date keeps them
-      countdown: this.countdown,
-      displayedTimezone: this.displayedTimezone,
+      recurring,
+      timezones,
+      timezone,
+      format,
     });
   }
 
   @computed(
-    "fromConfig.date",
-    "toConfig.date",
+    "fromConfig.{date}",
+    "toConfig.{date}",
     "options.{recurring,timezones,timezone,format}"
   )
-  get computedConfig() {
+  computedConfig(fromConfig, toConfig, options) {
     return EmberObject.create({
-      from: this.fromConfig,
-      to: this.toConfig,
-      options: this.options,
+      from: fromConfig,
+      to: toConfig,
+      options,
     });
   }
 
   @computed
-  get currentUserTimezone() {
+  currentUserTimezone() {
     return this.currentUser.user_option.timezone || moment.tz.guess();
   }
 
   @computed
-  get allTimezones() {
+  allTimezones() {
     return moment.tz.names();
   }
 
   @computed("currentUserTimezone")
-  get formattedCurrentUserTimezone() {
-    return this.currentUserTimezone
-      .replace("_", " ")
-      .replace("Etc/", "")
-      .replace("/", ", ");
+  formattedCurrentUserTimezone(timezone) {
+    return timezone.replace("_", " ").replace("Etc/", "").replace("/", ", ");
   }
 
   @computed("formats")
-  get previewedFormats() {
-    return this.formats.map((format) => {
+  previewedFormats(formats) {
+    return formats.map((format) => {
       return {
         format,
         preview: moment().format(format),
@@ -255,7 +222,7 @@ export default class LocalDatesCreate extends Component {
   }
 
   @computed
-  get recurringOptions() {
+  recurringOptions() {
     const key = "discourse_local_dates.create.form.recurring";
 
     return [
@@ -294,65 +261,62 @@ export default class LocalDatesCreate extends Component {
     ];
   }
 
+  _generateDateMarkup(fromDateTime, options, isRange, toDateTime) {
+    return generateDateMarkup(fromDateTime, options, isRange, toDateTime);
+  }
+
+  @computed("advancedMode")
+  toggleModeBtnLabel(advancedMode) {
+    return advancedMode
+      ? "discourse_local_dates.create.form.simple_mode"
+      : "discourse_local_dates.create.form.advanced_mode";
+  }
+
   @computed("computedConfig.{from,to,options}", "options", "isValid", "isRange")
-  get markup() {
+  markup(config, options, isValid, isRange) {
     let text;
 
-    if (this.isValid && this.computedConfig?.from) {
-      if (this.computedConfig?.to && this.computedConfig?.to.range) {
+    if (isValid && config.from) {
+      if (config.to && config.to.range) {
         text = this._generateDateMarkup(
-          this.computedConfig?.from,
-          this.options,
-          this.isRange,
-          this.computedConfig?.to
+          config.from,
+          options,
+          isRange,
+          config.to
         );
       } else {
-        text = this._generateDateMarkup(
-          this.computedConfig?.from,
-          this.options,
-          this.isRange
-        );
+        text = this._generateDateMarkup(config.from, options, isRange);
       }
     }
     return text;
   }
 
   @computed("fromConfig.dateTime")
-  get formattedFrom() {
-    return this.fromConfig?.dateTime?.format("LLLL");
+  formattedFrom(dateTime) {
+    return dateTime.format("LLLL");
   }
 
   @computed("toConfig.dateTime")
-  get formattedTo() {
-    return this.toConfig?.dateTime?.isValid()
-      ? this.toConfig?.dateTime?.format("LLLL")
+  formattedTo(dateTime) {
+    return dateTime.isValid()
+      ? dateTime.format("LLLL")
       : i18n("discourse_local_dates.create.form.until");
-  }
-
-  @computed("fromSelected", "toSelected")
-  get selectedDate() {
-    return this.fromSelected ? this.date : this.toDate;
-  }
-
-  @computed("fromSelected", "toSelected")
-  get selectedTime() {
-    return this.fromSelected ? this.time : this.toTime;
-  }
-
-  didInsertElement() {
-    super.didInsertElement(...arguments);
-    this.send("focusFrom");
-  }
-
-  @observes("computedConfig.{from,to,options}", "options", "isValid", "isRange")
-  configChanged() {
-    this._renderPreview();
   }
 
   @action
   updateFormat(format, event) {
     event?.preventDefault();
     this.set("format", format);
+  }
+
+  @computed("fromSelected", "toSelected")
+  selectedDate(fromSelected) {
+    return fromSelected ? this.date : this.toDate;
+  }
+
+  @computed("fromSelected", "toSelected")
+  selectedTime(fromSelected) {
+    return fromSelected ? this.time : this.toTime;
   }
 
   @action
@@ -420,34 +384,11 @@ export default class LocalDatesCreate extends Component {
     this.closeModal();
   }
 
-  @debounce(INPUT_DELAY)
-  async _renderPreview() {
-    if (this.markup) {
-      const result = await cook(this.markup);
-      this.set("currentPreview", result);
-
-      schedule("afterRender", () => {
-        applyLocalDates(
-          document.querySelectorAll(".preview .discourse-local-date"),
-          this.siteSettings
-        );
-      });
-    }
-  }
-
-  _generateDateMarkup(fromDateTime, options, isRange, toDateTime) {
-    return generateDateMarkup(fromDateTime, options, isRange, toDateTime);
-  }
-
   <template>
     <DModal
-      class="discourse-local-dates-create-modal --large"
+      @title={{i18n "discourse_local_dates.title"}}
       @closeModal={{@closeModal}}
-      @title={{if
-        this.isEditing
-        (i18n "discourse_local_dates.edit")
-        (i18n "discourse_local_dates.title")
-      }}
+      class="discourse-local-dates-create-modal -large"
     >
       <:body>
         <div class="form">
@@ -474,13 +415,13 @@ export default class LocalDatesCreate extends Component {
                   {{if this.fromSelected 'is-selected'}}
                   {{if this.fromFilled 'is-filled'}}"
               >
-                {{dIcon "calendar-days"}}
+                {{icon "calendar-days"}}
                 <DButton
-                  autofocus
-                  class="date-time"
-                  id="from-date-time"
                   @action={{this.focusFrom}}
                   @translatedLabel={{this.formattedFrom}}
+                  id="from-date-time"
+                  class="date-time"
+                  autofocus
                 />
               </div>
 
@@ -489,48 +430,48 @@ export default class LocalDatesCreate extends Component {
                   {{if this.toSelected 'is-selected'}}
                   {{if this.toFilled 'is-filled'}}"
               >
-                {{dIcon "calendar-days"}}
+                {{icon "calendar-days"}}
                 <DButton
-                  class="date-time"
                   @action={{this.focusTo}}
                   @translatedLabel={{this.formattedTo}}
+                  class="date-time"
                 />
                 {{#if this.toFilled}}
                   <DButton
-                    class="delete-to-date"
                     @action={{this.eraseToDateTime}}
                     @icon="xmark"
+                    class="delete-to-date"
                   />
                 {{/if}}
               </div>
 
               {{#if this.site.desktopView}}
                 <TimezoneInput
-                  @onChange={{fn (mut this.timezone)}}
                   @options={{hash icon="globe"}}
                   @value={{this.timezone}}
+                  @onChange={{fn (mut this.timezone)}}
                 />
               {{/if}}
             </div>
 
             <div class="picker-panel">
-              <DCalendarDateTimeInput
-                @date={{this.selectedDate}}
-                @dateFormat={{this.dateFormat}}
+              <CalendarDateTimeInput
                 @datePickerId="local-date-create-form"
+                @date={{this.selectedDate}}
+                @time={{this.selectedTime}}
                 @minDate={{this.minDate}}
+                @timeFormat={{this.timeFormat}}
+                @dateFormat={{this.dateFormat}}
                 @onChangeDate={{this.changeSelectedDate}}
                 @onChangeTime={{this.changeSelectedTime}}
-                @time={{this.selectedTime}}
-                @timeFormat={{this.timeFormat}}
               />
             </div>
 
             {{#if this.site.mobileView}}
               <TimezoneInput
-                @onChange={{fn (mut this.timezone)}}
-                @options={{hash icon="globe"}}
                 @value={{this.timezone}}
+                @options={{hash icon="globe"}}
+                @onChange={{fn (mut this.timezone)}}
               />
             {{/if}}
           </div>
@@ -542,20 +483,20 @@ export default class LocalDatesCreate extends Component {
                   <label class="control-label">
                     {{i18n "discourse_local_dates.create.form.recurring_title"}}
                   </label>
-                  <p>{{trustHTML
+                  <p>{{htmlSafe
                       (i18n
                         "discourse_local_dates.create.form.recurring_description"
                       )
                     }}</p>
                   <div class="controls">
                     <ComboBox
-                      class="recurrence-input"
                       @content={{this.recurringOptions}}
+                      @value={{this.recurring}}
                       @onChange={{fn (mut this.recurring)}}
                       @options={{hash
                         none="discourse_local_dates.create.form.recurring_none"
                       }}
-                      @value={{this.recurring}}
+                      class="recurrence-input"
                     />
                   </div>
                 </div>
@@ -570,12 +511,12 @@ export default class LocalDatesCreate extends Component {
                   }}</p>
                 <div class="controls">
                   <MultiSelect
-                    class="timezones-input"
-                    @content={{this.allTimezones}}
-                    @nameProperty={{null}}
-                    @options={{hash allowAny=false maximum=5}}
-                    @value={{this.timezones}}
                     @valueProperty={{null}}
+                    @nameProperty={{null}}
+                    @content={{this.allTimezones}}
+                    @value={{this.timezones}}
+                    @options={{hash allowAny=false maximum=5}}
+                    class="timezones-input"
                   />
                 </div>
               </div>
@@ -589,15 +530,15 @@ export default class LocalDatesCreate extends Component {
                     "discourse_local_dates.create.form.format_description"
                   }}
                   <a
+                    target="_blank"
                     href="https://momentjs.com/docs/#/parsing/string-format/"
                     rel="noopener noreferrer"
-                    target="_blank"
                   >
-                    {{dIcon "circle-question"}}
+                    {{icon "circle-question"}}
                   </a>
                 </p>
                 <div class="controls">
-                  <DTextField class="format-input" @value={{this.format}} />
+                  <TextField @value={{this.format}} class="format-input" />
                 </div>
               </div>
               <div class="control-group">
@@ -630,25 +571,23 @@ export default class LocalDatesCreate extends Component {
 
         {{#if this.isValid}}
           <DButton
-            class="btn-primary"
             @action={{this.save}}
-            @label={{if
-              this.isEditing
-              "discourse_local_dates.create.form.save"
-              "discourse_local_dates.create.form.insert"
-            }}
+            @label="discourse_local_dates.create.form.insert"
+            class="btn-primary"
           />
         {{/if}}
 
         <DButton
-          class="btn-flat"
           @action={{this.cancel}}
           @translatedLabel={{i18n "cancel"}}
+          class="btn-flat"
         />
 
-        <AdvancedModeToggle
-          @active={{this.advancedMode}}
-          @onToggle={{this.toggleAdvancedMode}}
+        <DButton
+          @action={{this.toggleAdvancedMode}}
+          @icon="gear"
+          @label={{this.toggleModeBtnLabel}}
+          class="btn-default advanced-mode-btn"
         />
       </:footer>
     </DModal>

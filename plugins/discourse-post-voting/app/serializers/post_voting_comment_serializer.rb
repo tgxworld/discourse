@@ -11,14 +11,9 @@ class PostVotingCommentSerializer < ApplicationSerializer
              :post_voting_vote_count,
              :user_voted,
              :available_flags,
-             :reviewable_id,
-             :url
+             :reviewable_id
 
   attr_accessor :comments_user_voted
-
-  def include_name?
-    SiteSetting.enable_names?
-  end
 
   def name
     object.user&.name
@@ -26,10 +21,6 @@ class PostVotingCommentSerializer < ApplicationSerializer
 
   def username
     object.user&.username
-  end
-
-  def url
-    "#{Discourse.base_path}/p/#{object.post_id}#post-voting-comment-#{object.id}"
   end
 
   def user_voted
@@ -51,9 +42,7 @@ class PostVotingCommentSerializer < ApplicationSerializer
     return [] if !scope.can_flag_post_voting_comment?(object)
     return [] if reviewable_id.present? && user_flag_status == ReviewableScore.statuses[:pending]
 
-    PostActionType.flag_types.filter_map do |name, id|
-      name if scope.can_flag_post_voting_comment_as?(object, id, {})
-    end
+    PostActionType.flag_types.map { |sym, id| sym }
   end
 
   def post_voting_vote_count

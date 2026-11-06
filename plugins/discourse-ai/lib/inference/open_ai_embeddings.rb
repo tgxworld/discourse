@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module DiscourseAi
+module ::DiscourseAi
   module Inference
     class OpenAiEmbeddings
       def initialize(endpoint, api_key, model, dimensions)
@@ -27,13 +27,14 @@ module DiscourseAi
         conn = Faraday.new { |f| f.adapter FinalDestination::FaradayAdapter }
         response = conn.post(endpoint, payload.to_json, headers)
 
-        if response.status == 200
+        case response.status
+        when 200
           JSON.parse(response.body, symbolize_names: true).dig(:data, 0, :embedding)
         else
-          raise EmbeddingInferenceError.from_response(
-                  provider: EmbeddingDefinition::OPEN_AI,
-                  response: response,
-                )
+          Rails.logger.warn(
+            "OpenAI Embeddings failed with status: #{response.status} body: #{response.body}",
+          )
+          raise Net::HTTPBadResponse.new(response.body.to_s)
         end
       end
     end

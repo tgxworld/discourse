@@ -5,13 +5,12 @@ DiscourseAssign::Engine.routes.draw do
   put "/assign" => "assign#assign"
   put "/unassign" => "assign#unassign"
   get "/suggestions" => "assign#suggestions"
-  get "/search" => "assign#search"
   get "/assigned" => "assign#assigned"
   get "/members/:group_name" => "assign#group_members"
 end
 
 Discourse::Application.routes.draw do
-  mount DiscourseAssign::Engine, at: "/assign"
+  mount ::DiscourseAssign::Engine, at: "/assign"
 
   get "topics/private-messages-assigned/:username" => "list#private_messages_assigned",
       :as => "topics_private_messages_assigned",

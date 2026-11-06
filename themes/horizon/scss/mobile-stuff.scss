@@ -18,33 +18,33 @@
 
 #main-outlet {
   @include viewport.until(sm) {
-    padding-top: var(--space-2);
+    padding-top: var(--spacing-block-sm);
   }
 
   .list-controls {
     @include viewport.until(sm) {
       padding-inline: var(
-        --space-4
+        --spacing-inline-m
       ) !important; // override will be fixed when the whole chat page shenanigans is resolved
-      padding-block: var(--space-2);
+      padding-block: var(--spacing-block-s);
       border-bottom: 1px solid var(--primary-200);
     }
 
     .navigation-container {
       @include viewport.until(sm) {
-        gap: var(--space-2);
+        gap: var(--spacing-inline-s);
 
         .category-breadcrumb.hidden,
         .category-breadcrumb {
           display: flex !important;
-          column-gap: var(--space-4);
-          row-gap: var(--space-1);
+          column-gap: var(--spacing-inline-m);
+          row-gap: var(--spacing-block-xs);
           flex-basis: 100%;
 
           li {
             margin-right: 0;
             margin-left: calc(
-              (var(--space-2) - 2px) * -1
+              (var(--spacing-block-s) - 2px) * -1
             ); // 2px is width of the outline
           }
 
@@ -69,7 +69,7 @@
         .fk-d-button-tooltip {
           margin-right: 0;
           margin-left: var(
-            --space-1
+            --spacing-inline-xs
           ); // pure visual correction for horizontal alignment
 
           &:has(#create-topic) {
@@ -83,6 +83,12 @@
       .category-breadcrumb {
         @include viewport.until(sm) {
           margin-bottom: 0;
+        }
+      }
+
+      .navigation-controls {
+        @include viewport.until(sm) {
+          gap: var(--spacing-inline-s);
         }
       }
     }
@@ -103,28 +109,41 @@
 
   #topic-title {
     @include viewport.until(sm) {
+      padding-inline: var(--spacing-inline-s) !important;
+
       .title-wrapper {
-        gap: var(--space-2);
+        gap: var(--spacing-block-s);
       }
 
       .topic-category {
         order: -1;
       }
 
+      // make mixin of this
       .badge-category__wrapper {
         font-size: var(--font-down-2-rem);
         border-radius: var(--d-border-radius);
-        padding: var(--space-1) var(--space-2);
-        background-color: var(--badge-category-bg);
-        border: 1px solid var(--badge-category-bg);
+        padding: var(--spacing-inline-xs) var(--spacing-inline-s);
+        background-color: light-dark(
+          oklch(from var(--category-badge-color) 97% calc(c * 0.3) h),
+          oklch(from var(--category-badge-color) 45% calc(c * 0.5) h)
+        );
+        border: 1px solid
+          light-dark(
+            oklch(from var(--category-badge-color) 97% calc(c * 0.3) h),
+            oklch(from var(--category-badge-color) 45% calc(c * 0.5) h)
+          );
       }
 
       .badge-category__name {
-        color: var(--badge-category-text);
+        color: light-dark(
+          oklch(from var(--category-badge-color) 20% calc(c * 1) h),
+          oklch(from var(--category-badge-color) 100% calc(c * 0.9) h)
+        );
       }
 
       .discourse-tags {
-        gap: var(--space-1);
+        gap: var(--spacing-inline-xs);
 
         &__tag-separator {
           display: none;
@@ -133,8 +152,8 @@
 
       .discourse-tag {
         font-size: var(--font-down-2-rem);
-        padding: var(--space-1) var(--space-2);
-        gap: var(--space-1);
+        padding: var(--spacing-inline-xs) var(--spacing-inline-s);
+        gap: var(--spacing-inline-xs);
         border-radius: var(--d-border-radius-large);
         border: 1px solid var(--primary-low-mid);
         background: var(--secondary);
@@ -142,39 +161,39 @@
     }
   }
 
-  body:not(.archetype-private_message) {
-    .container.posts {
-      @include viewport.until(sm) {
-        .main-avatar .avatar {
-          width: 40px;
-          height: 40px;
-        }
+  .container.posts {
+    @include viewport.until(sm) {
+      padding-inline: var(--spacing-inline-xs) !important;
 
-        .topic-body {
-          .topic-meta-data {
-            .username {
-              font-size: var(--font-0-rem);
-            }
-          }
+      .main-avatar .avatar {
+        width: 40px;
+        height: 40px;
+      }
 
-          .contents {
-            padding-top: var(--space-4);
+      .topic-body {
+        .topic-meta-data {
+          .username {
+            font-size: var(--font-0-rem);
           }
         }
 
-        .small-action {
-          &-desc {
-            padding: var(--space-1) 0;
-          }
+        .contents {
+          padding-top: var(--spacing-block-m);
+        }
+      }
 
-          // for core eventually, better way imo
-          .topic-avatar {
-            padding-top: 0;
-            align-items: center;
+      .small-action {
+        &-desc {
+          padding: var(--spacing-block-xs) 0;
+        }
 
-            .d-icon {
-              font-size: var(--font-up-1);
-            }
+        // for core eventually, better way imo
+        .topic-avatar {
+          padding-top: 0;
+          align-items: center;
+
+          .d-icon {
+            font-size: var(--font-up-1);
           }
         }
       }
@@ -183,7 +202,7 @@
 
   #topic-footer-buttons {
     @include viewport.until(sm) {
-      padding-inline: var(--space-1) !important;
+      padding-inline: var(--spacing-inline-xs) !important;
     }
   }
 }
@@ -193,14 +212,14 @@
 #topic-progress-wrapper {
   .progress-back-container {
     margin-right: 0;
-    margin-bottom: var(--space-1);
+    margin-bottom: var(--spacing-block-xs);
 
     .btn-primary.progress-back {
       border-radius: 0;
       background: var(--secondary);
       border: 1px solid var(--tertiary-low);
       color: var(--accent-color);
-      padding: var(--space-2) var(--space-4);
+      padding: var(--spacing-inline-s) var(--spacing-inline-m);
 
       .d-icon {
         color: var(--accent-color);
@@ -217,4 +236,8 @@
 
 .mobile-device #reply-control.show-preview .submit-panel {
   background-color: var(--background-color);
+}
+
+.d-editor-preview-wrapper {
+  outline: 2px solid var(--background-color);
 }

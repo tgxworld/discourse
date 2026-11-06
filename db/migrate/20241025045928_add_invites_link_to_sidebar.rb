@@ -2,8 +2,6 @@
 
 class AddInvitesLinkToSidebar < ActiveRecord::Migration[7.1]
   def up
-    return if Migration::Helpers.new_site?
-
     community_section_id = DB.query_single(<<~SQL).first
       SELECT id
       FROM sidebar_sections

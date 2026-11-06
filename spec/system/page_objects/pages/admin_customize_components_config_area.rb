@@ -117,7 +117,6 @@ module PageObjects
 
       def visit
         page.visit("/admin/config/customize/components")
-        self
       end
 
       def component(id)
@@ -133,11 +132,11 @@ module PageObjects
       end
 
       def status_selector
-        PageObjects::Components::DNativeSelect.new(find(".d-filter-controls__dropdown"))
+        PageObjects::Components::DSelect.new(find(".admin-filter-controls__dropdown"))
       end
 
       def name_filter_input
-        find(".d-filter-controls__input")
+        find(".admin-filter-controls__input")
       end
 
       def has_no_components?
@@ -159,19 +158,19 @@ module PageObjects
       end
 
       def has_name_filter_input?
-        has_css?(".d-filter-controls__input")
+        has_css?(".admin-filter-controls__input")
       end
 
       def has_status_selector?
-        has_css?(".d-filter-controls__dropdown")
+        has_css?(".admin-filter-controls__dropdown")
       end
 
       def has_no_name_filter_input?
-        has_no_css?(".d-filter-controls__input")
+        has_no_css?(".admin-filter-controls__input")
       end
 
       def has_no_status_selector?
-        has_no_css?(".d-filter-controls__dropdown")
+        has_no_css?(".admin-filter-controls__dropdown")
       end
 
       def has_no_components_installed_text?
@@ -186,10 +185,6 @@ module PageObjects
             "admin_js.admin.config_areas.themes_and_components.components.no_components_found",
           ),
         )
-      end
-
-      def click_install_button
-        PageObjects::Components::AdminCustomizeThemeInstallButton.new.click
       end
     end
   end

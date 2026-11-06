@@ -1,42 +1,48 @@
-import Component from "@glimmer/component";
+/* eslint-disable ember/no-classic-components */
+import Component from "@ember/component";
 import { concat } from "@ember/helper";
 import { action } from "@ember/object";
-import DButton from "discourse/ui-kit/d-button";
-import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
+import { tagName } from "@ember-decorators/component";
+import DButton from "discourse/components/d-button";
+import concatClass from "discourse/helpers/concat-class";
+import discourseComputed from "discourse/lib/decorators";
 import { i18n } from "discourse-i18n";
-import formatCurrency from "../helpers/format-currency.js";
+import formatCurrency from "../helpers/format-currency";
 
 const RECURRING = "recurring";
 
+@tagName("")
 export default class PaymentPlan extends Component {
-  get selectedClass() {
-    return this.args.selectedPlan === this.args.plan.id ? "btn-primary" : "";
+  @discourseComputed("selectedPlan")
+  selectedClass(planId) {
+    return planId === this.plan.id ? "btn-primary" : "";
   }
 
-  get recurringPlan() {
-    return this.args.plan?.type === RECURRING;
+  @discourseComputed("plan.type")
+  recurringPlan(type) {
+    return type === RECURRING;
   }
 
   @action
   planClick() {
-    this.args.clickPlan(this.args.plan);
+    this.clickPlan(this.plan);
     return false;
   }
 
   <template>
     <DButton
-      class={{dConcatClass
+      @action={{this.planClick}}
+      class={{concatClass
         "btn-discourse-subscriptions-subscribe"
         this.selectedClass
       }}
-      @action={{this.planClick}}
     >
       <span class="interval">
         {{#if this.recurringPlan}}
           {{i18n
             (concat
               "discourse_subscriptions.plans.interval.adverb."
-              @plan.recurring.interval
+              this.plan.recurring.interval
             )
           }}
         {{else}}
@@ -45,7 +51,7 @@ export default class PaymentPlan extends Component {
       </span>
 
       <span class="amount">
-        {{formatCurrency @plan.currency @plan.amountDollars}}
+        {{formatCurrency this.plan.currency this.plan.amountDollars}}
       </span>
     </DButton>
   </template>

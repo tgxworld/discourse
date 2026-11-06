@@ -5,6 +5,7 @@ RSpec.describe Chat::UpdateChannel do
 
   fab!(:channel, :chat_channel)
   fab!(:current_user, :admin)
+  fab!(:upload)
 
   let(:guardian) { Guardian.new(current_user) }
   let(:params) do
@@ -15,6 +16,7 @@ RSpec.describe Chat::UpdateChannel do
       slug: "snail",
       allow_channel_wide_mentions: true,
       auto_join_users: false,
+      icon_upload_id: upload.id,
     }
   end
   let(:dependencies) { { guardian: } }
@@ -43,6 +45,7 @@ RSpec.describe Chat::UpdateChannel do
           description: "a channel description",
           allow_channel_wide_mentions: true,
           auto_join_users: false,
+          icon_upload_id: upload.id,
         )
       end
 

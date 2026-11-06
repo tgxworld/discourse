@@ -1,11 +1,3 @@
-blog:
-  - changed-files:
-      - any-glob-to-any-file: plugins/blog/**/*
-
-boards:
-  - changed-files:
-      - any-glob-to-any-file: plugins/boards/**/*
-
 chat:
   - changed-files:
       - any-glob-to-any-file: plugins/chat/**/*
@@ -106,17 +98,17 @@ discourse-subscriptions:
   - changed-files:
       - any-glob-to-any-file: plugins/discourse-subscriptions/**/*
 
-discourse-captcha:
+discourse-hcaptcha:
   - changed-files:
-      - any-glob-to-any-file: plugins/discourse-captcha/**/*
+      - any-glob-to-any-file: plugins/discourse-hcaptcha/**/*
 
 discourse-gamification:
   - changed-files:
       - any-glob-to-any-file: plugins/discourse-gamification/**/*
 
-discourse-events:
+discourse-calendar:
   - changed-files:
-      - any-glob-to-any-file: plugins/discourse-events/**/*
+      - any-glob-to-any-file: plugins/discourse-calendar/**/*
 
 discourse-policy:
   - changed-files:
@@ -150,14 +142,6 @@ discourse-ai:
   - changed-files:
       - any-glob-to-any-file: plugins/discourse-ai/**/*
 
-discourse-rewind:
-  - changed-files:
-      - any-glob-to-any-file: plugins/discourse-rewind/**/*
-
-discourse-cakeday:
-  - changed-files:
-      - any-glob-to-any-file: plugins/discourse-cakeday/**/*
-
 footnote:
   - changed-files:
       - any-glob-to-any-file: plugins/footnote/**/*
@@ -187,9 +171,3 @@ i18n:
           - config/locales/*en.yml
           - plugins/**/config/locales/*en.yml
           - "**/*i18n*"
-
-rte:
-  - changed-files:
-      - any-glob-to-any-file:
-          - frontend/discourse/app/static/prosemirror/**/*
-          - spec/system/composer/prosemirror_editor_spec.rb

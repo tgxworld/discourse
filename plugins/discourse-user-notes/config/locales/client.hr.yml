@@ -7,5 +7,5 @@
 hr:
   js:
     user_notes:
-      title: "Napomene o korisniku"
-      delete_confirm: "Jeste li sigurni da želite izbrisati tu napomenu o korisniku?"
+      attach: "Dodaj bilješku za korisnike"
+      show_post: "Prikaži objavu"

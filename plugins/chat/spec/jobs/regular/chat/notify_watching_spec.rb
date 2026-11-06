@@ -5,20 +5,26 @@ RSpec.describe Jobs::Chat::NotifyWatching do
   fab!(:user2, :user)
   fab!(:user3, :user)
   fab!(:group)
-  subject(:run_job) { described_class.new.execute(chat_message_id: message.id, except_user_ids:) }
-
   let(:except_user_ids) { [] }
-  let(:notification_messages) do
-    MessageBus
-      .track_publish { run_job }
-      .filter do |published_message|
-        published_message.channel == "/chat/notification-alert/#{user2.id}"
-      end
-  end
 
   before do
     SiteSetting.chat_enabled = true
     SiteSetting.chat_allowed_groups = Group::AUTO_GROUPS[:everyone]
+  end
+
+  def run_job(message)
+    described_class.new.execute(chat_message_id: message.id, except_user_ids: except_user_ids)
+  end
+
+  def notification_messages_for(user, chat_message: message)
+    MessageBus
+      .track_publish { run_job(chat_message) }
+      .filter { |m| m.channel == "/chat/notification-alert/#{user.id}" }
+  end
+
+  def track_core_notification(user:, message:, type: ::Notification.types[:chat_watched_thread])
+    described_class.new.execute(chat_message_id: message.id)
+    Notification.where(user: user, notification_type: type).last
   end
 
   context "for a category channel" do
@@ -43,7 +49,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
     end
 
     it "sends a desktop notification" do
-      messages = notification_messages
+      messages = notification_messages_for(user2)
 
       expect(messages.first.data).to include(
         {
@@ -82,24 +88,14 @@ RSpec.describe Jobs::Chat::NotifyWatching do
             notification_level: Chat::NotificationLevels.all[:watching],
           )
 
-          described_class.new.execute(chat_message_id: thread_message.id)
-          notification =
-            Notification.where(
-              user: user1,
-              notification_type: Notification.types[:chat_watched_thread],
-            ).last
+          notification = track_core_notification(user: user1, message: thread_message)
 
           expect(notification).to be_present
           expect(notification.notification_type).to eq(Notification.types[:chat_watched_thread])
         end
 
         it "does not create a core notification when not watching the thread" do
-          described_class.new.execute(chat_message_id: thread_message.id)
-          notification =
-            Notification.where(
-              user: user1,
-              notification_type: Notification.types[:chat_watched_thread],
-            ).last
+          notification = track_core_notification(user: user1, message: thread_message)
 
           expect(notification).to be_nil
         end
@@ -109,12 +105,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
             notification_level: Chat::NotificationLevels.all[:watching],
           )
           membership1.update!(muted: true)
-          described_class.new.execute(chat_message_id: thread_message.id)
-          notification =
-            Notification.where(
-              user: user1,
-              notification_type: Notification.types[:chat_watched_thread],
-            ).last
+          notification = track_core_notification(user: user1, message: thread_message)
 
           expect(notification).to be_nil
         end
@@ -134,46 +125,22 @@ RSpec.describe Jobs::Chat::NotifyWatching do
         end
 
         it "creates a core notification for watched threads" do
-          expect {
-            described_class.new.execute(
-              chat_message_id: thread_message.id,
-              except_user_ids: except_user_ids,
-            )
-          }.to change { Notification.count }
+          expect { run_job(thread_message) }.to change { Notification.count }
         end
 
         it "does not create a core notification if channel is muted" do
           membership1.update!(muted: true)
-          expect {
-            described_class.new.execute(
-              chat_message_id: thread_message.id,
-              except_user_ids: except_user_ids,
-            )
-          }.not_to change { Notification.count }
+          expect { run_job(thread_message) }.not_to change { Notification.count }
         end
 
         it "does not create a desktop notification" do
-          messages =
-            MessageBus
-              .track_publish do
-                described_class.new.execute(
-                  chat_message_id: message.id,
-                  except_user_ids: except_user_ids,
-                )
-              end
-              .filter do |published_message|
-                published_message.channel == "/chat/notification-alert/#{user1.id}"
-              end
-
+          messages = notification_messages_for(user1)
           expect(messages).to be_empty
         end
 
         it "does not create a mobile notification" do
           PostAlerter.expects(:push_notification).never
-          described_class.new.execute(
-            chat_message_id: thread_message.id,
-            except_user_ids: except_user_ids,
-          )
+          run_job(thread_message)
         end
       end
     end
@@ -185,12 +152,11 @@ RSpec.describe Jobs::Chat::NotifyWatching do
           args
         end
       end
-
       it "Allows for changes to the translation args" do
         plugin_instance = Plugin::Instance.new
         plugin_instance.register_modifier(:chat_notification_translation_args, &modifier_block)
 
-        messages = notification_messages
+        messages = notification_messages_for(user2)
 
         expect(messages.first.data[:translated_title]).to start_with("Hijacked")
       ensure
@@ -203,14 +169,12 @@ RSpec.describe Jobs::Chat::NotifyWatching do
     end
 
     context "with push_notification_filter registered to block push notifications" do
-      let!(:original_filters) { DiscoursePluginRegistry._raw_push_notification_filters.dup }
-
-      after { DiscoursePluginRegistry._raw_push_notification_filters.replace(original_filters) }
+      after { DiscoursePluginRegistry.reset_register!(:push_notification_filters) }
 
       it "doesn't send notification alert via MessageBus" do
         Plugin::Instance.new.register_push_notification_filter { |user, payload| false }
 
-        expect(notification_messages).to be_empty
+        expect(notification_messages_for(user2)).to be_empty
       end
     end
 
@@ -219,7 +183,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
 
       it "does not send a desktop or mobile notification" do
         PostAlerter.expects(:push_notification).never
-        messages = notification_messages
+        messages = notification_messages_for(user2)
         expect(messages).to be_empty
       end
     end
@@ -249,7 +213,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
             },
           ),
         )
-        messages = notification_messages
+        messages = notification_messages_for(user2)
         expect(messages.length).to eq(1)
       end
 
@@ -258,7 +222,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
 
         it "does not send a desktop or mobile notification" do
           PostAlerter.expects(:push_notification).never
-          messages = notification_messages
+          messages = notification_messages_for(user2)
           expect(messages).to be_empty
         end
       end
@@ -268,17 +232,15 @@ RSpec.describe Jobs::Chat::NotifyWatching do
       before { SiteSetting.chat_allowed_groups = group.id }
 
       it "does not send a desktop notification" do
-        expect(notification_messages.count).to be_zero
+        expect(notification_messages_for(user2).count).to be_zero
       end
     end
 
     context "when the target user cannot see the chat channel" do
-      fab!(:private_category) { Fabricate(:private_category, group: group) }
-
-      before { channel.update!(chatable: private_category) }
+      before { channel.update!(chatable: Fabricate(:private_category, group: group)) }
 
       it "does not send a desktop notification" do
-        expect(notification_messages.count).to be_zero
+        expect(notification_messages_for(user2).count).to be_zero
       end
     end
 
@@ -286,7 +248,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
       before { membership2.update!(last_read_message_id: message.id) }
 
       it "does not send a desktop notification" do
-        expect(notification_messages.count).to be_zero
+        expect(notification_messages_for(user2).count).to be_zero
       end
     end
 
@@ -294,7 +256,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
       before { user2.update!(suspended_till: 1.year.from_now) }
 
       it "does not send a desktop notification" do
-        expect(notification_messages.count).to be_zero
+        expect(notification_messages_for(user2).count).to be_zero
       end
     end
 
@@ -302,7 +264,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
       let(:except_user_ids) { [user2.id] }
 
       it "does not send a desktop notification" do
-        expect(notification_messages.count).to be_zero
+        expect(notification_messages_for(user2).count).to be_zero
       end
     end
   end
@@ -333,7 +295,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
       end
 
       it "sends a desktop notification" do
-        messages = notification_messages
+        messages = notification_messages_for(user2)
 
         expect(messages.first.data).to include(
           {
@@ -360,7 +322,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
       end
 
       it "sends a desktop notification" do
-        messages = notification_messages
+        messages = notification_messages_for(user2)
 
         expect(messages.first.data).to include(
           {
@@ -384,7 +346,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
 
       it "does not send a desktop or mobile notification" do
         PostAlerter.expects(:push_notification).never
-        messages = notification_messages
+        messages = notification_messages_for(user2)
         expect(messages).to be_empty
       end
     end
@@ -414,7 +376,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
             },
           ),
         )
-        messages = notification_messages
+        messages = notification_messages_for(user2)
         expect(messages.length).to eq(1)
       end
 
@@ -423,7 +385,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
 
         it "does not send a desktop or mobile notification" do
           PostAlerter.expects(:push_notification).never
-          messages = notification_messages
+          messages = notification_messages_for(user2)
           expect(messages).to be_empty
         end
       end
@@ -433,7 +395,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
       before { SiteSetting.chat_allowed_groups = group.id }
 
       it "does not send a desktop notification" do
-        expect(notification_messages.count).to be_zero
+        expect(notification_messages_for(user2).count).to be_zero
       end
     end
 
@@ -441,7 +403,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
       before { membership2.destroy! }
 
       it "does not send a desktop notification" do
-        expect(notification_messages.count).to be_zero
+        expect(notification_messages_for(user2).count).to be_zero
       end
     end
 
@@ -449,7 +411,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
       before { membership2.update!(last_read_message_id: message.id) }
 
       it "does not send a desktop notification" do
-        expect(notification_messages.count).to be_zero
+        expect(notification_messages_for(user2).count).to be_zero
       end
     end
 
@@ -457,7 +419,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
       before { user2.update!(suspended_till: 1.year.from_now) }
 
       it "does not send a desktop notification" do
-        expect(notification_messages.count).to be_zero
+        expect(notification_messages_for(user2).count).to be_zero
       end
     end
 
@@ -465,7 +427,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
       let(:except_user_ids) { [user2.id] }
 
       it "does not send a desktop notification" do
-        expect(notification_messages.count).to be_zero
+        expect(notification_messages_for(user2).count).to be_zero
       end
     end
 
@@ -473,7 +435,7 @@ RSpec.describe Jobs::Chat::NotifyWatching do
       before { UserCommScreener.any_instance.expects(:allowing_actor_communication).returns([]) }
 
       it "does not send a desktop notification" do
-        expect(notification_messages.count).to be_zero
+        expect(notification_messages_for(user2).count).to be_zero
       end
     end
   end

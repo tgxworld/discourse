@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "Using #hashtag autocompletion to search for and lookup channels" do
+describe "Using #hashtag autocompletion to search for and lookup channels", type: :system do
   fab!(:user)
   fab!(:channel1) { Fabricate(:chat_channel, name: "Music Lounge", slug: "music") }
   fab!(:channel2) { Fabricate(:chat_channel, name: "Random", slug: "random") }
@@ -15,6 +15,7 @@ describe "Using #hashtag autocompletion to search for and lookup channels" do
   let(:topic_page) { PageObjects::Pages::Topic.new }
 
   before do
+    SiteSetting.floatkit_autocomplete_composer = true
     chat_system_bootstrap(user, [channel1, channel2])
     sign_in(user)
   end
@@ -53,16 +54,16 @@ describe "Using #hashtag autocompletion to search for and lookup channels" do
     )
     chat_channel_page.click_send_message
 
+    message = nil
     try_until_success do
       message =
         Chat::Message.find_by(
           user: user,
           message: "this is #random and this is #raspberry-beret and this is #razed which is cool",
         )
-
       expect(message).not_to eq(nil)
-      expect(chat_channel_page.messages).to have_message(id: message.id)
     end
+    expect(chat_channel_page.messages).to have_message(id: message.id)
 
     expect(page).to have_css(".hashtag-cooked[aria-label]", count: 3)
 
@@ -169,51 +170,34 @@ describe "Using #hashtag autocompletion to search for and lookup channels" do
       css_class = ".hashtag-color--channel-#{management_channel.id}"
       expect(find("#hashtag-css-generator", visible: false).text(:all)).not_to include(css_class)
     end
-  end
 
-  describe "using channel hashtags in the topic composer" do
-    it "renders the selected channel hashtag correctly in the topic composer preview" do
-      topic_page.visit_topic_and_open_composer(topic)
-      expect(topic_page).to have_expanded_composer
-      topic_page.type_in_composer("something #rando")
-      expect(page).to have_css(
-        ".hashtag-autocomplete .hashtag-autocomplete__option .hashtag-autocomplete__link",
-        count: 1,
-      )
-      find(".d-icon-comment.hashtag-color--channel-#{channel2.id}").find(:xpath, "..").click
-      expect(topic_page.composer.preview).to have_css(
-        ".hashtag-cooked .d-icon-comment.hashtag-color--channel-#{channel2.id}",
-      )
-    end
+    context "with floatkit autocomplete disabled" do
+      before { SiteSetting.floatkit_autocomplete_composer = false }
 
-    it "renders the selected channel hashtag correctly in the topic rich composer" do
-      topic_page.visit_topic_and_open_composer(topic)
-      expect(topic_page).to have_expanded_composer
-      topic_page.composer.toggle_rich_editor
-      topic_page.type_in_composer("something #rando")
-      expect(page).to have_css(
-        ".hashtag-autocomplete .hashtag-autocomplete__option .hashtag-autocomplete__link",
-        count: 1,
-      )
-      find(".d-icon-comment.hashtag-color--channel-#{channel2.id}").find(:xpath, "..").click
-      expect(topic_page.composer.rich_editor).to have_css(
-        ".hashtag-cooked .d-icon-comment.hashtag-color--channel-#{channel2.id}",
-      )
-      expect(topic_page.composer.rich_editor).to have_css(
-        ".hashtag-cooked svg use[href=\"#comment\"]",
-      )
-    end
-
-    it "cooks the post with the channel hashtag on submit" do
-      topic_page.visit_topic_and_open_composer(topic)
-      expect(topic_page).to have_expanded_composer
-      topic_page.type_in_composer("something #random is what i am typing")
-      topic_page.send_reply
-
-      expect(topic_page).to have_post_number(2)
-      topic_page.within_post(2) do
+      it "searches for channels, categories, and tags with # and prioritises channels in the results" do
+        chat_page.visit_channel(channel1)
+        chat_channel_page.composer.send_keys("this is #ra")
         expect(page).to have_css(
-          ".hashtag-cooked .d-icon-comment.hashtag-color--channel-#{channel2.id}",
+          ".hashtag-autocomplete .hashtag-autocomplete__option .hashtag-autocomplete__link",
+          count: 3,
+        )
+        hashtag_results = page.all(".hashtag-autocomplete__link", count: 3)
+        expect(hashtag_results.map(&:text).map { |r| r.gsub("\n", " ") }).to eq(
+          ["Random", "Raspberry", "razed (x0)"],
+        )
+      end
+
+      it "searches for channels as well with # in a topic composer and deprioritises them" do
+        topic_page.visit_topic_and_open_composer(topic)
+        expect(topic_page).to have_expanded_composer
+        topic_page.type_in_composer("something #ra")
+        expect(page).to have_css(
+          ".hashtag-autocomplete .hashtag-autocomplete__option .hashtag-autocomplete__link",
+          count: 3,
+        )
+        hashtag_results = page.all(".hashtag-autocomplete__link", count: 3)
+        expect(hashtag_results.map(&:text).map { |r| r.gsub("\n", " ") }).to eq(
+          ["Raspberry", "razed (x0)", "Random"],
         )
       end
     end

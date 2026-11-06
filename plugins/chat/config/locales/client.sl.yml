@@ -29,11 +29,6 @@ sl:
       chat_channels_count: "Kanali klepeta"
       chat_users_count: "Uporabniki klepeta"
     chat:
-      edit_category:
-        tab_title: "Klepet"
-        description: "Opis"
-        actions: "Akcije"
-        settings: "Nastavitve"
       text_copied: Besedilo je bilo kopirano v odložišče
       link_copied: Povezava je bila kopirana v odložišče
       deleted_chat_username: izbrisano
@@ -41,13 +36,9 @@ sl:
         yesterday: "Včeraj"
       create: "Ustvari"
       cancel: "Prekliči"
-      pinned_bar:
-        title: "Pripeto"
-      pinned: "Pripeto"
       channel_settings:
         edit: "Uredi"
         add: "Dodaj"
-        notification_settings_context: "Obvestila"
         join: "Pridruži se"
         leave: "Zapusti"
       close: "Zapri"
@@ -77,6 +68,7 @@ sl:
         none: "Brez"
       title: "klepet"
       title_capitalized: "Klepet"
+      exit: "nazaj"
       channel_status:
         closed: "Zaprto"
         open: "Odpri"
@@ -85,13 +77,9 @@ sl:
         filter_all: Vse
         filter_open: Odpri
         filter_closed: Zaprto
-        filter_joined_all: "Vsi"
-        filter_joined_joined: "Pridružen"
       chat_message_separator:
         today: Danes
         yesterday: Včeraj
-      search_view:
-        filter_placeholder: Išči po zasebnih sporočilih
       members_view:
         add_member: Dodaj člana
       about_view:
@@ -103,7 +91,6 @@ sl:
         tabs:
           members: Člani
           settings: Nastavitve
-          search: Išči
         remove_member: "Odstrani"
       new_message_modal:
         user_search_placeholder: "...dodaj več članov"
@@ -122,11 +109,7 @@ sl:
           two: "%{count}/%{max} člana"
           few: "%{count}/%{max} člani"
           other: "%{count}/%{max} članov"
-      channel:
-        preview_card:
-          log_in: "Prijava"
       create_channel:
-        description: "Opis"
         type: "Tip"
         types:
           category: "Kategorija"
@@ -172,19 +155,8 @@ sl:
         title: "Klepet"
         export_messages:
           description: "To izvozi vsa sporočila iz vseh kanalov."
-      search:
-        short_title: Išči
-        no_results: "Iskanje nima zadetkov"
-        sort:
-          relevance: "Pomembnosti"
-          latest: "Najnovejše"
       direct_messages:
-        new_group: "Nov skupinski klepet"
-      channel_list:
-        options:
-          filter: "Filter"
-        filter:
-          mentions: "Omembe"
+        close: "Zapri ta osebni klepet"
       incoming_webhooks:
         back: "Nazaj"
         description: "Opis"
@@ -263,13 +235,3 @@ sl:
       panels:
         chat:
           label: "Klepet"
-    discourse_workflows:
-      send_chat_message:
-        message: "Opozorilo"
-      chat_approval:
-        message: "Opozorilo"
-        value: "Stanje"
-        style_default: "Privzeto"
-        style_primary: "Primarna"
-        style_success: "Uspeh"
-        icon: "Ikona"

@@ -1,22 +1,30 @@
 import Component from "@glimmer/component";
+import { tracked } from "@glimmer/tracking";
+import { fn } from "@ember/helper";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
+import CookText from "discourse/components/cook-text";
+import DButton from "discourse/components/d-button";
+import DModal from "discourse/components/d-modal";
 import Form from "discourse/components/form";
+import UserLink from "discourse/components/user-link";
+import ageWithTooltip from "discourse/helpers/age-with-tooltip";
+import avatar from "discourse/helpers/avatar";
 import { popupAjaxError } from "discourse/lib/ajax-error";
-import { removeValueFromArray } from "discourse/lib/array-tools";
-import { applyValueTransformer } from "discourse/lib/transformer";
-import DModal from "discourse/ui-kit/d-modal";
 import { i18n } from "discourse-i18n";
-import UserNote from "../user-note.gjs";
 
 export default class UserNotesModal extends Component {
   @service dialog;
   @service store;
 
-  get subtitle() {
-    return applyValueTransformer("user-notes-modal-subtitle", "", {
-      model: this.args.model,
-    });
+  @tracked userId = this.args.model.userId;
+  postId = this.args.model.postId;
+  callback = this.args.model.callback;
+
+  #refreshCount() {
+    if (this.callback) {
+      this.callback(this.args.model.note.length);
+    }
   }
 
   /**
@@ -37,20 +45,21 @@ export default class UserNotesModal extends Component {
   @action
   async onSubmit(data) {
     const note = this.store.createRecord("user-note");
+    const userId = parseInt(this.userId, 10);
 
     const args = {
       raw: data.content,
-      user_id: parseInt(this.args.model.userId, 10),
+      user_id: userId,
     };
 
-    if (this.args.model.postId) {
-      args.post_id = parseInt(this.args.model.postId, 10);
+    if (this.postId) {
+      args.post_id = parseInt(this.postId, 10);
     }
 
     try {
       await note.save(args);
       await this.formApi.set("content", "");
-      this.args.model.note.unshift(note);
+      this.args.model.note.insertAt(0, note);
       this.#refreshCount();
     } catch (error) {
       popupAjaxError(error);
@@ -65,7 +74,7 @@ export default class UserNotesModal extends Component {
         note
           .destroyRecord()
           .then(() => {
-            removeValueFromArray(this.args.model.note, note);
+            this.args.model.note.removeObject(note);
             this.#refreshCount();
           })
           .catch(popupAjaxError);
@@ -73,40 +82,69 @@ export default class UserNotesModal extends Component {
     });
   }
 
-  #refreshCount() {
-    this.args.model.callback?.(this.args.model.note.length);
-  }
-
   <template>
     <DModal
-      class="user-notes-modal"
       @closeModal={{@closeModal}}
-      @subtitle={{this.subtitle}}
       @title={{i18n "user_notes.title"}}
+      class="user-notes-modal"
     >
       <Form
-        @onRegisterApi={{this.registerApi}}
         @onSubmit={{this.onSubmit}}
+        @onRegisterApi={{this.registerApi}}
         as |form|
       >
         <form.Field
-          @format="full"
           @name="content"
           @title={{i18n "user_notes.attach_note_description"}}
-          @type="textarea"
+          @format="full"
           @validation="required:trim"
           as |field|
         >
-          <field.Control />
+          <field.Textarea />
         </form.Field>
 
         <form.Actions>
-          <form.Submit class="btn-primary" @label="user_notes.attach" />
+          <form.Submit @label="user_notes.attach" class="btn-primary" />
         </form.Actions>
       </Form>
 
       {{#each @model.note as |n|}}
-        <UserNote @note={{n}} @removeNote={{this.removeNote}} />
+        <div class="user-note">
+          <div class="posted-by">
+            <UserLink @user={{n.created_by}}>
+              {{avatar n.created_by imageSize="small"}}
+            </UserLink>
+          </div>
+          <div class="note-contents">
+            <div class="note-info">
+              <span class="username">{{n.created_by.username}}</span>
+              <span class="post-date">{{ageWithTooltip n.created_at}}</span>
+
+              {{#if n.can_delete}}
+                <span class="controls">
+                  <DButton
+                    @action={{fn this.removeNote n}}
+                    @icon="far-trash-can"
+                    @title="user_notes.remove"
+                    class="btn-small btn-danger"
+                  />
+                </span>
+              {{/if}}
+            </div>
+
+            <div class="cooked">
+              <CookText @rawText={{n.raw}} />
+            </div>
+
+            {{#if n.post_id}}
+              <a href={{n.post_url}} class="btn btn-small">
+                {{i18n "user_notes.show_post"}}
+              </a>
+            {{/if}}
+          </div>
+
+          <div class="clearfix"></div>
+        </div>
       {{/each}}
     </DModal>
   </template>

@@ -1,25 +1,8 @@
-import { cached } from "@glimmer/tracking";
+import { cached, tracked } from "@glimmer/tracking";
 import { setOwner } from "@ember/owner";
-import {
-  removeValueFromArray,
-  uniqueItemsFromArray,
-} from "discourse/lib/array-tools";
-import { autoTrackedArray } from "discourse/lib/tracked-tools";
-
-function compareMessages(a, b) {
-  if (a.staged !== b.staged) {
-    return a.staged ? 1 : -1;
-  }
-
-  if (a.staged) {
-    return 0;
-  }
-
-  return a.createdAt - b.createdAt || a.id - b.id;
-}
 
 export default class ChatMessagesManager {
-  @autoTrackedArray messages = [];
+  @tracked messages = [];
 
   constructor(owner) {
     setOwner(this, owner);
@@ -27,12 +10,12 @@ export default class ChatMessagesManager {
 
   @cached
   get stagedMessages() {
-    return this.messages.filter((message) => message.staged);
+    return this.messages.filterBy("staged");
   }
 
   @cached
   get selectedMessages() {
-    return this.messages.filter((message) => message.selected);
+    return this.messages.filterBy("selected");
   }
 
   clearSelectedMessages() {
@@ -44,14 +27,10 @@ export default class ChatMessagesManager {
   }
 
   addMessages(messages = []) {
-    this.messages = uniqueItemsFromArray(
-      this.messages.concat(messages),
-      "id"
-    ).sort(compareMessages);
-  }
-
-  sortMessages() {
-    this.messages = this.messages.toSorted(compareMessages);
+    this.messages = this.messages
+      .concat(messages)
+      .uniqBy("id")
+      .sort((a, b) => a.createdAt - b.createdAt);
   }
 
   findMessage(messageId) {
@@ -60,17 +39,17 @@ export default class ChatMessagesManager {
     );
   }
 
-  findFirstMessageOfDay(date, timezone) {
-    const resolvedTimezone = timezone || moment.tz.guess();
-    const targetDate = moment(date).tz(resolvedTimezone);
-
-    return this.messages.find((message) =>
-      targetDate.isSame(moment(message.createdAt).tz(resolvedTimezone), "day")
+  findFirstMessageOfDay(a) {
+    return this.messages.find(
+      (b) =>
+        a.getFullYear() === b.createdAt.getFullYear() &&
+        a.getMonth() === b.createdAt.getMonth() &&
+        a.getDate() === b.createdAt.getDate()
     );
   }
 
   removeMessage(message) {
-    return removeValueFromArray(this.messages, message);
+    return this.messages.removeObject(message);
   }
 
   findStagedMessage(stagedMessageId) {

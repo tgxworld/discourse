@@ -16,6 +16,12 @@ export default class ChatTrackingState {
     this._watchedThreadsUnreadCount = params.watchedThreadsUnreadCount ?? 0;
   }
 
+  reset() {
+    this._unreadCount = 0;
+    this._mentionCount = 0;
+    this._watchedThreadsUnreadCount = 0;
+  }
+
   get unreadCount() {
     return this._unreadCount;
   }
@@ -50,11 +56,5 @@ export default class ChatTrackingState {
       this._watchedThreadsUnreadCount = value;
       this.chatTrackingStateManager.triggerNotificationsChanged();
     }
-  }
-
-  reset() {
-    this._unreadCount = 0;
-    this._mentionCount = 0;
-    this._watchedThreadsUnreadCount = 0;
   }
 }

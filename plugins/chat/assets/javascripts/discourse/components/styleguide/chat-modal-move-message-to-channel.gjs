@@ -2,15 +2,17 @@ import Component from "@glimmer/component";
 import { action } from "@ember/object";
 import { getOwner } from "@ember/owner";
 import { service } from "@ember/service";
-import DButton from "discourse/ui-kit/d-button";
+import DButton from "discourse/components/d-button";
+import { optionalRequire } from "discourse/lib/utilities";
 import ChatModalMoveMessageToChannel from "discourse/plugins/chat/discourse/components/chat/modal/move-message-to-channel";
 import ChatFabricators from "discourse/plugins/chat/discourse/lib/fabricators";
-import Row from "discourse/plugins/styleguide/discourse/components/styleguide/controls/row" with {
-  discourseImport: "optional",
-};
-import StyleguideExample from "discourse/plugins/styleguide/discourse/components/styleguide-example" with {
-  discourseImport: "optional",
-};
+
+const Row = optionalRequire(
+  "discourse/plugins/styleguide/discourse/components/styleguide/controls/row"
+);
+const StyleguideExample = optionalRequire(
+  "discourse/plugins/styleguide/discourse/components/styleguide-example"
+);
 
 export default class ChatStyleguideChatModalMoveMessageToChannel extends Component {
   @service modal;
@@ -18,7 +20,7 @@ export default class ChatStyleguideChatModalMoveMessageToChannel extends Compone
   channel = new ChatFabricators(getOwner(this)).channel();
   selectedMessageIds = [
     new ChatFabricators(getOwner(this)).message({ channel: this.channel }),
-  ].map((item) => item.id);
+  ].mapBy("id");
 
   @action
   openModal() {
@@ -29,7 +31,7 @@ export default class ChatStyleguideChatModalMoveMessageToChannel extends Compone
           new ChatFabricators(getOwner(this)).message({
             channel: this.channel,
           }),
-        ].map((item) => item.id),
+        ].mapBy("id"),
       },
     });
   }
@@ -37,7 +39,7 @@ export default class ChatStyleguideChatModalMoveMessageToChannel extends Compone
   <template>
     <StyleguideExample @title="<Chat::Modal::MoveMessageToChannel>">
       <Row>
-        <DButton @action={{this.openModal}} @translatedLabel="Open modal" />
+        <DButton @translatedLabel="Open modal" @action={{this.openModal}} />
       </Row>
     </StyleguideExample>
   </template>

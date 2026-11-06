@@ -17,7 +17,3 @@ export function assignedToUserPath(assignedToUser) {
 export function assignedToGroupPath(assignedToGroup) {
   return getURL(`/g/${assignedToGroup.name}/assigned/everyone`);
 }
-
-export function assignedToPostPath(postId) {
-  return getURL(`/p/${postId}`);
-}

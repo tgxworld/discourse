@@ -6,7 +6,7 @@ import selectKit from "discourse/tests/helpers/select-kit-helper";
 import AutomationField from "discourse/plugins/automation/admin/components/automation-field";
 import AutomationFabricators from "discourse/plugins/automation/admin/lib/fabricators";
 
-module("Integration | Component | DaTextListField", function (hooks) {
+module("Integration | Component | da-text-list-field", function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function () {
@@ -14,6 +14,8 @@ module("Integration | Component | DaTextListField", function (hooks) {
   });
 
   test("set value", async function (assert) {
+    const self = this;
+
     this.field = new AutomationFabricators(getOwner(this)).field({
       component: "text_list",
     });
@@ -21,8 +23,8 @@ module("Integration | Component | DaTextListField", function (hooks) {
     await render(
       <template>
         <AutomationField
-          @automation={{this.automation}}
-          @field={{this.field}}
+          @automation={{self.automation}}
+          @field={{self.field}}
         />
       </template>
     );

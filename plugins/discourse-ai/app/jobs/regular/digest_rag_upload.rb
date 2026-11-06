@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Jobs
+module ::Jobs
   class DigestRagUpload < ::Jobs::Base
     CHUNK_SIZE = 1024
     CHUNK_OVERLAP = 64
@@ -8,10 +8,15 @@ module Jobs
 
     # TODO(roman): Add a way to automatically recover from errors, resulting in unindexed uploads.
     def execute(args)
-      return unless upload = Upload.find_by(id: args[:upload_id])
-      return unless target_type = args[:target_type]
-      return unless target_id = args[:target_id]
-      return unless target = target_type.constantize.find_by(id: target_id)
+      return if (upload = Upload.find_by(id: args[:upload_id])).nil?
+
+      target_type = args[:target_type]
+      target_id = args[:target_id]
+
+      return if !target_type || !target_id
+
+      target = target_type.constantize.find_by(id: target_id)
+      return if !target
 
       vector_rep = DiscourseAi::Embeddings::Vector.instance
 
@@ -19,11 +24,11 @@ module Jobs
       chunk_tokens = target.rag_chunk_tokens
       overlap_tokens = target.rag_chunk_overlap_tokens
 
-      fragment_ids = RagDocumentFragment.where(target:, upload:).pluck(:id)
+      fragment_ids = RagDocumentFragment.where(target: target, upload: upload).pluck(:id)
 
       # Check if this is the first time we process this upload.
       if fragment_ids.empty?
-        document = get_uploaded_file(upload:, target:)
+        document = get_uploaded_file(upload: upload, target: target)
         return if document.nil?
 
         RagDocumentFragment.publish_status(upload, { total: 0, indexed: 0, left: 0 })
@@ -34,18 +39,16 @@ module Jobs
         ActiveRecord::Base.transaction do
           chunk_document(
             file: document,
-            tokenizer:,
-            chunk_tokens:,
-            overlap_tokens:,
+            tokenizer: tokenizer,
+            chunk_tokens: chunk_tokens,
+            overlap_tokens: overlap_tokens,
           ) do |chunk, metadata|
-            next if chunk.blank?
-
             fragment_ids << RagDocumentFragment.create!(
-              target:,
+              target: target,
               fragment: chunk,
               fragment_number: idx + 1,
-              upload:,
-              metadata:,
+              upload: upload,
+              metadata: metadata,
             ).id
 
             idx += 1
@@ -61,13 +64,6 @@ module Jobs
       fragment_ids.each_slice(50) do |slice|
         Jobs.enqueue(:generate_rag_embeddings, fragment_ids: slice)
       end
-    rescue StandardError => error
-      if upload.present? && target.present?
-        RagDocumentSource.mark_indexing_failed(target:, upload:, error:)
-      end
-      raise
-    ensure
-      @file&.close
     end
 
     private
@@ -80,17 +76,18 @@ module Jobs
 
       # generally this will be plenty
       read_size = chunk_tokens * 10
-      document_chunks = each_utf8_text_chunk(file:, chunk_size: read_size)
 
       while buffer.present? || !done
-        while buffer.length < read_size && !done
-          begin
-            buffer << document_chunks.next
-          rescue StopIteration
-            done = true
-          end
+        if buffer.length < read_size
+          read = file.read(read_size)
+          done = true if read.nil?
+
+          read = Encodings.to_utf8(read) if read
+
+          buffer << (read || "")
         end
 
+        # at this point we unconditionally have 2x CHUNK_SIZE worth of data in the buffer
         metadata_regex = /\[\[metadata (.*?)\]\]/m
 
         before_metadata, new_metadata, after_metadata = buffer.split(metadata_regex)
@@ -142,35 +139,6 @@ module Jobs
       end
     end
 
-    def each_utf8_text_chunk(file:, chunk_size:)
-      return enum_for(__method__, file:, chunk_size:) if !block_given?
-
-      file.binmode if file.respond_to?(:binmode)
-      file.set_encoding(Encoding::UTF_8) if file.respond_to?(:set_encoding)
-
-      source_chunks =
-        if file.respond_to?(:each_line)
-          file.each_line(chunk_size)
-        else
-          Enumerator.new do |yielder|
-            while (chunk = file.read(chunk_size))
-              yielder << chunk
-            end
-          end
-        end
-
-      first_chunk = true
-
-      source_chunks.each do |chunk|
-        chunk.force_encoding(Encoding::UTF_8)
-        chunk.scrub!("")
-        Encodings.delete_bom!(chunk) if first_chunk
-        first_chunk = false
-
-        yield chunk if !chunk.empty?
-      end
-    end
-
     def first_chunk(text, chunk_tokens:, tokenizer:, splitters: ["\n\n", "\n", ".", ""])
       return text, " " if tokenizer.tokenize(text).length <= chunk_tokens
 
@@ -201,7 +169,6 @@ module Jobs
                 "The setting ai_rag_images_enabled is false, can not index images",
               )
       end
-
       if upload.extension == "pdf"
         return(
           DiscourseAi::Utils::PdfToText.as_fake_file(
@@ -223,14 +190,12 @@ module Jobs
       end
 
       store = Discourse.store
-
       @file ||=
         if store.external?
           # Upload#filesize could be approximate.
           # add two extra Mbs to make sure that we'll be able to download the upload.
           max_filesize = upload.filesize + 2.megabytes
-          path = store.download(upload, max_file_size_kb: max_filesize)
-          File.open(path) if path
+          store.download(upload, max_file_size_kb: max_filesize)
         else
           File.open(store.path_for(upload))
         end

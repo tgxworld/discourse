@@ -9,89 +9,75 @@ module DiscourseAi
         rval = Hash.new { |h, k| h[k] = [] }
 
         if SiteSetting.ai_bot_enabled
-          LlmModel.enabled_chat_bot_ids.each do |llm_id|
-            rval[llm_id] << { type: :ai_bot, id: DiscourseAi::Configuration::Module::BOT_ID }
-          end
+          LlmModel
+            .where("enabled_chat_bot = ?", true)
+            .pluck(:id)
+            .each { |llm_id| rval[llm_id] << { type: :ai_bot } }
         end
 
         # this is unconditional, so it is clear that we always signal configuration
-        AiAgent
-          .where.not(default_llm_id: nil)
+        AiPersona
+          .where("default_llm_id IS NOT NULL")
           .pluck(:default_llm_id, :name, :id)
-          .each { |llm_id, name, id| rval[llm_id] << { type: :ai_agent, name: name, id: id } }
+          .each { |llm_id, name, id| rval[llm_id] << { type: :ai_persona, name: name, id: id } }
 
         if SiteSetting.ai_helper_enabled
           {
             "#{I18n.t("js.discourse_ai.features.ai_helper.proofread")}" =>
-              SiteSetting.ai_helper_proofreader_agent,
+              SiteSetting.ai_helper_proofreader_persona,
             "#{I18n.t("js.discourse_ai.features.ai_helper.title_suggestions")}" =>
-              SiteSetting.ai_helper_title_suggestions_agent,
+              SiteSetting.ai_helper_title_suggestions_persona,
             "#{I18n.t("js.discourse_ai.features.ai_helper.explain")}" =>
-              SiteSetting.ai_helper_explain_agent,
+              SiteSetting.ai_helper_explain_persona,
             "#{I18n.t("js.discourse_ai.features.ai_helper.illustrate_post")}" =>
-              SiteSetting.ai_helper_post_illustrator_agent,
+              SiteSetting.ai_helper_post_illustrator_persona,
             "#{I18n.t("js.discourse_ai.features.ai_helper.smart_dates")}" =>
-              SiteSetting.ai_helper_smart_dates_agent,
+              SiteSetting.ai_helper_smart_dates_persona,
             "#{I18n.t("js.discourse_ai.features.ai_helper.translator")}" =>
-              SiteSetting.ai_helper_translator_agent,
+              SiteSetting.ai_helper_translator_persona,
             "#{I18n.t("js.discourse_ai.features.ai_helper.markdown_tables")}" =>
-              SiteSetting.ai_helper_markdown_tables_agent,
+              SiteSetting.ai_helper_markdown_tables_persona,
             "#{I18n.t("js.discourse_ai.features.ai_helper.custom_prompt")}" =>
-              SiteSetting.ai_helper_custom_prompt_agent,
-          }.each do |helper_type, agent_id|
-            next if agent_id.blank?
+              SiteSetting.ai_helper_custom_prompt_persona,
+          }.each do |helper_type, persona_id|
+            next if persona_id.blank?
 
-            agent = AiAgent.find_by(id: agent_id)
-            next if agent.blank? || agent.default_llm_id.blank?
+            persona = AiPersona.find_by(id: persona_id)
+            next if persona.blank? || persona.default_llm_id.blank?
 
-            model_id = agent.default_llm_id || SiteSetting.ai_default_llm_model.to_i
-            rval[model_id] << {
-              type: :ai_helper,
-              name: helper_type,
-              id: DiscourseAi::Configuration::Module::AI_HELPER_ID,
-            }
+            model_id = persona.default_llm_id || SiteSetting.ai_default_llm_model.to_i
+            rval[model_id] << { type: :ai_helper, name: helper_type }
           end
         end
 
-        if SiteSetting.ai_post_image_captions_enabled
-          image_caption_agent = AiAgent.find_by(id: SiteSetting.ai_image_caption_agent)
+        if SiteSetting.ai_helper_enabled_features.split("|").include?("image_caption")
+          image_caption_persona = AiPersona.find_by(id: SiteSetting.ai_helper_image_caption_persona)
+          model_id = image_caption_persona.default_llm_id || SiteSetting.ai_default_llm_model.to_i
 
-          if image_caption_agent.present?
-            model_id = image_caption_agent.default_llm_id || SiteSetting.ai_default_llm_model.to_i
-
-            rval[model_id] << {
-              type: :ai_image_caption,
-              id: DiscourseAi::Configuration::Module::IMAGE_CAPTION_ID,
-            }
-          end
+          rval[model_id] << { type: :ai_helper_image_caption }
         end
 
         if SiteSetting.ai_summarization_enabled
-          summarization_agent = AiAgent.find_by(id: SiteSetting.ai_summarization_agent)
-          model_id = summarization_agent.default_llm_id || SiteSetting.ai_default_llm_model.to_i
+          summarization_persona = AiPersona.find_by(id: SiteSetting.ai_summarization_persona)
+          model_id = summarization_persona.default_llm_id || SiteSetting.ai_default_llm_model.to_i
 
-          rval[model_id] << {
-            type: :ai_summarization,
-            id: DiscourseAi::Configuration::Module::SUMMARIZATION_ID,
-          }
+          rval[model_id] << { type: :ai_summarization }
         end
 
         if SiteSetting.ai_embeddings_semantic_search_enabled
-          search_agent = AiAgent.find_by(id: SiteSetting.ai_embeddings_semantic_search_hyde_agent)
-          model_id = search_agent.default_llm_id || SiteSetting.ai_default_llm_model.to_i
+          search_persona =
+            AiPersona.find_by(id: SiteSetting.ai_embeddings_semantic_search_hyde_persona)
+          model_id = search_persona.default_llm_id || SiteSetting.ai_default_llm_model.to_i
 
-          rval[model_id] << {
-            type: :ai_embeddings_semantic_search,
-            id: DiscourseAi::Configuration::Module::EMBEDDINGS_ID,
-          }
+          rval[model_id] << { type: :ai_embeddings_semantic_search }
         end
 
-        if SiteSetting.ai_spam_detection_enabled &&
-             (model_id = AiModerationSetting.spam&.llm_model_id).present?
-          rval[model_id] << { type: :ai_spam, id: DiscourseAi::Configuration::Module::SPAM_ID }
+        if SiteSetting.ai_spam_detection_enabled && AiModerationSetting.spam.present?
+          model_id = AiModerationSetting.spam[:llm_model_id]
+          rval[model_id] << { type: :ai_spam }
         end
 
-        if defined?(DiscourseAutomation::Automation) && SiteSetting.discourse_automation_enabled
+        if defined?(DiscourseAutomation::Automation)
           DiscourseAutomation::Automation
             .joins(:fields)
             .where(script: %w[llm_report llm_triage])
@@ -106,57 +92,47 @@ module DiscourseAi
             end
         end
 
-        LlmModel
-          .where.not(vision_llm_model_id: nil)
-          .pluck(:vision_llm_model_id, :display_name, :id)
-          .each do |llm_id, name, id|
-            rval[llm_id] << { type: :vision_delegate, name: name, id: id }
-          end
-
         rval
       end
 
-      def self.valid_value?(_val)
+      def self.valid_value?(val)
         true
       end
 
-      # returns an array of hashes (id: , name:, vision_enabled:, supported_native_tools:)
-      def self.values_for_serialization
-        return [] unless table_exists?
+      # returns an array of hashes (id: , name:, vision_enabled:)
+      def self.values_for_serialization(allowed_seeded_llm_ids: nil)
+        builder = DB.build(<<~SQL)
+          SELECT id, display_name AS name, vision_enabled
+          FROM llm_models
+          /*where*/
+        SQL
 
-        llm_models = LlmModel.includes(:vision_llm_model).index_by(&:id)
+        if allowed_seeded_llm_ids.is_a?(Array) && !allowed_seeded_llm_ids.empty?
+          builder.where(
+            "id > 0 OR id IN (:allowed_seeded_llm_ids)",
+            allowed_seeded_llm_ids: allowed_seeded_llm_ids,
+          )
+        else
+          builder.where("id > 0")
+        end
 
-        DB
-          .query_hash(<<~SQL)
-            SELECT id, display_name AS name, vision_enabled
-            FROM llm_models
-          SQL
-          .map do |row|
-            row = row.symbolize_keys
-            llm_model = llm_models[row[:id]]
-            row[:vision_mode] = llm_model.vision_mode
-            row[:agent_image_capable] = llm_model.agent_image_capable?
-            row[:supported_native_tools] = DiscourseAi::Completions::NativeTools.supported_ids_for(
-              llm_model,
-            )
-            row
-          end
+        builder.query_hash.map(&:symbolize_keys)
       end
 
-      def self.values
-        return [] unless table_exists?
-
-        DB.query_hash(<<~SQL).map(&:symbolize_keys)
+      def self.values(allowed_seeded_llms: nil)
+        values = DB.query_hash(<<~SQL).map(&:symbolize_keys)
           SELECT display_name AS name, id AS value
           FROM llm_models
         SQL
-      end
 
-      def self.table_exists?
-        DB.exec("SELECT 1 FROM llm_models LIMIT 0")
-        true
-      rescue StandardError
-        false
+        if allowed_seeded_llms.is_a?(Array)
+          values =
+            values.filter do |value_h|
+              value_h[:value] > 0 || allowed_seeded_llms.include?("#{value_h[:value]}")
+            end
+        end
+
+        values
       end
     end
   end

@@ -5,11 +5,6 @@
 # https://translate.discourse.org/
 
 ru:
-  admin_js:
-    admin:
-      site_settings:
-        categories:
-          discourse_local_dates: "Плагин Discourse «Локальные даты»"
   js:
     discourse_local_dates:
       relative_dates:
@@ -19,11 +14,11 @@ ru:
         countdown:
           passed: прошедшая дата
       title: Дата / Время
-      edit_date: Редактировать %{date}
       create:
         form:
           insert: Вставить
-          save: Сохранить
+          advanced_mode: Расширенный режим
+          simple_mode: Простой режим
           format_description: "Формат, используемый для отображения даты пользователю. Используйте Z для отображения смещения и zz для названия часового пояса."
           timezones_title: Отображаемые часовые пояса
           timezones_description: Часовые пояса будут использоваться для отображения дат в режиме предпросмотра и в резервном режиме.

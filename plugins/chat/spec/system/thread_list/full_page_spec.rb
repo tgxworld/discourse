@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "Thread list in side panel | full page" do
+describe "Thread list in side panel | full page", type: :system do
   fab!(:current_user, :user)
   fab!(:channel) { Fabricate(:chat_channel, threading_enabled: true) }
   fab!(:other_user, :user)
@@ -31,7 +31,7 @@ describe "Thread list in side panel | full page" do
 
     before { chat_system_user_bootstrap(user: other_user, channel: channel) }
 
-    it "shows threads in the channel even if the user is not tracking them" do
+    it "it shows threads in the channel even if the user is not tracking them" do
       thread_1 =
         Fabricate(
           :chat_thread,
@@ -185,10 +185,9 @@ describe "Thread list in side panel | full page" do
       end
 
       it "shows the thread in the list when another user restores the original message" do
-        trash_message!(thread_1.original_message, user: other_user)
+        trash_message!(thread_1.original_message)
         chat_page.visit_threads_list(channel)
 
-        expect(thread_list_page).to have_loaded
         expect(thread_list_page).to have_no_thread(thread_1)
 
         restore_message!(thread_1.original_message, user: other_user)

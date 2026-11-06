@@ -8,9 +8,7 @@ hr:
   js:
     styleguide:
       title: "Vodič za stil"
-      example:
-        kind:
-          component: "Komponenta"
+      welcome: "Da biste započeli, odaberite odjeljak s izbornika s lijeve strane."
       categories:
         atoms: Atomi
         molecules: Molekule
@@ -22,16 +20,6 @@ hr:
           paragraph: "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud istezanje ullamco Laboris nisi ut aliquip ex ea commodo posljedica. Duis aute irure dolor in rephenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est Laborum."
         date_time_inputs:
           title: "Unosi datuma/vremena"
-        context_menu:
-          actions:
-            duplicate: "Dupliciraj"
-            delete: "Izbriši"
-        reorderable_list:
-          policies_pinned: "Zakvačeno"
-          policies_required: "Potrebno"
-          table_field: "Polje"
-          table_type: "Tip"
-          cross_list_primary: "Primarna"
         font_scale:
           title: "Sustav fonta"
         colors:
@@ -55,6 +43,8 @@ hr:
           title: "Navigacija složena"
         categories_list:
           title: "Popis kategorija"
+        topic_link:
+          title: "Veza na temu"
         topic_list_item:
           title: "Stavka popisa tema"
         topic_statuses:
@@ -63,6 +53,8 @@ hr:
           title: "Popis tema"
         basic_topic_list:
           title: "Popis osnovnih tema"
+        footer_message:
+          title: "Poruka podnožja"
         signup_cta:
           title: "Registracija CTA"
         topic_timer_info:
@@ -77,25 +69,10 @@ hr:
           title: "Karta teme"
         site_header:
           title: "Zaglavlje web lokacije"
-        more_topics:
-          title: "Više tema"
+        suggested_topics:
+          title: "Preporučene teme"
         post_menu:
           title: "Izbornik objava"
-        roving_focus:
-          toolbar:
-            copy: "Kopija"
-          adjacent:
-            label: "Filteri"
-            field: "Pretraživanje"
-            open: "Otvori"
-          combobox:
-            daily: "Dnevno"
-            weekly: "Tjedno"
-            monthly: "Mjesečno"
-            never: "nikada"
-          tree:
-            components: "Komponente"
-            select: "Odaberite"
         modal:
           title: "Modalni"
           header: "Modalni naslov"

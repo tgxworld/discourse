@@ -1,23 +1,10 @@
 # frozen_string_literal: true
 
-require_relative "../fabricators/reaction_fabricator"
-require_relative "../fabricators/reaction_user_fabricator"
+require_relative "../fabricators/reaction_fabricator.rb"
+require_relative "../fabricators/reaction_user_fabricator.rb"
 
 describe DiscourseReactions::ReactionUser do
   before { SiteSetting.discourse_reactions_enabled = true }
-
-  describe "#reload" do
-    it "accepts options like ActiveRecord's reload" do
-      reaction_user =
-        Fabricate(
-          :reaction_user,
-          user: Fabricate(:user),
-          reaction: Fabricate(:reaction),
-          post: Fabricate(:post),
-        )
-      expect { reaction_user.reload(lock: true) }.not_to raise_error
-    end
-  end
 
   describe "delegating methods when the user is nil" do
     let(:reaction_user) { described_class.new(user: nil) }

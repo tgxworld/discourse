@@ -25,7 +25,7 @@ rescue StandardError
 end
 
 def gather_uploads
-  public_directory = "#{Rails.public_path}"
+  public_directory = "#{Rails.root}/public"
   current_db = RailsMultisite::ConnectionManagement.current_db
 
   puts "", "Gathering uploads for '#{current_db}'...", ""
@@ -34,27 +34,29 @@ def gather_uploads
     .where("url ~ '^\/uploads\/'")
     .where("url !~ ?", "^\/uploads\/#{current_db}")
     .find_each do |upload|
-      old_db = upload.url[%r{\A/uploads/([^/]+)/}, 1]
-      from = upload.url.dup
-      to = upload.url.sub("/uploads/#{old_db}/", "/uploads/#{current_db}/")
-      source = "#{public_directory}#{from}"
-      destination = "#{public_directory}#{to}"
+      begin
+        old_db = upload.url[%r{\A/uploads/([^/]+)/}, 1]
+        from = upload.url.dup
+        to = upload.url.sub("/uploads/#{old_db}/", "/uploads/#{current_db}/")
+        source = "#{public_directory}#{from}"
+        destination = "#{public_directory}#{to}"
 
-      # create destination directory & copy file unless it already exists
-      unless file_exists?(destination)
-        `mkdir -p '#{File.dirname(destination)}'`
-        `cp --link '#{source}' '#{destination}'`
+        # create destination directory & copy file unless it already exists
+        unless file_exists?(destination)
+          `mkdir -p '#{File.dirname(destination)}'`
+          `cp --link '#{source}' '#{destination}'`
+        end
+
+        # ensure file has been successfully copied over
+        raise unless file_exists?(destination)
+
+        # remap links in db
+        DbHelper.remap(from, to)
+      rescue StandardError
+        putc "!"
+      else
+        putc "."
       end
-
-      # ensure file has been successfully copied over
-      raise unless file_exists?(destination)
-
-      # remap links in db
-      DbHelper.remap(from, to)
-    rescue StandardError
-      putc "!"
-    else
-      putc "."
     end
 
   puts "", "Done!"
@@ -70,14 +72,16 @@ task "uploads:backfill_shas" => :environment do
     Upload
       .where(sha1: nil)
       .find_each do |u|
-        path = Discourse.store.path_for(u)
-        sha1 = Upload.generate_digest(path)
-        u.sha1 = u.secure? ? SecureRandom.hex(20) : sha1
-        u.original_sha1 = u.secure? ? sha1 : nil
-        u.save!
-        putc "."
-      rescue => e
-        puts "Skipping #{u.original_filename} (#{u.url}) #{e.message}"
+        begin
+          path = Discourse.store.path_for(u)
+          sha1 = Upload.generate_digest(path)
+          u.sha1 = u.secure? ? SecureRandom.hex(20) : sha1
+          u.original_sha1 = u.secure? ? sha1 : nil
+          u.save!
+          putc "."
+        rescue => e
+          puts "Skipping #{u.original_filename} (#{u.url}) #{e.message}"
+        end
       end
   end
   puts "", "Done"
@@ -98,12 +102,14 @@ end
 
 def migrate_to_s3_all_sites
   RailsMultisite::ConnectionManagement.each_connection do
-    migrate_to_s3
-  rescue RuntimeError => e
-    if ENV["SKIP_FAILED"]
-      puts e
-    else
-      raise e unless ENV["SKIP_FAILED"]
+    begin
+      migrate_to_s3
+    rescue RuntimeError => e
+      if ENV["SKIP_FAILED"]
+        puts e
+      else
+        raise e unless ENV["SKIP_FAILED"]
+      end
     end
   end
 end
@@ -170,12 +176,12 @@ def clean_up_uploads
 
   if STDIN.gets.chomp.downcase == "y"
     puts "Starting backup..."
-    creator = BackupRestore::Creator.new(Discourse.system_user.id)
-    creator.run
-    exit 1 unless creator.success
+    backuper = BackupRestore::Backuper.new(Discourse.system_user.id)
+    backuper.run
+    exit 1 unless backuper.success
   end
 
-  public_directory = Rails.public_path.to_s
+  public_directory = Rails.root.join("public").to_s
 
   ##
   ## DATABASE vs FILE SYSTEM
@@ -221,8 +227,8 @@ def clean_up_uploads
       sha1 = Upload.generate_digest(file_path)
       url = file_path.split(public_directory, 2)[1]
 
-      if Upload.where(sha1: sha1).empty? && Upload.where(url: url).empty? &&
-           OptimizedImage.where(sha1: sha1).empty? && OptimizedImage.where(url: url).empty?
+      if (Upload.where(sha1: sha1).empty? && Upload.where(url: url).empty?) &&
+           (OptimizedImage.where(sha1: sha1).empty? && OptimizedImage.where(url: url).empty?)
         FileUtils.rm(file_path)
         putc "#"
       else
@@ -297,20 +303,17 @@ def regenerate_missing_optimized
     return
   end
 
-  public_directory = "#{Rails.public_path}"
+  public_directory = "#{Rails.root}/public"
   missing_uploads = Set.new
 
   avatar_upload_ids = UserAvatar.all.pluck(:custom_upload_id, :gravatar_upload_id).flatten.compact
-  avatar_upload_ids.concat(
-    UserAssociatedAccount.where.not(avatar_upload_id: nil).pluck(:avatar_upload_id),
-  )
 
   default_scope = OptimizedImage.includes(:upload)
 
   [
     default_scope.where("optimized_images.upload_id IN (?)", avatar_upload_ids),
     default_scope
-      .where.not(upload_id: avatar_upload_ids)
+      .where("optimized_images.upload_id NOT IN (?)", avatar_upload_ids)
       .where("LENGTH(COALESCE(url, '')) > 0")
       .where("width > 0 AND height > 0"),
   ].each do |scope|
@@ -401,7 +404,7 @@ task "uploads:analyze", %i[cache_path limit] => :environment do |_, args|
   cache_path = args[:cache_path]
 
   current_db = RailsMultisite::ConnectionManagement.current_db
-  uploads_path = Rails.public_path.join("uploads", current_db)
+  uploads_path = Rails.root.join("public", "uploads", current_db)
 
   path =
     if cache_path
@@ -541,9 +544,11 @@ def sync_access_control(async: true, concurrency: 10)
         .map do |upload|
           Concurrent::Future.execute(executor:) do
             RailsMultisite::ConnectionManagement.with_connection(current_db) do
-              Discourse.store.update_upload_access_control(upload, remove_existing_acl: true)
-            rescue => error
-              errors << "Error updating access control for upload #{upload.url}: #{error.message}"
+              begin
+                Discourse.store.update_upload_access_control(upload, remove_existing_acl: true)
+              rescue => error
+                errors << "Error updating access control for upload #{upload.url}: #{error.message}"
+              end
             end
           end
         end
@@ -865,6 +870,7 @@ end
 
 def mark_upload_posts_for_rebake(post_ids_to_rebake)
   posts_to_rebake = Post.where(id: post_ids_to_rebake)
+  post_rebake_errors = []
   puts "",
        "Marking #{posts_to_rebake.length} posts with affected uploads for rebake. Every 15 minutes, a batch of these will be enqueued for rebaking.",
        ""
@@ -938,7 +944,7 @@ def inline_img_tags(post)
           end
         end
         if !upload
-          local_file = Rails.public_path.join($2).to_s
+          local_file = File.join(Rails.root, "public", $2)
           if File.exist?(local_file)
             File.open(local_file) do |f|
               upload = UploadCreator.new(f, "image").create_for(post.user_id)
@@ -1131,7 +1137,7 @@ def fix_missing_s3
       tempfile =
         FileHelper.download(
           upload.url,
-          max_file_size: 30.megabytes,
+          max_file_size: 30.megabyte,
           tmp_file_name: "#{SecureRandom.hex}.#{upload.extension}",
         )
       downloaded_from = upload.url
@@ -1141,7 +1147,7 @@ def fix_missing_s3
           tempfile =
             FileHelper.download(
               upload.origin,
-              max_file_size: 30.megabytes,
+              max_file_size: 30.megabyte,
               tmp_file_name: "#{SecureRandom.hex}.#{upload.extension}",
             )
           downloaded_from = upload.origin
@@ -1311,7 +1317,7 @@ task "uploads:downsize" => :environment do
       if upload.local?
         Discourse.store.path_for(upload)
       else
-        Discourse.store.download(upload, max_file_size_kb: 100.megabytes)
+        Discourse.store.download_safe(upload, max_file_size_kb: 100.megabytes)&.path
       end
 
     unless path

@@ -1,5 +1,6 @@
-import AiFeatures from "../../../../components/ai-features.gjs";
+import RouteTemplate from "ember-route-template";
+import AiFeatures from "../../../../../discourse/components/ai-features";
 
-export default <template>
-  <AiFeatures @features={{@controller.model}} />
-</template>
+export default RouteTemplate(
+  <template><AiFeatures @features={{@controller.model}} /></template>
+);

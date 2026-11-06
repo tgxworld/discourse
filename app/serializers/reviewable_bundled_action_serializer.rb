@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class ReviewableBundledActionSerializer < ApplicationSerializer
-  attributes :id, :icon, :label, :secondary
+  attributes :id, :icon, :label
   has_many :actions, serializer: ReviewableActionSerializer, root: "actions"
 
   def label
@@ -14,9 +14,5 @@ class ReviewableBundledActionSerializer < ApplicationSerializer
 
   def include_icon?
     icon.present?
-  end
-
-  def include_secondary?
-    object.secondary
   end
 end

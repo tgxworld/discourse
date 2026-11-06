@@ -6,6 +6,6 @@ module RouteFormat
   end
 
   def self.backup
-    /[a-zA-Z0-9._-]+\.(sql\.gz|tar\.gz|tgz)/i
+    /.+\.(sql\.gz|tar\.gz|tgz)/i
   end
 end

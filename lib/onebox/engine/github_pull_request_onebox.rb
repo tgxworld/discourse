@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../mixins/github_body"
-require_relative "../mixins/github_api"
+require_relative "../mixins/github_auth_header"
 
 module Onebox
   module Engine
@@ -10,7 +10,7 @@ module Onebox
       include LayoutSupport
       include JSON
       include Onebox::Mixins::GithubBody
-      include Onebox::Mixins::GithubApi
+      include Onebox::Mixins::GithubAuthHeader
 
       matches_domain("github.com", "www.github.com")
       always_https
@@ -23,40 +23,6 @@ module Onebox
         "https://api.github.com/repos/#{match[:org]}/#{match[:repository]}/pulls/#{match[:number]}"
       end
 
-      def inline_data
-        return if !github_token? && !SiteSetting.github_pr_status_enabled
-
-        if commit_sha = @url[%r{/commits?/(\h+)}, 1]
-          commit =
-            load_json(
-              "https://api.github.com/repos/#{match[:org]}/#{match[:repository]}/commits/#{commit_sha}",
-            )
-          message = commit["commit"]["message"].split("\n").first
-          return(
-            {
-              title:
-                "#{message} - #{match[:org]}/#{match[:repository]}@#{commit["sha"][0...7]} - GitHub",
-            }
-          )
-        end
-
-        pr_data = raw
-        result = {
-          title:
-            "#{pr_data["title"]} - Pull Request ##{match[:number]} - #{match[:org]}/#{match[:repository]} - GitHub",
-        }
-
-        if SiteSetting.github_pr_status_enabled
-          status = fetch_pr_status(pr_data)&.dig(:status)
-          result[:css_class] = "--gh-status-#{status}" if status
-        end
-
-        result
-      rescue StandardError => e
-        Rails.logger.warn("Inline GitHub PR onebox error for #{@url}: #{e.message}")
-        nil
-      end
-
       private
 
       def match
@@ -65,17 +31,13 @@ module Onebox
       end
 
       def data
-        result = raw.clone
+        result = raw(github_auth_header(match[:org])).clone
         result["link"] = link
 
-        status_data = fetch_pr_status(result)
-        result["pr_status"] = status_data&.dig(:status)
-
-        status_timestamp = status_data&.dig(:timestamp) || result["created_at"]
-        status_date = Time.parse(status_timestamp)
-        result["status_date"] = status_date.strftime("%I:%M%p - %d %b %y %Z")
-        result["status_date_date"] = status_date.strftime("%F")
-        result["status_date_time"] = status_date.strftime("%T")
+        created_at = Time.parse(result["created_at"])
+        result["created_at"] = created_at.strftime("%I:%M%p - %d %b %y %Z")
+        result["created_at_date"] = created_at.strftime("%F")
+        result["created_at_time"] = created_at.strftime("%T")
 
         ulink = URI(link)
         _, org, repo = ulink.path.split("/")
@@ -94,17 +56,6 @@ module Onebox
           result["pr"] = true
         end
 
-        result["layout_class"] = "github-onebox"
-        result["repository"] = "#{org}/#{repo}"
-        if result["pr"] && result["pr_status"]
-          result["layout_class"] += " --github-#{result["pr_status"]}"
-          result["pr_status_data"] = {
-            result["pr_status"] => true,
-            :label => I18n.t("onebox.github.pr_status.#{result["pr_status"]}"),
-          }
-        end
-
-        result["number"] = match[:number]
         result["i18n"] = i18n
         result["i18n"]["pr_summary"] = I18n.t(
           "onebox.github.pr_summary",
@@ -125,12 +76,6 @@ module Onebox
 
       def i18n
         {
-          header: {
-            pull_request: I18n.t("onebox.github.header.pull_request"),
-            comment: I18n.t("onebox.github.header.comment"),
-            review: I18n.t("onebox.github.header.review"),
-            commit: I18n.t("onebox.github.header.commit"),
-          },
           opened: I18n.t("onebox.github.opened"),
           commit_by: I18n.t("onebox.github.commit_by"),
           comment_by: I18n.t("onebox.github.comment_by"),
@@ -162,40 +107,10 @@ module Onebox
         end
       end
 
-      def fetch_pr_status(pr_data)
-        return unless SiteSetting.github_pr_status_enabled
-
-        return { status: "merged", timestamp: pr_data["merged_at"] } if pr_data["merged"]
-        return { status: "closed", timestamp: pr_data["closed_at"] } if pr_data["state"] == "closed"
-        return { status: "draft", timestamp: pr_data["created_at"] } if pr_data["draft"]
-
-        reviews_data = load_json(url + "/reviews")
-        latest_reviews = latest_review_states_with_timestamps(reviews_data)
-
-        %w[CHANGES_REQUESTED APPROVED].each do |state|
-          reviews = latest_reviews.select { |r| r[:state] == state }
-          if reviews.present?
-            return { status: state.downcase, timestamp: reviews.map { |r| r[:timestamp] }.max }
-          end
-        end
-
-        { status: "open", timestamp: pr_data["created_at"] }
-      rescue StandardError => e
-        Rails.logger.warn("GitHub PR status fetch error: #{e.message}")
-        nil
-      end
-
-      def latest_review_states_with_timestamps(reviews)
-        return [] if reviews.blank?
-
-        reviews
-          .reject do |r|
-            r.dig("user", "id").nil? || !%w[CHANGES_REQUESTED APPROVED].include?(r["state"])
-          end
-          .group_by { |r| r.dig("user", "id") }
-          .transform_values { |rs| rs.max_by { |r| r["submitted_at"] } }
-          .values
-          .map { |r| { state: r["state"], timestamp: r["submitted_at"] } }
+      def load_json(url)
+        ::MultiJson.load(
+          URI.parse(url).open({ read_timeout: timeout }.merge(github_auth_header(match[:org]))),
+        )
       end
     end
   end

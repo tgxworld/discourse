@@ -1,6 +1,7 @@
-import { find, findAll, render } from "@ember/test-helpers";
+import { render } from "@ember/test-helpers";
 import { module, test } from "qunit";
 import { setupRenderingTest } from "discourse/tests/helpers/component-test";
+import { queryAll } from "discourse/tests/helpers/qunit-helpers";
 import { i18n } from "discourse-i18n";
 import PollResultsStandard from "discourse/plugins/poll/discourse/components/poll-results-standard";
 
@@ -33,10 +34,12 @@ const PRELOADEDVOTERS = {
   ],
 };
 
-module("Component | PollResultsStandard", function (hooks) {
+module("Poll | Component | poll-results-standard", function (hooks) {
   setupRenderingTest(hooks);
 
   test("Renders the standard results Component correctly", async function (assert) {
+    const self = this;
+
     this.setProperties({
       options: TWO_OPTIONS,
       pollName: "Two Choice Poll",
@@ -52,25 +55,27 @@ module("Component | PollResultsStandard", function (hooks) {
     await render(
       <template>
         <PollResultsStandard
-          @fetchVoters={{this.fetchVoters}}
-          @isPublic={{this.isPublic}}
-          @options={{this.options}}
-          @pollName={{this.pollName}}
-          @pollType={{this.pollType}}
-          @postId={{this.postId}}
-          @vote={{this.vote}}
-          @voters={{this.voters}}
-          @votersCount={{this.votersCount}}
+          @options={{self.options}}
+          @pollName={{self.pollName}}
+          @pollType={{self.pollType}}
+          @isPublic={{self.isPublic}}
+          @postId={{self.postId}}
+          @vote={{self.vote}}
+          @voters={{self.voters}}
+          @votersCount={{self.votersCount}}
+          @fetchVoters={{self.fetchVoters}}
         />
       </template>
     );
 
-    assert.dom(find(".option .percentage")).hasText("56%");
-    assert.dom(findAll(".option .percentage")[1]).hasText("44%");
+    assert.dom(queryAll(".option .percentage")[0]).hasText("56%");
+    assert.dom(queryAll(".option .percentage")[1]).hasText("44%");
     assert.dom("ul.poll-voters-list").exists();
   });
 
   test("Omits voters for private polls", async function (assert) {
+    const self = this;
+
     this.setProperties({
       options: TWO_OPTIONS,
       pollName: "Two Choice Poll",
@@ -86,15 +91,15 @@ module("Component | PollResultsStandard", function (hooks) {
     await render(
       <template>
         <PollResultsStandard
-          @fetchVoters={{this.fetchVoters}}
-          @isPublic={{this.isPublic}}
-          @options={{this.options}}
-          @pollName={{this.pollName}}
-          @pollType={{this.pollType}}
-          @postId={{this.postId}}
-          @vote={{this.vote}}
-          @voters={{this.voters}}
-          @votersCount={{this.votersCount}}
+          @options={{self.options}}
+          @pollName={{self.pollName}}
+          @pollType={{self.pollType}}
+          @isPublic={{self.isPublic}}
+          @postId={{self.postId}}
+          @vote={{self.vote}}
+          @voters={{self.voters}}
+          @votersCount={{self.votersCount}}
+          @fetchVoters={{self.fetchVoters}}
         />
       </template>
     );
@@ -103,6 +108,8 @@ module("Component | PollResultsStandard", function (hooks) {
   });
 
   test("options in ascending order", async function (assert) {
+    const self = this;
+
     this.setProperties({
       options: TWO_OPTIONS_REVERSED,
       pollName: "Two Choice Poll",
@@ -117,23 +124,25 @@ module("Component | PollResultsStandard", function (hooks) {
     await render(
       <template>
         <PollResultsStandard
-          @fetchVoters={{this.fetchVoters}}
-          @options={{this.options}}
-          @pollName={{this.pollName}}
-          @pollType={{this.pollType}}
-          @postId={{this.postId}}
-          @vote={{this.vote}}
-          @voters={{this.voters}}
-          @votersCount={{this.votersCount}}
+          @options={{self.options}}
+          @pollName={{self.pollName}}
+          @pollType={{self.pollType}}
+          @postId={{self.postId}}
+          @vote={{self.vote}}
+          @voters={{self.voters}}
+          @votersCount={{self.votersCount}}
+          @fetchVoters={{self.fetchVoters}}
         />
       </template>
     );
 
-    assert.dom(find(".option .percentage")).hasText("56%");
-    assert.dom(findAll(".option .percentage")[1]).hasText("44%");
+    assert.dom(queryAll(".option .percentage")[0]).hasText("56%");
+    assert.dom(queryAll(".option .percentage")[1]).hasText("44%");
   });
 
   test("options in ascending order", async function (assert) {
+    const self = this;
+
     this.setProperties({
       options: FIVE_OPTIONS,
       pollName: "Five Multi Option Poll",
@@ -148,30 +157,32 @@ module("Component | PollResultsStandard", function (hooks) {
     await render(
       <template>
         <PollResultsStandard
-          @fetchVoters={{this.fetchVoters}}
-          @options={{this.options}}
-          @pollName={{this.pollName}}
-          @pollType={{this.pollType}}
-          @postId={{this.postId}}
-          @vote={{this.vote}}
-          @voters={{this.voters}}
-          @votersCount={{this.votersCount}}
+          @options={{self.options}}
+          @pollName={{self.pollName}}
+          @pollType={{self.pollType}}
+          @postId={{self.postId}}
+          @vote={{self.vote}}
+          @voters={{self.voters}}
+          @votersCount={{self.votersCount}}
+          @fetchVoters={{self.fetchVoters}}
         />
       </template>
     );
 
-    let percentages = findAll(".option .percentage");
+    let percentages = queryAll(".option .percentage");
     assert.dom(percentages[0]).hasText("41%");
     assert.dom(percentages[1]).hasText("33%");
     assert.dom(percentages[2]).hasText("16%");
     assert.dom(percentages[3]).hasText("8%");
 
-    assert.dom(findAll(".option")[3].querySelectorAll("span")[1]).hasText("a");
+    assert.dom(queryAll(".option")[3].querySelectorAll("span")[1]).hasText("a");
     assert.dom(percentages[4]).hasText("8%");
-    assert.dom(findAll(".option")[4].querySelectorAll("span")[1]).hasText("b");
+    assert.dom(queryAll(".option")[4].querySelectorAll("span")[1]).hasText("b");
   });
 
   test("options in ascending order, showing absolute vote number", async function (assert) {
+    const self = this;
+
     this.setProperties({
       options: FIVE_OPTIONS,
       pollName: "Five Multi Option Poll",
@@ -187,27 +198,27 @@ module("Component | PollResultsStandard", function (hooks) {
     await render(
       <template>
         <PollResultsStandard
-          @fetchVoters={{this.fetchVoters}}
-          @options={{this.options}}
-          @pollName={{this.pollName}}
-          @pollType={{this.pollType}}
-          @postId={{this.postId}}
-          @showTally={{this.showTally}}
-          @vote={{this.vote}}
-          @voters={{this.voters}}
-          @votersCount={{this.votersCount}}
+          @options={{self.options}}
+          @pollName={{self.pollName}}
+          @pollType={{self.pollType}}
+          @postId={{self.postId}}
+          @vote={{self.vote}}
+          @voters={{self.voters}}
+          @votersCount={{self.votersCount}}
+          @fetchVoters={{self.fetchVoters}}
+          @showTally={{self.showTally}}
         />
       </template>
     );
 
-    let percentages = findAll(".option .absolute");
+    let percentages = queryAll(".option .absolute");
     assert.dom(percentages[0]).hasText(i18n("poll.votes", { count: 5 }));
     assert.dom(percentages[1]).hasText(i18n("poll.votes", { count: 4 }));
     assert.dom(percentages[2]).hasText(i18n("poll.votes", { count: 2 }));
     assert.dom(percentages[3]).hasText(i18n("poll.votes", { count: 1 }));
 
-    assert.dom(findAll(".option")[3].querySelectorAll("span")[1]).hasText("a");
+    assert.dom(queryAll(".option")[3].querySelectorAll("span")[1]).hasText("a");
     assert.dom(percentages[4]).hasText(i18n("poll.votes", { count: 1 }));
-    assert.dom(findAll(".option")[4].querySelectorAll("span")[1]).hasText("b");
+    assert.dom(queryAll(".option")[4].querySelectorAll("span")[1]).hasText("b");
   });
 });

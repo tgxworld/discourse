@@ -2,27 +2,29 @@ import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
-import ComboBox from "discourse/select-kit/components/combo-box";
-import DToggleSwitch from "discourse/ui-kit/d-toggle-switch";
+import DToggleSwitch from "discourse/components/d-toggle-switch";
+import { optionalRequire } from "discourse/lib/utilities";
+import ComboBox from "select-kit/components/combo-box";
 import Icon from "discourse/plugins/chat/discourse/components/chat/header/icon";
 import {
   HEADER_INDICATOR_PREFERENCE_ALL_NEW,
   HEADER_INDICATOR_PREFERENCE_DM_AND_MENTIONS,
   HEADER_INDICATOR_PREFERENCE_NEVER,
   HEADER_INDICATOR_PREFERENCE_ONLY_MENTIONS,
-} from "discourse/plugins/chat/discourse/lib/chat-constants";
-import StyleguideComponent from "discourse/plugins/styleguide/discourse/components/styleguide/component" with {
-  discourseImport: "optional",
-};
-import Controls from "discourse/plugins/styleguide/discourse/components/styleguide/controls" with {
-  discourseImport: "optional",
-};
-import Row from "discourse/plugins/styleguide/discourse/components/styleguide/controls/row" with {
-  discourseImport: "optional",
-};
-import StyleguideExample from "discourse/plugins/styleguide/discourse/components/styleguide-example" with {
-  discourseImport: "optional",
-};
+} from "discourse/plugins/chat/discourse/controllers/preferences-chat";
+
+const StyleguideComponent = optionalRequire(
+  "discourse/plugins/styleguide/discourse/components/styleguide/component"
+);
+const Controls = optionalRequire(
+  "discourse/plugins/styleguide/discourse/components/styleguide/controls"
+);
+const Row = optionalRequire(
+  "discourse/plugins/styleguide/discourse/components/styleguide/controls/row"
+);
+const StyleguideExample = optionalRequire(
+  "discourse/plugins/styleguide/discourse/components/styleguide-example"
+);
 
 export default class ChatStyleguideChatHeaderIcon extends Component {
   @tracked isActive = false;
@@ -75,11 +77,11 @@ export default class ChatStyleguideChatHeaderIcon extends Component {
           <ul class="d-header-icons">
             <li class="header-dropdown-toggle chat-header-icon">
               <Icon
-                @currentUserInDnD={{this.currentUserInDnD}}
-                @indicatorPreference={{this.indicatorPreference}}
                 @isActive={{this.isActive}}
+                @currentUserInDnD={{this.currentUserInDnD}}
                 @unreadCount={{this.unreadCount}}
                 @urgentCount={{this.urgentCount}}
+                @indicatorPreference={{this.indicatorPreference}}
               />
             </li>
           </ul>
@@ -103,24 +105,24 @@ export default class ChatStyleguideChatHeaderIcon extends Component {
       <Row @name="Unread count">
         <input
           type="number"
-          value={{this.unreadCount}}
           {{on "input" this.updateUnreadCount}}
+          value={{this.unreadCount}}
         />
       </Row>
       <Row @name="Urgent count">
         <input
           type="number"
-          value={{this.urgentCount}}
           {{on "input" this.updateUrgentCount}}
+          value={{this.urgentCount}}
         />
       </Row>
       <Row @name="Indicator preference">
         <ComboBox
-          @content={{this.indicatorPreferences}}
-          @nameProperty={{null}}
-          @onChange={{this.updateIndicatorPreference}}
           @value={{this.indicatorPreference}}
+          @content={{this.indicatorPreferences}}
+          @onChange={{this.updateIndicatorPreference}}
           @valueProperty={{null}}
+          @nameProperty={{null}}
         />
 
       </Row>

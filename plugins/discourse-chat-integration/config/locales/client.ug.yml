@@ -8,8 +8,6 @@ ug:
   js:
     chat_integration:
       settings: "تەڭشەك"
-      more_providers: "تېخىمۇ كۆپ"
-      channels_title: "قانال"
       all_categories: "(ھەممە سەھىپە)"
       all_tags: "(ھەممە بەلگە)"
       delete_channel: "ئۆچۈر"
@@ -121,8 +119,3 @@ ug:
           fields:
             channel_name:
               label: قانال ئىسمى
-    discourse_workflows:
-      send_chat_integration_message:
-        channel_id: "قانال"
-        configure: "سەپلە"
-        message: "ئۇچۇر"

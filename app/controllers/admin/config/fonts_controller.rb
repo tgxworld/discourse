@@ -19,7 +19,6 @@ class Admin::Config::FontsController < Admin::AdminController
       },
     ) do
       on_success { render json: success_json }
-      on_exceptions { |e| raise Discourse::InvalidParameters, e }
       on_failed_policy(:settings_are_visible) do |policy|
         raise Discourse::InvalidParameters, policy.reason
       end
@@ -27,6 +26,9 @@ class Admin::Config::FontsController < Admin::AdminController
         raise Discourse::InvalidParameters, policy.reason
       end
       on_failed_policy(:settings_are_configurable) do |policy|
+        raise Discourse::InvalidParameters, policy.reason
+      end
+      on_failed_policy(:values_are_valid) do |policy|
         raise Discourse::InvalidParameters, policy.reason
       end
     end

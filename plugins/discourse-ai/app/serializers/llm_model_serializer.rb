@@ -2,8 +2,8 @@
 
 class LlmModelSerializer < ApplicationSerializer
   # TODO: we probably should rename the table LlmModel to AiLlm
-  # it is consistent with AiAgent and AiTool
-  # LLM model is a bit confusing given that large language model model is a confusing
+  # it is consistent with AiPersona and AiTool
+  # LLM model is a bit confusing given that large langauge model model is a confusing
   # name
   root "ai_llm"
   attributes :id,
@@ -14,35 +14,22 @@ class LlmModelSerializer < ApplicationSerializer
              :max_output_tokens,
              :tokenizer,
              :api_key,
-             :ai_secret_id,
              :url,
+             :enabled_chat_bot,
              :provider_params,
              :vision_enabled,
-             :vision_mode,
-             :vision_llm_model_id,
              :input_cost,
              :output_cost,
              :cached_input_cost,
-             :cache_write_cost,
-             :used_by,
-             :seeded,
-             :allowed_attachment_types
+             :used_by
 
   has_one :user, serializer: BasicUserSerializer, embed: :object
   has_many :llm_quotas, serializer: LlmQuotaSerializer, embed: :objects
-  has_one :llm_credit_allocation,
-          serializer: LlmCreditAllocationSerializer,
-          embed: :object,
-          if: :include_credit_allocation?
-  has_many :llm_feature_credit_costs,
-           serializer: LlmFeatureCreditCostSerializer,
-           embed: :objects,
-           if: :include_credit_allocation?
 
   def used_by
     llm_usage =
       (
-        if scope && scope[:llm_usage]
+        if (scope && scope[:llm_usage])
           scope[:llm_usage]
         else
           DiscourseAi::Configuration::LlmEnumerator.global_usage
@@ -62,13 +49,5 @@ class LlmModelSerializer < ApplicationSerializer
 
   def provider
     object.seeded? ? "CDCK" : object.provider
-  end
-
-  def include_credit_allocation?
-    object.credit_system_enabled?
-  end
-
-  def seeded
-    object.seeded?
   end
 end

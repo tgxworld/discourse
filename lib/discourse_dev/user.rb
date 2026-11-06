@@ -69,7 +69,9 @@ module DiscourseDev
       upload = UploadCreator.new(tempfile, filename, type: "avatar").create_for(user.id)
 
       if upload.present? && upload.persisted?
-        user.pick_avatar!(upload.id, type: :custom)
+        user.create_user_avatar
+        user.user_avatar.update(custom_upload_id: upload.id)
+        user.update(uploaded_avatar_id: upload.id)
       else
         STDERR.puts "Failed to upload avatar for user #{user.username}: #{avatar_path}"
         STDERR.puts upload.errors.inspect if upload

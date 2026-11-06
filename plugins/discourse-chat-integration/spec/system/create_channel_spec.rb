@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 require_relative "../dummy_provider"
 
-RSpec.describe "Create channel" do
+RSpec.describe "Create channel", type: :system do
   fab!(:admin)
 
   include_context "with dummy provider"
-  let(:manager) { DiscourseChatIntegration::Manager }
+  let(:manager) { ::DiscourseChatIntegration::Manager }
   let(:chan1) { DiscourseChatIntegration::Channel.create!(provider: "dummy") }
   let(:category) { Fabricate(:category) }
   let(:topic) { Fabricate(:topic, category_id: category.id) }
@@ -14,28 +14,22 @@ RSpec.describe "Create channel" do
   before do
     SiteSetting.chat_integration_enabled = true
     SiteSetting.chat_integration_discord_enabled = true
-    SiteSetting.dummy_provider_enabled = true
     sign_in(admin)
   end
 
   it "creates and displays a new channel" do
-    visit("/admin/plugins/discourse-chat-integration/providers/discord")
+    visit("/admin/plugins/chat-integration/discord")
 
-    expect(page).to have_css("#site-logo")
     expect(page).to have_no_css(".channel-details")
 
-    find("#create-channel").click
+    click_button(I18n.t("js.chat_integration.create_channel"))
 
-    expect(page).to have_css(".inline-channel-form")
-
-    find(".form-kit__field[data-name='name'] input").fill_in(with: "bloop")
-    find(".form-kit__field[data-name='webhook_url'] input").fill_in(
-      with: "https://discord.com/api/webhooks/bloop",
-    )
-    find(".inline-channel-form .btn-primary").click
+    find("input[name='param-name']").fill_in(with: "bloop")
+    find("input[name='param-webhook_url']").fill_in(with: "https://discord.com/api/webhooks/bloop")
+    click_button(I18n.t("js.chat_integration.edit_channel_modal.save"))
 
     expect(page).to have_css(".channel-details")
-    expect(find(".channel-details")).to have_content("bloop")
+    expect(find(".channel-info")).to have_content("bloop")
   end
 
   it "shows the error in the channel modal" do
@@ -50,9 +44,9 @@ RSpec.describe "Create channel" do
     )
     manager.trigger_notifications(first_post.id)
 
-    visit("/admin/plugins/discourse-chat-integration/providers/dummy")
+    visit("/admin/plugins/chat-integration/dummy")
 
-    expect(find(".chat-integration-error-banner")).to have_content(
+    expect(find(".error-message")).to have_content(
       I18n.t("js.chat_integration.channels_with_errors"),
     )
     find(".channel-title").find("button").click

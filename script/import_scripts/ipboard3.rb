@@ -2,7 +2,7 @@
 
 require "mysql2"
 require "reverse_markdown"
-require_relative "base"
+require File.expand_path(File.dirname(__FILE__) + "/base.rb")
 
 class ImportScripts::IPBoard3 < ImportScripts::Base
   BATCH_SIZE = 5000

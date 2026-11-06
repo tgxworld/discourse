@@ -3,51 +3,31 @@
 describe TopicViewStatsController do
   fab!(:topic)
 
-  it "returns an error on login-required sites" do
+  it "will error if accessed on require login sites" do
     SiteSetting.login_required = true
     get "/t/#{topic.id}/view-stats.json"
     expect(response.status).to eq(403)
   end
 
-  it "returns the same not found response for inaccessible and nonexistent topics" do
-    SiteSetting.detailed_404 = false
+  it "will not allow access to private topics" do
     topic.category.update!(read_restricted: true)
 
     get "/t/#{topic.id}/view-stats.json"
-
-    expect(response.status).to eq(404)
-    inaccessible_topic_response = response.parsed_body
-
-    get "/t/#{topic.id + 1_000_000}/view-stats.json"
-
-    expect(response.status).to eq(404)
-    expect(response.parsed_body).to eq(inaccessible_topic_response)
-  end
-
-  it "returns an access error for private topics when detailed 404 errors are enabled" do
-    SiteSetting.detailed_404 = true
-    topic.category.update!(read_restricted: true)
-
-    get "/t/#{topic.id}/view-stats.json"
-
     expect(response.status).to eq(403)
-    expect(response.parsed_body).to include(
-      "errors" => ["You are not permitted to view the requested resource."],
-    )
   end
 
-  it "returns errors for invalid parameters" do
+  it "will raise correct errors if any param is invalid" do
     get "/t/999999999999999999999999999999990000009/view-stats.json"
     expect(response.status).to eq(404)
   end
 
-  it "returns an error for invalid date parameters" do
+  it "will return an error if from and to are not valid dates" do
     get "/t/#{topic.id}/view-stats.json?from=abc&to=xxx"
 
     expect(response.status).to eq(422)
   end
 
-  it "returns view statistics for public topics" do
+  it "will return view stats for public topics" do
     freeze_time "2021-01-01 12:00"
 
     TopicViewStat.create!(

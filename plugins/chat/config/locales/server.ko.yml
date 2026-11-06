@@ -8,22 +8,13 @@ ko:
   site_settings:
     chat_enabled: "채팅 활성화."
   chat:
-    design_wizard_homepage_name: "채팅"
     deleted_chat_username: 삭제되었습니다
-    crawler:
-      nav_title: "채팅"
-      members_count:
-        other: "회원 %{count}명"
-      thread_replies:
-        other: "%{count} 댓글"
     errors:
       delete_channel_failed: "채널 삭제에 실패했습니다. 다시 시도하세요."
       not_accepting_dms: "죄송합니다. %{username} 님이 당분간 메시지를 받지 않습니다."
       user_cannot_send_direct_messages: "죄송합니다. 다이렉트 메시지를 보낼 수 없습니다."
     reviewables:
       actions:
-        no_action_message:
-          title: "조치 없음"
         agree:
           title: "동의..."
         agree_and_keep_message:
@@ -38,6 +29,8 @@ ko:
           title: "메시지 복원"
         agree_and_delete:
           title: "메시지 삭제"
+        disagree:
+          title: "동의하지 않음"
     channel:
       dm_title:
         single_user: "%{username}"
@@ -65,18 +58,10 @@ ko:
         other: "회원 %{count}명"
     transcript:
       default_thread_title: "스레드"
-  discourse_push_notifications:
-    actions:
-      chat_reply:
-        title: 댓글쓰기
   discourse_automation:
     scriptables:
       send_chat_message:
         title: 채팅 메시지 보내기
-  discourse_workflows:
-    chat_approval:
-      default_approve_label: "승인"
-      default_deny_label: "거부"
   reviewable_score_types:
     needs_review:
       title: "검토 필요"

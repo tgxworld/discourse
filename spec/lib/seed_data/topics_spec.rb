@@ -5,12 +5,13 @@ require "seed_data/topics"
 RSpec.describe SeedData::Topics do
   subject(:seeder) { SeedData::Topics.with_default_locale }
 
-  fab!(:general_category) { Fabricate(:category, name: "General") }
-
-  before { SiteSetting.general_category_id = general_category.id }
+  before do
+    general_category = Fabricate(:category, name: "General")
+    SiteSetting.general_category_id = general_category.id
+  end
 
   def create_topic(name = "welcome_topic_id")
-    seeder.create(site_setting_names: [name])
+    seeder.create(site_setting_names: [name], include_legal_topics: true)
   end
 
   describe "#create" do
@@ -46,7 +47,7 @@ RSpec.describe SeedData::Topics do
       staff_category = Fabricate(:category, name: "Staff")
       SiteSetting.staff_category_id = staff_category.id
 
-      expect { create_topic("guidelines_topic_id") }.to change { Topic.count }.by(1).and change {
+      expect { create_topic("privacy_topic_id") }.to change { Topic.count }.by(1).and change {
               Post.count
             }.by(2)
 
@@ -76,9 +77,7 @@ RSpec.describe SeedData::Topics do
       expect { create_topic }.to_not change { Topic.count }
     end
 
-    it "does not create a legal topic when company_name is set" do
-      SiteSetting.company_name = "Company Name"
-
+    it "does not create a legal topic if company_name is not set" do
       seeder.create(site_setting_names: ["tos_topic_id"])
 
       expect(SiteSetting.tos_topic_id).to eq(-1)
@@ -95,7 +94,7 @@ RSpec.describe SeedData::Topics do
     end
 
     it "doesn't create a welcome topic when the 'General' category is missing" do
-      SiteSetting.general_category_id = ""
+      SiteSetting.general_category_id = nil
 
       create_topic("welcome_topic_id")
 
@@ -111,6 +110,13 @@ RSpec.describe SeedData::Topics do
       post = Post.find_by(topic_id: SiteSetting.welcome_topic_id, post_number: 1)
       expect(post.raw).to include("> ## My Awesome Community")
       expect(post.raw).to include("> The best community")
+    end
+
+    it "creates a legal topic if company_name is set" do
+      SiteSetting.company_name = "Company Name"
+      seeder.create(site_setting_names: ["tos_topic_id"])
+
+      expect(SiteSetting.tos_topic_id).to_not eq(-1)
     end
 
     it "creates FAQ topic" do
@@ -157,15 +163,17 @@ RSpec.describe SeedData::Topics do
     end
 
     it "updates an existing first reply when `static_first_reply` is true" do
-      create_topic("guidelines_topic_id")
+      create_topic("privacy_topic_id")
 
       post = Post.last
       post.revise(Discourse.system_user, raw: "New text of first reply.")
 
-      update_topic("guidelines_topic_id")
+      update_topic("privacy_topic_id")
       post.reload
 
-      expect(post.raw).to eq(I18n.t("static_topic_first_reply", page_name: post.topic.title).rstrip)
+      expect(post.raw).to eq(
+        I18n.t("static_topic_first_reply", page_name: I18n.t("privacy_topic.title")).rstrip,
+      )
     end
 
     it "does not update a change topic and `skip_changed` is true" do
@@ -183,7 +191,7 @@ RSpec.describe SeedData::Topics do
 
     it "updates 'Welcome Topic' even when `general_category_id` doesn't exist" do
       create_topic("welcome_topic_id")
-      SiteSetting.general_category_id = ""
+      SiteSetting.general_category_id = nil
 
       post = Post.last
       post.revise(Discourse.system_user, raw: "New text of first post.")
@@ -234,11 +242,7 @@ RSpec.describe SeedData::Topics do
       Post.last.revise(Fabricate(:admin), title: "Changed Topic Title", raw: "Hello world")
 
       expected_options = [
-        {
-          id: "guidelines_topic_id",
-          name: I18n.t("guidelines_topic.guidelines_title"),
-          selected: true,
-        },
+        { id: "guidelines_topic_id", name: I18n.t("guidelines_topic.title"), selected: true },
         { id: "welcome_topic_id", name: "Changed Topic Title", selected: false },
       ]
 
@@ -247,7 +251,7 @@ RSpec.describe SeedData::Topics do
 
     it "returns 'Welcome Topic' even when `general_category_id` doesn't exist" do
       create_topic("welcome_topic_id")
-      SiteSetting.general_category_id = ""
+      SiteSetting.general_category_id = nil
 
       expected_options = [
         {

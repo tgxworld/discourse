@@ -8,45 +8,27 @@
   .nav {
     margin-block: 0;
 
-    @include viewport.until(sm) {
-      margin-block: 0 7px;
-      border-bottom: 1px solid var(--content-border-color);
-    }
-
     li {
-      @include viewport.until(sm) {
-        position: relative;
-        bottom: -1px; // compensate for the border-bottom
-      }
-
       .btn {
-        color: var(--d-nav-color);
-        background-color: var(--d-nav-bg-color);
+        color: var(--primary);
+        background-color: transparent;
         padding: var(--d-topic-list-header-data-padding-y) 0.8em;
         border: none;
         border-radius: 0;
+        font-size: var(--d-topic-list-data-font-size);
         line-height: var(--line-height-medium);
 
-        .d-icon {
+        .discourse-no-touch & {
+          &:hover {
+            background: var(--d-hover);
+          }
+        }
+
+        .d-icon,
+        &:hover .d-icon,
+        &:active .d-icon {
           color: var(--primary-high);
-        }
-
-        &:focus-visible,
-        &:hover {
-          color: var(--d-nav-color--hover);
-          background: var(--d-nav-bg-color--hover);
-
-          .d-icon {
-            color: currentcolor;
-          }
-        }
-
-        &.active {
-          color: var(--d-nav-color--active);
-
-          .d-icon {
-            color: currentcolor;
-          }
+          opacity: 1;
         }
       }
     }
@@ -61,31 +43,22 @@
   }
 
   .more-topics__list {
+    .topic-list-header::after {
+      content: "";
+      display: block;
+      height: 12px;
+    }
+
     .topic-list-body {
-      border-top-width: 1px;
-    }
+      border-top: none;
 
-    .topic-list-header:has(.nav-pills) {
-      th.topic-list-data {
-        padding-bottom: 0;
-
-        &:first-of-type {
-          padding-left: 0;
-        }
-      }
-    }
-
-    @include viewport.until(sm) {
-      .topic-list-header.--has-tabs {
-        display: flex;
-
-        .nav-pills {
-          margin: 0;
-          border: none;
+      .topic-list-item {
+        &:first-child td {
+          padding-top: 0;
         }
 
-        th:not(.default) {
-          display: none;
+        &:last-of-type {
+          border-bottom: none;
         }
       }
     }

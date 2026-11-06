@@ -1,28 +1,32 @@
-import { getOwner } from "@ember/owner";
-import { trustHTML } from "@ember/template";
+import { getOwner } from "@ember/application";
+import { action } from "@ember/object";
+import { htmlSafe } from "@ember/template";
+import { isEmpty } from "@ember/utils";
+import { hbs } from "ember-cli-htmlbars";
+import { h } from "virtual-dom";
+import { renderAvatar } from "discourse/helpers/user-avatar";
+import discourseComputed from "discourse/lib/decorators";
+import { withSilencedDeprecations } from "discourse/lib/deprecated";
 import getURL from "discourse/lib/get-url";
-import { iconHTML } from "discourse/lib/icon-library";
+import { iconHTML, iconNode } from "discourse/lib/icon-library";
 import { withPluginApi } from "discourse/lib/plugin-api";
 import { registerTopicFooterDropdown } from "discourse/lib/register-topic-footer-dropdown";
+import { applyValueTransformer } from "discourse/lib/transformer";
 import { escapeExpression } from "discourse/lib/utilities";
-import { renderAvatar } from "discourse/ui-kit/helpers/d-user-avatar";
+import RawHtml from "discourse/widgets/raw-html";
+import RenderGlimmer from "discourse/widgets/render-glimmer";
 import { i18n } from "discourse-i18n";
-import AssignButton from "../components/assign-button.gjs";
-import BulkActionsAssignUser from "../components/bulk-actions/bulk-assign-user.gjs";
-import EditTopicAssignments from "../components/modal/edit-topic-assignments.gjs";
-import PostAssignmentsDisplay from "../components/post-assignments-display.gjs";
-import TopicLevelAssignMenu from "../components/topic-level-assign-menu.js";
-import {
-  assignedToGroupPath,
-  assignedToPostPath,
-  assignedToUserPath,
-} from "../lib/url.js";
-import { extendTopicModel } from "../models/topic.js";
+import AssignButton from "../components/assign-button";
+import BulkActionsAssignUser from "../components/bulk-actions/bulk-assign-user";
+import EditTopicAssignments from "../components/modal/edit-topic-assignments";
+import PostAssignmentsDisplay from "../components/post-assignments-display";
+import TopicLevelAssignMenu from "../components/topic-level-assign-menu";
+import { assignedToGroupPath, assignedToUserPath } from "../lib/url";
+import { extendTopicModel } from "../models/topic";
 
 const DEPENDENT_KEYS = [
   "topic.assigned_to_user",
   "topic.assigned_to_group",
-  "topic.can_assign",
   "currentUser.can_assign",
   "topic.assigned_to_user.username",
   "topic.assigned_to_user.name",
@@ -37,10 +41,6 @@ function defaultTitle(topic) {
   } else {
     return i18n("discourse_assign.assign.help");
   }
-}
-
-function canAssignTopic(context) {
-  return context.topic?.can_assign ?? context.currentUser?.can_assign;
 }
 
 function registerTopicFooterButtons(api) {
@@ -66,7 +66,7 @@ function registerTopicFooterButtons(api) {
       return i18n("discourse_assign.assign.title");
     },
     async action() {
-      if (!canAssignTopic(this)) {
+      if (!this.currentUser?.can_assign) {
         return;
       }
 
@@ -78,11 +78,21 @@ function registerTopicFooterButtons(api) {
         this.topic.assigned_to_group = null;
 
         await taskActions.unassign(this.topic.id, "Topic");
+
+        // TODO (glimmer-post-stream) the Glimmer Post Stream does not listen to this event
+        this.appEvents.trigger("post-stream:refresh", {
+          id: this.topic.postStream.firstPostId,
+        });
       } else {
         await modal.show(EditTopicAssignments, {
           model: {
             topic: this.topic,
           },
+          onSuccess: () =>
+            // TODO (glimmer-post-stream) the Glimmer Post Stream does not listen to this event
+            this.appEvents.trigger("post-stream:refresh", {
+              id: this.topic.postStream.firstPostId,
+            }),
         });
       }
     },
@@ -93,7 +103,7 @@ function registerTopicFooterButtons(api) {
     dependentKeys: DEPENDENT_KEYS,
     displayed() {
       return (
-        canAssignTopic(this) &&
+        this.currentUser?.can_assign &&
         !this.topic.isAssigned() &&
         !this.topic.hasAssignedPosts()
       );
@@ -111,31 +121,31 @@ function registerTopicFooterButtons(api) {
     translatedLabel() {
       const user = this.topic.assigned_to_user;
       const group = this.topic.assigned_to_group;
-      const label = i18n("discourse_assign.assigned_to");
+      const label = i18n("discourse_assign.assigned_to_w_ellipsis");
 
       if (user) {
-        return trustHTML(
-          `<span class="unassign-label"><span class="text">${label}&nbsp;</span><span class="username">${escapeExpression(
+        return htmlSafe(
+          `<span class="unassign-label"><span class="text">${label}</span><span class="username">${
             user.username
-          )}</span></span>&nbsp;${renderAvatar(user, {
+          }</span></span>${renderAvatar(user, {
             imageSize: "small",
             ignoreTitle: true,
           })}`
         );
       } else if (group) {
-        return trustHTML(
-          `<span class="unassign-label">${label}</span> @${escapeExpression(group.name)}`
+        return htmlSafe(
+          `<span class="unassign-label">${label}</span> @${group.name}`
         );
       }
     },
     dropdown() {
-      return canAssignTopic(this) && this.topic.isAssigned();
+      return this.currentUser?.can_assign && this.topic.isAssigned();
     },
     classNames: ["assign"],
     dependentKeys: DEPENDENT_KEYS,
     displayed() {
       // only display the button in the mobile view
-      return canAssignTopic(this) && this.site.mobileView;
+      return this.currentUser?.can_assign && this.site.mobileView;
     },
   });
 
@@ -153,12 +163,12 @@ function registerTopicFooterButtons(api) {
     translatedLabel() {
       const label = i18n("discourse_assign.unassign.title");
 
-      return trustHTML(
+      return htmlSafe(
         `<span class="unassign-label"><span class="text">${label}</span></span>`
       );
     },
     action() {
-      if (!canAssignTopic(this)) {
+      if (!this.currentUser?.can_assign) {
         return;
       }
 
@@ -166,17 +176,24 @@ function registerTopicFooterButtons(api) {
 
       this.topic.assigned_to_user = null;
       this.topic.assigned_to_group = null;
-      taskActions.unassign(this.topic.id);
+      taskActions.unassign(this.topic.id).then(() => {
+        // TODO (glimmer-post-stream) the Glimmer Post Stream does not listen to this event
+        this.appEvents.trigger("post-stream:refresh", {
+          id: this.topic.postStream.firstPostId,
+        });
+      });
     },
     dropdown() {
-      return canAssignTopic(this) && this.topic.isAssigned();
+      return this.currentUser?.can_assign && this.topic.isAssigned();
     },
     classNames: ["assign"],
     dependentKeys: DEPENDENT_KEYS,
     displayed() {
       // only display the button in the mobile view
       return (
-        canAssignTopic(this) && this.site.mobileView && this.topic.isAssigned()
+        this.currentUser?.can_assign &&
+        this.site.mobileView &&
+        this.topic.isAssigned()
       );
     },
   });
@@ -195,12 +212,12 @@ function registerTopicFooterButtons(api) {
     translatedLabel() {
       const label = i18n("discourse_assign.reassign.to_self");
 
-      return trustHTML(
+      return htmlSafe(
         `<span class="unassign-label"><span class="text">${label}</span></span>`
       );
     },
     async action() {
-      if (!canAssignTopic(this)) {
+      if (!this.currentUser?.can_assign) {
         return;
       }
 
@@ -210,9 +227,14 @@ function registerTopicFooterButtons(api) {
       this.topic.assigned_to_group = null;
 
       await taskActions.reassignUserToTopic(this.currentUser, this.topic);
+
+      // TODO (glimmer-post-stream) the Glimmer Post Stream does not listen to this event
+      this.appEvents.trigger("post-stream:refresh", {
+        id: this.topic.postStream.firstPostId,
+      });
     },
     dropdown() {
-      return canAssignTopic(this) && this.topic.isAssigned();
+      return this.currentUser?.can_assign && this.topic.isAssigned();
     },
     classNames: ["assign"],
     dependentKeys: DEPENDENT_KEYS,
@@ -220,7 +242,7 @@ function registerTopicFooterButtons(api) {
       return (
         // only display the button in the mobile view
         this.site.mobileView &&
-        canAssignTopic(this) &&
+        this.currentUser?.can_assign &&
         this.topic.isAssigned() &&
         this.topic.assigned_to_user?.username !== this.currentUser.username
       );
@@ -241,12 +263,12 @@ function registerTopicFooterButtons(api) {
     translatedLabel() {
       const label = i18n("discourse_assign.reassign.title_w_ellipsis");
 
-      return trustHTML(
+      return htmlSafe(
         `<span class="unassign-label"><span class="text">${label}</span></span>`
       );
     },
     async action() {
-      if (!canAssignTopic(this)) {
+      if (!this.currentUser?.can_assign) {
         return;
       }
 
@@ -255,16 +277,21 @@ function registerTopicFooterButtons(api) {
       await taskActions.showAssignModal(this.topic, {
         targetType: "Topic",
         isAssigned: this.topic.isAssigned(),
+        onSuccess: () =>
+          // TODO (glimmer-post-stream) the Glimmer Post Stream does not listen to this event
+          this.appEvents.trigger("post-stream:refresh", {
+            id: this.topic.postStream.firstPostId,
+          }),
       });
     },
     dropdown() {
-      return canAssignTopic(this) && this.topic.isAssigned();
+      return this.currentUser?.can_assign && this.topic.isAssigned();
     },
     classNames: ["assign"],
     dependentKeys: DEPENDENT_KEYS,
     displayed() {
       // only display the button in the mobile view
-      return canAssignTopic(this) && this.site.mobileView;
+      return this.currentUser?.can_assign && this.site.mobileView;
     },
   });
 }
@@ -272,9 +299,8 @@ function registerTopicFooterButtons(api) {
 function initialize(api) {
   const siteSettings = api.container.lookup("service:site-settings");
   const currentUser = api.getCurrentUser();
-  const canAssignGlobally = currentUser?.can_assign_globally;
 
-  if (siteSettings.assigns_public || canAssignGlobally) {
+  if (siteSettings.assigns_public || currentUser?.can_assign) {
     api.addNavigationBarItem({
       name: "unassigned",
       customFilter: (category) => {
@@ -297,14 +323,14 @@ function initialize(api) {
       },
       before: "top",
     });
-  }
 
-  if (currentUser?.can_assign) {
-    customizePostMenu(api);
+    if (api.getCurrentUser()?.can_assign) {
+      customizePostMenu(api);
+    }
   }
 
   api.addAdvancedSearchOptions(
-    canAssignGlobally
+    api.getCurrentUser()?.can_assign
       ? {
           inOptionsForUsers: [
             {
@@ -320,12 +346,21 @@ function initialize(api) {
       : {}
   );
 
-  api.addModelGetter("bookmark", "assignedToUserPath", function () {
-    return assignedToUserPath(this.assigned_to_user);
-  });
-  api.addModelGetter("bookmark", "assignedToGroupPath", function () {
-    return assignedToGroupPath(this.assigned_to_group);
-  });
+  api.modifyClass(
+    "model:bookmark",
+    (Superclass) =>
+      class extends Superclass {
+        @discourseComputed("assigned_to_user")
+        assignedToUserPath(assignedToUser) {
+          return assignedToUserPath(assignedToUser);
+        }
+
+        @discourseComputed("assigned_to_group")
+        assignedToGroupPath(assignedToGroup) {
+          return assignedToGroupPath(assignedToGroup);
+        }
+      }
+  );
 
   api.modifyClass(
     "component:topic-notifications-button",
@@ -391,11 +426,9 @@ function initialize(api) {
     const createTagHtml = ({ assignee, note }) => {
       let assignedPath;
       if (assignee.assignedToPostId) {
-        assignedPath = assignedToPostPath(assignee.assignedToPostId);
-      } else if (assignee.username) {
-        assignedPath = assignedToUserPath(assignee);
+        assignedPath = `/p/${assignee.assignedToPostId}`;
       } else {
-        assignedPath = assignedToGroupPath(assignee);
+        assignedPath = `/t/${topic.id}`;
       }
 
       const icon = iconHTML(assignee.username ? "user-plus" : "group-plus");
@@ -407,17 +440,49 @@ function initialize(api) {
 
       const tagName = params.tagName || "a";
       const href =
-        tagName === "a" ? `href="${assignedPath}" data-auto-route="true"` : "";
+        tagName === "a"
+          ? `href="${getURL(assignedPath)}" data-auto-route="true"`
+          : "";
 
       return `<${tagName} class="assigned-to discourse-tag simple" ${href}>${icon}<span title="${escapeExpression(
         note
-      )}">${escapeExpression(name)}</span></${tagName}>`;
+      )}">${name}</span></${tagName}>`;
     };
 
-    return assignedTo.map((assignment) => createTagHtml(assignment));
+    // is there's one assignment just return the tag
+    if (assignedTo.length === 1) {
+      return createTagHtml(assignedTo[0]);
+    }
+
+    // join multiple assignments with a separator
+    let result = "";
+    assignedTo.forEach((assignment, index) => {
+      result += createTagHtml(assignment);
+
+      // add separator if not the last tag
+      if (index < assignedTo.length - 1) {
+        const separator = applyValueTransformer("tag-separator", ",", {
+          topic,
+          index,
+        });
+        result += `<span class="discourse-tags__tag-separator">${separator}</span>`;
+      }
+    });
+
+    return result;
   });
 
-  api.addModelSaveProperty("group", "assignable_level");
+  api.modifyClass(
+    "model:group",
+    (Superclass) =>
+      class extends Superclass {
+        asJSON() {
+          return Object.assign({}, super.asJSON(...arguments), {
+            assignable_level: this.assignable_level,
+          });
+        }
+      }
+  );
 
   api.modifyClass(
     "controller:topic",
@@ -453,14 +518,27 @@ function initialize(api) {
               }
 
               if (data.post_id) {
-                topic.indirectly_assigned_to ||= {};
                 if (data.type === "assigned") {
-                  topic.indirectly_assigned_to[data.post_id] ||= {};
                   topic.indirectly_assigned_to[data.post_id].assigned_to =
                     data.assigned_to;
                 } else if (data.type === "unassigned") {
                   delete topic.indirectly_assigned_to[data.post_id];
                 }
+
+                // TODO (glimmer-post-stream) the Glimmer Post Stream does not listen to this event
+                this.appEvents.trigger("post-stream:refresh", {
+                  id: topic.postStream.posts[0].id,
+                });
+                // TODO (glimmer-post-stream) the Glimmer Post Stream does not listen to this event
+                this.appEvents.trigger("post-stream:refresh", {
+                  id: data.post_id,
+                });
+              }
+              if (topic.closed) {
+                // TODO (glimmer-post-stream) the Glimmer Post Stream does not listen to this event
+                this.appEvents.trigger("post-stream:refresh", {
+                  id: topic.postStream.posts[0].id,
+                });
               }
             }
             // force the components tracking `topic.indirectly_assigned_to` to update
@@ -468,6 +546,10 @@ function initialize(api) {
             topic.indirectly_assigned_to = topic.indirectly_assigned_to;
 
             this.appEvents.trigger("header:update-topic", topic);
+            // TODO (glimmer-post-stream) the Glimmer Post Stream does not listen to this event
+            this.appEvents.trigger("post-stream:refresh", {
+              id: topic.postStream.posts[0].id,
+            });
           });
         }
 
@@ -492,7 +574,17 @@ function initialize(api) {
     "group-plus"
   );
 
-  api.addSaveableCustomFields("notifications");
+  api.modifyClass(
+    "controller:preferences/notifications",
+    (Superclass) =>
+      class extends Superclass {
+        @action
+        save() {
+          this.saveAttrNames.push("custom_fields");
+          super.save(...arguments);
+        }
+      }
+  );
 
   api.addKeyboardShortcut("g a", "", { path: "/my/activity/assigned" });
 }
@@ -504,16 +596,29 @@ function customizePost(api, siteSettings) {
     "assigned_to_user",
     "assigned_to_user_id",
     "assignment_note",
-    "assignment_status",
-    "can_assign"
+    "assignment_status"
   );
 
-  api.registerValueTransformer("post-can-edit", ({ value, context }) =>
-    isAssignSmallAction(context.post.action_code) ? true : value
-  );
+  api.modifyClass(
+    "model:post",
+    (Superclass) =>
+      class extends Superclass {
+        get can_edit() {
+          return isAssignSmallAction(this.action_code) ? true : super.can_edit;
+        }
 
-  api.registerValueTransformer("post-is-small-action", ({ value, context }) =>
-    isAssignSmallAction(context.post.action_code) ? true : value
+        // overriding tracked properties requires overriding both the getter and the setter.
+        // otherwise the superclass will throw an error when the application sets the field value
+        set can_edit(value) {
+          super.can_edit = value;
+        }
+
+        get isSmallAction() {
+          return isAssignSmallAction(this.action_code)
+            ? true
+            : super.isSmallAction;
+        }
+      }
   );
 
   api.renderAfterWrapperOutlet(
@@ -522,7 +627,8 @@ function customizePost(api, siteSettings) {
   );
 
   api.addPostSmallActionClassesCallback((post) => {
-    const actionCode = post.action_code;
+    // TODO (glimmer-post-stream): only check for .action_code once the widget code is removed
+    const actionCode = post.action_code || post.actionCode;
 
     if (actionCode.includes("assigned") && !siteSettings.assigns_public) {
       return ["private-assign"];
@@ -539,6 +645,170 @@ function customizePost(api, siteSettings) {
   api.addPostSmallActionIcon("unassigned_group_from_post", "group-times");
   api.addPostSmallActionIcon("reassigned", "user-plus");
   api.addPostSmallActionIcon("reassigned_group", "group-plus");
+
+  withSilencedDeprecations("discourse.post-stream-widget-overrides", () =>
+    customizeWidgetPost(api)
+  );
+}
+
+function customizeWidgetPost(api) {
+  api.decorateWidget("post-contents:after-cooked", (dec) => {
+    const postModel = dec.getModel();
+    if (postModel) {
+      let assignedToUser, assignedToGroup, postAssignment, href;
+      if (dec.attrs.post_number === 1) {
+        return dec.widget.attach("assigned-to-first-post", {
+          topic: postModel.topic,
+        });
+      } else {
+        postAssignment =
+          postModel.topic.indirectly_assigned_to?.[postModel.id]?.assigned_to;
+        if (postAssignment?.username) {
+          assignedToUser = postAssignment;
+        }
+        if (postAssignment?.name) {
+          assignedToGroup = postAssignment;
+        }
+      }
+      if (assignedToUser || assignedToGroup) {
+        href = assignedToUser
+          ? assignedToUserPath(assignedToUser)
+          : assignedToGroupPath(assignedToGroup);
+      }
+
+      if (href) {
+        return dec.widget.attach("assigned-to-post", {
+          assignedToUser,
+          assignedToGroup,
+          href,
+          post: postModel,
+        });
+      }
+    }
+  });
+
+  api.createWidget("assigned-to-post", {
+    html(attrs) {
+      return new RenderGlimmer(
+        this,
+        "p.assigned-to",
+        hbs`
+          <AssignedToPost @assignedToUser={{@data.assignedToUser}} @assignedToGroup={{@data.assignedToGroup}}
+                          @href={{@data.href}} @post={{@data.post}} />`,
+        {
+          assignedToUser: attrs.post.assigned_to_user,
+          assignedToGroup: attrs.post.assigned_to_group,
+          href: attrs.href,
+          post: attrs.post,
+        }
+      );
+    },
+  });
+
+  api.createWidget("assigned-to-first-post", {
+    html(attrs) {
+      const topic = attrs.topic;
+      const [assignedToUser, assignedToGroup, indirectlyAssignedTo] = [
+        topic.assigned_to_user,
+        topic.assigned_to_group,
+        topic.indirectly_assigned_to,
+      ];
+      const assigneeElements = [];
+
+      const assignedHtml = (username, path, type) => {
+        return `<span class="assigned-to--${type}">${htmlSafe(
+          i18n("discourse_assign.assigned_topic_to", {
+            username,
+            path,
+          })
+        )}</span>`;
+      };
+
+      let displayedName = "";
+      if (assignedToUser) {
+        displayedName = this.siteSettings.prioritize_full_name_in_ux
+          ? assignedToUser.name || assignedToUser.username
+          : assignedToUser.username;
+
+        assigneeElements.push(
+          h(
+            "span.assignee",
+            new RawHtml({
+              html: assignedHtml(
+                displayedName,
+                assignedToUserPath(assignedToUser),
+                "user"
+              ),
+            })
+          )
+        );
+      }
+
+      if (assignedToGroup) {
+        assigneeElements.push(
+          h(
+            "span.assignee",
+            new RawHtml({
+              html: assignedHtml(
+                assignedToGroup.name,
+                assignedToGroupPath(assignedToGroup),
+                "group"
+              ),
+            })
+          )
+        );
+      }
+
+      if (indirectlyAssignedTo) {
+        Object.keys(indirectlyAssignedTo).map((postId) => {
+          const assignee = indirectlyAssignedTo[postId].assigned_to;
+          const postNumber = indirectlyAssignedTo[postId].post_number;
+
+          displayedName =
+            !this.siteSettings.prioritize_username_in_ux || !assignee.username
+              ? assignee.name || assignee.username
+              : assignee.username;
+
+          assigneeElements.push(
+            h("span.assignee", [
+              h(
+                "a",
+                {
+                  attributes: {
+                    class: "assigned-indirectly",
+                    href: `${topic.url}/${postNumber}`,
+                  },
+                },
+                i18n("discourse_assign.assign_post_to_multiple", {
+                  post_number: postNumber,
+                  username: displayedName,
+                })
+              ),
+            ])
+          );
+        });
+      }
+
+      if (!isEmpty(assigneeElements)) {
+        return h("p.assigned-to", [
+          assignedToUser ? iconNode("user-plus") : iconNode("group-plus"),
+          assignedToUser || assignedToGroup
+            ? ""
+            : h("span.assign-text", i18n("discourse_assign.assigned")),
+          assigneeElements,
+        ]);
+      }
+    },
+  });
+
+  // `addPostTransformCallback` doesn't have a direct translation in the new Glimmer API.
+  // We need to use a modify class in the post model instead
+  api.addPostTransformCallback((transformed) => {
+    if (isAssignSmallAction(transformed.actionCode)) {
+      transformed.isSmallAction = true;
+      transformed.canEdit = true;
+    }
+  });
 }
 
 function isAssignSmallAction(actionCode) {
@@ -600,16 +870,8 @@ export default {
     }
 
     withPluginApi((api) => {
-      api.addUserNavSidebarLink("activity", {
-        name: "activity-assigned",
-        route: "userActivity.assigned",
-        label: "discourse_assign.assigned",
-        icon: "user-plus",
-        displayed: ({ currentUser }) => currentUser?.can_assign_globally,
-      });
-
       const currentUser = container.lookup("service:current-user");
-      if (currentUser?.can_assign_globally) {
+      if (currentUser?.can_assign) {
         api.modifyClass(
           "component:search-advanced-options",
           (Superclass) =>
@@ -655,19 +917,15 @@ export default {
 
       api.addUserSearchOption("assignableGroups");
 
-      api.addSaveableUserOption("notification_level_when_assigned", {
-        page: "tracking",
-      });
+      api.addSaveableUserOptionField("notification_level_when_assigned");
 
       api.addBulkActionButton({
         id: "assign-topics",
         label: "topics.bulk.assign",
         icon: "user-plus",
-        class: "assign-topics",
-        description: "topics.bulk.assign_description",
-        confirmButtonTranslationKey: "topics.bulk.confirm_assign_topics",
-        action({ setComponent, performAndRefresh }) {
-          setComponent(BulkActionsAssignUser, { onPerform: performAndRefresh });
+        class: "btn-default assign-topics",
+        action({ setComponent }) {
+          setComponent(BulkActionsAssignUser);
         },
         actionType: "setComponent",
       });
@@ -676,9 +934,7 @@ export default {
         id: "unassign-topics",
         label: "topics.bulk.unassign",
         icon: "user-xmark",
-        class: "unassign-topics",
-        description: "topics.bulk.unassign_description",
-        confirmButtonTranslationKey: "topics.bulk.confirm_unassign_topics",
+        class: "btn-default unassign-topics",
         action({ performAndRefresh }) {
           performAndRefresh({ type: "unassign" });
         },

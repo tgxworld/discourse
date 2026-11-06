@@ -22,10 +22,7 @@ if defined?(Rack::MiniProfiler) && defined?(Rack::MiniProfiler::Config)
   #
   # namespacing gets complex, cause mini profiler is in the rack chain way before multisite
   Rack::MiniProfiler.config.storage_instance =
-    Rack::MiniProfiler::RedisStore.new(
-      connection: DiscourseRedis.new(nil, namespace: false),
-      expires_in: ENV["DISCOURSE_MINI_PROFILER_STORAGE_EXPIRY_SECONDS"]&.to_i,
-    )
+    Rack::MiniProfiler::RedisStore.new(connection: DiscourseRedis.new(nil, namespace: false))
 
   Rack::MiniProfiler.config.snapshot_every_n_requests = GlobalSetting.mini_profiler_snapshots_period
   Rack::MiniProfiler.config.snapshots_transport_destination_url =
@@ -57,8 +54,7 @@ if defined?(Rack::MiniProfiler) && defined?(Rack::MiniProfiler::Config)
       /topics/timings
       /uploads/
       /user_avatar/
-      /theme-qunit/
-    ].map { |path| "#{Discourse.base_path}#{path}" }.concat([%r{/(\d+/)?(theme-qunit|tests)}])
+    ].map { |path| "#{Discourse.base_path}#{path}" }.concat([/.*theme-qunit/])
 
   # we DO NOT WANT mini-profiler loading on anything but real desktops and laptops
   # so let's rule out all handheld, tablet, and mobile devices

@@ -5,10 +5,11 @@ import { setupRenderingTest } from "discourse/tests/helpers/component-test";
 import ChatChannelMetadata from "discourse/plugins/chat/discourse/components/chat-channel-metadata";
 import ChatFabricators from "discourse/plugins/chat/discourse/lib/fabricators";
 
-module("Component | ChatChannelMetadata", function (hooks) {
+module("Discourse Chat | Component | chat-channel-metadata", function (hooks) {
   setupRenderingTest(hooks);
 
   test("displays created at placeholder for empty chat", async function (assert) {
+    const self = this;
     this.channel = new ChatFabricators(getOwner(this)).directMessageChannel();
     this.channel.lastMessage = new ChatFabricators(getOwner(this)).message({
       channel: this.channel,
@@ -17,13 +18,15 @@ module("Component | ChatChannelMetadata", function (hooks) {
     });
 
     await render(
-      <template><ChatChannelMetadata @channel={{this.channel}} /></template>
+      <template><ChatChannelMetadata @channel={{self.channel}} /></template>
     );
 
     assert.dom(".chat-channel__metadata-date").hasText("–");
   });
 
   test("displays last message created at", async function (assert) {
+    const self = this;
+
     let lastMessageSentAt = moment().subtract(1, "day").format();
     this.channel = new ChatFabricators(getOwner(this)).directMessageChannel();
     this.channel.lastMessage = new ChatFabricators(getOwner(this)).message({
@@ -32,7 +35,7 @@ module("Component | ChatChannelMetadata", function (hooks) {
     });
 
     await render(
-      <template><ChatChannelMetadata @channel={{this.channel}} /></template>
+      <template><ChatChannelMetadata @channel={{self.channel}} /></template>
     );
 
     assert.dom(".chat-channel__metadata-date").hasText("Yesterday");
@@ -40,7 +43,7 @@ module("Component | ChatChannelMetadata", function (hooks) {
     lastMessageSentAt = moment();
     this.channel.lastMessage.createdAt = lastMessageSentAt;
     await render(
-      <template><ChatChannelMetadata @channel={{this.channel}} /></template>
+      <template><ChatChannelMetadata @channel={{self.channel}} /></template>
     );
 
     assert

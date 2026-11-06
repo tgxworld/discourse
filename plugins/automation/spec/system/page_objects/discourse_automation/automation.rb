@@ -33,10 +33,6 @@ module PageObjects
         self
       end
 
-      def enabled_toggle
-        PageObjects::Components::DToggleSwitch.new(".d-toggle-switch .d-toggle-switch__checkbox")
-      end
-
       def form
         @form ||= find(".discourse-automation-edit")
       end

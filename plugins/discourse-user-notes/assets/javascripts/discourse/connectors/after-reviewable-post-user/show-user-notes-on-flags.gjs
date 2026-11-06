@@ -2,11 +2,13 @@ import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
+import DButton from "discourse/components/d-button";
+import icon from "discourse/helpers/d-icon";
 import { emojiUrlFor } from "discourse/lib/text";
-import DButton from "discourse/ui-kit/d-button";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { i18n } from "discourse-i18n";
-import { showUserNotes } from "../../lib/user-notes.js";
+import { showUserNotes } from "../../lib/user-notes";
+
+const EMOJI_URL = emojiUrlFor("memo");
 
 export default class ShowUserNotesOnFlags extends Component {
   static shouldRender(args, { siteSettings }) {
@@ -32,19 +34,19 @@ export default class ShowUserNotesOnFlags extends Component {
     <div class="after-reviewable-post-user-outlet show-user-notes-on-flags">
       {{#if this.userNotesCount}}
         <DButton
-          class="btn-flat"
-          @action={{this.showUserNotes}}
           @translatedTitle={{i18n "user_notes.show" count=this.userNotesCount}}
+          @action={{this.showUserNotes}}
+          class="btn-flat"
         >
           {{#if this.siteSettings.enable_emoji}}
             <img
+              src={{EMOJI_URL}}
+              title={{i18n "user_notes.show" count=this.userNotesCount}}
               alt
               class="emoji"
-              src={{emojiUrlFor "memo"}}
-              title={{i18n "user_notes.show" count=this.userNotesCount}}
             />
           {{else}}
-            {{dIcon "pen-to-square"}}
+            {{icon "pen-to-square"}}
           {{/if}}
         </DButton>
       {{/if}}

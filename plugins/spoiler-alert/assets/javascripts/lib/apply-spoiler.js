@@ -1,4 +1,3 @@
-import { REVEAL_EVENT } from "discourse/lib/highlight-html";
 import { i18n } from "discourse-i18n";
 
 const INTERACTIVE_SELECTOR = [
@@ -22,12 +21,8 @@ const INTERACTIVE_SELECTOR = [
   ".lightbox",
 ].join(", ");
 
-function isInteractive(event, element) {
-  if (event.defaultPrevented) {
-    return true;
-  }
-  const interactive = event.target.closest(INTERACTIVE_SELECTOR);
-  return interactive && element.contains(interactive);
+function isInteractive(event) {
+  return event.defaultPrevented || event.target.closest(INTERACTIVE_SELECTOR);
 }
 
 function noTextSelected() {
@@ -86,7 +81,7 @@ function toggleSpoiler(event, element) {
   if (element.getAttribute("data-spoiler-state") === "blurred") {
     _setSpoilerVisible(element);
     event.preventDefault();
-  } else if (!isInteractive(event, element) && noTextSelected()) {
+  } else if (!isInteractive(event) && noTextSelected()) {
     _setSpoilerHidden(element);
   }
 }
@@ -97,8 +92,6 @@ export default function applySpoiler(element) {
   element.addEventListener("click", (event) => {
     toggleSpoiler(event, element);
   });
-
-  element.addEventListener(REVEAL_EVENT, () => _setSpoilerVisible(element));
 
   element.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {

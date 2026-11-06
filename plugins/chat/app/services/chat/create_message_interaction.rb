@@ -18,11 +18,9 @@ module Chat
     params do
       attribute :message_id, :integer
       attribute :action_id, :string
-      attribute :channel_id, :integer
 
       validates :action_id, presence: true
       validates :message_id, presence: true
-      validates :channel_id, presence: true
     end
 
     model :message
@@ -37,7 +35,7 @@ module Chat
     private
 
     def fetch_message(params:)
-      Chat::Message.find_by(id: params.message_id, chat_channel_id: params.channel_id)
+      Chat::Message.find_by(id: params.message_id)
     end
 
     def fetch_action(params:, message:)
@@ -50,7 +48,7 @@ module Chat
     end
 
     def can_interact_with_message(guardian:, message:)
-      guardian.can_join_chat_channel?(message.chat_channel)
+      guardian.can_preview_chat_channel?(message.chat_channel)
     end
 
     def fetch_interaction(guardian:, message:, action:)

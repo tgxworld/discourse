@@ -1,9 +1,10 @@
+import TopicTimerInfo from "discourse/components/topic-timer-info";
 import StyleguideExample from "discourse/plugins/styleguide/discourse/components/styleguide-example";
-import TopicTimerInfoExample from "../../examples/molecules/topic-timer-info.gjs";
-import topicTimerInfoSource from "../../examples/molecules/topic-timer-info?source=file";
 
-export default <template>
-  <StyleguideExample @code={{topicTimerInfoSource}} @title="<TopicTimerInfo>">
-    <TopicTimerInfoExample />
+const TopicTimerInfoMolecule = <template>
+  <StyleguideExample @title="<TopicTimerInfo>">
+    <TopicTimerInfo @statusType="reminder" @executeAt={{@dummy.soon}} />
   </StyleguideExample>
-</template>
+</template>;
+
+export default TopicTimerInfoMolecule;

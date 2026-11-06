@@ -10,17 +10,8 @@ de:
       site_settings:
         categories:
           poll: "Discourse Umfrage"
-      logs:
-        staff_actions:
-          actions:
-            poll_closed: "Umfrage geschlossen"
-            poll_opened: "Umfrage geöffnet"
   js:
     poll:
-      title: "Umfrage"
-      closed_by: "Geschlossen von %{username}"
-      dynamic:
-        enabled_hint: "Optionen können hinzugefügt oder entfernt werden."
       voters:
         one: "Teilnehmer"
         other: "Teilnehmer"
@@ -60,8 +51,6 @@ de:
       cast-votes:
         title: "Gib deine Stimmen ab"
         label: "Jetzt abstimmen!"
-      keep-vote:
-        label: "Zurück"
       show-results:
         title: "Das Ergebnis der Umfrage anzeigen"
         label: "Ergebnisse"
@@ -159,8 +148,6 @@ de:
           step: Schrittweite
         poll_public:
           label: Anzeigen, wer abgestimmt hat
-        poll_dynamic:
-          label: Erlaube das Hinzufügen oder Entfernen von Optionen nach der Veröffentlichung
         poll_title:
           label: Titel (optional)
         poll_options:
@@ -168,3 +155,5 @@ de:
           add: Option hinzufügen
         automatic_close:
           label: Umfrage automatisch beenden
+        show_advanced: "Erweiterte Optionen anzeigen"
+        hide_advanced: "Erweiterte Optionen ausblenden"

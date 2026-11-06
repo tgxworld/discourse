@@ -5,7 +5,7 @@ import { setupRenderingTest } from "discourse/tests/helpers/component-test";
 import AutomationField from "discourse/plugins/automation/admin/components/automation-field";
 import AutomationFabricators from "discourse/plugins/automation/admin/lib/fabricators";
 
-module("Integration | Component | DaMessageField", function (hooks) {
+module("Integration | Component | da-message-field", function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function () {
@@ -13,6 +13,8 @@ module("Integration | Component | DaMessageField", function (hooks) {
   });
 
   test("set value", async function (assert) {
+    const self = this;
+
     this.field = new AutomationFabricators(getOwner(this)).field({
       component: "message",
     });
@@ -20,8 +22,8 @@ module("Integration | Component | DaMessageField", function (hooks) {
     await render(
       <template>
         <AutomationField
-          @automation={{this.automation}}
-          @field={{this.field}}
+          @automation={{self.automation}}
+          @field={{self.field}}
         />
       </template>
     );
@@ -31,6 +33,8 @@ module("Integration | Component | DaMessageField", function (hooks) {
   });
 
   test("render placeholders", async function (assert) {
+    const self = this;
+
     this.field = new AutomationFabricators(getOwner(this)).field({
       component: "message",
     });
@@ -39,8 +43,8 @@ module("Integration | Component | DaMessageField", function (hooks) {
     await render(
       <template>
         <AutomationField
-          @automation={{this.automation}}
-          @field={{this.field}}
+          @automation={{self.automation}}
+          @field={{self.field}}
         />
       </template>
     );

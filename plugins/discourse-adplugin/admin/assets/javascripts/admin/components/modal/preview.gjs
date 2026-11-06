@@ -1,5 +1,5 @@
-import { trustHTML } from "@ember/template";
-import DModal from "discourse/ui-kit/d-modal";
+import { htmlSafe } from "@ember/template";
+import DModal from "discourse/components/d-modal";
 import { i18n } from "discourse-i18n";
 
 const Preview = <template>
@@ -9,7 +9,7 @@ const Preview = <template>
   >
     <:body>
       <div class="house-ad-preview">
-        {{trustHTML @model.html}}
+        {{htmlSafe @model.html}}
       </div>
     </:body>
   </DModal>

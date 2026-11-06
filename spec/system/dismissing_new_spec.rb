@@ -1,24 +1,23 @@
 # frozen_string_literal: true
 
-RSpec.describe "Dismissing New" do
+RSpec.describe "Dismissing New", type: :system do
   fab!(:user) { Fabricate(:user, refresh_auto_groups: true) }
 
   let(:discovery) { PageObjects::Pages::Discovery.new }
   let(:topic_list_controls) { PageObjects::Components::TopicListControls.new }
   let(:topic_list) { PageObjects::Components::TopicList.new }
+  let(:dismiss_new_modal) { PageObjects::Modals::DismissNew.new }
   let(:topic_view) { PageObjects::Components::TopicView.new }
 
-  before { SiteSetting.enable_unified_new = true }
-
-  describe "when a user has a new reply" do
+  describe "when a user has an unread post" do
     fab!(:topic) { Fabricate(:topic, user: user) }
     fab!(:post1) { create_post(user: user, topic: topic) }
     fab!(:post2) { create_post(topic: topic) }
 
-    it "lets the user stop tracking replies across sessions" do
+    it "should untrack topics across sessions after the user dismisses it" do
       sign_in(user)
 
-      visit("/new?subset=replies")
+      visit("/unread")
 
       using_session(:tab_1) do
         sign_in(user)
@@ -28,16 +27,12 @@ RSpec.describe "Dismissing New" do
         expect(topic_view).to have_tracking_status("tracking")
       end
 
-      topic_list_controls.dismiss_new_and_stop_tracking
+      topic_list_controls.dismiss_unread(untrack: true)
 
-      using_session(:tab_1) do
-        try_until_success(reason: "relies on MessageBus updates") do
-          expect(topic_view).to have_tracking_status("regular")
-        end
-      end
+      using_session(:tab_1) { expect(topic_view).to have_tracking_status("regular") }
     end
 
-    context "when viewing a category's topic list" do
+    context "when dismissing new on a category's topic list" do
       fab!(:category, :category_with_definition)
       fab!(:subcategory) { Fabricate(:category_with_definition, parent_category: category) }
       fab!(:category_topic) { Fabricate(:topic, category: category, user: user) }
@@ -47,16 +42,16 @@ RSpec.describe "Dismissing New" do
       fab!(:subcategory_post1) { create_post(user: user, topic: subcategory_topic) }
       fab!(:subcategory_post2) { create_post(topic: subcategory_topic) }
 
-      it "lets the user dismiss replies for the category and subcategories" do
+      it "should dismiss unread posts for the category and its subcategories" do
         sign_in(user)
 
-        visit("/c/#{category.slug}/#{category.id}/l/new?subset=replies")
+        visit("/c/#{category.id}/l/unread")
 
-        expect(topic_list).to have_topics(count: 2)
+        expect(topic_list_controls).to have_unread(count: 2)
 
-        topic_list_controls.dismiss_new
+        topic_list_controls.dismiss_unread
 
-        expect(topic_list).to have_no_topics
+        expect(topic_list_controls).to have_unread(count: 0)
       end
     end
   end
@@ -64,18 +59,18 @@ RSpec.describe "Dismissing New" do
   describe "when a user has a new topic" do
     fab!(:topic)
 
-    it "lets the user dismiss the new topic across sessions" do
+    it "should remove the new topic across sessions after the user dismisses it" do
       tab_1 = open_new_window(:tab)
       switch_to_window(tab_1)
       sign_in(user)
-      visit("/new?subset=topics")
+      visit("/new")
 
       expect(topic_list_controls).to have_new(count: 1)
 
       tab_2 = open_new_window(:tab)
       switch_to_window(tab_2)
       sign_in(user)
-      visit("/new?subset=topics")
+      visit("/new")
 
       expect(topic_list_controls).to have_new(count: 1)
 
@@ -89,12 +84,15 @@ RSpec.describe "Dismissing New" do
     end
   end
 
-  describe "when a user has new topics and replies" do
+  describe "when the `experimental_new_new_view_groups` site setting is enabled" do
+    fab!(:group) { Fabricate(:group).tap { |g| g.add(user) } }
     fab!(:new_topic) { Fabricate(:topic, user: user) }
     fab!(:post1) { create_post(user: user) }
     fab!(:post2) { create_post(topic: post1.topic) }
 
-    it "lets the user dismiss topics and replies across sessions" do
+    before { SiteSetting.experimental_new_new_view_groups = group.name }
+
+    it "should remove the new topic and post across sessions after the user dismisses it" do
       tab_1 = open_new_window(:tab)
       switch_to_window(tab_1)
       sign_in(user)
@@ -111,7 +109,9 @@ RSpec.describe "Dismissing New" do
 
       switch_to_window(tab_1)
       topic_list_controls.dismiss_new
+      dismiss_new_modal.click_dismiss
 
+      expect(dismiss_new_modal).to be_closed
       expect(topic_list_controls).to have_new(count: 0)
 
       switch_to_window(tab_2)
@@ -123,7 +123,7 @@ RSpec.describe "Dismissing New" do
       expect(topic_list_controls).to have_new(count: 0)
     end
 
-    it "dismisses all topics and replies from the all subset" do
+    it "displays confirmation modal with preselected options" do
       sign_in(user)
 
       visit("/new")
@@ -133,10 +133,16 @@ RSpec.describe "Dismissing New" do
 
       topic_list_controls.dismiss_new
 
+      expect(dismiss_new_modal).to have_dismiss_topics_checked
+      expect(dismiss_new_modal).to have_dismiss_posts_checked
+      expect(dismiss_new_modal).to have_untrack_unchecked
+
+      dismiss_new_modal.click_dismiss
+
       expect(topic_list).to have_no_topics
     end
 
-    it "dismisses only replies from the replies subset" do
+    it "displays confirmation modal with replies preselected" do
       sign_in(user)
 
       visit("/new?subset=replies")
@@ -145,13 +151,16 @@ RSpec.describe "Dismissing New" do
 
       topic_list_controls.dismiss_new
 
-      expect(topic_list).to have_no_topics
+      expect(dismiss_new_modal).to have_dismiss_topics_unchecked
+      expect(dismiss_new_modal).to have_dismiss_posts_checked
+      expect(dismiss_new_modal).to have_untrack_unchecked
 
-      visit("/new?subset=topics")
-      expect(topic_list).to have_topic(new_topic)
+      dismiss_new_modal.click_dismiss
+
+      expect(topic_list).to have_no_topics
     end
 
-    it "dismisses only topics from the topics subset" do
+    it "displays confirmation modal with topics preselected" do
       sign_in(user)
 
       visit("/new?subset=topics")
@@ -160,18 +169,11 @@ RSpec.describe "Dismissing New" do
 
       topic_list_controls.dismiss_new
 
-      expect(topic_list).to have_no_topics
+      expect(dismiss_new_modal).to have_dismiss_topics_checked
+      expect(dismiss_new_modal).to have_dismiss_posts_unchecked
+      expect(dismiss_new_modal).to have_untrack_unchecked
 
-      visit("/new?subset=replies")
-      expect(topic_list).to have_topic(post1.topic)
-    end
-
-    it "can dismiss and stop tracking from the dropdown action" do
-      sign_in(user)
-
-      visit("/new")
-
-      topic_list_controls.dismiss_new_and_stop_tracking
+      dismiss_new_modal.click_dismiss
 
       expect(topic_list).to have_no_topics
     end
@@ -184,12 +186,13 @@ RSpec.describe "Dismissing New" do
       it "works on tag routes" do
         sign_in(user)
 
-        visit("/tag/#{tag.slug}/#{tag.id}/l/new")
+        visit("/tag/#{tag.name}/l/new")
 
         expect(topic_list).to have_topics(count: 1)
         expect(topic_list).to have_topic(tagged_first_post.topic)
 
         topic_list_controls.dismiss_new
+        dismiss_new_modal.click_dismiss
 
         expect(topic_list).to have_no_topics
 
@@ -200,7 +203,7 @@ RSpec.describe "Dismissing New" do
       it "works on regular routes after visiting tagged route" do
         sign_in(user)
 
-        visit("/tag/#{tag.slug}/#{tag.id}/l/new")
+        visit("/tag/#{tag.name}/l/new")
 
         expect(topic_list).to have_topics(count: 1)
 
@@ -211,6 +214,7 @@ RSpec.describe "Dismissing New" do
         discovery.nav_item("new").click
 
         topic_list_controls.dismiss_new
+        dismiss_new_modal.click_dismiss
 
         expect(topic_list).to have_no_topics
       end

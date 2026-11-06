@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "Edit Category Images" do
+describe "Edit Category Images", type: :system do
   fab!(:admin)
   fab!(:category)
   let(:category_page) { PageObjects::Pages::Category.new }
@@ -18,15 +18,15 @@ describe "Edit Category Images" do
       it "displays and updates new counter" do
         category_page.visit_images(category)
 
-        find("#category-logo-uploader .file-uploader__controls").click
+        find("#category-logo-uploader .image-upload-controls").click
         attach_file(
           "category-logo-uploader__input",
-          "#{Rails.root.join("spec/fixtures/images/logo.png")}",
+          "#{Rails.root}/spec/fixtures/images/logo.png",
           make_visible: true,
         )
 
         expect(page).to have_content("uploaded successfully").or have_css(
-               ".has-image .file-uploader__preview.input-xxlarge",
+               ".has-image .uploaded-image-preview.input-xxlarge",
              )
 
         upload = Upload.last

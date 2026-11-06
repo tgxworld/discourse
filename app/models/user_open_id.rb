@@ -6,8 +6,8 @@ class UserOpenId < ActiveRecord::Base
 
   belongs_to :user
 
-  validates :email, presence: true
-  validates :url, presence: true
+  validates_presence_of :email
+  validates_presence_of :url
 
   private
 
@@ -21,12 +21,12 @@ end
 # Table name: user_open_ids
 #
 #  id         :integer          not null, primary key
-#  active     :boolean          not null
+#  user_id    :integer          not null
 #  email      :string           not null
 #  url        :string           not null
 #  created_at :datetime         not null
 #  updated_at :datetime         not null
-#  user_id    :integer          not null
+#  active     :boolean          not null
 #
 # Indexes
 #

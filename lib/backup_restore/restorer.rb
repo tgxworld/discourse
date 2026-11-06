@@ -61,7 +61,6 @@ module BackupRestore
       @database_restorer.restore(db_dump_path, @interactive)
 
       reload_site_settings
-      run_seed_fu
 
       @system.disable_readonly_mode
 
@@ -136,17 +135,6 @@ module BackupRestore
       end
     end
 
-    def run_seed_fu
-      log "Running seed fu..."
-
-      begin
-        Discourse::Application.load_tasks
-        Rake::Task["db:seed"].invoke
-      rescue => ex
-        log "Failed to run seed fu", ex
-      end
-    end
-
     def clear_category_cache
       log "Clearing category cache..."
       Category.reset_topic_ids_cache
@@ -187,7 +175,7 @@ module BackupRestore
         status = @success ? :restore_succeeded : :restore_failed
 
         logs = Discourse::Utils.logs_markdown(@logger.logs, user: user)
-        SystemMessage.create_from_system_user(user, status, logs: logs)
+        post = SystemMessage.create_from_system_user(user, status, logs: logs)
       else
         log "Could not send notification to '#{@user_info[:username]}' " \
               "(#{@user_info[:email]}), because the user does not exist."

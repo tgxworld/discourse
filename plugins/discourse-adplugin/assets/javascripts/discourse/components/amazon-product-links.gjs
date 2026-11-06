@@ -1,14 +1,17 @@
-import { computed } from "@ember/object";
-import { trustHTML } from "@ember/template";
-import { tagName } from "@ember-decorators/component";
+import { and } from "@ember/object/computed";
+import { htmlSafe } from "@ember/template";
+import { classNames } from "@ember-decorators/component";
+import discourseComputed from "discourse/lib/decorators";
 import { i18n } from "discourse-i18n";
-import AdComponent from "./ad-component.js";
+import AdComponent from "./ad-component";
 
-@tagName("")
+@classNames("amazon-product-links")
 export default class AmazonProductLinks extends AdComponent {
+  @and("showAmazonAds", "showToGroups", "showAfterPost", "showOnCurrentPage")
+  showAd;
+
   init() {
     const data = {
-      "above-site-header": {},
       "topic-list-top": {},
       "topic-above-post-stream": {},
       "topic-above-suggested": {},
@@ -16,35 +19,6 @@ export default class AmazonProductLinks extends AdComponent {
     };
     const mobileView = this.site.get("mobileView");
     const placement = this.get("placement");
-
-    if (!mobileView && this.siteSettings.amazon_above_site_header_src_code) {
-      data["above-site-header"]["user_input"] =
-        this.siteSettings.amazon_above_site_header_src_code;
-      data["above-site-header"]["amazon_width"] = parseInt(
-        this.siteSettings.amazon_above_site_header_ad_width_code,
-        10
-      );
-      data["above-site-header"]["amazon_height"] = parseInt(
-        this.siteSettings.amazon_above_site_header_ad_height_code,
-        10
-      );
-    }
-
-    if (
-      mobileView &&
-      this.siteSettings.amazon_mobile_above_site_header_src_code
-    ) {
-      data["above-site-header"]["user_input_mobile"] =
-        this.siteSettings.amazon_mobile_above_site_header_src_code;
-      data["above-site-header"]["mobile_amazon_width"] = parseInt(
-        this.siteSettings.amazon_mobile_above_site_header_ad_width_code,
-        10
-      );
-      data["above-site-header"]["mobile_amazon_height"] = parseInt(
-        this.siteSettings.amazon_mobile_above_site_header_ad_height_code,
-        10
-      );
-    }
 
     if (!mobileView && this.siteSettings.amazon_topic_list_top_src_code) {
       data["topic-list-top"]["user_input"] =
@@ -171,52 +145,33 @@ export default class AmazonProductLinks extends AdComponent {
     super.init();
   }
 
-  @computed(
-    "showAmazonAds",
-    "showToGroups",
-    "showAfterPost",
-    "showOnCurrentPage"
-  )
-  get showAd() {
-    return (
-      this.showAmazonAds &&
-      this.showToGroups &&
-      this.showAfterPost &&
-      this.showOnCurrentPage
-    );
+  @discourseComputed("amazon_width", "amazon_height")
+  adWrapperStyle(w, h) {
+    return htmlSafe(`width: ${w}px; height: ${h}px;`);
   }
 
-  @computed("amazon_width", "amazon_height")
-  get adWrapperStyle() {
-    return trustHTML(
-      `width: ${this.amazon_width}px; height: ${this.amazon_height}px;`
-    );
+  @discourseComputed("mobile_amazon_width", "mobile_amazon_height")
+  adWrapperStyleMobile(w, h) {
+    return htmlSafe(`width: ${w}px; height: ${h}px;`);
   }
 
-  @computed("mobile_amazon_width", "mobile_amazon_height")
-  get adWrapperStyleMobile() {
-    return trustHTML(
-      `width: ${this.mobile_amazon_width}px; height: ${this.mobile_amazon_height}px;`
-    );
+  @discourseComputed("mobile_amazon_width")
+  adTitleStyleMobile(w) {
+    return htmlSafe(`width: ${w}px;`);
   }
 
-  @computed("mobile_amazon_width")
-  get adTitleStyleMobile() {
-    return trustHTML(`width: ${this.mobile_amazon_width}px;`);
+  @discourseComputed("user_input")
+  userInput(userInput) {
+    return htmlSafe(`${userInput}`);
   }
 
-  @computed("user_input")
-  get userInput() {
-    return trustHTML(`${this.user_input}`);
+  @discourseComputed("user_input_mobile")
+  userInputMobile(userInput) {
+    return htmlSafe(`${userInput}`);
   }
 
-  @computed("user_input_mobile")
-  get userInputMobile() {
-    return trustHTML(`${this.user_input_mobile}`);
-  }
-
-  @computed
-  get showAmazonAds() {
+  @discourseComputed
+  showAmazonAds() {
     if (!this.currentUser) {
       return true;
     }
@@ -224,61 +179,49 @@ export default class AmazonProductLinks extends AdComponent {
     return this.currentUser.show_amazon_ads;
   }
 
-  @computed("postNumber")
-  get showAfterPost() {
-    if (!this.postNumber) {
+  @discourseComputed("postNumber")
+  showAfterPost(postNumber) {
+    if (!postNumber) {
       return true;
     }
 
     return this.isNthPost(parseInt(this.siteSettings.amazon_nth_post_code, 10));
   }
 
-  buildImpressionPayload() {
-    return {
-      ad_plugin_impression: {
-        ad_type: this.site.ad_types.amazon,
-        ad_plugin_house_ad_id: null,
-        placement: this.placement,
-      },
-    };
-  }
-
   <template>
-    <div class="amazon-product-links" ...attributes>
-      {{#if this.showAd}}
-        {{#if this.site.mobileView}}
-          <div
-            class="amazon-product-links-label"
-            style={{this.adTitleStyleMobile}}
-          ><h2>{{i18n "adplugin.advertisement_label"}}</h2></div>
+    {{#if this.showAd}}
+      {{#if this.site.mobileView}}
+        <div
+          class="amazon-product-links-label"
+          style={{this.adTitleStyleMobile}}
+        ><h2>{{i18n "adplugin.advertisement_label"}}</h2></div>
+        <iframe
+          style={{this.adWrapperStyleMobile}}
+          marginwidth="0"
+          marginheight="0"
+          scrolling="no"
+          frameborder="0"
+          src={{this.userInputMobile}}
+          title={{i18n "adplugin.advertisement_label"}}
+        >
+        </iframe>
+      {{else}}
+        <div class="amazon-product-links-label"><h2>{{i18n
+              "adplugin.advertisement_label"
+            }}</h2></div>
+        <div class="container" align="center">
           <iframe
-            frameborder="0"
-            marginheight="0"
+            style={{this.adWrapperStyle}}
             marginwidth="0"
+            marginheight="0"
             scrolling="no"
-            src={{this.userInputMobile}}
-            style={{this.adWrapperStyleMobile}}
+            frameborder="0"
+            src={{this.userInput}}
             title={{i18n "adplugin.advertisement_label"}}
           >
           </iframe>
-        {{else}}
-          <div class="amazon-product-links-label"><h2>{{i18n
-                "adplugin.advertisement_label"
-              }}</h2></div>
-          <div align="center" class="container">
-            <iframe
-              frameborder="0"
-              marginheight="0"
-              marginwidth="0"
-              scrolling="no"
-              src={{this.userInput}}
-              style={{this.adWrapperStyle}}
-              title={{i18n "adplugin.advertisement_label"}}
-            >
-            </iframe>
-          </div>
-        {{/if}}
+        </div>
       {{/if}}
-    </div>
+    {{/if}}
   </template>
 }

@@ -1,17 +1,8 @@
 # frozen_string_literal: true
 
 class Admin::SiteSettingsController < Admin::AdminController
-  # On an archived site the only site setting an admin may change is
-  # `site_archived` itself (to toggle archive back off). The guard inside
-  # #update blocks every other setting.
-  allow_when_archived :update
-
   rescue_from Discourse::InvalidParameters do |e|
     render_json_error e.message, status: 422
-  end
-
-  rescue_from Discourse::InvalidHTMLParameters do |e|
-    render_json_error e.html_message, html_message: true, status: 422
   end
 
   def index
@@ -23,8 +14,6 @@ class Admin::SiteSettingsController < Admin::AdminController
           filter_plugin: params[:plugin],
           filter_names: params[:names],
         ),
-      default_theme:
-        BasicThemeSerializer.new(Theme.find_default, scope: guardian, root: false).as_json,
     )
   end
 
@@ -41,25 +30,8 @@ class Admin::SiteSettingsController < Admin::AdminController
       settings = [{ setting_name: id, value: params[id], backfill: }]
     end
 
-    if SiteSetting.site_archived && settings.any? { |s| s[:setting_name].to_s != "site_archived" }
-      raise Discourse::SiteArchived
-    end
-
-    SiteSetting::Update.call(
-      guardian:,
-      params: {
-        settings:,
-      },
-      options: {
-        # TODO: remove once the site setting is no longer hidden
-        allow_changing_hidden: %i[enable_site_owner_onboarding],
-      },
-    ) do
-      on_success { head :no_content }
-      on_exceptions do |e|
-        raise e if e.is_a?(Discourse::InvalidParameters)
-        raise Discourse::InvalidParameters, e.message
-      end
+    SiteSetting::Update.call(params: { settings: }, guardian:) do
+      on_success { render body: nil }
       on_failed_policy(:settings_are_not_deprecated) do |policy|
         raise Discourse::InvalidParameters, policy.reason
       end
@@ -72,6 +44,9 @@ class Admin::SiteSettingsController < Admin::AdminController
       on_failed_policy(:settings_are_configurable) do |policy|
         raise Discourse::InvalidParameters, policy.reason
       end
+      on_failed_policy(:values_are_valid) do |policy|
+        raise Discourse::InvalidParameters, policy.reason
+      end
     end
   end
 
@@ -79,7 +54,6 @@ class Admin::SiteSettingsController < Admin::AdminController
     params.require(:site_setting_id)
     id = params[:site_setting_id]
     raise Discourse::NotFound unless id.start_with?("default_")
-    raise Discourse::NotFound unless SiteSetting.has_setting?(id)
     new_value = value_or_default(params[id])
 
     raise_access_hidden_setting(id)

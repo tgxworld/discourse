@@ -2,19 +2,19 @@ import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
-import { trustHTML } from "@ember/template";
+import { htmlSafe } from "@ember/template";
 import { isEmpty } from "@ember/utils";
+import DButton from "discourse/components/d-button";
+import DModal from "discourse/components/d-modal";
 import { popupAjaxError } from "discourse/lib/ajax-error";
 import discourseLater from "discourse/lib/later";
-import DButton from "discourse/ui-kit/d-button";
-import DModal from "discourse/ui-kit/d-modal";
 import { i18n } from "discourse-i18n";
 import {
   EXISTING_TOPIC_SELECTION,
   NEW_TOPIC_SELECTION,
 } from "discourse/plugins/chat/discourse/components/chat-to-topic-selector";
 import { CHANNEL_STATUSES } from "discourse/plugins/chat/discourse/models/chat-channel";
-import ChatToTopicSelector from "../../chat-to-topic-selector.gjs";
+import ChatToTopicSelector from "../../chat-to-topic-selector";
 
 export default class ChatModalArchiveChannel extends Component {
   @service chatApi;
@@ -74,7 +74,7 @@ export default class ChatModalArchiveChannel extends Component {
   }
 
   get instructionsText() {
-    return trustHTML(
+    return htmlSafe(
       i18n("chat.channel_archive.instructions", {
         channelTitle: this.channel.escapedTitle,
       })
@@ -86,9 +86,7 @@ export default class ChatModalArchiveChannel extends Component {
     if (this.newTopic) {
       data.title = this.topicTitle;
       data.category_id = this.categoryId;
-      data.tags = (this.tags ?? []).map((tag) =>
-        typeof tag === "string" ? tag : tag.name
-      );
+      data.tags = this.tags;
     }
     if (this.existingTopic) {
       data.topic_id = this.selectedTopicId;
@@ -122,35 +120,35 @@ export default class ChatModalArchiveChannel extends Component {
 
   <template>
     <DModal
-      class="chat-modal-archive-channel"
       @closeModal={{@closeModal}}
-      @flash={{this.flash}}
-      @flashType={{this.flashType}}
+      class="chat-modal-archive-channel"
       @inline={{@inline}}
       @title={{i18n "chat.channel_archive.title"}}
+      @flash={{this.flash}}
+      @flashType={{this.flashType}}
     >
       <:body>
         <p class="chat-modal-archive-channel__instructions">
           {{this.instructionsText}}
         </p>
         <ChatToTopicSelector
-          @allowNewMessage={{false}}
-          @categoryId={{this.categoryId}}
-          @instructionLabels={{this.instructionLabels}}
-          @selectedTopicId={{this.selectedTopicId}}
           @selection={{this.selection}}
+          @topicTitle={{this.topicTitle}}
+          @categoryId={{this.categoryId}}
           @tags={{this.tags}}
           @topicChangedCallback={{this.newTopicSelected}}
-          @topicTitle={{this.topicTitle}}
+          @selectedTopicId={{this.selectedTopicId}}
+          @instructionLabels={{this.instructionLabels}}
+          @allowNewMessage={{false}}
         />
       </:body>
       <:footer>
         <DButton
-          class="btn-primary"
-          id="chat-confirm-archive-channel"
-          @action={{this.archiveChannel}}
           @disabled={{this.buttonDisabled}}
+          @action={{this.archiveChannel}}
           @label="chat.channel_archive.title"
+          id="chat-confirm-archive-channel"
+          class="btn-primary"
         />
       </:footer>
     </DModal>

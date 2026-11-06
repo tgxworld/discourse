@@ -1,12 +1,13 @@
-import { tracked } from "@glimmer/tracking";
 import { action } from "@ember/object";
 import { next } from "@ember/runloop";
 import Service, { service } from "@ember/service";
+import { tracked } from "@ember-compat/tracked-built-ins";
 import { ajax } from "discourse/lib/ajax";
 import { getUploadMarkdown } from "discourse/lib/uploads";
 import { i18n } from "discourse-i18n";
 
 export default class AiBotConversationsHiddenSubmit extends Service {
+  @service aiConversationsSidebarManager;
   @service appEvents;
   @service composer;
   @service dialog;
@@ -15,8 +16,7 @@ export default class AiBotConversationsHiddenSubmit extends Service {
 
   @tracked loading = false;
 
-  agentId;
-  llmModelId;
+  personaId;
   targetUsername;
 
   inputValue = "";
@@ -70,13 +70,14 @@ export default class AiBotConversationsHiddenSubmit extends Service {
     }
 
     try {
-      const response = await ajax("/discourse-ai/ai-bot/conversations.json", {
+      const response = await ajax("/posts.json", {
         method: "POST",
         data: {
           raw: rawContent,
-          target_username: this.targetUsername,
-          ai_agent_id: this.agentId,
-          ai_llm_model_id: this.llmModelId,
+          title,
+          archetype: "private_message",
+          target_recipients: this.targetUsername,
+          meta_data: { ai_persona_id: this.personaId },
         },
       });
 

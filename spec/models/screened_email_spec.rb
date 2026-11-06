@@ -96,9 +96,7 @@ RSpec.describe ScreenedEmail do
       let!(:screened_email) do
         Fabricate(:screened_email, email: email, action_type: ScreenedEmail.actions[:block])
       end
-
       it { is_expected.to eq(true) }
-
       include_examples "when a ScreenedEmail record matches"
     end
 
@@ -106,9 +104,7 @@ RSpec.describe ScreenedEmail do
       let!(:screened_email) do
         Fabricate(:screened_email, email: email, action_type: ScreenedEmail.actions[:do_nothing])
       end
-
       it { is_expected.to eq(false) }
-
       include_examples "when a ScreenedEmail record matches"
     end
   end

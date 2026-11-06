@@ -2,7 +2,7 @@
 
 class MicrosoftAuthRevoker
   def self.revoke
-    # Deactivate users using microsoft as an authentication provider
+    # Deactive users using microsoft as an authentication provider
     DB.exec <<~SQL
       UPDATE users SET active = false
       WHERE users.id IN (#{microsoft_user_associated_accounts_sql})

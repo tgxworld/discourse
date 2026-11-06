@@ -27,12 +27,6 @@ hy:
         text:
           label: Տեքստ
       triggerables:
-        post_flag_created:
-          fields:
-            categories:
-              label: Կատեգորիաներ
-            tags:
-              label: Պիտակներ
         user_badge_granted:
           fields:
             badge:

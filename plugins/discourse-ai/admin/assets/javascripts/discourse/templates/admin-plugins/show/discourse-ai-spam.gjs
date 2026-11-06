@@ -1,3 +1,6 @@
-import AiSpam from "../../../components/ai-spam.gjs";
+import RouteTemplate from "ember-route-template";
+import AiSpam from "../../../../discourse/components/ai-spam";
 
-export default <template><AiSpam @model={{@controller.model}} /></template>
+export default RouteTemplate(
+  <template><AiSpam @model={{@controller.model}} /></template>
+);

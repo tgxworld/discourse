@@ -69,27 +69,6 @@ RSpec.describe Middleware::AnonymousCache do
       end
     end
 
-    describe "per color scheme cache" do
-      it "handles valid color scheme keys only", :aggregate_failures do
-        color_scheme = Fabricate(:color_scheme)
-
-        with_no_scheme_key = new_helper.cache_key
-        with_bad_scheme_key =
-          new_helper(
-            "HTTP_COOKIE" => %(color_scheme_id=#{color_scheme.id}"><link rel="modulepreload">),
-          ).cache_key
-        with_color_scheme_key =
-          new_helper("HTTP_COOKIE" => "color_scheme_id=#{color_scheme.id}").cache_key
-        with_dark_scheme_key =
-          new_helper("HTTP_COOKIE" => "dark_scheme_id=#{color_scheme.id}").cache_key
-
-        expect(with_bad_scheme_key).to eq(with_no_scheme_key)
-        expect(with_color_scheme_key).not_to eq(with_no_scheme_key)
-        expect(with_dark_scheme_key).not_to eq(with_no_scheme_key)
-        expect(with_color_scheme_key).not_to eq(with_dark_scheme_key)
-      end
-    end
-
     context "with header or cookie based custom locale" do
       it "handles different languages" do
         # Normally does not check the language header
@@ -117,67 +96,6 @@ RSpec.describe Middleware::AnonymousCache do
         SiteSetting.set_locale_from_cookie = true
         expect(new_helper("HTTP_COOKIE" => "locale=es;").cache_key).to include("l=es")
       end
-
-      it "keys on the locale cookie when the language switcher is enabled" do
-        SiteSetting.default_locale = "en"
-        SiteSetting.allow_user_locale = true
-        SiteSetting.set_locale_from_cookie = false
-        SiteSetting.content_localization_supported_locales = "es|fr"
-        SiteSetting.content_localization_enabled = true
-        SiteSetting.content_localization_language_switcher = "all"
-
-        expect(new_helper("HTTP_COOKIE" => "locale=es;").cache_key).to include("l=es")
-
-        # An unsupported locale is not honoured, so it must not fan the cache out either.
-        expect(new_helper("HTTP_COOKIE" => "locale=ja;").cache_key).to eq(new_helper.cache_key)
-      end
-
-      it "keys on the same locale the request renders in" do
-        SiteSetting.default_locale = "en"
-        SiteSetting.allow_user_locale = true
-        SiteSetting.content_localization_supported_locales = "es"
-        SiteSetting.content_localization_enabled = true
-        SiteSetting.content_localization_language_switcher = "all"
-
-        env = { "HTTP_COOKIE" => "locale=es;" }
-        request = ActionDispatch::Request.new(Rack::MockRequest.env_for("/", env))
-
-        expect(new_helper(env).cache_key).to include("l=#{Discourse.anonymous_locale(request)}")
-      end
-
-      it "keys locale param URLs on the locale the plain URL serves when crawler URLs are localized" do
-        SiteSetting.allow_user_locale = true
-        SiteSetting.set_locale_from_param = true
-        SiteSetting.set_locale_from_accept_language_header = true
-        SiteSetting.content_localization_enabled = true
-        SiteSetting.content_localization_supported_locales = "ja"
-        path = "http://test.com/path?#{Discourse::LOCALE_PARAM}=en"
-
-        key_for = ->(opts = {}) { new_helper(path:, **opts).cache_key }
-
-        expect(key_for.call).to eq(key_for.call("HTTP_ACCEPT_LANGUAGE" => "ja"))
-
-        SiteSetting.content_localization_crawler_param = true
-
-        expect(key_for.call).not_to eq(key_for.call("HTTP_ACCEPT_LANGUAGE" => "ja"))
-        expect(key_for.call).to eq(key_for.call("HTTP_ACCEPT_LANGUAGE" => "en"))
-        expect(new_helper.cache_key).to eq(new_helper("HTTP_ACCEPT_LANGUAGE" => "en").cache_key)
-      end
-
-      it "keys blank locale param URLs on the locale the plain URL serves when crawler URLs are localized" do
-        SiteSetting.allow_user_locale = true
-        SiteSetting.set_locale_from_param = true
-        SiteSetting.set_locale_from_accept_language_header = true
-        SiteSetting.content_localization_enabled = true
-        SiteSetting.content_localization_crawler_param = true
-        SiteSetting.content_localization_supported_locales = "ja"
-        path = "http://test.com/path?#{Discourse::LOCALE_PARAM}="
-
-        key_for = ->(opts = {}) { new_helper(path:, **opts).cache_key }
-
-        expect(key_for.call).not_to eq(key_for.call("HTTP_ACCEPT_LANGUAGE" => "ja"))
-        expect(key_for.call).to eq(key_for.call("HTTP_ACCEPT_LANGUAGE" => "en"))
-      end
     end
 
     it "handles old browsers" do
@@ -190,7 +108,7 @@ RSpec.describe Middleware::AnonymousCache do
 
     it "handles modern mobile browsers" do
       key1 = new_helper("HTTP_USER_AGENT" => "Safari (iPhone OS 7)").cache_key
-      key2 = new_helper("HTTP_USER_AGENT" => "Safari (iPhone OS 16)").cache_key
+      key2 = new_helper("HTTP_USER_AGENT" => "Safari (iPhone OS 15)").cache_key
       expect(key1).not_to eq(key2)
     end
 
@@ -206,19 +124,12 @@ RSpec.describe Middleware::AnonymousCache do
       }.not_to raise_error
     end
 
-    it "keys only on the resolved automatic translation preference" do
+    it "handles showing original content" do
+      show_orig_key =
+        new_helper("HTTP_COOKIE" => ContentLocalization::SHOW_ORIGINAL_COOKIE).cache_key
       regular_key = new_helper.cache_key
-      enabled_key =
-        new_helper(
-          "HTTP_COOKIE" => "#{ContentLocalization::AUTOMATICALLY_TRANSLATE_COOKIE}=true",
-        ).cache_key
-      disabled_key =
-        new_helper(
-          "HTTP_COOKIE" => "#{ContentLocalization::AUTOMATICALLY_TRANSLATE_COOKIE}=false",
-        ).cache_key
 
-      expect(enabled_key).to eq(regular_key)
-      expect(disabled_key).not_to eq(regular_key)
+      expect(show_orig_key).not_to eq(regular_key)
     end
 
     context "when cached" do
@@ -326,7 +237,7 @@ RSpec.describe Middleware::AnonymousCache do
   end
 
   describe "background request rate limit" do
-    it "rate limits background requests" do
+    it "will rate limit background requests" do
       app = Middleware::AnonymousCache.new(lambda { |env| [200, {}, ["ok"]] })
 
       global_setting :background_requests_max_queue_length, "0.5"
@@ -338,12 +249,12 @@ RSpec.describe Middleware::AnonymousCache do
           "HOST" => "site.com",
           "REQUEST_METHOD" => "GET",
           "REQUEST_URI" => "/somewhere/rainbow",
-          Middleware::ProcessingRequest::REQUEST_QUEUE_SECONDS_ENV_KEY => 2.1,
+          "REQUEST_QUEUE_SECONDS" => 2.1,
           "rack.input" => StringIO.new,
         )
 
       # non background ... long request
-      env[Middleware::ProcessingRequest::REQUEST_QUEUE_SECONDS_ENV_KEY] = 2
+      env["REQUEST_QUEUE_SECONDS"] = 2
 
       status, _ = app.call(env.dup)
       expect(status).to eq(200)
@@ -356,7 +267,7 @@ RSpec.describe Middleware::AnonymousCache do
       json = JSON.parse(body.join)
       expect(json["extras"]["wait_seconds"]).to be > 4.9
 
-      env[Middleware::ProcessingRequest::REQUEST_QUEUE_SECONDS_ENV_KEY] = 0.4
+      env["REQUEST_QUEUE_SECONDS"] = 0.4
 
       status, _ = app.call(env.dup)
       expect(status).to eq(200)
@@ -366,7 +277,7 @@ RSpec.describe Middleware::AnonymousCache do
   describe "#force_anonymous!" do
     before { RateLimiter.enable }
 
-    it "reverts to anonymous when the limit is reached" do
+    it "will revert to anonymous once we reach the limit" do
       is_anon = false
 
       app =
@@ -388,7 +299,7 @@ RSpec.describe Middleware::AnonymousCache do
           "HOST" => "site.com",
           "REQUEST_METHOD" => "GET",
           "REQUEST_URI" => "/somewhere/rainbow",
-          Middleware::ProcessingRequest::REQUEST_QUEUE_SECONDS_ENV_KEY => 2.1,
+          "REQUEST_QUEUE_SECONDS" => 2.1,
           "rack.input" => StringIO.new,
         )
 
@@ -412,14 +323,14 @@ RSpec.describe Middleware::AnonymousCache do
       # tricky change, a 50ms delay still will trigger protection
       # once it is tripped
 
-      env[Middleware::ProcessingRequest::REQUEST_QUEUE_SECONDS_ENV_KEY] = 0.05
+      env["REQUEST_QUEUE_SECONDS"] = 0.05
       is_anon = false
 
       app.call(env.dup)
       expect(is_anon).to eq(true)
 
       is_anon = false
-      env[Middleware::ProcessingRequest::REQUEST_QUEUE_SECONDS_ENV_KEY] = 0.01
+      env["REQUEST_QUEUE_SECONDS"] = 0.01
 
       app.call(env.dup)
       expect(is_anon).to eq(false)
@@ -429,53 +340,10 @@ RSpec.describe Middleware::AnonymousCache do
   describe "invalid request payload" do
     it "returns 413 for GET request with payload" do
       status, headers, _ =
-        middleware.call(
-          env.tap do |environment|
-            environment[Rack::RACK_INPUT].write("test")
-            environment[Rack::RACK_INPUT].rewind
-          end,
-        )
+        middleware.call(env.tap { |environment| environment[Rack::RACK_INPUT].write("test") })
 
       expect(status).to eq(413)
       expect(headers["Cache-Control"]).to eq("private, max-age=0, must-revalidate")
-    end
-
-    it "returns 413 for GET request with a whitespace-prefixed payload" do
-      status, headers, _ =
-        middleware.call(
-          env.tap do |environment|
-            environment[Rack::RACK_INPUT].write(%(  {"injected":true}))
-            environment[Rack::RACK_INPUT].rewind
-          end,
-        )
-
-      expect(status).to eq(413)
-      expect(headers["Cache-Control"]).to eq("private, max-age=0, must-revalidate")
-    end
-
-    it "does not let a whitespace-prefixed GET body poison the shared anonymous cache" do
-      global_setting :anon_cache_store_threshold, 1
-
-      app =
-        Middleware::AnonymousCache.new(
-          lambda do |environment|
-            input = environment[Rack::RACK_INPUT]
-            input.rewind
-            [200, {}, ["body=#{input.read}"]]
-          end,
-        )
-
-      attacker_env =
-        env("ANON_CACHE_DURATION" => 10).tap do |environment|
-          environment[Rack::RACK_INPUT].write("  poisoned-content")
-          environment[Rack::RACK_INPUT].rewind
-        end
-
-      attacker_status, _, _ = app.call(attacker_env)
-      expect(attacker_status).to eq(413)
-
-      _, _, victim_body = app.call(env("ANON_CACHE_DURATION" => 10))
-      expect(victim_body.join).not_to include("poisoned-content")
     end
   end
 
@@ -557,7 +425,7 @@ RSpec.describe Middleware::AnonymousCache do
       expect(@status).to eq(200)
     end
 
-    it "allows robots.txt requests" do
+    it "should never block robots.txt" do
       SiteSetting.blocked_crawler_user_agents = "Googlebot"
 
       get "/robots.txt",
@@ -568,7 +436,7 @@ RSpec.describe Middleware::AnonymousCache do
       expect(@status).to eq(200)
     end
 
-    it "allows srv/status requests" do
+    it "should never block srv/status" do
       SiteSetting.blocked_crawler_user_agents = "Googlebot"
 
       get "/srv/status",

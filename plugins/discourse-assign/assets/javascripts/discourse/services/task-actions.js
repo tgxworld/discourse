@@ -3,31 +3,36 @@ import Service, { service } from "@ember/service";
 import { isEmpty } from "@ember/utils";
 import { ajax } from "discourse/lib/ajax";
 import { popupAjaxError } from "discourse/lib/ajax-error";
-import { manuallyTrack } from "discourse/lib/tracked-tools";
-import AssignUser from "../components/modal/assign-user.gjs";
-import assignmentPayload from "../lib/assignment-payload.js";
+import AssignUser from "../components/modal/assign-user";
 
 export default class TaskActions extends Service {
   @service modal;
 
-  @tracked suggestionsRevision = 0;
-  #suggestionsByTarget = new Map();
-  #suggestionsPromisesByTarget = new Map();
+  @tracked allowedGroups;
+  @tracked allowedGroupsForAssignment;
+  #suggestionsPromise; // eslint-disable-line no-unused-private-class-members
+  @tracked _suggestions;
 
-  suggestionsFor(targetId, targetType = "Topic") {
-    manuallyTrack(this.suggestionsRevision);
-    this.#ensureSuggestions(targetId, targetType);
+  get suggestions() {
+    if (this._suggestions) {
+      return this._suggestions;
+    }
 
-    return (
-      this.#suggestionsByTarget.get(
-        this.#suggestionsKey(targetId, targetType)
-      ) || null
-    );
+    this.#suggestionsPromise ||= this.#fetchSuggestions();
+
+    return null;
   }
 
-  searchUrlFor(targetId, targetType = "Topic") {
-    const query = new URLSearchParams(this.#targetParams(targetId, targetType));
-    return query.size ? `/assign/search?${query}` : "/assign/search";
+  async #fetchSuggestions() {
+    const data = await ajax("/assign/suggestions");
+
+    if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
+
+    this._suggestions = data.suggestions;
+    this.allowedGroups = data.assign_allowed_on_groups;
+    this.allowedGroupsForAssignment = data.assign_allowed_for_groups;
   }
 
   unassign(targetId, targetType = "Topic") {
@@ -100,9 +105,12 @@ export default class TaskActions extends Service {
       await ajax(path, {
         type: "PUT",
         data: {
-          ...assignmentPayload(model),
+          username: model.username,
+          group_name: model.group_name,
           target_id: model.target.id,
           target_type: model.targetType,
+          note: model.note,
+          status: model.status,
         },
       });
 
@@ -116,51 +124,13 @@ export default class TaskActions extends Service {
     await ajax("/assign/assign", {
       type: "PUT",
       data: {
-        ...assignmentPayload(assignment),
+        username: assignment.username,
+        group_name: assignment.group_name,
         target_id: assignment.targetId,
         target_type: assignment.targetType,
+        note: assignment.note,
+        status: assignment.status,
       },
     });
-  }
-
-  #ensureSuggestions(targetId, targetType) {
-    const key = this.#suggestionsKey(targetId, targetType);
-
-    if (
-      this.#suggestionsByTarget.has(key) ||
-      this.#suggestionsPromisesByTarget.has(key)
-    ) {
-      return;
-    }
-
-    this.#suggestionsPromisesByTarget.set(
-      key,
-      this.#fetchSuggestions(key, targetId, targetType)
-    );
-  }
-
-  async #fetchSuggestions(key, targetId, targetType) {
-    const response = await ajax("/assign/suggestions", {
-      data: this.#targetParams(targetId, targetType),
-    });
-
-    if (this.isDestroying) {
-      return;
-    }
-
-    this.#suggestionsByTarget.set(key, [
-      ...response.suggestions,
-      ...response.groups,
-    ]);
-    this.#suggestionsPromisesByTarget.delete(key);
-    this.suggestionsRevision++;
-  }
-
-  #targetParams(targetId, targetType) {
-    return targetId ? { target_id: targetId, target_type: targetType } : {};
-  }
-
-  #suggestionsKey(targetId, targetType) {
-    return targetId ? `${targetType}:${targetId}` : "default";
   }
 }

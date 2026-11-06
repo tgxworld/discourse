@@ -18,7 +18,7 @@ describe "Telegram Command Controller", type: :request do
   end
 
   describe "with plugin disabled" do
-    it "returns a 404" do
+    it "should return a 404" do
       post "/chat-integration/telegram/command/abcd.json"
       expect(response.status).to eq(404)
     end
@@ -30,7 +30,7 @@ describe "Telegram Command Controller", type: :request do
       SiteSetting.chat_integration_telegram_enabled = false
     end
 
-    it "returns a 404" do
+    it "should return a 404" do
       post "/chat-integration/telegram/command/abcd.json"
       expect(response.status).to eq(404)
     end
@@ -51,7 +51,7 @@ describe "Telegram Command Controller", type: :request do
     end
 
     describe "when forum is private" do
-      it "does not redirect to the login page" do
+      it "should not redirect to login page" do
         SiteSetting.login_required = true
 
         post "/chat-integration/telegram/command/shhh.json",
@@ -69,7 +69,7 @@ describe "Telegram Command Controller", type: :request do
     end
 
     describe "when the token is invalid" do
-      it "rejects an invalid command token" do
+      it "should raise the right error" do
         post "/chat-integration/telegram/command/blah.json",
              params: {
                message: {
@@ -85,7 +85,7 @@ describe "Telegram Command Controller", type: :request do
     end
 
     describe "when token has not been set" do
-      it "rejects commands when the access token is missing" do
+      it "should raise the right error" do
         SiteSetting.chat_integration_telegram_access_token = ""
         post "/chat-integration/telegram/command/blah.json",
              params: {
@@ -107,7 +107,7 @@ describe "Telegram Command Controller", type: :request do
       before { SiteSetting.chat_integration_telegram_enable_slash_commands = true }
 
       describe "add new rule" do
-        it "adds a new rule" do
+        it "should add a new rule correctly" do
           post "/chat-integration/telegram/command/shhh.json",
                params: {
                  message: {
@@ -128,7 +128,7 @@ describe "Telegram Command Controller", type: :request do
           expect(rule.tags).to eq(nil)
         end
 
-        it "adds a new rule using group chat syntax" do
+        it "should add a new rule correctly using group chat syntax" do
           post "/chat-integration/telegram/command/shhh.json",
                params: {
                  message: {
@@ -167,7 +167,7 @@ describe "Telegram Command Controller", type: :request do
         end
       end
 
-      it "responds only to a specific command in a broadcast channel" do
+      it "should respond only to a specific command in a broadcast channel" do
         post "/chat-integration/telegram/command/shhh.json",
              params: {
                channel_post: {
@@ -193,25 +193,6 @@ describe "Telegram Command Controller", type: :request do
 
         expect(response.status).to eq(200)
         expect(stub).to have_been_requested.times(1)
-      end
-
-      it "still returns success when the reply cannot be sent" do
-        SiteSetting.stubs(:chat_integration_telegram_api_base_url).returns(
-          "http://telegram.example.com",
-        )
-
-        post "/chat-integration/telegram/command/shhh.json",
-             params: {
-               message: {
-                 chat: {
-                   id: 123,
-                 },
-                 text: "/help",
-               },
-             }
-
-        expect(response.status).to eq(200)
-        expect(stub).to have_been_requested.times(0)
       end
 
       context "when 'text' is missing" do

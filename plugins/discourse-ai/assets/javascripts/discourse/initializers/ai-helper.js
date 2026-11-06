@@ -1,9 +1,8 @@
 import { withPluginApi } from "discourse/lib/plugin-api";
-import { waitForClosedKeyboard } from "discourse/lib/wait-for-keyboard";
 import { i18n } from "discourse-i18n";
-import AiComposerHelperMenu from "../components/ai-composer-helper-menu.gjs";
-import ModalDiffModal from "../components/modal/diff-modal.gjs";
-import { showComposerAiHelper } from "../lib/show-ai-helper.js";
+import AiComposerHelperMenu from "../components/ai-composer-helper-menu";
+import ModalDiffModal from "../components/modal/diff-modal";
+import { showComposerAiHelper } from "../lib/show-ai-helper";
 
 function initializeAiHelperTrigger(api) {
   api.onToolbarCreate((toolbar) => {
@@ -64,11 +63,7 @@ function initializeAiHelperTrigger(api) {
           currentUser,
           "context_menu"
         ),
-      sendAction: async (event) => {
-        const capabilities = api.container.lookup("service:capabilities");
-        const site = api.container.lookup("service:site");
-        await waitForClosedKeyboard(capabilities, site);
-
+      sendAction: (event) => {
         const menu = api.container.lookup("service:menu");
         menu.show(document.querySelector(".ai-helper-trigger"), {
           identifier: "ai-composer-helper-menu",

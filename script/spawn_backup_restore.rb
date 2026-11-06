@@ -6,7 +6,7 @@ fork do
 
   def backup
     user_id, opts = parse_params
-    BackupRestore::Creator.new(user_id, opts).run
+    BackupRestore::Backuper.new(user_id, opts).run
   end
 
   def restore

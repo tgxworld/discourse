@@ -1,5 +1,3 @@
-/* eslint-disable no-console */
-
 const fs = require("fs");
 const { execSync, execFileSync } = require("child_process");
 
@@ -19,27 +17,6 @@ if (fs.existsSync(`${discourseRoot}/node_modules/.yarn-integrity`)) {
   console.log("cleanup done");
 }
 
-const oldFrontendPath = `app/assets/javascripts`;
-if (fs.existsSync(`${discourseRoot}/${oldFrontendPath}`)) {
-  console.log(
-    `[.pnpmfile.cjs] Detected old ${oldFrontendPath} directory. Cleaning up gitignored files...`
-  );
-  execSync(`git clean -f -X ${oldFrontendPath}`, { cwd: discourseRoot });
-
-  if (fs.existsSync(`${discourseRoot}/${oldFrontendPath}`)) {
-    const anyFiles = !!execSync(
-      `find "${oldFrontendPath}" -mindepth 1 -type f -print -quit`,
-      { encoding: "utf8", cwd: discourseRoot }
-    ).trim();
-
-    if (!anyFiles) {
-      fs.rmSync(oldFrontendPath, {
-        recursive: true,
-      });
-    }
-  }
-}
-
 const pluginBase = `${discourseRoot}/plugins/`;
 const cwd = process.cwd();
 const pluginName =
@@ -47,7 +24,7 @@ const pluginName =
 
 if (
   pluginName &&
-  fs.existsSync(`${discourseRoot}/plugins/${pluginName}/pnpm-lock.yaml`) &&
+  fs.existsSync(`${discourseRoot}/plugins/${pluginName}/package.json`) &&
   !process.argv.includes("--ignore-workspace")
 ) {
   console.log(

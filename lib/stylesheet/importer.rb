@@ -7,7 +7,6 @@ module Stylesheet
     include GlobalPath
 
     THEME_TARGETS = %w[embedded_theme common_theme mobile_theme desktop_theme]
-    FONT_TARGETS = %w[embed publish]
 
     def self.plugin_assets
       @plugin_assets ||= {}
@@ -17,7 +16,7 @@ module Stylesheet
       Discourse.plugins.each do |plugin|
         plugin_directory_name = plugin.directory_name
 
-        ["", "mobile", "desktop", "admin"].each do |type|
+        ["", "mobile", "desktop"].each do |type|
           asset_name = type.present? ? "#{plugin_directory_name}_#{type}" : plugin_directory_name
           stylesheets =
             (
@@ -40,33 +39,13 @@ module Stylesheet
 
     register_imports!
 
-    # The font definitions for the given font keys, as plain CSS. Staff
-    # previews use it to try fonts before the site does.
-    def self.font_definitions(base_font:, heading_font:)
-      new({}).font_definitions(base_font, heading_font)
-    end
-
     def font
-      contents = font_definitions(SiteSetting.base_font, SiteSetting.heading_font)
-
-      contents << <<~CSS
-        #{font_css(jetbrains_mono)}
-        #{render_font_special_properties(jetbrains_mono, "body")}
-        :root {
-          --d-font-family--monospace: #{jetbrains_mono[:stack]};
-        }
-
-      CSS
-
-      contents
-    end
-
-    def font_definitions(base_font_key, heading_font_key)
-      body_font = DiscourseFonts.fonts.find { |f| f[:key] == base_font_key }
-      heading_font = DiscourseFonts.fonts.find { |f| f[:key] == heading_font_key }
+      body_font = DiscourseFonts.fonts.find { |f| f[:key] == SiteSetting.base_font }
+      heading_font = DiscourseFonts.fonts.find { |f| f[:key] == SiteSetting.heading_font }
       contents = +""
 
       contents << <<~CSS if body_font.present?
+          // Body font definition
           #{font_css(body_font)}
           #{render_font_special_properties(body_font, "body")}
           :root {
@@ -76,6 +55,7 @@ module Stylesheet
         CSS
 
       contents << <<~CSS if heading_font.present?
+          // Heading font definition
           #{font_css(heading_font)}
           #{render_font_special_properties(heading_font, "heading")}
           :root {
@@ -83,6 +63,24 @@ module Stylesheet
           }
 
         CSS
+
+      if SiteSetting.rich_editor
+        contents << <<~CSS
+          #{font_css(jetbrains_mono)}
+          #{render_font_special_properties(jetbrains_mono, "body")}
+          :root {
+            --d-font-family--monospace: #{jetbrains_mono[:stack]};
+          }
+
+        CSS
+      else
+        contents << <<~CSS
+          :root {
+            --d-font-family--monospace: ui-monospace, "Cascadia Mono", "Segoe UI Mono", "Liberation Mono", menlo, monaco, consolas, monospace;
+          }
+
+        CSS
+      end
 
       contents
     end
@@ -162,19 +160,21 @@ module Stylesheet
       if @color_scheme_id
         colors =
           begin
-            ColorScheme.find(@color_scheme_id).resolved_colors
+            ColorScheme.find(@color_scheme_id).resolved_colors(dark: @dark)
           rescue StandardError
             ColorScheme.base_colors
           end
-      elsif @theme_id && !theme.component
-        colors = theme&.color_scheme&.resolved_colors || ColorScheme.base_colors
+      elsif (@theme_id && !theme.component)
+        colors = theme&.color_scheme&.resolved_colors(dark: @dark) || ColorScheme.base_colors
       else
         # this is a slightly ugly backwards compatibility fix,
         # we shouldn't be using the default theme color scheme for components
         # (most components use CSS custom properties which work fine without this)
         colors =
-          Theme.find_by_id(SiteSetting.default_theme_id)&.color_scheme&.resolved_colors ||
-            ColorScheme.base_colors
+          Theme
+            .find_by_id(SiteSetting.default_theme_id)
+            &.color_scheme
+            &.resolved_colors(dark: @dark) || ColorScheme.base_colors
       end
 
       colors.each { |n, hex| contents << "$#{n}: ##{hex} !default; " }
@@ -195,6 +195,7 @@ module Stylesheet
       @theme = options[:theme]
       @theme_id = options[:theme_id]
       @color_scheme_id = options[:color_scheme_id]
+      @dark = options[:dark]
 
       if @theme && !@theme_id
         # make up an id so other stuff does not bail out

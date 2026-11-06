@@ -8,8 +8,7 @@ bs_BA:
   js:
     chat_integration:
       settings: "Postavke"
-      more_providers: "Više"
-      all_categories: "(Sve kategorije)"
+      all_categories: "(sve kategorije)"
       delete_channel: "Delete"
       edit_channel: "Izmijeni"
       test_modal:
@@ -84,6 +83,3 @@ bs_BA:
               label: Privatna Poruka
             url:
               label: URL
-    discourse_workflows:
-      send_chat_integration_message:
-        message: "Privatna Poruka"

@@ -3,7 +3,7 @@
 RSpec.describe DiscourseAi::Utils::AiStaffActionLogger do
   fab!(:admin)
   fab!(:llm_model)
-  fab!(:ai_agent)
+  fab!(:ai_persona)
   fab!(:group)
 
   subject(:ai_staff_action_logger) { described_class.new(admin) }
@@ -48,23 +48,23 @@ RSpec.describe DiscourseAi::Utils::AiStaffActionLogger do
       allow(StaffActionLogger).to receive(:new).with(admin).and_return(staff_action_logger)
       allow(staff_action_logger).to receive(:log_custom)
 
-      # Create a agent with a large system prompt
+      # Create a persona with a large system prompt
       large_prompt = "a" * 200
-      ai_agent.update!(system_prompt: large_prompt)
+      ai_persona.update!(system_prompt: large_prompt)
 
       # Create entity details
-      entity_details = { agent_id: ai_agent.id, agent_name: ai_agent.name }
+      entity_details = { persona_id: ai_persona.id, persona_name: ai_persona.name }
 
       field_config = { name: {}, description: {}, system_prompt: { type: :large_text } }
 
-      ai_staff_action_logger.log_creation("agent", ai_agent, field_config, entity_details)
+      ai_staff_action_logger.log_creation("persona", ai_persona, field_config, entity_details)
 
       # Verify with have_received
       expect(staff_action_logger).to have_received(:log_custom).with(
-        "create_ai_agent",
+        "create_ai_persona",
         hash_including(
-          "agent_id" => ai_agent.id,
-          "name" => ai_agent.name,
+          "persona_id" => ai_persona.id,
+          "name" => ai_persona.name,
           "system_prompt" => an_instance_of(String),
         ),
       ) do |action, details|
@@ -124,16 +124,16 @@ RSpec.describe DiscourseAi::Utils::AiStaffActionLogger do
       initial_attributes = { "name" => "Old Name", "allowed_group_ids" => [] }
 
       # Update with complex JSON
-      ai_agent.update!(name: "New Name", allowed_group_ids: [group.id, 999])
+      ai_persona.update!(name: "New Name", allowed_group_ids: [group.id, 999])
 
       field_config = { name: {}, json_fields: %w[allowed_group_ids] }
 
       # Create entity details
-      entity_details = { agent_id: ai_agent.id, agent_name: ai_agent.name }
+      entity_details = { persona_id: ai_persona.id, persona_name: ai_persona.name }
 
       ai_staff_action_logger.log_update(
-        "agent",
-        ai_agent,
+        "persona",
+        ai_persona,
         initial_attributes,
         field_config,
         entity_details,
@@ -141,10 +141,10 @@ RSpec.describe DiscourseAi::Utils::AiStaffActionLogger do
 
       # Verify with have_received
       expect(staff_action_logger).to have_received(:log_custom).with(
-        "update_ai_agent",
+        "update_ai_persona",
         hash_including(
-          "agent_id" => ai_agent.id,
-          "agent_name" => ai_agent.name,
+          "persona_id" => ai_persona.id,
+          "persona_name" => ai_persona.name,
           "name" => "Old Name → New Name",
           "allowed_group_ids" => "updated",
         ),
@@ -295,7 +295,7 @@ RSpec.describe DiscourseAi::Utils::AiStaffActionLogger do
       }
 
       # Update with different JSON
-      ai_agent.update!(
+      ai_persona.update!(
         name: "New Name",
         tools: [["search", { "base_query" => "updated" }, true], ["categories", {}, false]],
       )
@@ -303,11 +303,11 @@ RSpec.describe DiscourseAi::Utils::AiStaffActionLogger do
       field_config = { name: {}, json_fields: %w[tools] }
 
       # Create entity details
-      entity_details = { agent_id: ai_agent.id, agent_name: ai_agent.name }
+      entity_details = { persona_id: ai_persona.id, persona_name: ai_persona.name }
 
       ai_staff_action_logger.log_update(
-        "agent",
-        ai_agent,
+        "persona",
+        ai_persona,
         initial_attributes,
         field_config,
         entity_details,
@@ -315,10 +315,10 @@ RSpec.describe DiscourseAi::Utils::AiStaffActionLogger do
 
       # Verify with have_received
       expect(staff_action_logger).to have_received(:log_custom).with(
-        "update_ai_agent",
+        "update_ai_persona",
         hash_including(
-          "agent_id" => ai_agent.id,
-          "agent_name" => ai_agent.name,
+          "persona_id" => ai_persona.id,
+          "persona_name" => ai_persona.name,
           "name" => "Old Name → New Name",
           "tools" => "updated",
         ),

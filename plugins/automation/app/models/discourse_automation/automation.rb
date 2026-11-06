@@ -23,14 +23,12 @@ module DiscourseAutomation
 
     validates :script, presence: true
     validate :validate_trigger_fields
-    validate :required_fields_complete, if: :perform_required_fields_validation?
 
     after_destroy do |automation|
       UserCustomField.where(name: automation.new_user_custom_field_name).destroy_all
     end
 
     attr_accessor :running_in_background
-    attr_accessor :perform_required_fields_validation
 
     def trigger=(new_trigger)
       @triggerable = nil
@@ -57,8 +55,8 @@ module DiscourseAutomation
       change_automation_ids_custom_field_in_mutex(target, custom_field_key) do
         target.reload
         ids = Array(target.custom_fields[custom_field_key])
-        if !ids.include?(id)
-          ids << id
+        if !ids.include?(self.id)
+          ids << self.id
           ids = ids.compact.uniq
           target.custom_fields[custom_field_key] = ids
           target.save_custom_fields
@@ -74,9 +72,9 @@ module DiscourseAutomation
       change_automation_ids_custom_field_in_mutex(target, custom_field_key) do
         target.reload
         ids = Array(target.custom_fields[custom_field_key])
-        if ids.include?(id)
+        if ids.include?(self.id)
           ids = ids.compact.uniq
-          ids.delete(id)
+          ids.delete(self.id)
           target.custom_fields[custom_field_key] = ids
           target.save_custom_fields
         end
@@ -100,7 +98,6 @@ module DiscourseAutomation
     def upsert_field!(name, component, metadata, target: "script")
       field = fields.find_or_initialize_by(name: name, component: component, target: target)
       field.update!(metadata: metadata)
-      field
     end
 
     def self.deserialize_context(context)
@@ -130,8 +127,6 @@ module DiscourseAutomation
           new_context["_serialized_#{k}"] = { "class" => "Symbol", "value" => v.to_s }
         elsif v.is_a?(ActiveRecord::Base)
           new_context["_serialized_#{k}"] = { "class" => v.class.name, "id" => v.id }
-        elsif v.is_a?(Date) || v.is_a?(Time)
-          new_context[k] = v.iso8601
         else
           new_context[k] = v
         end
@@ -148,23 +143,22 @@ module DiscourseAutomation
     end
 
     def trigger!(context = {})
-      return if !enabled
-      return if DiscourseAutomation.triggers_suppressed?
+      if enabled
+        return if active_id = DiscourseAutomation.get_active_automation
 
-      return if DiscourseAutomation.recursion_depth >= DiscourseAutomation.max_recursion_depth
-
-      begin
-        DiscourseAutomation.increment_recursion_depth
-        if scriptable.background && !running_in_background
-          trigger_in_background!(context)
-        else
-          Stat.log(id) do
-            triggerable&.on_call&.call(self, serialized_fields)
-            scriptable.script.call(context, serialized_fields, self)
+        begin
+          DiscourseAutomation.set_active_automation(self.id)
+          if scriptable.background && !running_in_background
+            trigger_in_background!(context)
+          else
+            Stat.log(id) do
+              triggerable&.on_call&.call(self, serialized_fields)
+              scriptable.script.call(context, serialized_fields, self)
+            end
           end
+        ensure
+          DiscourseAutomation.set_active_automation(nil)
         end
-      ensure
-        DiscourseAutomation.decrement_recursion_depth
       end
     end
 
@@ -192,7 +186,7 @@ module DiscourseAutomation
     end
 
     def new_user_custom_field_name
-      "automation_#{id}_new_user"
+      "automation_#{self.id}_new_user"
     end
 
     private
@@ -207,49 +201,6 @@ module DiscourseAutomation
         validity: 5.seconds,
       ) { yield }
     end
-
-    def perform_required_fields_validation?
-      !!@perform_required_fields_validation && enabled?
-    end
-
-    def required_fields_complete
-      if scriptable.blank?
-        errors.add(
-          :base,
-          I18n.t("discourse_automation.models.automations.validations.script_blank"),
-        )
-        return
-      end
-
-      if triggerable.blank?
-        errors.add(
-          :base,
-          I18n.t("discourse_automation.models.automations.validations.trigger_blank"),
-        )
-        return
-      end
-
-      if missing_fields = scriptable.missing_required_fields.presence
-        errors.add(
-          :base,
-          I18n.t(
-            "discourse_automation.models.automations.validations.script_missing_required_fields",
-            fields: missing_fields.join(", "),
-          ),
-        )
-        return
-      end
-
-      if missing_fields = triggerable.missing_required_fields.presence
-        errors.add(
-          :base,
-          I18n.t(
-            "discourse_automation.models.automations.validations.trigger_missing_required_fields",
-            fields: missing_fields.join(", "),
-          ),
-        )
-      end
-    end
   end
 end
 
@@ -258,11 +209,11 @@ end
 # Table name: discourse_automation_automations
 #
 #  id                 :bigint           not null, primary key
-#  enabled            :boolean          default(FALSE), not null
 #  name               :string
 #  script             :string           not null
-#  trigger            :string
+#  enabled            :boolean          default(FALSE), not null
 #  created_at         :datetime         not null
 #  updated_at         :datetime         not null
 #  last_updated_by_id :integer          not null
+#  trigger            :string
 #

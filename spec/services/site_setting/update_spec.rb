@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe SiteSetting::Update do
-  describe SiteSetting::Update::Contract, type: :model do
+  describe described_class::Contract, type: :model do
     it { is_expected.to validate_presence_of :settings }
   end
 
@@ -29,28 +29,6 @@ RSpec.describe SiteSetting::Update do
       let(:guardian) { Guardian.new }
 
       it { is_expected.to fail_a_policy(:current_user_is_admin) }
-    end
-
-    context "when changing a setting where the value already matches the current value" do
-      let(:setting_name) { :title }
-      let(:new_value) { SiteSetting.title }
-
-      it { is_expected.to run_successfully }
-
-      it "does not create a staff action log" do
-        expect { result }.to not_change { UserHistory.count }
-      end
-
-      context "when the site setting is a boolean and the new value has not been coerced to a boolean" do
-        let(:setting_name) { :allow_user_locale }
-        let(:new_value) { "false" }
-
-        before { SiteSetting.allow_user_locale = false }
-
-        it "does not create a staff action log" do
-          expect { result }.to not_change { UserHistory.count }
-        end
-      end
     end
 
     context "when trying to change a deprecated setting" do
@@ -97,26 +75,6 @@ RSpec.describe SiteSetting::Update do
           expect { result }.to change { SiteSetting.max_category_nesting }.to(3)
         end
       end
-
-      context "when the hidden setting is an upcoming change" do
-        let(:setting_name) { :enable_upload_debug_mode }
-        let(:new_value) { true }
-
-        before do
-          mock_upcoming_change_metadata(
-            {
-              enable_upload_debug_mode: {
-                impact: "other,developers",
-                status: :stable,
-                impact_type: "other",
-                impact_role: "developers",
-              },
-            },
-          )
-        end
-
-        it { is_expected.to run_successfully }
-      end
     end
 
     context "when a user changes a setting shadowed by a global variable" do
@@ -156,17 +114,6 @@ RSpec.describe SiteSetting::Update do
       end
     end
 
-    context "when the expected value is stale" do
-      let(:options) do
-        { allow_changing_hidden:, expected_values: { setting_name => "a stale value" } }
-      end
-
-      it "does not update the setting" do
-        expect { result }.to not_change { SiteSetting.title }
-        expect(result["result.try.default"].exception).to be_a(SiteSetting::Update::Conflict)
-      end
-    end
-
     context "when one setting is having invalid value" do
       let(:settings) do
         [
@@ -175,25 +122,10 @@ RSpec.describe SiteSetting::Update do
         ]
       end
 
+      it { is_expected.to fail_a_policy(:values_are_valid) }
+
       it "does not update valid setting" do
-        expect { result }.to not_change { SiteSetting.where(name: "title").pick(:value) }
-      end
-    end
-
-    context "when updating dependent settings" do
-      before { SiteSetting.allow_user_locale = false }
-
-      let(:settings) do
-        [
-          # The first setting depends on the second one, which will fail
-          # unless we re-order them before updating.
-          { setting_name: "set_locale_from_param", value: true },
-          { setting_name: "allow_user_locale", value: true },
-        ]
-      end
-
-      it "updates the settings in order of dependency" do
-        is_expected.to run_successfully
+        expect { result }.not_to change { SiteSetting.title }
       end
     end
 

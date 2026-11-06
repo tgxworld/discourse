@@ -1,7 +1,6 @@
-import { uniqueItemsFromArray } from "discourse/lib/array-tools";
 import { renderIcon } from "discourse/lib/icon-library";
 import { i18n } from "discourse-i18n";
-import DateWithZoneHelper from "./date-with-zone-helper.js";
+import DateWithZoneHelper from "./date-with-zone-helper";
 
 const DATETIME_FORMAT = "LLL";
 const DATE_FORMAT = "LL";
@@ -114,7 +113,7 @@ export default class LocalDateBuilder {
       displayedTimezone === this.localTimezone &&
       this.timezone !== displayedTimezone &&
       !this._isEqualZones(displayedTimezone, this.timezone) &&
-      !this.timezones.some((t) => this._isEqualZones(t, this.timezone))
+      !this.timezones.any((t) => this._isEqualZones(t, this.timezone))
     ) {
       timezones.unshift(this.timezone);
     }
@@ -142,7 +141,7 @@ export default class LocalDateBuilder {
       });
     });
 
-    return uniqueItemsFromArray(previewedTimezones, "timezone");
+    return previewedTimezones.uniqBy("timezone");
   }
 
   _isEqualZones(timezoneA, timezoneB) {

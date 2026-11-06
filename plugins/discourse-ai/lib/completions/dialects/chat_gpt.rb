@@ -6,20 +6,21 @@ module DiscourseAi
       class ChatGpt < Dialect
         class << self
           def can_translate?(llm_model)
-            return false if llm_model.url.to_s.include?("/v1/responses")
-
             llm_model.provider == "open_router" || llm_model.provider == "open_ai" ||
               llm_model.provider == "azure"
           end
         end
 
         VALID_ID_REGEX = /\A[a-zA-Z0-9_]+\z/
+
         def native_tool_support?
-          !disable_native_tools?
+          llm_model.provider == "open_ai" || llm_model.provider == "azure"
         end
 
         def embed_user_ids?
           return @embed_user_ids if defined?(@embed_user_ids)
+
+          @embed_user_ids = true if responses_api?
 
           @embed_user_ids ||=
             prompt.messages.any? do |m|
@@ -27,10 +28,15 @@ module DiscourseAi
             end
         end
 
+        def responses_api?
+          return @responses_api if defined?(@responses_api)
+          @responses_api = llm_model.lookup_custom_param("enable_responses_api")
+        end
+
         def max_prompt_tokens
           # provide a buffer of 120 tokens - our function counting is not
           # 100% accurate and getting numbers to align exactly is very hard
-          buffer = (opts[:reserved_output_tokens] || opts[:max_tokens] || 2500) + 50
+          buffer = (opts[:max_tokens] || 2500) + 50
 
           if tools.present?
             # note this is about 100 tokens over, OpenAI have a more optimal representation
@@ -41,18 +47,22 @@ module DiscourseAi
           llm_model.max_prompt_tokens - buffer
         end
 
-        private
-
         def disable_native_tools?
           return @disable_native_tools if defined?(@disable_native_tools)
           !!@disable_native_tools = llm_model.lookup_custom_param("disable_native_tools")
         end
 
+        private
+
         def tools_dialect
-          if native_tool_support?
-            @tools_dialect ||= DiscourseAi::Completions::Dialects::OpenAiTools.new(prompt.tools)
-          else
+          if disable_native_tools?
             super
+          else
+            @tools_dialect ||=
+              DiscourseAi::Completions::Dialects::OpenAiTools.new(
+                prompt.tools,
+                responses_api: responses_api?,
+              )
           end
         end
 
@@ -61,7 +71,7 @@ module DiscourseAi
           !legacy_reasoning_model? && llm_model.provider == "open_ai" &&
             (
               llm_model.name.start_with?("o1") || llm_model.name.start_with?("o3") ||
-                llm_model.name.start_with?("gpt-5") || llm_model.name.start_with?("gpt-6")
+                llm_model.name.start_with?("gpt-5")
             )
         end
 
@@ -72,7 +82,7 @@ module DiscourseAi
 
         def system_msg(msg)
           content = msg[:content]
-          if !native_tool_support? && tools_dialect.instructions.present?
+          if disable_native_tools? && tools_dialect.instructions.present?
             content = content + "\n\n" + tools_dialect.instructions
           end
 
@@ -86,56 +96,46 @@ module DiscourseAi
         end
 
         def model_msg(msg)
-          message_for_role("assistant", msg)
+          { role: "assistant", content: msg[:content] }
         end
 
         def tool_call_msg(msg)
-          if native_tool_support?
-            tools_dialect.from_raw_tool_call(msg)
-          else
+          if disable_native_tools?
             super
+          else
+            tools_dialect.from_raw_tool_call(msg)
           end
         end
 
         def tool_msg(msg)
-          if native_tool_support?
-            tools_dialect.from_raw_tool(msg)
-          else
+          if disable_native_tools?
             super
+          else
+            tools_dialect.from_raw_tool(msg)
           end
         end
 
         def user_msg(msg)
-          message_for_role("user", msg)
-        end
-
-        def message_for_role(role, msg)
           content_array = []
 
-          user_message = { role: }
+          user_message = { role: "user" }
 
-          if (user_id = user_id_for(msg))
+          if msg[:id]
             if embed_user_ids?
-              content_array << "#{user_id}: "
+              content_array << "#{msg[:id]}: "
             else
-              user_message[:name] = user_id
+              user_message[:name] = msg[:id]
             end
           end
 
           content_array << msg[:content]
 
-          allow_images = vision_support?
-
           content_array =
             to_encoded_content_array(
               content: content_array.flatten,
-              upload_encoder: ->(details) { upload_node(details, role) },
-              text_encoder: ->(text) { text_node(text, role) },
-              other_encoder: ->(hash) { hash },
-              allow_images:,
-              allow_documents: true,
-              allowed_attachment_types: llm_model.allowed_attachment_types,
-              upload_filter: ->(encoded) { document_allowed?(encoded) },
+              image_encoder: ->(details) { image_node(details) },
+              text_encoder: ->(text) { text_node(text) },
+              allow_vision: vision_support?,
             )
 
           user_message[:content] = no_array_if_only_text(content_array)
@@ -150,33 +150,21 @@ module DiscourseAi
           end
         end
 
-        def text_node(text, role)
-          { type: "text", text: text }
-        end
-
-        def upload_node(details, role)
-          return text_node(details[:text], role) if details[:text].present?
-
-          if details[:mime_type] == "application/pdf" || details[:kind] == :document
-            file_node(details)
+        def text_node(text)
+          if responses_api?
+            { type: "input_text", text: text }
           else
-            image_node(details)
+            { type: "text", text: text }
           end
         end
 
         def image_node(details)
           encoded_image = "data:#{details[:mime_type]};base64,#{details[:base64]}"
-          { type: "image_url", image_url: { url: encoded_image } }
-        end
-
-        def file_node(details)
-          {
-            type: "file",
-            file: {
-              filename: details[:filename] || "document.pdf",
-              file_data: "data:#{details[:mime_type]};base64,#{details[:base64]}",
-            },
-          }
+          if responses_api?
+            { type: "input_image", image_url: encoded_image }
+          else
+            { type: "image_url", image_url: { url: encoded_image } }
+          end
         end
 
         def per_message_overhead

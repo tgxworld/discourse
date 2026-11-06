@@ -4,8 +4,7 @@ require_dependency "post_creator"
 require_relative "../dummy_provider"
 
 RSpec.describe DiscourseChatIntegration::Manager do
-  subject(:manager) { described_class }
-
+  let(:manager) { ::DiscourseChatIntegration::Manager }
   let(:category) { Fabricate(:category) }
   let(:group) { Fabricate(:group) }
   let(:group2) { Fabricate(:group) }
@@ -20,12 +19,9 @@ RSpec.describe DiscourseChatIntegration::Manager do
     let(:chan2) { DiscourseChatIntegration::Channel.create!(provider: "dummy") }
     let(:chan3) { DiscourseChatIntegration::Channel.create!(provider: "dummy") }
 
-    before do
-      SiteSetting.chat_integration_enabled = true
-      SiteSetting.dummy_provider_enabled = true
-    end
+    before { SiteSetting.chat_integration_enabled = true }
 
-    it "continues when a provider raises an exception" do
+    it "should fail gracefully when a provider throws an exception" do
       DiscourseChatIntegration::Rule.create!(
         channel: chan1,
         filter: "watch",
@@ -54,8 +50,8 @@ RSpec.describe DiscourseChatIntegration::Manager do
       expect(DiscourseChatIntegration::Channel.all.first.error_key.nil?).to be true
     end
 
-    it "does not notify a disabled provider" do
-      SiteSetting.dummy_provider_enabled = false
+    it "should not send notifications when provider is disabled" do
+      SiteSetting.chat_integration_enabled = false
       DiscourseChatIntegration::Rule.create!(
         channel: chan1,
         filter: "watch",
@@ -67,7 +63,7 @@ RSpec.describe DiscourseChatIntegration::Manager do
       expect(provider.sent_to_channel_ids).to contain_exactly
     end
 
-    it "notifies watched and followed channels about a new topic" do
+    it "should send a notification to watched and following channels for new topic" do
       DiscourseChatIntegration::Rule.create!(
         channel: chan1,
         filter: "watch",
@@ -89,7 +85,7 @@ RSpec.describe DiscourseChatIntegration::Manager do
       expect(provider.sent_to_channel_ids).to contain_exactly(chan1.id, chan2.id)
     end
 
-    it "notifies only watched channels about a reply" do
+    it "should send a notification only to watched for reply" do
       DiscourseChatIntegration::Rule.create!(
         channel: chan1,
         filter: "watch",
@@ -111,7 +107,7 @@ RSpec.describe DiscourseChatIntegration::Manager do
       expect(provider.sent_to_channel_ids).to contain_exactly(chan1.id)
     end
 
-    it "applies wildcard category rules" do
+    it "should respect wildcard category settings" do
       DiscourseChatIntegration::Rule.create!(channel: chan1, filter: "watch", category_id: nil)
 
       manager.trigger_notifications(first_post.id)
@@ -119,7 +115,7 @@ RSpec.describe DiscourseChatIntegration::Manager do
       expect(provider.sent_to_channel_ids).to contain_exactly(chan1.id)
     end
 
-    it "gives mute rules precedence over watch rules" do
+    it "should respect mute over watch" do
       DiscourseChatIntegration::Rule.create!(channel: chan1, filter: "watch", category_id: nil) # Wildcard watch
       DiscourseChatIntegration::Rule.create!(
         channel: chan1,
@@ -132,7 +128,7 @@ RSpec.describe DiscourseChatIntegration::Manager do
       expect(provider.sent_to_channel_ids).to contain_exactly
     end
 
-    it "gives watch rules precedence over follow rules" do
+    it "should respect watch over follow" do
       DiscourseChatIntegration::Rule.create!(channel: chan1, filter: "follow", category_id: nil) # Wildcard follow
       DiscourseChatIntegration::Rule.create!(
         channel: chan1,
@@ -145,7 +141,7 @@ RSpec.describe DiscourseChatIntegration::Manager do
       expect(provider.sent_to_channel_ids).to contain_exactly(chan1.id)
     end
 
-    it "gives thread rules precedence over watch rules" do
+    it "should respect thread over watch" do
       DiscourseChatIntegration::Rule.create!(channel: chan1, filter: "watch", category_id: nil) # Wildcard watch
       DiscourseChatIntegration::Rule.create!(
         channel: chan1,
@@ -158,7 +154,7 @@ RSpec.describe DiscourseChatIntegration::Manager do
       expect(provider.sent_to_channel_ids).to contain_exactly(chan1.id)
     end
 
-    it "does not notify about private messages" do
+    it "should not notify about private messages" do
       DiscourseChatIntegration::Rule.create!(channel: chan1, filter: "follow", category_id: nil) # Wildcard watch
 
       private_post = Fabricate(:private_message_post)
@@ -168,7 +164,7 @@ RSpec.describe DiscourseChatIntegration::Manager do
       expect(provider.sent_to_channel_ids).to contain_exactly
     end
 
-    it "notifies eligible group private messages" do
+    it "should work for group pms" do
       DiscourseChatIntegration::Rule.create!(channel: chan1, filter: "watch") # Wildcard watch
       DiscourseChatIntegration::Rule.create!(
         channel: chan2,
@@ -185,7 +181,7 @@ RSpec.describe DiscourseChatIntegration::Manager do
       expect(provider.sent_to_channel_ids).to contain_exactly(chan2.id)
     end
 
-    it "notifies private messages shared with multiple groups" do
+    it "should work for pms with multiple groups" do
       DiscourseChatIntegration::Rule.create!(
         channel: chan1,
         type: "group_message",
@@ -208,7 +204,7 @@ RSpec.describe DiscourseChatIntegration::Manager do
       expect(provider.sent_to_channel_ids).to contain_exactly(chan1.id, chan2.id)
     end
 
-    it "notifies group mentions" do
+    it "should work for group mentions" do
       third_post =
         Fabricate(:post, topic: topic, post_number: 3, raw: "let's mention @#{group.name}")
 
@@ -230,7 +226,7 @@ RSpec.describe DiscourseChatIntegration::Manager do
       expect(provider.sent_to_channel_ids).to contain_exactly(chan1.id, chan3.id)
     end
 
-    it "gives group rules precedence over normal rules" do
+    it "should give group rule precedence over normal rules" do
       third_post =
         Fabricate(:post, topic: topic, post_number: 3, raw: "let's mention @#{group.name}")
 
@@ -252,7 +248,7 @@ RSpec.describe DiscourseChatIntegration::Manager do
       expect(provider.sent_to_channel_ids).to contain_exactly(chan1.id)
     end
 
-    it "does not notify about mentions in private messages" do
+    it "should not notify about mentions in private messages" do
       # Group 1 watching for messages on channel 1
       DiscourseChatIntegration::Rule.create!(
         channel: chan1,
@@ -286,7 +282,7 @@ RSpec.describe DiscourseChatIntegration::Manager do
       expect(provider.sent_to_channel_ids).to contain_exactly(chan1.id)
     end
 
-    it "does not notify about posts hidden from the chat user" do
+    it "should not notify about posts the chat_user cannot see" do
       DiscourseChatIntegration::Rule.create!(channel: chan1, filter: "follow", category_id: nil) # Wildcard watch
 
       # Create a group & user
@@ -326,7 +322,7 @@ RSpec.describe DiscourseChatIntegration::Manager do
 
       before(:each) { SiteSetting.tagging_enabled = true }
 
-      it "matches rules without specified tags" do
+      it "should still work for rules without any tags specified" do
         DiscourseChatIntegration::Rule.create!(channel: chan1, filter: "follow", category_id: nil) # Wildcard watch
 
         manager.trigger_notifications(first_post.id)
@@ -335,7 +331,7 @@ RSpec.describe DiscourseChatIntegration::Manager do
         expect(provider.sent_to_channel_ids).to contain_exactly(chan1.id, chan1.id)
       end
 
-      it "only matches tagged topics when a rule specifies tags" do
+      it "should only match tagged topics when rule has tags" do
         DiscourseChatIntegration::Rule.create!(
           channel: chan1,
           filter: "follow",
@@ -356,7 +352,7 @@ RSpec.describe DiscourseChatIntegration::Manager do
         SiteSetting.whispers_allowed_groups = "#{Group::AUTO_GROUPS[:staff]}"
       end
 
-      it "notifies about category changes" do
+      it "should notify about category changes" do
         DiscourseChatIntegration::Rule.create!(
           channel: chan1,
           filter: "watch",

@@ -5,15 +5,8 @@
 # https://translate.discourse.org/
 
 ja:
-  admin_js:
-    admin:
-      site_settings:
-        categories:
-          poll: "Discourse 投票"
   js:
     poll:
-      dynamic:
-        enabled_hint: "オプションは追加または削除できます。"
       voters:
         other: "投票者数"
       total_votes:
@@ -47,8 +40,6 @@ ja:
       cast-votes:
         title: "投票する"
         label: "今すぐ投票！"
-      keep-vote:
-        label: "戻る"
       show-results:
         title: "投票結果を表示する"
         label: "結果"
@@ -144,8 +135,6 @@ ja:
           step: 間隔
         poll_public:
           label: 投票者を表示する
-        poll_dynamic:
-          label: 投稿後にオプションを追加または削除することを許可する
         poll_title:
           label: タイトル (オプション)
         poll_options:
@@ -153,3 +142,5 @@ ja:
           add: オプションを追加
         automatic_close:
           label: 投票を自動的にクローズする
+        show_advanced: "高度なオプションを表示"
+        hide_advanced: "高度なオプションを非表示"

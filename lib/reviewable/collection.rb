@@ -11,8 +11,6 @@ class Reviewable < ActiveRecord::Base
       end
     end
 
-    delegate :present?, :blank?, to: :@content
-
     def initialize(reviewable, guardian, args = nil)
       args ||= {}
 
@@ -22,6 +20,14 @@ class Reviewable < ActiveRecord::Base
 
     def has?(action_id)
       @content.any? { |a| a.server_action.to_s == action_id.to_s }
+    end
+
+    def blank?
+      @content.blank?
+    end
+
+    def present?
+      !blank?
     end
 
     def each

@@ -2,49 +2,42 @@
 
 require "json"
 
-module Patreon
+module ::Patreon
   class Campaign
     def self.update!
-      verbose = SiteSetting.patreon_verbose_log
-      adapter = ApiVersion.current
+      rewards = {}
+      campaign_rewards = []
+      pledges_uris = []
 
-      if verbose
-        Rails.logger.warn("Patreon sync started using API v#{SiteSetting.patreon_api_version}")
+      response = ::Patreon::Api.campaign_data
+
+      return false if response.blank? || response["data"].blank?
+
+      response["data"].map do |campaign|
+        uri = campaign["relationships"]["pledges"]["links"]["first"]
+        pledges_uris << uri.sub("page%5Bcount%5D=20", "page%5Bcount%5D=100")
+
+        campaign["relationships"]["rewards"]["data"].each do |entry|
+          campaign_rewards << entry["id"]
+        end
       end
 
-      response = Patreon::Api.campaign_data
-
-      if response.blank? || response["data"].blank?
-        Rails.logger.warn("Patreon sync: no campaign data returned") if verbose
-        return false
-      end
-
-      campaign_data = adapter.parse_campaigns(response)
-      rewards = campaign_data[:rewards]
-
-      if verbose
-        Rails.logger.warn(
-          "Patreon sync: found #{rewards.size} rewards/tiers across #{response["data"].size} campaigns",
-        )
+      response["included"].each do |entry|
+        id = entry["id"]
+        if entry["type"] == "reward" && campaign_rewards.include?(id)
+          rewards[id] = entry["attributes"]
+          rewards[id]["id"] = id
+        end
       end
 
       # Special catch all patrons virtual reward
       rewards["0"] ||= {}
-      rewards["0"]["id"] = "0"
       rewards["0"]["title"] = "All Patrons"
       rewards["0"]["amount_cents"] = 0
 
       Patreon.set("rewards", rewards)
 
-      return false unless adapter.pull_pledges!(campaign_data)
-
-      pledges = Patreon.get("pledges") || {}
-      users = Patreon.get("users") || {}
-      if verbose
-        Rails.logger.warn(
-          "Patreon sync complete: #{pledges.size} pledges, #{users.size} users synced",
-        )
-      end
+      Patreon::Pledge.pull!(pledges_uris)
 
       # Sets all patrons to the seed group by default on first run
       filters = Patreon.get("filters")

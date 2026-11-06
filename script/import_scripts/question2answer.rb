@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "mysql2"
-require_relative "base"
+require File.expand_path(File.dirname(__FILE__) + "/base.rb")
 require "htmlentities"
 require "php_serialize" # https://github.com/jqr/php-serialize
 
@@ -284,14 +284,16 @@ class ImportScripts::Question2Answer < ImportScripts::Base
     puts "", "importing best answers..."
     ans = mysql_query("select postid, selchildid from qa_posts where selchildid is not null").to_a
     ans.each do |answer|
-      post = Post.find_by(id: post_id_from_imported_post_id("#{answer["selchildid"]}"))
-      post.custom_fields["is_accepted_answer"] = "true"
-      post.save
-      topic = Topic.find(post.topic_id)
-      topic.custom_fields["accepted_answer_post_id"] = post.id
-      topic.save
-    rescue => e
-      puts "error acting on post #{e}"
+      begin
+        post = Post.find_by(id: post_id_from_imported_post_id("#{answer["selchildid"]}"))
+        post.custom_fields["is_accepted_answer"] = "true"
+        post.save
+        topic = Topic.find(post.topic_id)
+        topic.custom_fields["accepted_answer_post_id"] = post.id
+        topic.save
+      rescue => e
+        puts "error acting on post #{e}"
+      end
     end
   end
 
@@ -320,15 +322,17 @@ class ImportScripts::Question2Answer < ImportScripts::Base
     max = Post.count
 
     Post.find_each do |post|
-      new_raw = postprocess_post_raw(post.raw)
-      if new_raw != post.raw
-        post.raw = new_raw
-        post.save
+      begin
+        new_raw = postprocess_post_raw(post.raw)
+        if new_raw != post.raw
+          post.raw = new_raw
+          post.save
+        end
+      rescue PrettyText::JavaScriptError
+        nil
+      ensure
+        print_status(current += 1, max)
       end
-    rescue PrettyText::JavaScriptError
-      nil
-    ensure
-      print_status(current += 1, max)
     end
   end
 

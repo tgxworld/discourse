@@ -3,24 +3,25 @@
 describe DiscourseGithubPlugin::GithubRepo do
   before { enable_current_plugin }
 
-  describe ".names" do
-    it "extracts the repo names from the badges repos setting" do
-      SiteSetting.github_badges_repos =
-        "https://github.com/discourse/discourse.git|https://github.com/discourse/onebox/|discourse/somerepo_with-numbers7"
-
-      expect(described_class.names).to eq(
-        %w[discourse/discourse discourse/onebox discourse/somerepo_with-numbers7],
-      )
-      expect(described_class.count).to eq(0)
-    end
+  it "strips .git from url" do
+    SiteSetting.github_badges_repos = "https://github.com/discourse/discourse.git"
+    repo = DiscourseGithubPlugin::GithubRepo.repos.first
+    expect(repo.name).to eq("discourse/discourse")
   end
 
-  describe ".repos" do
-    it "finds or creates a repo for each name" do
-      SiteSetting.github_badges_repos = "discourse/discourse"
+  it "strips trailing slash from url" do
+    SiteSetting.github_badges_repos = "https://github.com/discourse/discourse/"
+    repo = DiscourseGithubPlugin::GithubRepo.repos.first
+    expect(repo.name).to eq("discourse/discourse")
+  end
 
-      expect(described_class.repos.map(&:name)).to eq(%w[discourse/discourse])
-      expect { described_class.repos }.not_to change { described_class.count }
-    end
+  it "doesn't raise an error when the site setting follows the user/repo format" do
+    SiteSetting.github_badges_repos = "discourse/discourse-github"
+    repo = DiscourseGithubPlugin::GithubRepo.repos.first
+    expect(repo.name).to eq("discourse/discourse-github")
+
+    SiteSetting.github_badges_repos = "discourse/somerepo_with-numbers7"
+    repo = DiscourseGithubPlugin::GithubRepo.repos.first
+    expect(repo.name).to eq("discourse/somerepo_with-numbers7")
   end
 end

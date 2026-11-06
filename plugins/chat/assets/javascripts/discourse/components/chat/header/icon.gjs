@@ -1,10 +1,9 @@
 import Component from "@glimmer/component";
-import { action } from "@ember/object";
 import { service } from "@ember/service";
+import DButton from "discourse/components/d-button";
+import concatClass from "discourse/helpers/concat-class";
+import icon from "discourse/helpers/d-icon";
 import getURL from "discourse/lib/get-url";
-import DButton from "discourse/ui-kit/d-button";
-import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { i18n } from "discourse-i18n";
 import ChatHeaderIconUnreadIndicator from "discourse/plugins/chat/discourse/components/chat/header/icon/unread-indicator";
 import { getUserChatSeparateSidebarMode } from "discourse/plugins/chat/discourse/lib/get-user-chat-separate-sidebar-mode";
@@ -23,7 +22,7 @@ export default class ChatHeaderIcon extends Component {
   }
 
   get currentUserInDnD() {
-    return this.args.currentUserInDnD || this.currentUser?.isInDoNotDisturb();
+    return this.args.currentUserInDnD || this.currentUser.isInDoNotDisturb();
   }
 
   get chatSeparateSidebarMode() {
@@ -62,56 +61,42 @@ export default class ChatHeaderIcon extends Component {
     return "d-chat";
   }
 
-  get targetUrl() {
+  get href() {
+    if (this.site.mobileView && this.chatStateManager.isFullPageActive) {
+      return getURL("/chat");
+    }
+
     if (
       this.chatStateManager.isFullPageActive &&
       !this.chatSeparateSidebarMode.never
     ) {
-      return this.chatStateManager.lastKnownAppURL || "/";
+      return getURL(this.chatStateManager.lastKnownAppURL || "/");
     }
 
     if (this.chatStateManager.isDrawerActive) {
-      return "/chat";
+      return getURL("/chat");
     }
 
-    return this.chatStateManager.lastKnownChatURL || "/chat";
-  }
-
-  get href() {
-    return getURL(this.targetUrl);
-  }
-
-  @action
-  openChat() {
-    // Opening chat: explicitly set drawer preference before navigating
-    // This ensures the route's beforeModel respects drawer mode even on
-    // full page loads (e.g., after browser refresh)
-    if (this.chatStateManager.isDrawerPreferred) {
-      this.chatStateManager.prefersDrawer();
-    }
-    this.router.transitionTo(this.targetUrl);
+    return getURL(this.chatStateManager.lastKnownChatURL || "/chat");
   }
 
   <template>
-    {{#unless (and this.site.mobileView this.isActive)}}
-      <li class="header-dropdown-toggle chat-header-icon">
-        <DButton
-          class={{dConcatClass "icon" "btn-flat" (if this.isActive "active")}}
-          tabindex="0"
-          title={{this.title}}
-          @action={{this.openChat}}
-          @href={{this.href}}
-        >
-          {{~dIcon this.icon~}}
-          {{#if this.showUnreadIndicator}}
-            <ChatHeaderIconUnreadIndicator
-              @indicatorPreference={{@indicatorPreference}}
-              @unreadCount={{@unreadCount}}
-              @urgentCount={{@urgentCount}}
-            />
-          {{/if}}
-        </DButton>
-      </li>
-    {{/unless}}
+    <li class="header-dropdown-toggle chat-header-icon">
+      <DButton
+        @href={{this.href}}
+        tabindex="0"
+        class={{concatClass "icon" "btn-flat" (if this.isActive "active")}}
+        title={{this.title}}
+      >
+        {{~icon this.icon~}}
+        {{#if this.showUnreadIndicator}}
+          <ChatHeaderIconUnreadIndicator
+            @urgentCount={{@urgentCount}}
+            @unreadCount={{@unreadCount}}
+            @indicatorPreference={{@indicatorPreference}}
+          />
+        {{/if}}
+      </DButton>
+    </li>
   </template>
 }

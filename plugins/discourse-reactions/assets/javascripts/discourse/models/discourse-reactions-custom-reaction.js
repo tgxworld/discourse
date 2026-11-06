@@ -1,52 +1,22 @@
 import EmberObject from "@ember/object";
 import { ajax } from "discourse/lib/ajax";
-import { emojiUnescape } from "discourse/lib/text";
 import Category from "discourse/models/category";
 import Post from "discourse/models/post";
 import RestModel from "discourse/models/rest";
 import Topic from "discourse/models/topic";
 import User from "discourse/models/user";
 
-export const PAGE_SIZE = 20;
-
 export default class CustomReaction extends RestModel {
-  static toggle(post, reactionId, appEvents) {
+  static toggle(post, reactionId) {
     return ajax(
       `/discourse-reactions/posts/${post.id}/custom-reactions/${reactionId}/toggle.json`,
       { type: "PUT" }
     ).then((result) => {
-      appEvents.trigger("discourse-reactions:reaction-toggled", {
+      post.appEvents.trigger("discourse-reactions:reaction-toggled", {
         post: result,
         reaction: result.current_user_reaction,
       });
     });
-  }
-
-  static flattenForPostList(reaction) {
-    const { title, fancy_title } = reaction.topic;
-    return {
-      // Original reaction data
-      ...reaction,
-      // Preserve reaction_user.id for pagination
-      reaction_user_id: reaction.id,
-      // Flatten post fields to top level for PostListItem
-      id: reaction.post.id,
-      user_id: reaction.post.user_id,
-      username: reaction.post.username,
-      name: reaction.post.name,
-      avatar_template: reaction.post.avatar_template,
-      user_title: reaction.post.user_title,
-      primary_group_name: reaction.post.primary_group_name,
-      excerpt: reaction.post.excerpt,
-      expandedExcerpt: reaction.post.expandedExcerpt,
-      topic_id: reaction.post.topic_id,
-      post_type: reaction.post.post_type,
-      url: reaction.post.url,
-      title,
-      titleHtml: fancy_title && emojiUnescape(fancy_title),
-      category: reaction.category,
-      created_at: reaction.created_at,
-    };
   }
 
   static findReactions(url, username, opts) {
@@ -91,33 +61,16 @@ export default class CustomReaction extends RestModel {
     });
   }
 
-  static fetchReactionsUsersList(postId, page, limit, reactionValue) {
-    const data = { page, limit };
-    if (reactionValue) {
-      data.reaction_value = reactionValue;
-    }
-    return ajax(
-      `/discourse-reactions/posts/${postId}/reactions-users-list.json`,
-      { data }
-    );
-  }
-
-  static findReactionUsers(postId, options = {}) {
+  static findReactionUsers(postId, opts) {
+    opts = opts || {};
     const data = {};
-    if (options.reactionValue) {
-      data.reaction_value = options.reactionValue;
+
+    if (opts.reactionValue) {
+      data.reaction_value = opts.reactionValue;
     }
+
     return ajax(`/discourse-reactions/posts/${postId}/reactions-users.json`, {
-      type: "GET",
       data,
-    }).then((result) => {
-      const reactionUsers = result.reaction_users.map((reactionUser) => {
-        reactionUser.users = reactionUser.users.map((user) =>
-          User.create(user)
-        );
-        return reactionUser;
-      });
-      return { reaction_users: reactionUsers };
     });
   }
 

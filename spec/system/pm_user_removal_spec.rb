@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "PM user removal" do
+describe "PM user removal", type: :system do
   fab!(:current_user, :admin)
   fab!(:other_user, :user)
 
@@ -9,55 +9,54 @@ describe "PM user removal" do
 
   before { sign_in(current_user) }
 
-  it "removes a user from the PM list" do
-    pm =
-      create_post(
-        user: current_user,
-        target_usernames: [other_user.username],
-        archetype: Archetype.private_message,
-      ).topic
+  %w[enabled disabled].each do |setting|
+    context "when the setting is #{setting}" do
+      before { SiteSetting.glimmer_post_stream_mode = setting }
 
-    topic_page.visit_topic(pm)
+      it "removes a user from the PM list" do
+        pm =
+          create_post(
+            user: current_user,
+            target_usernames: [other_user.username],
+            archetype: Archetype.private_message,
+          ).topic
 
-    find(".user[data-id='#{other_user.id}'] .remove-invited").click
+        topic_page.visit_topic(pm)
 
-    expect(page).to have_selector(
-      ".small-action-contents",
-      text: "Removed @#{other_user.username} just now",
-    )
-  end
+        find(".add-remove-participant-btn").click
+        find(".user[data-id='#{other_user.id}'] .remove-invited").click
+        dialog.click_danger
 
-  it "removes yourself from the PM list" do
-    pm =
-      create_post(
-        user: current_user,
-        target_usernames: [other_user.username],
-        archetype: Archetype.private_message,
-      ).topic
-    topic_page.visit_topic(pm)
-    find(".user[data-id='#{current_user.id}'] .remove-invited").click
-    dialog.click_yes
-
-    expect(page).to have_current_path("/u/#{current_user.username}/messages")
-  end
-
-  it "removes a group from the PM list" do
-    group =
-      Fabricate(:group, messageable_level: Group::ALIAS_LEVELS[:everyone]).tap do |g|
-        g.add(other_user)
+        expect(page).to have_selector(
+          ".small-action-contents",
+          text: "Removed @#{other_user.username} just now",
+        )
       end
 
-    pm =
-      create_post(
-        user: current_user,
-        target_group_names: [group.name],
-        archetype: Archetype.private_message,
-      ).topic
+      it "removes a group from the PM list" do
+        group =
+          Fabricate(:group, messageable_level: Group::ALIAS_LEVELS[:everyone]).tap do |g|
+            g.add(other_user)
+          end
 
-    topic_page.visit_topic(pm)
+        pm =
+          create_post(
+            user: current_user,
+            target_group_names: [group.name],
+            archetype: Archetype.private_message,
+          ).topic
 
-    find(".group[data-id='#{group.id}'] .remove-invited").click
+        topic_page.visit_topic(pm)
 
-    expect(page).to have_selector(".small-action-contents", text: "Removed @#{group.name} just now")
+        find(".add-remove-participant-btn").click
+        find(".group[data-id='#{group.id}'] .remove-invited").click
+        dialog.click_danger
+
+        expect(page).to have_selector(
+          ".small-action-contents",
+          text: "Removed @#{group.name} just now",
+        )
+      end
+    end
   end
 end

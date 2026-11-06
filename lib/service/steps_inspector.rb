@@ -7,36 +7,27 @@
 class Service::StepsInspector
   # @!visibility private
   class Step
-    COLORS = { red: 31, green: 32, white: 37, gray: 90 }
-
-    attr_reader :step, :result, :nesting_level, :color
+    attr_reader :step, :result, :nesting_level
 
     delegate :name, :result_key, to: :step
-    delegate :failure?,
-             :success?,
-             :error,
-             :raised_exception?,
-             :skipped?,
-             to: :step_result,
-             allow_nil: true
+    delegate :failure?, :success?, :error, :raised_exception?, to: :step_result, allow_nil: true
 
     alias error? failure?
 
-    def self.for(step, result, nesting_level: 0, color: nil)
+    def self.for(step, result, nesting_level: 0)
       class_name =
         "#{module_parent_name}::#{step.class.name.split("::").last.sub(/^(\w+)Step$/, "\\1")}"
-      class_name.constantize.new(step, result, nesting_level:, color:)
+      class_name.constantize.new(step, result, nesting_level: nesting_level)
     end
 
-    def initialize(step, result, nesting_level: 0, color: nil)
+    def initialize(step, result, nesting_level: 0)
       @step = step
       @result = result
       @nesting_level = nesting_level
-      @color = color
     end
 
     def type
-      self.class.name.split("::").last.underscore
+      self.class.name.split("::").last.downcase
     end
     alias inspect_type type
 
@@ -49,7 +40,7 @@ class Service::StepsInspector
     end
 
     def inspect
-      "#{"  " * nesting_level}\e[#{ansi_color}m[#{inspect_type}] #{name}#{runtime}\e[0m #{emoji}".rstrip
+      "#{"  " * nesting_level}[#{inspect_type}] #{name}#{runtime} #{emoji}".rstrip
     end
 
     private
@@ -65,7 +56,6 @@ class Service::StepsInspector
 
     def result_emoji
       return "💥" if raised_exception?
-      return "⏭️" if skipped?
       return "❌" if failure?
       return "✅" if success?
       ""
@@ -78,13 +68,6 @@ class Service::StepsInspector
     def unexpected_result_text
       return "  <= expected to return true but got false instead" if error?
       "  <= expected to return false but got true instead"
-    end
-
-    def ansi_color
-      return color if color
-      return COLORS[:red] if failure?
-      return COLORS[:green] if success?
-      COLORS[:white]
     end
   end
 
@@ -117,14 +100,11 @@ class Service::StepsInspector
   # @!visibility private
   class Transaction < Step
     def steps
-      [
-        self,
-        *step.steps.map { Step.for(it, result, nesting_level: nesting_level + 1, color:).steps },
-      ]
+      [self, *step.steps.map { Step.for(_1, result, nesting_level: nesting_level + 1).steps }]
     end
 
     def inspect
-      "#{"  " * nesting_level}\e[#{ansi_color}m[#{inspect_type}]#{runtime}\e[0m#{unexpected_result_emoji}"
+      "#{"  " * nesting_level}[#{inspect_type}]#{runtime}#{unexpected_result_emoji}"
     end
   end
 
@@ -146,7 +126,7 @@ class Service::StepsInspector
   # @!visibility private
   class Lock < Transaction
     def inspect
-      "#{"  " * nesting_level}\e[#{ansi_color}m[#{inspect_type}] #{name}#{runtime}\e[0m #{emoji}".rstrip
+      "#{"  " * nesting_level}[#{inspect_type}] #{name}#{runtime} #{emoji}".rstrip
     end
 
     def error
@@ -154,62 +134,10 @@ class Service::StepsInspector
     end
   end
 
-  # @!visibility private
-  class OnlyIf < Step
-    def steps
-      [
-        self,
-        *step.steps.map do
-          Step.for(it, result, nesting_level: nesting_level + 1, color: skipped_color).steps
-        end,
-      ]
-    end
-
-    def inspect
-      "#{"  " * nesting_level}\e[#{ansi_color}m[#{inspect_type}] #{name}#{runtime}\e[0m #{emoji}#{explanation}".rstrip
-    end
-
-    private
-
-    def explanation
-      return unless skipped?
-      " (condition was not met)"
-    end
-
-    def ansi_color
-      return super unless skipped?
-      COLORS[:white]
-    end
-
-    def skipped_color
-      return unless skipped?
-      COLORS[:gray]
-    end
-  end
-
-  # @!visibility private
-  class Each < OnlyIf
-    def inspect
-      "#{"  " * nesting_level}\e[#{ansi_color}m[#{inspect_type}] #{name} (#{iteration_info})#{runtime}\e[0m #{skipped_emoji}".rstrip
-    end
-
-    private
-
-    def iteration_info
-      return "empty collection" if skipped?
-      "#{result[:index].to_i + 1}/#{step_result[:total].to_i}"
-    end
-
-    def skipped_emoji
-      return unless skipped?
-      emoji
-    end
-  end
-
   attr_reader :steps, :result
 
   def initialize(result)
-    @steps = result.__steps__.map { Step.for(it, result).steps }.flatten
+    @steps = result.__steps__.map { Step.for(_1, result).steps }.flatten
     @result = result
   end
 

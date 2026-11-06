@@ -31,10 +31,6 @@ class IncomingEmailSerializer < ApplicationSerializer
   end
 
   def error
-    object.error.presence || I18n.t("emails.incoming.unrecognized_error")
-  end
-
-  def include_error?
-    !object.error.nil?
+    @object.error.presence || I18n.t("emails.incoming.unrecognized_error")
   end
 end

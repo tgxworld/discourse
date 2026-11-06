@@ -45,7 +45,7 @@ class GlobalSetting
             end
           end
         end
-        if secret_key_base.present? && token != secret_key_base
+        if !secret_key_base.blank? && token != secret_key_base
           STDERR.puts "WARNING: DISCOURSE_SECRET_KEY_BASE is invalid, it was re-generated"
         end
         token
@@ -98,11 +98,13 @@ class GlobalSetting
   def self.use_s3?
     (
       @use_s3 ||=
-        if s3_bucket && s3_region &&
-             (s3_use_iam_profile || (s3_access_key_id && s3_secret_access_key))
-          :true
-        else
-          :false
+        begin
+          if s3_bucket && s3_region &&
+               (s3_use_iam_profile || (s3_access_key_id && s3_secret_access_key))
+            :true
+          else
+            :false
+          end
         end
     ) == :true
   end
@@ -124,8 +126,7 @@ class GlobalSetting
     hostnames
   end
 
-  def self.database_config(variables_overrides: {})
-    variables_overrides = variables_overrides.with_indifferent_access
+  def self.database_config
     hash = { "adapter" => "postgresql" }
 
     %w[
@@ -141,7 +142,7 @@ class GlobalSetting
       replica_host
       replica_port
     ].each do |s|
-      if val = public_send("db_#{s}")
+      if val = self.public_send("db_#{s}")
         hash[s] = val
       end
     end
@@ -154,22 +155,17 @@ class GlobalSetting
 
     hash["host_names"] = hostnames
     hash["database"] = db_name
-    hash["prepared_statements"] = !!db_prepared_statements
+    hash["prepared_statements"] = !!self.db_prepared_statements
     hash["idle_timeout"] = connection_reaper_age if connection_reaper_age.present?
     hash["reaping_frequency"] = connection_reaper_interval if connection_reaper_interval.present?
-    hash["advisory_locks"] = !!db_advisory_locks
+    hash["advisory_locks"] = !!self.db_advisory_locks
 
     db_variables = provider.keys.filter { |k| k.to_s.starts_with? "db_variables_" }
     if db_variables.length > 0
       hash["variables"] = {}
       db_variables.each do |k|
-        hash["variables"][k.slice(("db_variables_".length)..)] = public_send(k)
+        hash["variables"][k.slice(("db_variables_".length)..)] = self.public_send(k)
       end
-    end
-
-    variables_overrides.each do |key, value|
-      hash["variables"] ||= {}
-      hash["variables"][key.to_s] = value
     end
 
     { "production" => hash }
@@ -223,7 +219,7 @@ class GlobalSetting
         c[:username] = redis_username if redis_username.present?
         c[:password] = redis_password if redis_password.present?
         c[:db] = redis_db if redis_db != 0
-        c[:db] = 1 if Rails.env.test?
+        c[:db] = 1 if Rails.env == "test"
         c[:id] = nil if redis_skip_client_commands
         c[:ssl] = true if redis_use_ssl
 
@@ -250,7 +246,7 @@ class GlobalSetting
         c[:username] = message_bus_redis_username if message_bus_redis_username.present?
         c[:password] = message_bus_redis_password if message_bus_redis_password.present?
         c[:db] = message_bus_redis_db if message_bus_redis_db != 0
-        c[:db] = 1 if Rails.env.test?
+        c[:db] = 1 if Rails.env == "test"
         c[:id] = nil if message_bus_redis_skip_client_commands
         c[:ssl] = true if redis_use_ssl
 
@@ -259,7 +255,7 @@ class GlobalSetting
   end
 
   def self.add_default(name, default)
-    define_singleton_method(name) { default } unless respond_to? name
+    define_singleton_method(name) { default } unless self.respond_to? name
   end
 
   def self.smtp_settings
@@ -270,9 +266,9 @@ class GlobalSetting
         domain: GlobalSetting.smtp_domain,
         user_name: GlobalSetting.smtp_user_name,
         password: GlobalSetting.smtp_password,
-        enable_starttls_auto: !GlobalSetting.smtp_force_tls && GlobalSetting.smtp_enable_start_tls,
-        open_timeout: GlobalSetting.smtp_open_timeout.to_f,
-        read_timeout: GlobalSetting.smtp_read_timeout.to_f,
+        enable_starttls_auto: GlobalSetting.smtp_enable_start_tls,
+        open_timeout: GlobalSetting.smtp_open_timeout,
+        read_timeout: GlobalSetting.smtp_read_timeout,
       }
 
       if settings[:password] || settings[:user_name]
@@ -289,19 +285,21 @@ class GlobalSetting
     end
   end
 
-  def self.sendmail_settings
-    { arguments: %w[-i] }
-  end
-
   class BaseProvider
     def self.coerce(setting)
       return setting == "true" if setting == "true" || setting == "false"
-      return $1.to_i if setting.to_s.strip =~ /\A(-?[0-9]+)\z/
+      return $1.to_i if setting.to_s.strip =~ /\A([0-9]+)\z/
       setting
     end
 
     def resolve(current, default)
-      BaseProvider.coerce(current.presence || default.presence)
+      BaseProvider.coerce(
+        if current.present?
+          current
+        else
+          default.present? ? default : nil
+        end,
+      )
     end
   end
 
@@ -338,7 +336,7 @@ class GlobalSetting
     end
 
     def self.parse(file)
-      provider = new(file)
+      provider = self.new(file)
       provider.read
       provider
     end
@@ -374,41 +372,25 @@ class GlobalSetting
     attr_accessor :provider
   end
 
-  def self.configure!(
-    path: File.expand_path("../../../config/discourse.conf", __FILE__),
-    use_blank_provider: Rails.env.test?
-  )
-    if use_blank_provider
+  def self.configure!
+    if Rails.env == "test"
       @provider = BlankProvider.new
     else
-      @provider = FileProvider.from(path) || EnvProvider.new
+      @provider =
+        FileProvider.from(File.expand_path("../../../config/discourse.conf", __FILE__)) ||
+          EnvProvider.new
     end
   end
 
   def self.load_plugins?
-    load_plugins_filter != :none
-  end
-
-  def self.plugins_to_load
-    filter = load_plugins_filter
-    filter.is_a?(Array) ? filter : nil
-  end
-
-  # Returns `:all`, `:none`, or an array of plugin directory names.
-  def self.load_plugins_filter
-    case ENV["LOAD_PLUGINS"]
-    when "0"
-      :none
-    when "1"
-      :all
-    when nil, ""
-      Rails.env.test? ? :none : :all
+    if ENV["LOAD_PLUGINS"] == "1"
+      true
+    elsif ENV["LOAD_PLUGINS"] == "0"
+      false
+    elsif Rails.env.test?
+      false
     else
-      unless Rails.env.local?
-        raise "LOAD_PLUGINS=#{ENV["LOAD_PLUGINS"].inspect} is only supported in development/test"
-      end
-      ENV["LOAD_PLUGINS"].split(",").map { |p| File.basename(p.strip) }.reject(&:empty?)
+      true
     end
   end
-  private_class_method :load_plugins_filter
 end

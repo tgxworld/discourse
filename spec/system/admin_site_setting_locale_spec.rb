@@ -1,8 +1,7 @@
 # frozen_string_literal: true
 
-describe "Admin Site Setting Locales" do
+describe "Admin Site Setting Locales", type: :system do
   let(:settings_page) { PageObjects::Pages::AdminSiteSettings.new }
-
   fab!(:admin)
 
   before do
@@ -16,12 +15,13 @@ describe "Admin Site Setting Locales" do
       settings_page.visit
 
       settings_page.type_in_search("default locale")
-      expect(settings_page).to have_enum_value("default_locale", "es")
+      expect(settings_page.find_setting("default_locale")).to have_content("Spanish (Español)")
 
       settings_page.select_enum_value("default_locale", "en")
       settings_page.save_setting("default_locale")
 
-      expect(settings_page).to have_enum_value("default_locale", "en", text: "Inglés (English)")
+      settings_page.type_in_search("default locale")
+      expect(settings_page.find_setting("default_locale")).to have_content("English (US)")
     end
   end
 
@@ -32,19 +32,19 @@ describe "Admin Site Setting Locales" do
 
       settings_page.visit("content_localization_supported_locales")
       expect(settings_page.find_setting("content_localization_supported_locales")).to have_content(
-        "Japonés (日本語)",
+        "Japanese (日本語)",
       )
 
       settings_page.select_list_values("content_localization_supported_locales", %w[en])
       settings_page.save_setting("content_localization_supported_locales")
       expect(settings_page.find_setting("content_localization_supported_locales")).to have_content(
-        "Japonés (日本語), Inglés",
+        "Japanese (日本語), English (US)",
       )
 
       # confirm persist on reload
       settings_page.visit("content_localization_supported_locales")
       expect(settings_page.find_setting("content_localization_supported_locales")).to have_content(
-        "Japonés (日本語), Inglés",
+        "Japanese (日本語), English (US)",
       )
     end
   end

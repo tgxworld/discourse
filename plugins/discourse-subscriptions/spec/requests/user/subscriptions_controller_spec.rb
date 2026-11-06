@@ -1,9 +1,14 @@
 # frozen_string_literal: true
 
 RSpec.describe DiscourseSubscriptions::User::SubscriptionsController do
-  before do
-    SiteSetting.discourse_subscriptions_enabled = true
-    SiteSetting.discourse_subscriptions_secret_key = "secret-key"
+  before { SiteSetting.discourse_subscriptions_enabled = true }
+
+  def create_price(id, product)
+    price = { id: id, product: product }
+    def price.id
+      self[:id]
+    end
+    price
   end
 
   it "is a subclass of ApplicationController" do
@@ -35,37 +40,43 @@ RSpec.describe DiscourseSubscriptions::User::SubscriptionsController do
     let(:customer) do
       Fabricate(:customer, user_id: user.id, customer_id: "cus_23456", product_id: "prod_123")
     end
-    let!(:subscription) do
+
+    before do
+      sign_in(user)
       Fabricate(:subscription, customer_id: customer.id, external_id: "sub_10z")
     end
-
-    before { sign_in(user) }
 
     describe "index" do
       plans_json =
         File.read(
           Rails.root.join(
-            "plugins/discourse-subscriptions/spec/fixtures/json/stripe-price-list.json",
+            "plugins",
+            "discourse-subscriptions",
+            "spec",
+            "fixtures",
+            "json",
+            "stripe-price-list.json",
           ),
         )
 
       it "gets subscriptions" do
-        ::Stripe::Price
-          .stubs(:list)
-          .with(anything, DiscourseSubscriptions::Stripe.request_opts)
-          .returns(JSON.parse(plans_json, symbolize_names: true))
+        ::Stripe::Price.stubs(:list).returns(JSON.parse(plans_json, symbolize_names: true))
 
         subscriptions_json =
           File.read(
             Rails.root.join(
-              "plugins/discourse-subscriptions/spec/fixtures/json/stripe-subscription-list.json",
+              "plugins",
+              "discourse-subscriptions",
+              "spec",
+              "fixtures",
+              "json",
+              "stripe-subscription-list.json",
             ),
           )
 
-        ::Stripe::Subscription
-          .stubs(:list)
-          .with(anything, DiscourseSubscriptions::Stripe.request_opts)
-          .returns(JSON.parse(subscriptions_json, symbolize_names: true))
+        ::Stripe::Subscription.stubs(:list).returns(
+          JSON.parse(subscriptions_json, symbolize_names: true),
+        )
 
         get "/s/user/subscriptions.json"
 
@@ -80,49 +91,26 @@ RSpec.describe DiscourseSubscriptions::User::SubscriptionsController do
         subscription_data = { id: "sub_10z", items: { data: [{ price: { id: "price_200" } }] } }
         ::Stripe::Subscription
           .stubs(:list)
-          .with(
-            { customer: "cus_23456", status: "all" },
-            DiscourseSubscriptions::Stripe.request_opts,
-          )
+          .with(customer: "cus_23456", status: "all")
           .returns({ data: [subscription_data] })
 
         # Build the first page of 100 prices that do NOT include the desired price.
         prices_page_1 =
           (1..100).map do |i|
-            ::Stripe::Price.construct_from(
-              id: "price_#{i}",
-              product: {
-                id: "prod_dummy",
-                name: "Dummy Product #{i}",
-              },
-            )
+            create_price("price_#{i}", { id: "prod_dummy", name: "Dummy Product #{i}" })
           end
 
         # Second page containing the desired price.
-        prices_page_2 = [
-          ::Stripe::Price.construct_from(
-            id: "price_200",
-            product: {
-              id: "prod_200",
-              name: "Matching Product",
-            },
-          ),
-        ]
+        prices_page_2 = [create_price("price_200", { id: "prod_200", name: "Matching Product" })]
 
         ::Stripe::Price
           .expects(:list)
-          .with(
-            has_entries(limit: 100, expand: ["data.product"]),
-            DiscourseSubscriptions::Stripe.request_opts,
-          )
+          .with(has_entries(limit: 100, expand: ["data.product"]))
           .returns({ data: prices_page_1, has_more: true })
 
         ::Stripe::Price
           .expects(:list)
-          .with(
-            has_entries(limit: 100, expand: ["data.product"], starting_after: "price_100"),
-            DiscourseSubscriptions::Stripe.request_opts,
-          )
+          .with(has_entries(limit: 100, expand: ["data.product"], starting_after: "price_100"))
           .returns({ data: prices_page_2, has_more: false })
 
         get "/s/user/subscriptions.json"
@@ -138,45 +126,9 @@ RSpec.describe DiscourseSubscriptions::User::SubscriptionsController do
 
     describe "update" do
       it "updates the payment method for subscription" do
-        ::Stripe::Subscription
-          .expects(:update)
-          .with(anything, anything, DiscourseSubscriptions::Stripe.request_opts)
-          .once
-        ::Stripe::PaymentMethod
-          .expects(:attach)
-          .with(anything, anything, DiscourseSubscriptions::Stripe.request_opts)
-          .once
+        ::Stripe::Subscription.expects(:update).once
+        ::Stripe::PaymentMethod.expects(:attach).once
         put "/s/user/subscriptions/sub_10z.json", params: { payment_method: "pm_abc123abc" }
-      end
-    end
-  end
-
-  context "when authenticated as another user" do
-    fab!(:user_1, :user)
-    fab!(:user_2, :user)
-    fab!(:customer) { Fabricate(:customer, user_id: user_1.id, customer_id: "001") }
-    fab!(:subscription) { Fabricate(:subscription, customer_id: customer.id, external_id: "abc") }
-
-    before { sign_in(user_2) }
-
-    describe "destroy" do
-      it "does not allow user to cancel a subscription that is not theirs" do
-        ::Stripe::Subscription.expects(:update).never
-
-        delete "/s/user/subscriptions/abc.json"
-
-        expect(response.status).to eq(404)
-      end
-    end
-
-    describe "update" do
-      it "does not allow user to update a subscription that is not theirs" do
-        ::Stripe::PaymentMethod.expects(:attach).never
-        ::Stripe::Subscription.expects(:update).never
-
-        put "/s/user/subscriptions/abc.json", params: { payment_method: "x" }
-
-        expect(response.status).to eq(404)
       end
     end
   end

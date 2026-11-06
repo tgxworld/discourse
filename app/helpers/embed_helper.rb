@@ -1,10 +1,6 @@
 # frozen_string_literal: true
 
 module EmbedHelper
-  def embed_post_date_title(dt)
-    dt.strftime I18n.t("datetime_formats.formats.long")
-  end
-
   def embed_post_date(dt)
     current = Time.now
 
@@ -21,7 +17,7 @@ module EmbedHelper
 
   def get_html(post)
     key = "js.action_codes.#{post.action_code}"
-    cooked = post.cooked.presence || I18n.t(key, when: nil).humanize
+    cooked = post.cooked.blank? ? I18n.t(key, when: nil).humanize : post.cooked
 
     raw PrettyText.format_for_email(cooked, post)
   end

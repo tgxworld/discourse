@@ -11,3 +11,5 @@ lv:
         actions:
           agree_and_suspend:
             title: "Apturētie lietotāji"
+          disagree:
+            title: "Nepiekrist"

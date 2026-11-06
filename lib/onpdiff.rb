@@ -4,31 +4,7 @@
 # in https://publications.mpi-cbg.de/Wu_1990_6334.pdf
 
 class ONPDiff
-  class DiffLimitExceeded < StandardError
-    attr_reader :comparisons_used, :comparison_budget, :left_size, :right_size
-
-    def initialize(comparisons_used:, comparison_budget:, left_size:, right_size:)
-      @comparisons_used = comparisons_used
-      @comparison_budget = comparison_budget
-      @left_size = left_size
-      @right_size = right_size
-      super(
-        "Diff comparison budget exceeded (used=#{comparisons_used}, budget=#{comparison_budget}, left_size=#{left_size}, right_size=#{right_size})",
-      )
-    end
-  end
-
-  DEFAULT_COMPARISON_BUDGET_FACTOR = 200
-  MAX_COMPARISON_BUDGET = 2_000_000
-
-  attr_reader :comparison_budget, :comparisons_used
-
-  def initialize(
-    a,
-    b,
-    comparison_budget_factor: DEFAULT_COMPARISON_BUDGET_FACTOR,
-    max_comparison_budget: MAX_COMPARISON_BUDGET
-  )
+  def initialize(a, b)
     @a, @b = a, b
     @m, @n = a.size, b.size
     @backtrack = []
@@ -38,8 +14,6 @@ class ONPDiff
     end
     @offset = @m + 1
     @delta = @n - @m
-    @comparison_budget = [comparison_budget_factor * (@m + @n), max_comparison_budget].min
-    @comparisons_used = 0
   end
 
   def diff
@@ -66,6 +40,8 @@ class ONPDiff
 
     begin
       p += 1
+
+      return(@shortest_path = []) if p >= 1000
 
       k = -p
       while k <= @delta - 1
@@ -95,29 +71,16 @@ class ONPDiff
   end
 
   def snake(k, p, pp)
-    k_offset = k + @offset
-
-    if p > pp
-      r = @path[k_offset - 1]
-      y = p
-    else
-      r = @path[k_offset + 1]
-      y = pp
-    end
-
+    r = p > pp ? @path[k - 1 + @offset] : @path[k + 1 + @offset]
+    y = [p, pp].max
     x = y - k
 
-    while x < @m && y < @n
-      @comparisons_used += 1
-      raise_diff_limit_exceeded! if @comparisons_used > @comparison_budget
-
-      break if @a[x] != @b[y]
-
+    while x < @m && y < @n && @a[x] == @b[y]
       x += 1
       y += 1
     end
 
-    @path[k_offset] = @backtrack.size
+    @path[k + @offset] = @backtrack.size
     @backtrack << [x, y, r]
 
     y
@@ -256,14 +219,5 @@ class ONPDiff
     end
 
     pairs
-  end
-
-  def raise_diff_limit_exceeded!
-    raise DiffLimitExceeded.new(
-            comparisons_used: @comparisons_used,
-            comparison_budget: @comparison_budget,
-            left_size: @m,
-            right_size: @n,
-          )
   end
 end

@@ -4,16 +4,17 @@ import { Input } from "@ember/component";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
-import { trustHTML } from "@ember/template";
+import { htmlSafe } from "@ember/template";
+import DButton from "discourse/components/d-button";
+import DModal from "discourse/components/d-modal";
 import discourseLater from "discourse/lib/later";
-import DButton from "discourse/ui-kit/d-button";
-import DModal from "discourse/ui-kit/d-modal";
 import { i18n } from "discourse-i18n";
-import { showShareConversationModal } from "../../lib/ai-bot-helper.js";
-import copyConversation from "../../lib/copy-conversation.js";
+import { showShareConversationModal } from "../../lib/ai-bot-helper";
+import copyConversation from "../../lib/copy-conversation";
 
 export default class ShareModal extends Component {
   @service modal;
+  @service siteSettings;
   @service currentUser;
 
   @tracked contextValue = 1;
@@ -58,7 +59,7 @@ export default class ShareModal extends Component {
       context.push(`<p><b>${post.username}:</b></p>`);
       context.push(post.cooked);
     }
-    this.htmlContext = trustHTML(context.join("\n"));
+    this.htmlContext = htmlSafe(context.join("\n"));
   }
 
   @action
@@ -86,8 +87,8 @@ export default class ShareModal extends Component {
   <template>
     <DModal
       class="ai-share-modal"
-      @closeModal={{@closeModal}}
       @title={{i18n "discourse_ai.ai_bot.share_modal.title"}}
+      @closeModal={{@closeModal}}
     >
       <:body>
         <div class="ai-share-modal__preview">
@@ -98,9 +99,9 @@ export default class ShareModal extends Component {
       <:footer>
         <div class="ai-share-modal__slider">
           <Input
-            max={{this.maxContext}}
-            min="1"
             @type="range"
+            min="1"
+            max={{this.maxContext}}
             @value={{this.contextValue}}
             {{on "change" this.updateHtmlContext}}
           />
@@ -111,8 +112,8 @@ export default class ShareModal extends Component {
         </div>
         <DButton
           class="btn-primary confirm"
-          @action={{this.copyContext}}
           @icon="copy"
+          @action={{this.copyContext}}
           @label="discourse_ai.ai_bot.share_modal.copy"
         />
         <span class="ai-share-modal__just-copied">{{this.justCopiedText}}</span>

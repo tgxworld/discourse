@@ -27,12 +27,6 @@ et:
         text:
           label: Tekst
       triggerables:
-        post_flag_created:
-          fields:
-            categories:
-              label: Liigid
-            tags:
-              label: Sildid
         user_badge_granted:
           fields:
             badge:
@@ -122,8 +116,6 @@ et:
               label: Teema ID
             user:
               label: Kasutaja
-        set_topic_timer:
-          title: Määra teema taimer
       models:
         trigger:
           name:
@@ -137,5 +129,7 @@ et:
             label: Versioon
           status:
             label: Staatus
+          enabled:
+            label: Sisse lülitatud
           disabled:
             label: Välja lülitatud

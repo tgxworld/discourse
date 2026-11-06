@@ -1,7 +1,7 @@
 # frozen_string_literal: true
-
+#
 class AdstxtController < ::ApplicationController
-  requires_plugin AdPlugin::PLUGIN_NAME
+  requires_plugin AdPlugin.plugin_name
 
   skip_before_action :preload_json, :check_xhr, :redirect_to_login_if_required
 

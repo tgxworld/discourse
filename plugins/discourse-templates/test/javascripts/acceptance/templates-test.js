@@ -7,15 +7,13 @@ import {
   visit,
 } from "@ember/test-helpers";
 import { test } from "qunit";
+import { PLATFORM_KEY_MODIFIER } from "discourse/lib/keyboard-shortcuts";
 import { cloneJSON } from "discourse/lib/object";
-import Category from "discourse/models/category";
-import PermissionType from "discourse/models/permission-type";
-import { PLATFORM_KEY_MODIFIER } from "discourse/services/keyboard-shortcuts";
 import topicFixtures from "discourse/tests/fixtures/topic";
 import { acceptance } from "discourse/tests/helpers/qunit-helpers";
 import selectKit from "discourse/tests/helpers/select-kit-helper";
 import { i18n } from "discourse-i18n";
-import TemplatesFixtures from "../fixtures/templates-fixtures.js";
+import TemplatesFixtures from "../fixtures/templates-fixtures";
 
 function templatesPretender(server, helper) {
   const repliesPath = "/discourse_templates";
@@ -31,18 +29,6 @@ async function selectCategory() {
   const categoryChooser = selectKit(".category-chooser");
   await categoryChooser.expand();
   await categoryChooser.selectRowByValue(2);
-}
-
-function categoryFixture(attrs) {
-  return {
-    color: "0088CC",
-    name: attrs.slug,
-    permission: PermissionType.FULL,
-    read_restricted: false,
-    text_color: "FFFFFF",
-    topic_count: 1,
-    ...attrs,
-  };
 }
 
 acceptance("discourse-templates", function (needs) {
@@ -176,90 +162,37 @@ acceptance("discourse-templates", function (needs) {
       "navigates to the source"
     );
   });
-
-  test("Has ordering by relevance, usage, and title", async function (assert) {
-    await visit("/");
-
-    await click("#create-topic");
-    await selectCategory();
-    await click(".toolbar-menu__options-trigger");
-    await click(`button[title="${i18n("templates.insert_template")}"]`);
-
-    await fillIn(".templates-filter-bar input.templates-filter", "ipsum");
-    const templateItems = document.querySelectorAll(
-      ".templates-list .template-item-title-text"
-    );
-    const titles = Array.from(templateItems).map((el) => el.textContent.trim());
-
-    assert.deepEqual(
-      titles,
-      [
-        "Cupcake Ipsum excerpt",
-        "Hipster ipsum excerpt",
-        "Liquor ipsum excerpt",
-        "Mussum Ipsum excerpt",
-        "Lorem ipsum dolor sit amet",
-      ],
-      "orders templates by relevance, usage, and title"
-    );
-  });
-
-  test("Remembers selected tag between openings", async function (assert) {
-    await visit("/");
-
-    await click("#create-topic");
-    await selectCategory();
-    await click(".toolbar-menu__options-trigger");
-    await click(`button[title="${i18n("templates.insert_template")}"]`);
-
-    const tagDropdown = selectKit(".templates-filter-bar .tag-drop");
-    await tagDropdown.expand();
-
-    await tagDropdown.fillInFilter(
-      "cupcake",
-      ".templates-filter-bar .tag-drop input"
-    );
-    await tagDropdown.selectRowByIndex(0);
-    assert.dom(".templates-list .template-item").exists({ count: 1 });
-
-    await click("#reply-control .toggle-save-and-close");
-
-    await click("#create-topic");
-    await selectCategory();
-    await click(".toolbar-menu__options-trigger");
-    await click(`button[title="${i18n("templates.insert_template")}"]`);
-    assert
-      .dom(".templates-list .template-item")
-      .exists({ count: 1 }, "preserves selected tag across composer sessions");
-  });
 });
 
-acceptance("with tags disabled in Settings", function (needs) {
-  needs.settings({
-    discourse_templates_enabled: true,
-    tagging_enabled: false,
-  });
-  needs.user({
-    can_use_templates: true,
-  });
+acceptance(
+  "discourse-templates - with tags disabled in Settings",
+  function (needs) {
+    needs.settings({
+      discourse_templates_enabled: true,
+      tagging_enabled: false,
+    });
+    needs.user({
+      can_use_templates: true,
+    });
 
-  needs.pretender(templatesPretender);
+    needs.pretender(templatesPretender);
 
-  test("Filtering by tags", async function (assert) {
-    await visit("/");
+    test("Filtering by tags", async function (assert) {
+      await visit("/");
 
-    await click("#create-topic");
-    await selectCategory();
-    await click(".toolbar-menu__options-trigger");
-    await click(`button[title="${i18n("templates.insert_template")}"]`);
+      await click("#create-topic");
+      await selectCategory();
+      await click(".toolbar-menu__options-trigger");
+      await click(`button[title="${i18n("templates.insert_template")}"]`);
 
-    assert
-      .dom(".templates-filter-bar .tag-drop")
-      .doesNotExist("tag drop down is not displayed");
-  });
-});
+      assert
+        .dom(".templates-filter-bar .tag-drop")
+        .doesNotExist("tag drop down is not displayed");
+    });
+  }
+);
 
-acceptance("keyboard shortcut", function (needs) {
+acceptance("discourse-templates | keyboard shortcut", function (needs) {
   needs.settings({
     discourse_templates_enabled: true,
     tagging_enabled: true,
@@ -303,7 +236,7 @@ acceptance("keyboard shortcut", function (needs) {
     await triggerKeyEvent(document, "keypress", "?".charCodeAt(0));
 
     assert.dom(".shortcut-category-templates").exists();
-    assert.dom(".shortcut-category-templates tbody tr").exists({ count: 1 });
+    assert.dom(".shortcut-category-templates li").exists({ count: 1 });
   });
 
   test("Composer | Title field focused | Template is inserted", async function (assert) {
@@ -440,23 +373,10 @@ acceptance("keyboard shortcut", function (needs) {
   });
 });
 
-acceptance("buttons on topics", function (needs) {
-  let categoriesBySlugPath;
-  let categoryFindRequests;
-  let templateBody;
-  let templateCategory;
-
+acceptance("discourse-templates - buttons on topics", function (needs) {
   needs.user();
-  needs.site({ can_tag_topics: true });
   needs.settings({
     allow_uncategorized_topics: true,
-    tagging_enabled: true,
-  });
-  needs.hooks.beforeEach(() => {
-    categoriesBySlugPath = {};
-    categoryFindRequests = [];
-    templateBody = "post raw content";
-    templateCategory = "dev";
   });
 
   needs.pretender((server, helper) => {
@@ -464,174 +384,13 @@ acceptance("buttons on topics", function (needs) {
     topicResponse.is_template = true;
 
     server.get("/t/280.json", () => helper.response(topicResponse));
-    server.get("/raw/280/1", () => [
-      200,
-      {},
-      `<!-- discourse-template
-category: ${templateCategory}
-tags: security, minor-security-fix
--->
-
-${templateBody}`,
-    ]);
-    server.get("/categories/find", (request) => {
-      categoryFindRequests.push(request.queryParams);
-
-      const categories = categoriesBySlugPath[request.queryParams.slug_path];
-
-      if (categories) {
-        return helper.response({ categories });
-      }
-
-      return helper.response(404, {});
-    });
+    server.get("/raw/280/1", () => [200, {}, "post raw content"]);
   });
 
   test("Can open composer using button on topic", async function (assert) {
     await visit("/t/280");
-    Category.findById(7).set("permission", PermissionType.FULL);
 
     await click(".template-new-topic");
-    assert
-      .dom("textarea.d-editor-input")
-      .hasValue("post raw content", "uses the raw template content");
-
-    const categoryChooser = selectKit(".category-chooser");
-    assert.strictEqual(
-      categoryChooser.header().value(),
-      "7",
-      "selects the category from the template options"
-    );
-
-    const tags = selectKit(".mini-tag-chooser");
-    assert.strictEqual(
-      tags.header().value(),
-      "security,minor-security-fix",
-      "selects the tags from the template options"
-    );
-  });
-
-  test("Does not select a category the user cannot create topics in", async function (assert) {
-    await visit("/t/280");
-    Category.findById(7).set("permission", PermissionType.READONLY);
-
-    await click(".template-new-topic");
-
-    const categoryChooser = selectKit(".category-chooser");
-    assert.notStrictEqual(
-      categoryChooser.header().value(),
-      "7",
-      "does not select the category from the template options"
-    );
-
-    const tags = selectKit(".mini-tag-chooser");
-    assert.strictEqual(
-      tags.header().value(),
-      "security,minor-security-fix",
-      "still selects allowed tags from the template options"
-    );
-  });
-
-  test("Ignores an invalid category in template options", async function (assert) {
-    templateCategory = "not-a-real-category";
-
-    await visit("/t/280");
-
-    await click(".template-new-topic");
-
-    assert
-      .dom("textarea.d-editor-input")
-      .hasValue("post raw content", "still opens the composer");
-
-    const categoryChooser = selectKit(".category-chooser");
-    assert.notStrictEqual(
-      categoryChooser.header().value(),
-      "7",
-      "does not select the invalid category"
-    );
-
-    const tags = selectKit(".mini-tag-chooser");
-    assert.strictEqual(
-      tags.header().value(),
-      "security,minor-security-fix",
-      "still selects tags from the template options"
-    );
-  });
-
-  test("Selects a category that is loaded asynchronously", async function (assert) {
-    templateCategory = "async-category";
-    categoriesBySlugPath["async-category"] = [
-      categoryFixture({
-        id: 30,
-        name: "Async category",
-        slug: "async-category",
-      }),
-    ];
-
-    await visit("/t/280");
-
-    await click(".template-new-topic");
-
-    assert.deepEqual(
-      categoryFindRequests,
-      [{ slug_path: "async-category" }],
-      "loads the category by slug path"
-    );
-
-    const categoryChooser = selectKit(".category-chooser");
-    assert.strictEqual(
-      categoryChooser.header().value(),
-      "30",
-      "selects the asynchronously loaded category"
-    );
-  });
-
-  test("Selects a subcategory that is loaded asynchronously", async function (assert) {
-    templateCategory = "async-parent/async-child";
-    categoriesBySlugPath["async-parent/async-child"] = [
-      categoryFixture({
-        id: 30,
-        name: "Async parent",
-        slug: "async-parent",
-      }),
-      categoryFixture({
-        id: 31,
-        name: "Async child",
-        parent_category_id: 30,
-        slug: "async-child",
-      }),
-    ];
-
-    await visit("/t/280");
-
-    await click(".template-new-topic");
-
-    assert.deepEqual(
-      categoryFindRequests,
-      [{ slug_path: "async-parent/async-child" }],
-      "loads the subcategory by slug path"
-    );
-
-    const categoryChooser = selectKit(".category-chooser");
-    assert.strictEqual(
-      categoryChooser.header().value(),
-      "31",
-      "selects the asynchronously loaded subcategory"
-    );
-  });
-
-  test("Preserves body indentation after template options", async function (assert) {
-    templateBody = "    indented raw content";
-
-    await visit("/t/280");
-
-    await click(".template-new-topic");
-
-    assert
-      .dom("textarea.d-editor-input")
-      .hasValue(
-        "    indented raw content",
-        "preserves intentional leading indentation"
-      );
+    assert.dom("textarea.d-editor-input").hasValue("post raw content");
   });
 });

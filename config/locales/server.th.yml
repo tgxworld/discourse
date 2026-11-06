@@ -5,33 +5,6 @@
 # https://translate.discourse.org/
 
 th:
-  markdown_endpoints:
-    latest: "ล่าสุด"
-    categories: "หมวดหมู่"
-    tags: "ป้าย"
-    previous_page: "หน้าก่อนหน้า"
-    next_page: "หน้าถัดไป"
-    replies: "ตอบ"
-    event:
-      location: "ที่อยู่"
-      link: "ลิงก์"
-  mcp:
-    errors:
-      topic_not_found: "ไม่พบกระทู้"
-    oauth:
-      deny: "ปฏิเสธ"
-  llms_txt:
-    sections:
-      optional: "ทางเลือก"
-    links:
-      search:
-        label: "ค้นหา"
-      categories:
-        label: "หมวดหมู่"
-      about:
-        label: "เกี่ยวกับ"
-      guidelines:
-        label: "คู่มือ"
   dates:
     short_date_no_year: "D MMM"
     short_date: "D MMM, YYYY"
@@ -94,6 +67,7 @@ th:
   errors: &errors
     messages:
       exclusion: ถูกจองแล้ว
+      has_already_been_used: "ได้ถูกใช้แล้ว"
       invalid: ไม่ถูกต้อง
   not_in_group:
     join_group: "เข้าร่วมกลุ่ม"
@@ -128,11 +102,6 @@ th:
       everyone: "ทุกคน"
       admins: "ผู้ดูแลระบบ"
       moderators: "ผู้ดูแล"
-      staff: "ทีมงาน"
-    default_full_names:
-      everyone: "ทุกคน"
-      admins: "แอดมิน"
-      moderators: "ผู้ดูแลระบบ"
       staff: "ทีมงาน"
   education:
     until_posts:
@@ -196,10 +165,6 @@ th:
         other: "%{count}เดือนที่แล้ว"
   password_reset:
     title: "รีเซ็ทรหัสผ่าน"
-  admin_site_traffic_explorer:
-    unknown: "ไม่ทราบ"
-    traffic_types:
-      anonymous: "ไม่ระบุชื่อ"
   reviewable_score_types:
     needs_approval:
       title: "ต้องการอนุมัติ"
@@ -228,15 +193,11 @@ th:
       every_month: "ทุกเดือน"
       every_six_months: "ทุกหกเดือน"
   user_api_key:
-    deny: "ยกเลิก"
     read: "อ่าน"
-    copied: "คัดลอกแล้ว!"
     otp_confirmation:
       confirm_title: ดำเนินการต่อไปยัง %{site_name}
       logging_in_as: กำลังเข้าสู่ระบบด้วย %{username}
       confirm_button: เสร็จสิ้นการเข้าสู่ระบบ
-    device:
-      continue: "ดำเนินการต่อ"
   reports:
     post_edits:
       labels:
@@ -253,34 +214,6 @@ th:
     flags_status:
       labels:
         flag: ชนิด
-    visits:
-      xaxis:
-        mobile: "โทรศัพท์"
-    activity_by_category:
-      labels:
-        category: "หมวดหมู่"
-        topics: "หัวข้อ"
-        posts: "โพส"
-        share: "แบ่งปัน"
-    posters_by_member_type:
-      labels:
-        count: "โพส"
-        share: "แบ่งปัน"
-      types:
-        staff: "ทีมงาน"
-    posters_by_member_type_members:
-      labels:
-        user: "ผู้ใช้"
-        count: "โพส"
-        share: "แบ่งปัน"
-    trust_level_pipeline:
-      labels:
-        count: "สมาชิก"
-        share: "แบ่งปัน"
-      levels:
-        "0": "ใหม่"
-        "2": "สมาชิก"
-        "3": "ทั่วไป"
     consolidated_page_views:
       labels:
         post: โพส
@@ -288,9 +221,6 @@ th:
     consolidated_api_requests:
       xaxis:
         api: "API"
-    site_traffic:
-      xaxis:
-        page_view_anon_browser: "ไม่ระบุชื่อ"
     topics:
       title: "หัวข้อ"
     posts:
@@ -322,15 +252,6 @@ th:
       labels:
         user: "ผู้ใช้"
         num_topics: "หัวข้อ"
-    top_countries_by_browser_pageviews:
-      labels:
-        count: "เยี่ยมชม"
-    top_entry_urls:
-      labels:
-        count: "เยี่ยมชม"
-    top_referrers_by_browser_pageviews:
-      labels:
-        count: "เยี่ยมชม"
     top_traffic_sources:
       xaxis: "โดเมน"
       num_topics: "หัวข้อ"
@@ -351,7 +272,7 @@ th:
       labels:
         user: ผู้ใช้
         location: ที่อยู่
-    admin_logins:
+    staff_logins:
       labels:
         user: ผู้ใช้
         location: ที่อยู่
@@ -383,10 +304,6 @@ th:
     types:
       category: "หมวดหมู่"
       user: "ผู้ใช้"
-  filter:
-    description:
-      status_noreplies: "แสดงหัวข้อที่ไม่มีการตอบกลับ"
-      status_single_user: "แสดงหัวข้อที่มีผู้เข้าร่วมเพียงคนเดียว"
   publish_page:
     slug_errors:
       invalid: "มีตัวอักษรที่ไม่สามารถใช้งานได้"
@@ -396,7 +313,6 @@ th:
     admin_not_allowed_from_ip_address: "คุณไม่สามารถเข้าสู่ระบบด้วยผู้ดูแลระบบด้วยไอพีนี้"
     not_available: "ใช้การไม่ได้ ลอง%{suggestion}?"
     omniauth_confirm_button: "ดำเนินการต่อ"
-    missing_username: "กรุณากรอกชื่อผู้ใช้"
   admin:
     email:
       sent_test: "ส่งแล้ว!"
@@ -404,10 +320,8 @@ th:
     queued_by_staff:
       title: "โพสต์นี้ต้องได้รับการอนุมัติ"
     welcome_user:
-      preview: "ยินดีต้อนรับสู่ %{site_name}!"
       subject_template: "ยินดีต้อนรับสู่ %{site_name}!"
     welcome_invite:
-      preview: "ยินดีต้อนรับสู่ %{site_name}!"
       subject_template: "ยินดีต้อนรับสู่ %{site_name}!"
   subject_re: "ตอบ: "
   subject_pm: "[PM] "
@@ -529,21 +443,24 @@ th:
         %{context}
 
         %{respond_instructions}
+    user_posted_pm_staged:
+      text_body_template: |2
+
+        %{message}
     digest:
       liked_received: "ได้รับการชอบ"
       new_users: "ผู้ใช้งานใหม่"
-      subject_template_improved: "สรุป"
     forgot_password:
       title: "ลืมรหัสผ่าน"
     set_password:
       title: "ตั้งรหัสผ่าน"
-    admin_login:
-      subject_template_improved: "เข้าสู่ระบบ"
     post_approved:
       title: "โพสต์ของคุณได้รับการอนุมัติ"
   page_not_found:
     page_title: "ไม่พบหน้าดังกล่าว"
+    popular_topics: "ยอดนิยม"
     see_more: "อื่น"
+    search_title: "ค้นหาเว็บไซต์นี้"
     search_button: "ค้นหา"
   csv_export:
     boolean_yes: "ใช่"
@@ -573,12 +490,9 @@ th:
       button: "ลงทะเบียน"
     resend_email:
       title: "ส่งอีเมลยืนยันตัวตนอีกครั้ง"
-  design_wizard:
-    palette_pairs:
-      default: "ค่าเริ่มต้น"
   wizard:
     step:
-      setup:
+      privacy:
         fields:
           login_required:
             choices:
@@ -586,23 +500,17 @@ th:
                 label: "สาธารณะ"
               private:
                 label: "ส่วนตัว"
+      styling:
+        fields:
+          styling_preview:
+            label: "แสดงตัวอย่าง"
+          homepage_style:
+            choices:
+              latest:
+                label: "ล่าสุด"
   onebox:
-    discourse:
-      recurrence:
-        every_day: "ทุกวัน"
-        ordinals:
-          last: "ล่าสุด"
-        weekdays:
-          monday: "วันจันทร์"
     github:
-      header:
-        success: "สำเร็จ"
       closed: "ปิด"
-      pr_status:
-        draft: "แบบร่าง"
-        open: "เปิด"
-        approved: "อนุมัติ"
-        closed: "ปิด"
   discourse_push_notifications:
     popup:
       mentioned: '%{username} พูดถึงคุณใน "%{topic}" - %{site_title}'
@@ -631,44 +539,27 @@ th:
     actions:
       agree:
         title: "ใช่"
-      delete:
+      delete_single:
         title: "ลบ"
         complete: "โพสต์ถูกลบ."
       delete_and_ignore:
         complete: "โพสต์ถูกลบ."
       delete_and_agree:
         complete: "โพสต์ถูกลบ."
-      disagree_bundle:
+      disagree:
         title: "ไม่ใช่"
       ignore:
         title: "ไม่สนใจ"
       approve:
-        title: "ใช่"
-      approve_post:
-        title: "ใช่"
-      approve_post_closed:
-        title: "ใช่"
-      reject_post_bundle:
-        title: "ไม่ใช่"
-      approve_user:
-        title: "ใช่"
+        title: "อนุมัติ"
       reject_user:
-        title: "ไม่ใช่"
         delete:
           title: "ลบผู้ใช้"
           complete: "ผู้ใช้ถูกลบ."
-      confirm_spam:
-        title: "ใช่"
-      not_spam:
-        title: "ไม่ใช่"
       reject:
         title: "ละทิ้ง"
-      approve_and_restore:
-        title: "ใช่"
-      approve_and_unhide:
-        title: "ใช่"
       delete_user:
-        complete: "ผู้ใช้ถูกลบ"
+        complete: "ผู้ใช้ถูกลบ."
   fallback_username: "ผู้ใช้"
   activemodel:
     errors:

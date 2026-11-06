@@ -322,7 +322,7 @@ RSpec.describe HasCustomFields do
       expect(item.custom_fields[field_type]).to eq(%w[a b])
     end
 
-    it "loads custom fields when their JSON is corrupt" do
+    it "will not fail to load custom fields if json is corrupt" do
       field_type = "bad_json"
       CustomFieldsTestItem.register_custom_field_type(field_type, :json)
 

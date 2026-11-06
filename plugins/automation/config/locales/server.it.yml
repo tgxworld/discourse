@@ -11,7 +11,6 @@ it:
     models:
       fields:
         required_field: Il campo `%{name}` deve essere compilato su `%{target}:%{target_name}`.
-        invalid_field: Il componente del campo `%{component}` non è utilizzabile su `%{target}:%{target_name}`.
         invalid_metadata: I dati per `%{field}` non sono validi o il componente `%{component}` è sconosciuto.
     triggerables:
       errors:
@@ -61,6 +60,7 @@ it:
         description: Quando le etichette di un argomento vengono modificate, l'automazione verrà attivata
       topic:
         title: Argomento
+        description: Lo script associato verrà utilizzato solo sull'argomento specificato, questo è utile per gli script che eseguono la convalida, ad esempio
       after_post_cook:
         title: Dopo l'elaborazione del messaggio
         description: Quando il contenuto di un messaggio viene elaborato, l'automazione verrà attivata
@@ -151,5 +151,3 @@ it:
       random_assign:
         title: "Assegnazione casuale"
         description: "Assegna casualmente argomenti a un gruppo"
-      set_topic_timer:
-        title: "Imposta il timer per l'argomento"

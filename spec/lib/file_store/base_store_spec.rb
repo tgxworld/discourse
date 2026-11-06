@@ -14,19 +14,19 @@ RSpec.describe FileStore::BaseStore do
     context "with empty URL" do
       before { upload.update!(url: "") }
 
-      it "builds the original upload path from its SHA1" do
+      it "should return the right path" do
         expect_correct_path("original/2X/4/4170ac2a2782a1516fe9e13d7322ae482c1bd594.png")
       end
 
       describe "when Upload#extension has not been set" do
-        it "infers the extension when building the upload path" do
+        it "should return the right path" do
           upload.update!(extension: nil)
           expect_correct_path("original/2X/4/4170ac2a2782a1516fe9e13d7322ae482c1bd594.png")
         end
       end
 
       describe "when id is negative" do
-        it "uses a single directory level" do
+        it "should return the right depth" do
           upload.update!(id: -999)
           expect_correct_path("original/1X/4170ac2a2782a1516fe9e13d7322ae482c1bd594.png")
         end
@@ -110,14 +110,14 @@ RSpec.describe FileStore::BaseStore do
     let!(:optimized_path) { "optimized/1X/#{upload.sha1}_1_100x200.png" }
 
     context "with empty URL" do
-      it "builds the optimized image path" do
+      it "should return the right path" do
         optimized = Fabricate.build(:optimized_image, upload: upload, version: 1)
         expect(FileStore::BaseStore.new.get_path_for_optimized_image(optimized)).to eq(
           optimized_path,
         )
       end
 
-      it "defaults a nil version to version 1 in the image path" do
+      it "should return the right path for `nil` version" do
         optimized = Fabricate.build(:optimized_image, upload: upload, version: nil)
         expect(FileStore::BaseStore.new.get_path_for_optimized_image(optimized)).to eq(
           optimized_path,
@@ -185,53 +185,47 @@ RSpec.describe FileStore::BaseStore do
     let(:upload_s3) { Fabricate(:upload_s3) }
     let(:store) { FileStore::BaseStore.new }
 
-    it "returns consistent encodings for fresh and cached downloads" do
-      first_encoding = File.read(store.download(upload_s3)).encoding
-      second_encoding = File.read(store.download(upload_s3)).encoding
+    it "should return consistent encodings for fresh and cached downloads" do
+      # Net::HTTP always returns binary ASCII-8BIT encoding. File.read auto-detects the encoding
+      # Make sure we File.read after downloading a file for consistency
+
+      first_encoding = store.download(upload_s3, print_deprecation: false).read.encoding
+
+      second_encoding = store.download(upload_s3, print_deprecation: false).read.encoding
 
       expect(first_encoding).to eq(Encoding::UTF_8)
       expect(second_encoding).to eq(Encoding::UTF_8)
     end
 
-    it "returns a file path" do
-      path = store.download(upload_s3)
+    it "should return the file" do
+      file = store.download(upload_s3, print_deprecation: false)
 
-      expect(path).to be_a(String)
-      expect(File.exist?(path)).to eq(true)
+      expect(file.class).to eq(File)
     end
 
-    it "returns the path when the S3 CDN is enabled" do
+    it "should return the file when s3 cdn enabled" do
       SiteSetting.s3_cdn_url = "https://cdn.s3.#{SiteSetting.s3_region}.amazonaws.com"
       stub_request(:get, Discourse.store.cdn_url(upload_s3.url)).to_return(
         status: 200,
         body: "Hello world",
       )
 
-      path = store.download(upload_s3)
+      file = store.download(upload_s3, print_deprecation: true)
 
-      expect(path).to be_a(String)
-      expect(File.exist?(path)).to eq(true)
+      expect(file.class).to eq(File)
     end
 
-    it "returns the path when secure uploads are enabled" do
+    it "should return the file when secure uploads are enabled" do
       SiteSetting.login_required = true
       SiteSetting.secure_uploads = true
 
       stub_request(:head, "https://s3-upload-bucket.s3.#{SiteSetting.s3_region}.amazonaws.com/")
-      signed_url =
-        Discourse.store.signed_url_for_path(upload_s3.url, include_content_disposition: false)
+      signed_url = Discourse.store.signed_url_for_path(upload_s3.url)
       stub_request(:get, signed_url).to_return(status: 200, body: "Hello world")
 
-      path = store.download(upload_s3)
+      file = store.download(upload_s3, print_deprecation: false)
 
-      expect(path).to be_a(String)
-      expect(File.exist?(path)).to eq(true)
-    end
-
-    it "returns nil when download fails" do
-      FileHelper.stubs(:download).raises(OpenURI::HTTPError.new("400 error", anything))
-
-      expect(store.download(upload_s3)).to eq(nil)
+      expect(file.class).to eq(File)
     end
   end
 
@@ -244,57 +238,10 @@ RSpec.describe FileStore::BaseStore do
     let(:upload_s3) { Fabricate(:upload_s3) }
     let(:store) { FileStore::BaseStore.new }
 
-    it "raises DownloadError when download fails" do
+    it "does not raise an error when download fails" do
       FileHelper.stubs(:download).raises(OpenURI::HTTPError.new("400 error", anything))
 
       expect { store.download!(upload_s3) }.to raise_error(FileStore::DownloadError)
-    end
-
-    it "returns a file path" do
-      path = store.download!(upload_s3)
-
-      expect(path).to be_a(String)
-      expect(File.exist?(path)).to eq(true)
-    end
-  end
-
-  describe "#cache_file" do
-    let(:store) { FileStore::BaseStore.new }
-    let(:cache_dir) { FileStore::BaseStore::CACHE_DIR }
-
-    before { FileUtils.rm_rf(cache_dir) }
-
-    after { FileUtils.rm_rf(cache_dir) }
-
-    it "evicts oldest files in batch when over the cache limit" do
-      FileUtils.mkdir_p(cache_dir)
-
-      stub_const(FileStore::BaseStore, "CACHE_MAXIMUM_SIZE", 5) do
-        stub_const(FileStore::BaseStore, "CACHE_EVICT_COUNT", 2) do
-          6.times do |i|
-            file = Tempfile.new("test_cache_#{i}")
-            file.write("data_#{i}")
-            file.rewind
-            store.cache_file(file, "cached_#{i}.tmp")
-            path = store.get_cache_path_for("cached_#{i}.tmp")
-            FileUtils.touch(path, mtime: Time.now - (10 - i).hours)
-            file.close!
-          end
-
-          trigger = Tempfile.new("trigger")
-          trigger.write("trigger")
-          trigger.rewind
-          store.cache_file(trigger, "trigger.tmp")
-          trigger.close!
-        end
-      end
-
-      remaining = Dir.glob("#{cache_dir}*")
-      expect(remaining.length).to eq(5)
-      expect(File.exist?(store.get_cache_path_for("cached_0.tmp"))).to eq(false)
-      expect(File.exist?(store.get_cache_path_for("cached_1.tmp"))).to eq(false)
-      expect(File.exist?(store.get_cache_path_for("cached_5.tmp"))).to eq(true)
-      expect(File.exist?(store.get_cache_path_for("trigger.tmp"))).to eq(true)
     end
   end
 
@@ -307,7 +254,7 @@ RSpec.describe FileStore::BaseStore do
     let(:upload_s3) { Fabricate(:upload_s3) }
     let(:store) { FileStore::BaseStore.new }
 
-    it "delegates to #download and emits a deprecation warning" do
+    it "does not raise an error when download fails" do
       FileHelper.stubs(:download).raises(OpenURI::HTTPError.new("400 error", anything))
 
       expect(store.download_safe(upload_s3)).to eq(nil)

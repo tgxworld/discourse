@@ -1,20 +1,20 @@
 import { array } from "@ember/helper";
 import { LinkTo } from "@ember/routing";
-import DCookText from "discourse/ui-kit/d-cook-text";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
+import CookText from "discourse/components/cook-text";
+import icon from "discourse/helpers/d-icon";
 import { i18n } from "discourse-i18n";
 
 const ItemContent = <template>
   <div class="templates-content">
     <LinkTo
       class="template-item-source-link"
-      @models={{array @template.slug @template.id}}
       @route="topic"
+      @models={{array @template.slug @template.id}}
     >
-      {{dIcon "crosshairs"}}
+      {{icon "crosshairs"}}
       {{i18n "templates.source"}}
     </LinkTo>
-    <DCookText @rawText={{@template.content}} />
+    <CookText @rawText={{@template.content}} />
   </div>
 </template>;
 

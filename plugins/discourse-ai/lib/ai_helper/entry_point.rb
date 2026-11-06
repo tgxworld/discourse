@@ -4,7 +4,7 @@ module DiscourseAi
     class EntryPoint
       def inject_into(plugin)
         plugin.register_seedfu_fixtures(
-          Rails.root.join("plugins/discourse-ai/db/fixtures/ai_helper"),
+          Rails.root.join("plugins", "discourse-ai", "db", "fixtures", "ai_helper"),
         )
 
         plugin.add_to_serializer(:current_user, :can_use_assistant) do
@@ -16,15 +16,7 @@ module DiscourseAi
         end
 
         plugin.add_to_serializer(:current_user, :can_use_custom_prompts) do
-          return [] if !SiteSetting.ai_helper_enabled
-
-          custom_prompt_allowed_group_ids =
-            AiAgent
-              .select(:allowed_group_ids)
-              .find_by(id: SiteSetting.ai_helper_custom_prompt_agent)
-              &.allowed_group_ids || []
-
-          scope.user.in_any_groups?(custom_prompt_allowed_group_ids)
+          scope.user.in_any_groups?(SiteSetting.ai_helper_custom_prompts_allowed_groups_map)
         end
 
         plugin.on(:chat_message_created) do |message, channel, user, extra|

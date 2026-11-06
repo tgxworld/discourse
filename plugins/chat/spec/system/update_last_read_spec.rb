@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "Update last read" do
+RSpec.describe "Update last read", type: :system do
   fab!(:current_user, :user)
   fab!(:channel_1, :chat_channel)
   fab!(:messages) { Fabricate.times(15, :chat_message, chat_channel: channel_1) }
@@ -22,9 +22,7 @@ RSpec.describe "Update last read" do
       last_message = Fabricate(:chat_message, chat_channel: channel_1)
       chat_page.visit_channel(channel_1)
 
-      try_until_success(
-        reason: "Relies on Ember timer to fire off request to update last_read_message_id",
-      ) { expect(membership.reload.last_read_message_id).to eq(last_message.id) }
+      try_until_success { expect(membership.reload.last_read_message_id).to eq(last_message.id) }
     end
   end
 
@@ -34,9 +32,7 @@ RSpec.describe "Update last read" do
 
       last_message = Fabricate(:chat_message, chat_channel: channel_1, use_service: true)
 
-      try_until_success(
-        reason: "Relies on Ember timer to fire off request to update last_read_message_id",
-      ) { expect(membership.reload.last_read_message_id).to eq(last_message.id) }
+      try_until_success { expect(membership.reload.last_read_message_id).to eq(last_message.id) }
     end
   end
 
@@ -47,9 +43,7 @@ RSpec.describe "Update last read" do
       last_message = Fabricate(:chat_message, chat_channel: channel_1)
       chat_page.visit_channel(channel_1)
 
-      try_until_success(
-        reason: "Relies on Ember timer to fire off request to update last_read_message_id",
-      ) { expect(membership.reload.last_read_message_id).to eq(last_message.id) }
+      try_until_success { expect(membership.reload.last_read_message_id).to eq(last_message.id) }
     end
   end
 end

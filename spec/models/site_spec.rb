@@ -19,7 +19,6 @@ RSpec.describe Site do
             "default" => id == SiteSetting.default_theme_id,
             "color_scheme_id" => color_scheme_id,
             "dark_color_scheme_id" => dark_color_scheme_id,
-            "only_theme_color_schemes" => false,
           }
         end
 
@@ -34,7 +33,7 @@ RSpec.describe Site do
     color_scheme = Fabricate(:color_scheme)
 
     anon_guardian = Guardian.new
-    user_guardian = Fabricate(:user).guardian
+    user_guardian = Guardian.new(Fabricate(:user))
 
     expect_correct_themes(anon_guardian)
     expect_correct_themes(user_guardian)
@@ -70,7 +69,7 @@ RSpec.describe Site do
   describe "#categories" do
     fab!(:category)
     fab!(:user)
-    let(:guardian) { user.guardian }
+    let(:guardian) { Guardian.new(user) }
 
     it "omits read restricted categories" do
       expect(Site.new(guardian).categories.map { |c| c[:id] }).to contain_exactly(
@@ -96,7 +95,7 @@ RSpec.describe Site do
 
       group.add(user)
 
-      expect(Site.new(user.guardian).categories.map { |c| c[:id] }).to contain_exactly(
+      expect(Site.new(Guardian.new(user)).categories.map { |c| c[:id] }).to contain_exactly(
         SiteSetting.uncategorized_category_id,
         category.id,
       )
@@ -108,7 +107,7 @@ RSpec.describe Site do
       category.set_permissions(everyone: :create_post)
       category.save!
 
-      guardian = user.guardian
+      guardian = Guardian.new(user)
 
       expect(
         Site.new(guardian).categories.keep_if { |c| c[:name] == category.name }.first[:permission],
@@ -118,14 +117,11 @@ RSpec.describe Site do
       category.set_permissions(staff: :full)
       category.save!
 
-      sub_category =
-        Fabricate(:category, parent_category_id: category.id, permissions: { staff: :full })
-      expect(Site.new(guardian).categories.map { |entry| entry[:id] }).not_to include(
-        sub_category.id,
-      )
+      sub_category = Fabricate(:category, parent_category_id: category.id)
+      expect(Site.new(guardian).categories).not_to include(sub_category)
     end
 
-    it "clears the cache when custom fields change" do
+    it "should clear the cache when custom fields are updated" do
       Site.preloaded_category_custom_fields << "enable_marketplace"
       categories = Site.new(Guardian.new).categories
 
@@ -152,13 +148,13 @@ RSpec.describe Site do
 
       expect(categories.map { |c| c[:can_edit] }).to contain_exactly(false, false)
 
-      site = Site.new(Fabricate(:moderator).guardian)
+      site = Site.new(Guardian.new(Fabricate(:moderator)))
 
       expect(site.categories.map { |c| c[:can_edit] }).to contain_exactly(false, false)
 
-      SiteSetting.moderators_manage_categories = true
+      SiteSetting.moderators_manage_categories_and_groups = true
 
-      site = Site.new(Fabricate(:moderator).guardian)
+      site = Site.new(Guardian.new(Fabricate(:moderator)))
 
       expect(site.categories.map { |c| c[:can_edit] }).to contain_exactly(true, true)
     end
@@ -168,7 +164,7 @@ RSpec.describe Site do
       fab!(:boring_category) { Fabricate(:category, name: "Boring category") }
 
       it "allows changing the query" do
-        prefetched_categories = Site.new(user.guardian).categories.map { |c| c[:id] }
+        prefetched_categories = Site.new(Guardian.new(user)).categories.map { |c| c[:id] }
         expect(prefetched_categories).to include(cool_category.id, boring_category.id)
 
         # we need to clear the cache to ensure that the categories list will be updated
@@ -178,7 +174,7 @@ RSpec.describe Site do
         modifier_block = Proc.new { |query| query.where("categories.name LIKE 'Cool%'") }
         plugin_instance.register_modifier(:site_all_categories_cache_query, &modifier_block)
 
-        prefetched_categories = Site.new(user.guardian).categories.map { |c| c[:id] }
+        prefetched_categories = Site.new(Guardian.new(user)).categories.map { |c| c[:id] }
 
         expect(prefetched_categories).to include(cool_category.id)
         expect(prefetched_categories).not_to include(boring_category.id)
@@ -194,12 +190,12 @@ RSpec.describe Site do
     context "with lazy loaded categories enabled" do
       fab!(:user)
 
-      before { SiteSetting.lazy_load_categories_groups = "#{Group::AUTO_GROUPS[:logged_in_users]}" }
+      before { SiteSetting.lazy_load_categories_groups = "#{Group::AUTO_GROUPS[:everyone]}" }
 
-      it "returns all categories for anonymous users" do
+      it "does not return any categories for anonymous users" do
         site = Site.new(Guardian.new)
 
-        expect(site.categories.map { |c| c[:id] }).to include(category.id)
+        expect(site.categories).to eq([])
       end
 
       it "returns only sidebar categories and their ancestors" do
@@ -209,7 +205,7 @@ RSpec.describe Site do
         category.update!(parent_category: parent_category)
         Fabricate(:category_sidebar_section_link, linkable: category, user: user)
 
-        site = Site.new(user.guardian)
+        site = Site.new(Guardian.new(user))
 
         expect(site.categories.map { |c| c[:id] }).to contain_exactly(
           grandfather_category.id,
@@ -222,7 +218,7 @@ RSpec.describe Site do
         Fabricate(:category_sidebar_section_link, linkable: category, user: user)
         category.update!(read_restricted: true)
 
-        site = Site.new(user.guardian)
+        site = Site.new(Guardian.new(user))
 
         expect(site.categories).to eq([])
       end
@@ -231,7 +227,7 @@ RSpec.describe Site do
 
   it "omits groups user can not see" do
     user = Fabricate(:user)
-    site = Site.new(user.guardian)
+    site = Site.new(Guardian.new(user))
 
     staff_group = Fabricate(:group, visibility_level: Group.visibility_levels[:staff])
     expect(site.groups.pluck(:name)).not_to include(staff_group.name)
@@ -240,13 +236,8 @@ RSpec.describe Site do
     expect(site.groups.pluck(:name)).to include(public_group.name)
 
     admin = Fabricate(:admin)
-    site = Site.new(admin.guardian)
-    expect(site.groups.pluck(:name)).to include(
-      staff_group.name,
-      public_group.name,
-      "logged_in_users",
-      "anonymous_users",
-    )
+    site = Site.new(Guardian.new(admin))
+    expect(site.groups.pluck(:name)).to include(staff_group.name, public_group.name, "everyone")
   end
 
   describe "site_groups_query modifier" do
@@ -255,7 +246,7 @@ RSpec.describe Site do
     fab!(:boring_group) { Fabricate(:group, name: "boring-group") }
 
     it "allows changing the query" do
-      prefetched_groups = Site.new(user.guardian).groups.map { |c| c[:id] }
+      prefetched_groups = Site.new(Guardian.new(user)).groups.map { |c| c[:id] }
       expect(prefetched_groups).to include(cool_group.id, boring_group.id)
 
       # we need to clear the cache to ensure that the groups list will be updated
@@ -265,7 +256,7 @@ RSpec.describe Site do
       modifier_block = Proc.new { |query| query.where("groups.name LIKE 'cool%'") }
       plugin_instance.register_modifier(:site_groups_query, &modifier_block)
 
-      prefetched_groups = Site.new(user.guardian).groups.map { |c| c[:id] }
+      prefetched_groups = Site.new(Guardian.new(user)).groups.map { |c| c[:id] }
 
       expect(prefetched_groups).to include(cool_group.id)
       expect(prefetched_groups).not_to include(boring_group.id)
@@ -279,56 +270,18 @@ RSpec.describe Site do
   end
 
   it "includes all enabled authentication providers" do
-    SiteSetting.twitter_consumer_key = "twitter_consumer_key"
-    SiteSetting.twitter_consumer_secret = "twitter_consumer_secret"
     SiteSetting.enable_twitter_logins = true
-    SiteSetting.facebook_app_id = "432489234823984"
-    SiteSetting.facebook_app_secret = "adddcccdddd99922"
     SiteSetting.enable_facebook_logins = true
     data = JSON.parse(Site.json_for(Guardian.new))
     expect(data["auth_providers"].map { |a| a["name"] }).to contain_exactly("facebook", "twitter")
-  end
-
-  it "excludes enabled authentication providers that are missing credentials" do
-    SiteSetting.twitter_consumer_key = "twitter_consumer_key"
-    SiteSetting.twitter_consumer_secret = "twitter_consumer_secret"
-    SiteSetting.enable_twitter_logins = true
-    SiteSetting.twitter_consumer_secret = ""
-
-    data = JSON.parse(Site.json_for(Guardian.new))
-    expect(data["auth_providers"].map { |a| a["name"] }).to be_empty
   end
 
   it "includes all enabled authentication providers for anon when login_required" do
     SiteSetting.login_required = true
-    SiteSetting.twitter_consumer_key = "twitter_consumer_key"
-    SiteSetting.twitter_consumer_secret = "twitter_consumer_secret"
     SiteSetting.enable_twitter_logins = true
-    SiteSetting.facebook_app_id = "432489234823984"
-    SiteSetting.facebook_app_secret = "adddcccdddd99922"
     SiteSetting.enable_facebook_logins = true
     data = JSON.parse(Site.json_for(Guardian.new))
     expect(data["auth_providers"].map { |a| a["name"] }).to contain_exactly("facebook", "twitter")
-  end
-
-  it "includes anonymous_list_filters for anon when login_required" do
-    SiteSetting.login_required = true
-
-    data = JSON.parse(Site.json_for(Guardian.new))
-
-    expect(data["anonymous_list_filters"]).to include("latest")
-    expect(data["anonymous_list_filters"]).not_to include("unread")
-  end
-
-  it "includes tos_url and privacy_policy_url when login_required" do
-    SiteSetting.login_required = true
-    SiteSetting.tos_url = "https://discourse.org"
-    SiteSetting.privacy_policy_url = "https://discourse.org/privacy"
-
-    data = JSON.parse(Site.json_for(Guardian.new))
-
-    expect(data["tos_url"]).to eq(SiteSetting.tos_url)
-    expect(data["privacy_policy_url"]).to eq(SiteSetting.privacy_policy_url)
   end
 
   describe ".all_categories_cache" do
@@ -397,8 +350,8 @@ RSpec.describe Site do
       it "returns localized category names when enabled" do
         SiteSetting.content_localization_enabled = true
 
-        category = Fabricate(:category, locale: "en")
-        localization = Fabricate(:category_localization, category:)
+        localization = Fabricate(:category_localization)
+        category = localization.category
         locale = localization.locale.to_sym
 
         I18n.locale = locale
@@ -473,24 +426,6 @@ RSpec.describe Site do
         expect(Discourse.redis.get("site_json_ja")).to eq(json_ja)
 
         expect(json_en).not_to eq(json_ja)
-      end
-
-      it "returns localized tag names for anonymous users based on locale" do
-        SiteSetting.tagging_enabled = true
-        tag = Fabricate(:tag, name: "cats", locale: "en")
-        Fabricate(:tag_localization, tag:, locale: "ja", name: "猫")
-        Fabricate(:topic, tags: [tag])
-
-        I18n.locale = :en
-        Discourse.redis.flushdb
-        json_en = Site.json_for(anon_guardian)
-
-        I18n.locale = :ja
-        json_ja = Site.json_for(anon_guardian)
-
-        expect(json_en).to include("cats")
-        expect(json_en).not_to include("猫")
-        expect(json_ja).to include("猫")
       end
     end
   end

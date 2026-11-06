@@ -9,20 +9,21 @@ pt_BR:
     admin:
       site_settings:
         categories:
-          chat_integration: "Integrações de chat"
+          chat_integration: "Integrações de bate-papo"
   js:
     chat_integration:
-      menu_title: "Integrações de chat"
-      settings: "Configurações"
-      more_providers: "Mais"
-      channels_title: "Canais"
+      menu_title: "Integrações de bate-papo"
+      settings: "Definições"
+      no_providers: "Você precisa habilitar alguns provedores nas configurações do plugin"
       channels_with_errors: "Alguns canais deste provedor falharam na última vez em que as mensagens foram enviadas. Clique no(s) ícone(s) de erro para saber mais."
-      channel_exception: "Ocorreu um erro desconhecido última vez que uma mensagem foi enviada para este canal."
+      channel_exception: "Um erro desconhecido ocorreu na última vez que uma mensagem foi enviada para este canal."
       group_mention_template: "Menções de: @%{name}"
       group_message_template: "Mensagens para: @%{name}"
-      choose_group: "(Fechar grupo)"
-      all_categories: "(Todas as categorias)"
-      all_tags: "(Todas as etiquetas)"
+      choose_group: "(escolha um grupo)"
+      all_categories: "(todas as categorias)"
+      all_tags: "(todas as etiquetas)"
+      create_rule: "Criar Regra"
+      create_channel: "Criar Canal"
       delete_channel: "Excluir"
       test_channel: "Testar"
       edit_channel: "Editar"
@@ -30,11 +31,14 @@ pt_BR:
       test_modal:
         title: "Enviar uma mensagem de teste"
         topic: "Tópico"
+        send: "Enviar Mensagem de Teste"
         close: "Fechar"
-        error: "Ocorreu um erro desconhecido durante o envio da mensagem. Verifique os logs do site para mais informações."
+        error: "Um erro desconhecido ocorreu durante o envio da mensagem. Verifique os logs do site para mais informações."
         success: "Mensagem enviada com sucesso"
       type:
         normal: Normal
+        group_message: Mensagem de Grupo
+        group_mention: Menção de Grupo
       filter:
         mute: 'Silenciar'
         follow: 'Apenas primeira postagem'
@@ -55,6 +59,8 @@ pt_BR:
           ok: "Válido"
           fail: "Formato inválido"
       edit_rule_modal:
+        title: Editar Regra
+        save: Salvar Regra
         cancel: Cancelar
         provider: Provedor
         type: Tipo
@@ -75,6 +81,7 @@ pt_BR:
           param:
             identifier:
               title: Canal
+              help: "ex.: #canal, @username."
           errors:
             action_prohibited: "Este robô não tem permissão para postar naquele canal"
             channel_not_found: "O canal especificado não existe no Slack"
@@ -85,7 +92,7 @@ pt_BR:
               title: "Nome"
               help: "Um nome para descrever o canal. Não é usado para a conexão ao Telegram."
             chat_id:
-              title: ID do chat
+              title: ID do Bate-Papo
               help: Um número dado a você pelo robô, ou um identificador do canal de transmissão no formato @nome_do_canal
           errors:
             channel_not_found: "O canal especificado não existe no Telegram"
@@ -98,6 +105,7 @@ pt_BR:
               help: "Um nome para descrever o canal. Não é usado para a conexão ao Discord."
             webhook_url:
               title: URL do webhook
+              help: A URL do webhook criada nas configurações do seu servidor Discord
         guilded:
           title: "Guilded"
           param:
@@ -112,6 +120,7 @@ pt_BR:
           param:
             identifier:
               title: Canal
+              help: "ex.: #canal, @username."
           errors:
             channel_not_found: "O canal especificado não existe no Mattermost"
         matrix:
@@ -121,8 +130,8 @@ pt_BR:
               title: "Nome"
               help: "Um nome para descrever o canal. Não é usado para a conexão com o Matrix."
             room_id:
-              title: "ID da sala"
-              help: "O 'identificador privado' para a sala. Precisa ser algo como !abcdefghijkl:"
+              title: "ID da Sala"
+              help: "O \"identificador privado\" para a sala. Precisa ser algo como !abcdefg:matrix.org"
           errors:
             unknown_token: "O token de acesso é inválido"
             unknown_room: "O ID da sala é inválido"
@@ -142,6 +151,7 @@ pt_BR:
           param:
             identifier:
               title: Canal
+              help: "ex.: #canal, @username."
           errors:
             invalid_channel: "Este canal não existe no Rocket Chat"
         gitter:
@@ -149,9 +159,16 @@ pt_BR:
           param:
             name:
               title: "Nome"
+              help: "O nome de uma sala Gitter, ex.: gitterHQ/services."
             webhook_url:
               title: "URL do webhook"
               help: "A URL fornecida quando você cria uma nova integração em uma sala Gitter."
+        flowdock:
+          title: "Flowdock"
+          param:
+            flow_token:
+              title: "Token de Fluxo"
+              help: "O token de fluxo fornecido depois de criar uma fonte para um fluxo no qual você deseja enviar mensagens."
         groupme:
           title: "GroupMe"
           param:
@@ -194,7 +211,7 @@ pt_BR:
           errors:
             invalid_channel: "Este canal não existe no Webex"
         google:
-          title: "Chat do Google"
+          title: "Bate-papo do Google"
           param:
             name:
               title: "Nome"
@@ -223,8 +240,3 @@ pt_BR:
               description: "O nome do canal está nas configurações de integração do chat"
             provider:
               label: Provedor
-    discourse_workflows:
-      send_chat_integration_message:
-        channel_id: "Canal"
-        configure: "Configurar"
-        message: "Mensagem"

@@ -3,12 +3,12 @@
 @import "about";
 @import "activation";
 @import "alert";
-@import "authorize-api-key";
 @import "bbcode";
-@import "categories-topic-list";
 @import "category-list";
 @import "code_highlighting";
+@import "colorpicker";
 @import "compose";
+@import "composer-user-selector";
 @import "crawler_layout";
 @import "d-icon";
 @import "d-image-grid";
@@ -17,7 +17,6 @@
 @import "discourse";
 @import "edit-category";
 @import "edit-topic-timer-modal";
-@import "embedded-posts";
 @import "ember-select";
 @import "emoji";
 @import "exception";
@@ -25,7 +24,6 @@
 @import "faqs";
 @import "group";
 @import "groups";
-@import "heading-anchor";
 @import "header";
 @import "history";
 @import "json_schema";
@@ -33,7 +31,7 @@
 @import "list-controls";
 @import "login";
 @import "login-signup-page";
-@import "photoswipe";
+@import "magnific-popup";
 @import "menu-panel";
 @import "modal";
 @import "new-user";
@@ -41,11 +39,10 @@
 @import "onebox";
 @import "personal-message";
 @import "popup-menu";
+@import "redirection";
 @import "reorder-categories";
 @import "review";
 @import "reviewables";
-@import "dsa-classification";
-@import "dsa-notice";
 @import "revise-and-reject-post-reviewable";
 @import "rtl";
 @import "search";
@@ -58,10 +55,8 @@
 @import "sidebar-more-section-links";
 @import "sidebar-section";
 @import "sidebar-section-link";
-@import "sidebar-user-nav";
 @import "static-login";
 @import "tagging";
-@import "tag-settings";
 @import "tooltip";
 @import "topic";
 @import "topic-admin-menu";
@@ -71,5 +66,3 @@
 @import "user";
 @import "user-badges";
 @import "user-tips";
-@import "embed-mode";
-@import "_mcp";

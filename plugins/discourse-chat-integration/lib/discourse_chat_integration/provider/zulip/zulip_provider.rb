@@ -3,10 +3,9 @@
 module DiscourseChatIntegration
   module Provider
     module ZulipProvider
-      PROVIDER_NAME = "zulip"
-      POPULARITY_SCORE = 80
+      PROVIDER_NAME = "zulip".freeze
       PROVIDER_ENABLED_SETTING = :chat_integration_zulip_enabled
-      CHANNEL_IDENTIFIER_KEY = "stream"
+      CHANNEL_IDENTIFIER_KEY = "stream".freeze
       CHANNEL_PARAMETERS = [
         { key: "stream", unique: true, regex: '^\S+' },
         { key: "subject", unique: true, regex: '^\S+' },
@@ -31,7 +30,7 @@ module DiscourseChatIntegration
       end
 
       def self.generate_zulip_message(post, stream, subject)
-        display_name = DiscourseChatIntegration::Helper.formatted_display_name(post.user)
+        display_name = ::DiscourseChatIntegration::Helper.formatted_display_name(post.user)
 
         message =
           I18n.t(
@@ -48,14 +47,14 @@ module DiscourseChatIntegration
               ),
           )
 
-        { type: "stream", to: stream, subject: subject, content: message }
+        data = { type: "stream", to: stream, subject: subject, content: message }
       end
 
       def self.trigger_notification(post, channel, rule)
         stream = channel.data["stream"]
         subject = channel.data["subject"]
 
-        message = generate_zulip_message(post, stream, subject)
+        message = self.generate_zulip_message(post, stream, subject)
 
         response = send_message(message)
 
@@ -65,12 +64,12 @@ module DiscourseChatIntegration
             "chat_integration.provider.zulip.errors.does_not_exist" if response.body.include?(
             "does not exist",
           )
-          raise DiscourseChatIntegration::ProviderError.new info: {
-                                                              error_key: error_key,
-                                                              message: message,
-                                                              response_code: response.code,
-                                                              response_body: response.body,
-                                                            }
+          raise ::DiscourseChatIntegration::ProviderError.new info: {
+                                                                error_key: error_key,
+                                                                message: message,
+                                                                response_code: response.code,
+                                                                response_body: response.body,
+                                                              }
         end
       end
 

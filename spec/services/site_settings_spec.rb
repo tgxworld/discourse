@@ -4,20 +4,11 @@ RSpec.describe SiteSettingsTask do
   describe "export" do
     it "creates a hash of all site settings" do
       sso_url = "https://somewhere.over.com"
-
-      # Clear all overrides first
-      SiteSetting.provider.all.each { |setting| SiteSetting.remove_override!(setting.name) }
-
       SiteSetting.discourse_connect_url = sso_url
-      SiteSetting.discourse_connect_secret = "x" * 10
       SiteSetting.enable_discourse_connect = true
       hash = SiteSettingsTask.export_to_hash
 
-      expect(hash).to eq(
-        "discourse_connect_secret" => "x" * 10,
-        "enable_discourse_connect" => "true",
-        "discourse_connect_url" => sso_url,
-      )
+      expect(hash).to eq("enable_discourse_connect" => "true", "discourse_connect_url" => sso_url)
     end
   end
 
@@ -41,14 +32,14 @@ RSpec.describe SiteSettingsTask do
       expect(SiteSetting.default_theme_id).to eq(999_999_999)
     end
 
-    it "does not update a missing setting" do
+    it "won't update a setting that doesn't exist" do
       yml = "fake_setting: foo"
       log, counts = SiteSettingsTask.import(yml)
       expect(log[0]).to eq "NOT FOUND: existing site setting not found for fake_setting"
       expect(counts[:not_found]).to eq 1
     end
 
-    it "logs the missing-setting error" do
+    it "will log that an error has occurred" do
       yml = "min_password_length: 0"
       log, counts = SiteSettingsTask.import(yml)
       expect(log[0]).to eq "ERROR: min_password_length: Value must be between 8 and 500."

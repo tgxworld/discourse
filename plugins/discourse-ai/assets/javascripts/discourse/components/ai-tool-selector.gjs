@@ -1,12 +1,12 @@
 import { hash } from "@ember/helper";
-import MultiSelect from "discourse/select-kit/components/multi-select";
+import MultiSelect from "select-kit/components/multi-select";
 
 const AiToolSelector = <template>
   <MultiSelect
-    @content={{@content}}
-    @onChange={{@onChange}}
-    @options={{hash filterable=true allowAny=false disabled=@disabled}}
     @value={{@value}}
+    @onChange={{@onChange}}
+    @content={{@content}}
+    @options={{hash filterable=true allowAny=false disabled=@disabled}}
   />
 </template>;
 

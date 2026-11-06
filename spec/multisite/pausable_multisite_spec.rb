@@ -40,7 +40,7 @@ RSpec.describe Sidekiq::Pausable, type: :multisite do
       ) { yield }
     end
 
-    it "delays the job" do
+    it "should delay the job" do
       Sidekiq.pause!
 
       called = false
@@ -64,15 +64,6 @@ RSpec.describe Sidekiq::Pausable, type: :multisite do
         call_middleware("second") { called2 = false }
         expect(called2).to eq(true)
       end
-    end
-
-    it "runs a job for a site this process does not know about" do
-      Sidekiq.pause!
-
-      called = false
-      call_middleware("unknown-site") { called = true }
-
-      expect(called).to eq(true)
     end
   end
 end

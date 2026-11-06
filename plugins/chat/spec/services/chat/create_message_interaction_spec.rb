@@ -4,7 +4,6 @@ RSpec.describe Chat::CreateMessageInteraction do
   describe described_class::Contract, type: :model do
     it { is_expected.to validate_presence_of :message_id }
     it { is_expected.to validate_presence_of :action_id }
-    it { is_expected.to validate_presence_of :channel_id }
   end
 
   describe ".call" do
@@ -35,12 +34,8 @@ RSpec.describe Chat::CreateMessageInteraction do
     end
 
     let(:guardian) { Guardian.new(current_user) }
-    let(:params) do
-      { message_id: message.id, action_id: "xxx", channel_id: message.chat_channel_id }
-    end
+    let(:params) { { message_id: message.id, action_id: "xxx" } }
     let(:dependencies) { { guardian: } }
-
-    before { SiteSetting.chat_allowed_groups = Group::AUTO_GROUPS[:everyone] }
 
     context "when all steps pass" do
       before { message.chat_channel.add(current_user) }

@@ -3,10 +3,11 @@ import { Input } from "@ember/component";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import didInsert from "@ember/render-modifiers/modifiers/did-insert";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
+import { eq } from "truth-helpers";
+import icon from "discourse/helpers/d-icon";
 import { i18n } from "discourse-i18n";
-import { getNext, getPrevious } from "./lib/iterate-list.js";
-import Member from "./member.gjs";
+import { getNext, getPrevious } from "./lib/iterate-list";
+import Member from "./member";
 
 export default class Members extends Component {
   addMoreMembersLabel = i18n("chat.new_message_modal.user_search_placeholder");
@@ -28,7 +29,7 @@ export default class Members extends Component {
       event.stopPropagation();
 
       if (!this.args.highlightedMember) {
-        this.args.onHighlightMember(this.args.members.at(-1));
+        this.args.onHighlightMember(this.args.members.lastObject);
       } else {
         this.args.onSelectMember(this.args.highlightedMember);
       }
@@ -72,21 +73,21 @@ export default class Members extends Component {
   <template>
     <div class="chat-message-creator__members-container">
       <div class="chat-message-creator__members">
-        {{dIcon "magnifying-glass"}}
+        {{icon "magnifying-glass"}}
 
         {{#each @members as |member|}}
           <Member
-            @highlighted={{eq member @highlightedMember}}
             @member={{member}}
             @onSelect={{@onSelectMember}}
+            @highlighted={{eq member @highlightedMember}}
           />
         {{/each}}
 
         <Input
-          autofocus={{true}}
-          class="chat-message-creator__members-input"
           placeholder={{this.addMoreMembersLabel}}
+          class="chat-message-creator__members-input"
           @value={{@filter}}
+          autofocus={{true}}
           {{on "input" this.onFilter}}
           {{on "keydown" this.handleKeypress}}
           {{didInsert this.registerFocusFilterAction}}

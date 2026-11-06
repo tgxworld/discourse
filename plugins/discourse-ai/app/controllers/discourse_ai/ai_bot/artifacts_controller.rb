@@ -3,87 +3,21 @@
 module DiscourseAi
   module AiBot
     class ArtifactsController < ApplicationController
-      requires_plugin PLUGIN_NAME
+      requires_plugin DiscourseAi::PLUGIN_NAME
       before_action :require_site_settings!
 
-      skip_before_action :preload_json, :check_xhr, only: %i[show shared embed forum]
-      skip_after_action :set_cross_origin_opener_policy_header, only: %i[show shared embed forum]
-
-      def embed
-        raise Discourse::NotFound if !params[:id].to_s.match?(/\A[1-9]\d*\z/)
-
-        artifact = AiArtifact.find(params[:id])
-        raise Discourse::NotFound if !artifact.publicly_embeddable?
-
-        version = nil
-        if params[:version].present?
-          raise Discourse::NotFound if !params[:version].to_s.match?(/\A[1-9]\d*\z/)
-
-          version = artifact.versions.find_by(version_number: params[:version])
-          raise Discourse::NotFound if !version
-        end
-
-        untrusted_html = build_untrusted_html(version || artifact, artifact.name, standalone: true)
-        trusted_html = build_trusted_html(nil, nil, artifact.name, untrusted_html, standalone: true)
-
-        set_security_headers
-        response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["Cache-Control"] = "no-store"
-        render html: trusted_html.html_safe, layout: false, content_type: "text/html"
-      end
-
-      def shared
-        share = find_public_share
-        untrusted_html = build_untrusted_html(share, share.name, standalone: true)
-        trusted_html = build_trusted_html(nil, nil, share.name, untrusted_html, standalone: true)
-
-        set_security_headers
-        response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["Cache-Control"] = "no-store"
-        render html: trusted_html.html_safe, layout: false, content_type: "text/html"
-      end
-
-      def forum
-        share = find_public_share
-        untrusted_html = build_untrusted_html(share, share.name)
-        trusted_html = build_trusted_html(share, nil, share.name, untrusted_html)
-
-        set_native_security_headers
-        response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["Cache-Control"] = "no-store"
-        render html: trusted_html.html_safe, layout: false, content_type: "text/html"
-      end
-
-      def shared_metadata
-        render_metadata(find_public_share.name)
-      end
-
-      def metadata
-        id = params[:id].to_s
-        if !id.match?(/\A[1-9]\d{0,18}\z/) || id.to_i > 9_223_372_036_854_775_807
-          raise Discourse::NotFound
-        end
-
-        artifact = AiArtifact.find_by(id: id)
-        raise Discourse::NotFound if !artifact&.available_to?(guardian)
-
-        if params.key?(:version)
-          version = params[:version].to_s
-          if !version.match?(/\A(?:0|[1-9]\d{0,9})\z/) || version.to_i > 2_147_483_647
-            raise Discourse::NotFound
-          end
-          if version != "0" && !artifact.versions.exists?(version_number: version.to_i)
-            raise Discourse::NotFound
-          end
-        end
-
-        render_metadata(artifact.name)
-      end
+      skip_before_action :preload_json, :check_xhr, only: %i[show]
 
       def show
         artifact = AiArtifact.find(params[:id])
 
-        raise Discourse::NotFound if !artifact.available_to?(guardian)
+        post = Post.find_by(id: artifact.post_id)
+        if artifact.public?
+          # no guardian needed
+        else
+          raise Discourse::NotFound if !post&.topic&.private_message?
+          raise Discourse::NotFound if !guardian.can_see?(post)
+        end
 
         name = artifact.name
         artifact_version = nil
@@ -96,28 +30,14 @@ module DiscourseAi
         untrusted_html = build_untrusted_html(artifact_version || artifact, name)
         trusted_html = build_trusted_html(artifact, artifact_version, name, untrusted_html)
 
-        set_native_security_headers
+        set_security_headers
         render html: trusted_html.html_safe, layout: false, content_type: "text/html"
       end
 
       private
 
-      def render_metadata(name)
-        response.headers["Cache-Control"] = "no-store"
-        response.headers["X-Robots-Tag"] = "noindex"
-        render json: { name: name }
-      end
-
-      def find_public_share
-        share = AiArtifactShare.find_by(share_key: params[:share_key])
-        raise Discourse::NotFound if !share&.publicly_visible?
-
-        share
-      end
-
-      def build_untrusted_html(artifact, name, standalone: false)
+      def build_untrusted_html(artifact, name)
         js = prepare_javascript(artifact.js)
-        sanitized_css = artifact.css.to_s.gsub(%r{</style}i, '<\/style')
 
         <<~HTML
           <!DOCTYPE html>
@@ -126,9 +46,9 @@ module DiscourseAi
               <meta charset="UTF-8">
               <title>#{ERB::Util.html_escape(name)}</title>
               <style>
-                #{sanitized_css}
+                #{artifact.css}
               </style>
-              #{standalone ? build_standalone_javascript : build_iframe_javascript}
+              #{build_iframe_javascript}
             </head>
             <body>
               #{artifact.html}
@@ -138,7 +58,7 @@ module DiscourseAi
         HTML
       end
 
-      def build_trusted_html(artifact, artifact_version, name, untrusted_html, standalone: false)
+      def build_trusted_html(artifact, artifact_version, name, untrusted_html)
         <<~HTML
           <!DOCTYPE html>
           <html>
@@ -146,7 +66,7 @@ module DiscourseAi
               <meta charset="UTF-8">
               <title>#{ERB::Util.html_escape(name)}</title>
               <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, user-scalable=yes, viewport-fit=cover, interactive-widget=resizes-content">
-              #{"<meta name=\"csrf-token\" content=\"#{form_authenticity_token}\">" unless standalone}
+              <meta name="csrf-token" content="#{form_authenticity_token}">
               <style>
                 html, body, iframe {
                   margin: 0;
@@ -162,8 +82,8 @@ module DiscourseAi
               </style>
             </head>
             <body>
-              <iframe sandbox="allow-scripts allow-forms" title="#{ERB::Util.html_escape(name)}" height="100%" width="100%" srcdoc="#{ERB::Util.html_escape(untrusted_html)}" frameborder="0"></iframe>
-              #{build_parent_javascript(artifact) unless standalone}
+              <iframe sandbox="allow-scripts allow-forms" height="100%" width="100%" srcdoc="#{ERB::Util.html_escape(untrusted_html)}" frameborder="0"></iframe>
+              #{build_parent_javascript(artifact)}
             </body>
           </html>
         HTML
@@ -186,21 +106,6 @@ module DiscourseAi
           user_id: current_user ? current_user.id : nil,
           name: current_user ? current_user.name : nil,
         }
-      end
-
-      def build_standalone_javascript
-        <<~JAVASCRIPT
-          <script>
-            window.discourseArtifactData = {};
-            window.discourseArtifactReady = Promise.resolve(window.discourseArtifactData);
-            window.discourseArtifact = {
-              get: function() { return Promise.reject(new Error('Key-value storage is unavailable in public shares')); },
-              set: function() { return Promise.reject(new Error('Key-value storage is unavailable in public shares')); },
-              delete: function() { return Promise.reject(new Error('Key-value storage is unavailable in public shares')); },
-              index: function() { return Promise.reject(new Error('Key-value storage is unavailable in public shares')); }
-            };
-          </script>
-        JAVASCRIPT
       end
 
       def build_iframe_javascript
@@ -267,18 +172,9 @@ module DiscourseAi
       end
 
       def build_parent_javascript(artifact)
-        storage_url =
-          if artifact.is_a?(AiArtifactShare)
-            "/discourse-ai/ai-bot/artifact-share-key-values/#{artifact.share_key}.json"
-          else
-            "/discourse-ai/ai-bot/artifact-key-values/#{artifact.id}.json"
-          end
-
         <<~JAVASCRIPT
           <script>
-            const iframe = document.querySelector('iframe');
-
-            iframe.addEventListener('load', function() {
+            document.querySelector('iframe').addEventListener('load', function() {
               try {
                 const iframeWindow = this.contentWindow;
                 const message = { type: 'discourse-artifact-data', dataset: {} };
@@ -295,12 +191,11 @@ module DiscourseAi
             // Handle key-value store requests from iframe
             window.addEventListener('message', async function(event) {
               if (event.data && event.data.type === 'discourse-artifact-kv') {
-                if (event.source !== iframe.contentWindow) return;
                 const { action, data, requestId } = event.data;
-                const baseUrl = #{storage_url.to_json};
+                const artifactId = #{artifact.id};
 
                 try {
-                  const result = await handleKeyValueRequest(action, data, baseUrl);
+                  const result = await handleKeyValueRequest(action, data, artifactId);
                   event.source.postMessage({
                     requestId: requestId,
                     result: result
@@ -314,7 +209,8 @@ module DiscourseAi
               }
             });
 
-            async function handleKeyValueRequest(action, data, baseUrl) {
+            async function handleKeyValueRequest(action, data, artifactId) {
+              const baseUrl = '/discourse-ai/ai-bot/artifact-key-values/' + artifactId + ".json";
               const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
               switch (action) {
@@ -429,15 +325,8 @@ module DiscourseAi
         JAVASCRIPT
       end
 
-      def set_native_security_headers
-        set_security_headers
-        response.headers["X-Frame-Options"] = "SAMEORIGIN"
-        response.headers["Content-Security-Policy"] += " frame-ancestors 'self';"
-      end
-
       def set_security_headers
         response.headers.delete("X-Frame-Options")
-        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         response.headers[
           "Content-Security-Policy"
         ] = "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' #{AiArtifact::ALLOWED_CDN_SOURCES.join(" ")};"

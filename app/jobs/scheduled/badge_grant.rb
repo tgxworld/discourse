@@ -3,7 +3,7 @@
 module Jobs
   class BadgeGrant < ::Jobs::Scheduled
     def self.run
-      new.execute(nil)
+      self.new.execute(nil)
     end
 
     every 1.day

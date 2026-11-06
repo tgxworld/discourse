@@ -80,31 +80,6 @@ RSpec.describe DiscourseAi::Admin::AiEmbeddingsController do
         expect(created_def.provider_params["model_name"]).to eq("embeddings-v1")
       end
 
-      it "creates a Bedrock definition without a URL or API key" do
-        post "/admin/plugins/discourse-ai/ai-embeddings.json",
-             params: {
-               ai_embedding:
-                 valid_attrs.except(:url, :api_key).merge(
-                   provider: "aws_bedrock",
-                   provider_params: {
-                     model_id: "cohere.embed-v4:0",
-                     region: "us-west-2",
-                     role_arn: "arn:aws:iam::123456789012:role/bedrock",
-                   },
-                 ),
-             }
-
-        created_def = EmbeddingDefinition.last
-
-        expect(response.status).to eq(201)
-        expect(created_def.url).to eq("https://bedrock-runtime.us-west-2.amazonaws.com")
-        expect(created_def.provider_params).to eq(
-          "model_id" => "cohere.embed-v4:0",
-          "region" => "us-west-2",
-          "role_arn" => "arn:aws:iam::123456789012:role/bedrock",
-        )
-      end
-
       it "ignores parameters not associated with that provider" do
         post "/admin/plugins/discourse-ai/ai-embeddings.json",
              params: {
@@ -128,16 +103,6 @@ RSpec.describe DiscourseAi::Admin::AiEmbeddingsController do
         created_def = EmbeddingDefinition.last
 
         expect(created_def).to be_nil
-      end
-
-      it "rejects a SQL injection payload in pg_function" do
-        post "/admin/plugins/discourse-ai/ai-embeddings.json",
-             params: {
-               ai_embedding: valid_attrs.merge(pg_function: "'; DROP TABLE users; --"),
-             }
-
-        expect(response.status).to eq(422)
-        expect(EmbeddingDefinition.last).to be_nil
       end
     end
   end
@@ -259,26 +224,15 @@ RSpec.describe DiscourseAi::Admin::AiEmbeddingsController do
     end
   end
 
-  describe "POST #test" do
-    it "is not accessible via GET" do
-      WebMock.stub_request(:post, valid_attrs[:url]).to_return(status: 200, body: [[1]].to_json)
-
-      get "/admin/plugins/discourse-ai/ai-embeddings/test.json",
-          params: {
-            ai_embedding: valid_attrs,
-          }
-
-      expect(response.status).to eq(404)
-    end
-
+  describe "GET #test" do
     context "when we can generate an embedding" do
       it "returns a success true flag" do
         WebMock.stub_request(:post, valid_attrs[:url]).to_return(status: 200, body: [[1]].to_json)
 
-        post "/admin/plugins/discourse-ai/ai-embeddings/test.json",
-             params: {
-               ai_embedding: valid_attrs,
-             }
+        get "/admin/plugins/discourse-ai/ai-embeddings/test.json",
+            params: {
+              ai_embedding: valid_attrs,
+            }
 
         expect(response).to be_successful
         expect(response.parsed_body["success"]).to eq(true)
@@ -294,14 +248,14 @@ RSpec.describe DiscourseAi::Admin::AiEmbeddingsController do
           body: error_message.to_json,
         )
 
-        post "/admin/plugins/discourse-ai/ai-embeddings/test.json",
-             params: {
-               ai_embedding: valid_attrs,
-             }
+        get "/admin/plugins/discourse-ai/ai-embeddings/test.json",
+            params: {
+              ai_embedding: valid_attrs,
+            }
 
         expect(response).to be_successful
         expect(response.parsed_body["success"]).to eq(false)
-        expect(response.parsed_body["error"]).to eq(error_message[:error])
+        expect(response.parsed_body["error"]).to eq(error_message.to_json)
       end
     end
   end

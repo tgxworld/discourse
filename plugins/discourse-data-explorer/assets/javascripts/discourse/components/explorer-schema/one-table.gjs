@@ -1,11 +1,10 @@
-/* eslint-disable ember/no-tracked-properties-from-args */
 import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
 import { on } from "@ember/modifier";
+import icon from "discourse/helpers/d-icon";
 import { bind } from "discourse/lib/decorators";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { i18n } from "discourse-i18n";
-import EnumInfo from "./enum-info.gjs";
+import EnumInfo from "./enum-info";
 
 export default class OneTable extends Component {
   @tracked open = this.args.table.open;
@@ -21,16 +20,16 @@ export default class OneTable extends Component {
 
   <template>
     <li class="schema-table {{this.styles}}">
-
+      {{! template-lint-enable no-invalid-interactive }}
       <div
         class="schema-table-name"
         role="button"
         {{on "click" this.toggleOpen}}
       >
         {{#if this.open}}
-          {{dIcon "angle-down"}}
+          {{icon "caret-down"}}
         {{else}}
-          {{dIcon "angle-right"}}
+          {{icon "caret-right"}}
         {{/if}}
         {{@table.name}}
       </div>
@@ -45,7 +44,7 @@ export default class OneTable extends Component {
                   title={{if col.sensitive (i18n "explorer.schema.sensitive")}}
                 >
                   {{#if col.sensitive}}
-                    {{dIcon "triangle-exclamation"}}
+                    {{icon "triangle-exclamation"}}
                   {{/if}}
                   {{col.column_name}}
                 </dt>
@@ -55,7 +54,7 @@ export default class OneTable extends Component {
                     <br />
                     {{#if col.havepopup}}
                       <div class="popup-info">
-                        {{dIcon "info"}}
+                        {{icon "info"}}
                         <div class="popup">
                           {{col.column_desc}}
                           {{#if col.enum}}

@@ -1,7 +1,11 @@
-import Component from "@glimmer/component";
+/* eslint-disable ember/no-classic-components */
+import Component from "@ember/component";
+import { classNames, tagName } from "@ember-decorators/component";
 import { slotContenders } from "discourse/plugins/discourse-adplugin/discourse/components/ad-slot";
-import AdSlot from "../../components/ad-slot.gjs";
+import AdSlot from "../../components/ad-slot";
 
+@tagName("tr")
+@classNames("after-topic-list-item-outlet", "discourse-adplugin")
 export default class DiscourseAdplugin extends Component {
   static shouldRender(args, context) {
     return (
@@ -16,14 +20,11 @@ export default class DiscourseAdplugin extends Component {
   }
 
   <template>
-    <tr class="after-topic-list-item-outlet discourse-adplugin">
-      <AdSlot
-        @category={{@outletArgs.category.slug}}
-        @childTagName="td"
-        @colspan="5"
-        @indexNumber={{@outletArgs.index}}
-        @placement="topic-list-between"
-      />
-    </tr>
+    <AdSlot
+      @placement="topic-list-between"
+      @category={{this.category.slug}}
+      @indexNumber={{this.index}}
+      @childTagName="td"
+    />
   </template>
 }

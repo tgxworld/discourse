@@ -1,21 +1,21 @@
 import { LinkTo } from "@ember/routing";
-import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
+import concatClass from "discourse/helpers/concat-class";
+import icon from "discourse/helpers/d-icon";
 
 const ChatFormRow = <template>
   {{#if @route}}
     <LinkTo
-      class={{dConcatClass "chat-form__row -link" (if @separator "-separator")}}
-      @models={{@routeModels}}
       @route={{@route}}
+      @models={{@routeModels}}
+      class={{concatClass "chat-form__row -link" (if @separator "-separator")}}
     >
       <div class="chat-form__row-content">
         {{@label}}
-        {{dIcon "chevron-right" class="chat-form__row-icon"}}
+        {{icon "chevron-right" class="chat-form__row-icon"}}
       </div>
     </LinkTo>
   {{else}}
-    <div class={{dConcatClass "chat-form__row" (if @separator "-separator")}}>
+    <div class={{concatClass "chat-form__row" (if @separator "-separator")}}>
       <div class="chat-form__row-content">
         {{#if @label}}
           <span class="chat-form__row-label">{{@label}}</span>

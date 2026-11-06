@@ -1,21 +1,19 @@
 # frozen_string_literal: true
 
 class PostLocalizationCreator
-  def self.create(post:, locale:, raw:, user:)
-    Guardian.new(user).ensure_can_localize_post!(post)
+  def self.create(post_id:, locale:, raw:, user:)
+    Guardian.new(user).ensure_can_localize_content!
 
-    localization =
-      PostLocalization.create!(
-        post: post,
-        locale: locale,
-        raw: raw,
-        cooked: post.post_analyzer.cook(raw, post.cooking_options || {}),
-        post_version: post.version,
-        localizer_user_id: user.id,
-      )
+    post = Post.find_by(id: post_id)
+    raise Discourse::NotFound unless post
 
-    Jobs.enqueue(:process_localized_cooked, post_localization_id: localization.id)
-
-    localization
+    PostLocalization.create!(
+      post_id: post.id,
+      post_version: post.version,
+      locale: locale,
+      raw: raw,
+      cooked: PrettyText.cook(raw),
+      localizer_user_id: user.id,
+    )
   end
 end

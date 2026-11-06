@@ -2,23 +2,15 @@
 
 module Chat
   class ChatController < ::Chat::BaseController
-    skip_before_action :check_xhr, if: -> { action_name == "respond" && use_crawler_layout? }
+    # Other endpoints use set_channel_and_chatable_with_access_check, but
+    # these endpoints require a standalone find because they need to be
+    # able to get deleted channels and recover them.
+    before_action :find_chat_message, only: %i[rebake]
     before_action :set_channel_and_chatable_with_access_check,
-                  except: %i[respond set_user_chat_status dismiss_retention_reminder rebake]
-
-    DIRECTORY_PAGE_SIZE = Chat::ChannelFetcher::MAX_PUBLIC_CHANNEL_RESULTS
+                  except: %i[respond set_user_chat_status dismiss_retention_reminder]
 
     def respond
-      raise ApplicationController::RenderEmpty if !use_crawler_layout? || current_user
-
-      # Channel routes 404 when anonymous access is off, so already-indexed pages drop out of search.
-      if params[:channel_id].present?
-        render_crawler_channel
-      elsif params[:crawler_directory] && Chat.anonymous_public_channel_access_allowed?
-        render_crawler_directory
-      else
-        raise ApplicationController::RenderEmpty
-      end
+      render
     end
 
     def react
@@ -34,42 +26,10 @@ module Chat
       render json: success_json
     end
 
-    def message_reactions_users
-      params.require(:message_id)
-
-      message = Chat::Message.find_by(id: params[:message_id], chat_channel_id: @chat_channel.id)
-      raise Discourse::NotFound if message.nil? || !guardian.can_see_chat_message?(message)
-
-      page = params[:page].to_i.clamp(0..)
-      limit = params[:limit].present? ? params[:limit].to_i.clamp(1, 50) : 30
-
-      rows, total =
-        Chat::MessageReactionUsersQuery.call(
-          message: message,
-          emoji: params[:emoji],
-          limit: limit,
-          offset: page * limit,
-          current_user_id: current_user.id,
-        )
-
-      render_json_dump(users: serialize_data(rows, Chat::ReactionUserSerializer), total_rows: total)
-    end
-
     def rebake
-      Chat::RebakeMessage.call(service_params) do
-        on_success { render(json: success_json) }
-        on_failure { render(json: failed_json, status: :unprocessable_entity) }
-        on_model_not_found(:channel) { raise Discourse::NotFound }
-        on_failed_policy(:can_access_channel) { raise Discourse::InvalidAccess }
-        on_model_not_found(:message) { raise Discourse::NotFound }
-        on_failed_policy(:can_rebake) { raise Discourse::InvalidAccess }
-        on_failed_contract do |contract|
-          render(
-            json: failed_json.merge(errors: contract.errors.full_messages),
-            status: :bad_request,
-          )
-        end
-      end
+      guardian.ensure_can_rebake_chat_message!(@message)
+      @message.rebake!(invalidate_oneboxes: true)
+      render json: success_json
     end
 
     def set_user_chat_status
@@ -113,70 +73,32 @@ module Chat
 
     private
 
-    # Crawler requests skip check_xhr, so respond itself decides what anonymous visitors may see.
-    def allow_anonymous_public_chat_access?
-      action_name == "respond" && use_crawler_layout?
+    def preloaded_chat_message_query
+      query =
+        Chat::Message
+          .includes(in_reply_to: [:user, chat_webhook_event: [:incoming_chat_webhook]])
+          .includes(:revisions)
+          .includes(user: :primary_group)
+          .includes(chat_webhook_event: :incoming_chat_webhook)
+          .includes(reactions: :user)
+          .includes(:bookmarks)
+          .includes(:uploads)
+          .includes(chat_channel: :chatable)
+          .includes(:thread)
+          .includes(:chat_mentions)
+
+      query = query.includes(user: :user_status) if SiteSetting.enable_user_status
+
+      query
     end
 
-    def render_crawler_channel
-      channel = Chat::Channel.includes(:chatable).find_by_id_or_slug(params[:channel_id])
-      raise Discourse::NotFound if !guardian.can_preview_anonymous_public_chat_channel?(channel)
-
-      if params[:thread_id].present?
-        thread = channel.threads.find_by(id: params[:thread_id])
-        raise Discourse::NotFound if !thread || (!channel.threading_enabled? && !thread.force)
-      elsif params[:message_id].present?
-        # Channel permalinks to thread replies (e.g. from transcripts) live on the thread page.
-        message = channel.chat_messages.find_by(id: params[:message_id])
-        return redirect_to(message.url, status: :moved_permanently) if message&.thread_reply?
-      end
-
-      @crawler_view =
-        Chat::CrawlerView.new(
-          channel:,
-          thread:,
-          date: params[:date],
-          page: params[:page],
-          target_message_id: params[:message_id],
-        )
-      raise Discourse::NotFound if !@crawler_view.valid?
-
-      canonical_url(@crawler_view.canonical_url)
-      render :crawler_channel
-    end
-
-    def render_crawler_directory
-      channels =
-        Chat::CategoryChannel.joins(
-          "INNER JOIN categories ON categories.id = chat_channels.chatable_id",
-        ).where(chatable_id: Category.secured(Guardian.new).select(:id))
-
-      page = [params[:page].to_s.to_i, 1].max
-      total_pages = [(channels.count.to_f / DIRECTORY_PAGE_SIZE).ceil, 1].max
-      raise Discourse::NotFound if page > total_pages
-
-      @crawler_directory_offset = (page - 1) * DIRECTORY_PAGE_SIZE
-      @crawler_channels =
-        channels
-          .includes(:chatable, :last_message)
-          .order(
-            Arel.sql(
-              "LOWER(COALESCE(NULLIF(chat_channels.name, ''), categories.name)), chat_channels.id",
-            ),
-          )
-          .offset(@crawler_directory_offset)
-          .limit(DIRECTORY_PAGE_SIZE)
-
-      @crawler_prev_page_url = crawler_directory_url(page - 1) if page > 1
-      @crawler_next_page_url = crawler_directory_url(page + 1) if page < total_pages
-
-      canonical_url(crawler_directory_url(page))
-      render :crawler_directory
-    end
-
-    def crawler_directory_url(page)
-      url = "#{Discourse.base_url}/chat"
-      page > 1 ? "#{url}?page=#{page}" : url
+    def find_chat_message
+      @message = preloaded_chat_message_query.with_deleted
+      @message = @message.where(chat_channel_id: params[:chat_channel_id]) if params[
+        :chat_channel_id
+      ]
+      @message = @message.find_by(id: params[:message_id])
+      raise Discourse::NotFound unless @message
     end
   end
 end

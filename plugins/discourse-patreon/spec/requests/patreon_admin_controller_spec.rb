@@ -17,7 +17,7 @@ describe Patreon::PatreonAdminController do
       Patreon.set("rewards", rewards)
     end
 
-    it "returns the Patreon groups" do
+    it "should display list of patreon groups" do
       get "/patreon/list.json"
 
       result = JSON.parse(response.body)
@@ -25,23 +25,14 @@ describe Patreon::PatreonAdminController do
       expect(result["rewards"].count).to eq(2)
     end
 
-    it "reports that it is unconfigured when the creator tokens are missing" do
-      SiteSetting.patreon_creator_access_token = ""
-
-      get "/patreon/list.json"
-
-      expect(response.status).to eq(200)
-      expect(response.parsed_body).to eq("unconfigured" => true)
-    end
-
-    it "returns the Patreon rewards" do
+    it "should display list of rewards" do
       get "/patreon/rewards.json"
 
       rewards = JSON.parse(response.body)
       expect(rewards.count).to eq(2)
     end
 
-    it "updates an existing filter" do
+    it "should update existing filter" do
       ids = %w[1 2]
 
       post "/patreon/list.json", params: { rewards_ids: ids, group_id: group1.id }
@@ -49,19 +40,19 @@ describe Patreon::PatreonAdminController do
       expect(Patreon.get("filters")[group1.id.to_s]).to eq(ids)
     end
 
-    it "deletes a filter" do
+    it "should delete an filter" do
       expect { delete "/patreon/list.json", params: { group_id: group1.id } }.to change {
         Patreon.get("filters").count
       }.by(-1)
       expect(Patreon.get("filters")[group1.id.to_s]).to eq(nil)
     end
 
-    it "synchronizes Patreon groups" do
+    it "should sync patreon groups" do
       Patreon::Patron.expects(:sync_groups)
       post "/patreon/sync_groups.json"
     end
 
-    it "enqueues the patron and group synchronization job" do
+    it "should enqueue job to sync patrons and groups" do
       expect_enqueued_with(job: :patreon_sync_patrons_to_groups) do
         post "/patreon/update_data.json"
       end

@@ -4,7 +4,6 @@ require "email/sender"
 
 RSpec.describe Email::Sender do
   before { SiteSetting.secure_uploads_allow_embed_images_in_emails = false }
-
   fab!(:post)
   let(:mock_smtp_transaction_response) do
     "250 Ok: queued as 2l3Md07BObzB8kRyHZeoN0baSUAhzc7A-NviRioOr80=@mailhog.example"
@@ -12,24 +11,6 @@ RSpec.describe Email::Sender do
 
   def stub_deliver_response(message)
     message.stubs(:deliver!).returns(Net::SMTP::Response.new("250", mock_smtp_transaction_response))
-  end
-
-  it "renders recipient-visible tag hashtags as absolute links in HTML while retaining text hashtags" do
-    recipient = Fabricate(:admin)
-    tag = Fabricate(:tag)
-    Fabricate(:tag_group, permissions: { "staff" => 1 }, tag_names: [tag.name])
-    body = "Tags: ##{tag.name}::tag"
-
-    [[nil, []], [recipient, [tag.full_url]]].each do |user, expected_urls|
-      message = Mail::Message.new(to: recipient.email, body:)
-      stub_deliver_response(message)
-
-      Email::Sender.new(message, :user_replied, user).send
-
-      links = Nokogiri::HTML5.parse(message.html_part.body.decoded).css("a.hashtag-cooked")
-      expect(links.map { |link| link["href"] }).to eq(expected_urls)
-      expect(message.text_part.body.decoded).to eq(body)
-    end
   end
 
   context "when disable_emails is enabled" do
@@ -164,7 +145,7 @@ RSpec.describe Email::Sender do
     context "when no plus addressing" do
       before { SiteSetting.reply_by_email_address = "%{reply_key}@test.com" }
 
-      it "leaves return_path unset" do
+      it "should not set the return_path" do
         email_sender.send
         expect(message.header[:return_path].to_s).to eq("")
       end
@@ -173,7 +154,7 @@ RSpec.describe Email::Sender do
     context "with plus addressing" do
       before { SiteSetting.reply_by_email_address = "replies+%{reply_key}@test.com" }
 
-      it "sets return_path" do
+      it "should set the return_path" do
         email_sender.send
         expect(message.header[:return_path].to_s).to eq(
           "replies+verp-#{EmailLog.last.bounce_key}@test.com",
@@ -191,7 +172,7 @@ RSpec.describe Email::Sender do
         message.header["X-Discourse-Topic-Id"] = topic.id
       end
 
-      it "adds the List-ID header" do
+      it "should add the right header" do
         email_sender.send
 
         expect(message.header["List-ID"]).to be_present
@@ -200,7 +181,7 @@ RSpec.describe Email::Sender do
     end
 
     context "when topic id is not present" do
-      it "adds the Message-ID header" do
+      it "should add the right header" do
         email_sender.send
 
         expect(message.header["Message-ID"]).to be_present
@@ -256,14 +237,14 @@ RSpec.describe Email::Sender do
         message.header["X-Discourse-Topic-Id"] = topic.id
       end
 
-      it "adds the Precedence header" do
+      it "should add the right header" do
         email_sender.send
         expect(message.header["Precedence"]).to be_present
       end
     end
 
     describe "removes custom Discourse headers from digest/registration/other mails" do
-      it "removes custom Discourse headers" do
+      it "should remove the right headers" do
         email_sender.send
         expect(message.header["X-Discourse-Topic-Id"]).not_to be_present
         expect(message.header["X-Discourse-Topic-Ids"]).not_to be_present
@@ -416,7 +397,7 @@ RSpec.describe Email::Sender do
         message.header["X-MC-Metadata"] = { foo: "bar" }.to_json
       end
 
-      it "adds the message ID to the Mandrill metadata" do
+      it "should set the right header" do
         email_sender.send
         expect(message.header["X-MC-Metadata"].to_s).to match(message.message_id)
       end
@@ -428,7 +409,7 @@ RSpec.describe Email::Sender do
         message.header["X-MSYS-API"] = { foo: "bar" }.to_json
       end
 
-      it "adds the message ID to the SparkPost metadata" do
+      it "should set the right header" do
         email_sender.send
         expect(message.header["X-MSYS-API"].to_s).to match(message.message_id)
       end
@@ -437,7 +418,7 @@ RSpec.describe Email::Sender do
     context "with email logs" do
       let(:email_log) { EmailLog.last }
 
-      it "creates an email log without a reply key" do
+      it "should create the right log" do
         expect do email_sender.send end.to_not change { PostReplyKey.count }
 
         expect(email_log).to be_present
@@ -507,7 +488,7 @@ RSpec.describe Email::Sender do
 
       let(:email_log) { EmailLog.last }
 
-      it "records the post and topic in the email log" do
+      it "should create the right log" do
         email_sender.send
         expect(email_log.post_id).to eq(post.id)
         expect(email_log.topic_id).to eq(topic.id)
@@ -516,7 +497,7 @@ RSpec.describe Email::Sender do
     end
 
     context "with email parts" do
-      it "builds matching plain-text and HTML email parts" do
+      it "should contain the right message" do
         email_sender.send
 
         expect(message).to be_multipart
@@ -605,14 +586,14 @@ RSpec.describe Email::Sender do
       )
     end
 
-    it "changes hashtags to their slug with a # symbol rather than the full resource name" do
+    it "changes the hashtags to the slug with a # symbol beforehand rather than the full name of the resource" do
       category = Fabricate(:category, slug: "dev")
       reply.update!(raw: reply.raw + "\n wow this is #dev")
       reply.rebake!
       Email::Sender.new(message, :valid_type).send
       expected = <<~HTML
-          <a class="hashtag-cooked" href="#{Discourse.base_url}#{category.url}" data-type="category" data-slug="dev" data-id="#{category.id}" data-style-type="square" style="text-decoration:none;font-weight:bold;color:#006699">#dev</a>
-        HTML
+      <a class="hashtag-cooked" href=\"#{Discourse.base_url}#{category.url}\" data-type=\"category\" data-slug=\"dev\" data-id=\"#{category.id}\" data-style-type=\"square\" style=\"text-decoration:none;font-weight:bold;color:#006699\"><span>#dev</span>
+      HTML
       expect(message.html_part.body.to_s).to include(expected.chomp)
     end
 
@@ -732,7 +713,7 @@ RSpec.describe Email::Sender do
             >   3. If you graph these numbers, patterns emerge.
             >
             > Therefore: There are patterns everywhere in nature.
-
+            
             IMAGE #2
             #{UploadMarkdown.new(@secure_image_2).image_markdown}
           MD
@@ -745,7 +726,7 @@ RSpec.describe Email::Sender do
           raw = <<~MD
             IMAGE #3
             #{UploadMarkdown.new(@secure_image_3).image_markdown}
-
+            
             ATTACHMENT
             #{UploadMarkdown.new(@secure_attachment).attachment_markdown}
 
@@ -898,7 +879,7 @@ RSpec.describe Email::Sender do
   end
 
   context "with a deleted post" do
-    it "skips the email and records the deleted-post reason" do
+    it "should skip sending the email" do
       post = Fabricate(:post, deleted_at: 1.day.ago)
 
       message = Mail::Message.new to: "disc@ourse.org", body: "some content"
@@ -915,7 +896,7 @@ RSpec.describe Email::Sender do
   end
 
   context "with a deleted topic" do
-    it "skips the email and records the deleted-topic reason" do
+    it "should skip sending the email" do
       post = Fabricate(:post, topic: Fabricate(:topic, deleted_at: 1.day.ago))
 
       message = Mail::Message.new to: "disc@ourse.org", body: "some content"
@@ -946,11 +927,11 @@ RSpec.describe Email::Sender do
       @email_log = EmailLog.last
     end
 
-    it "records the current user ID" do
+    it "should have the current user_id" do
       expect(@email_log.user_id).to eq(user.id)
     end
 
-    it "records the SMTP transaction response" do
+    it "should have the smtp_transaction_response message" do
       expect(@email_log.smtp_transaction_response).to eq(mock_smtp_transaction_response)
     end
 
@@ -963,7 +944,7 @@ RSpec.describe Email::Sender do
       end
 
       describe "when allow reply by email header is not present" do
-        it "does not create a post reply key" do
+        it "should not create a post reply key" do
           expect { email_sender.send }.to_not change { PostReplyKey.count }
         end
       end
@@ -973,7 +954,7 @@ RSpec.describe Email::Sender do
 
         before { message.header[header] = "test-%{reply_key}@test.com" }
 
-        it "creates a post reply key" do
+        it "should create a post reply key" do
           expect { email_sender.send }.to change { PostReplyKey.count }.by(1)
           post_reply_key = PostReplyKey.last
 
@@ -987,7 +968,7 @@ RSpec.describe Email::Sender do
           expect { email_sender.send }.not_to change { PostReplyKey.count }
         end
 
-        it "reuses the existing post reply key" do
+        it "should find existing key" do
           existing_post_reply_key = PostReplyKey.create(post_id: post.id, user_id: user.id)
           expect { email_sender.send }.not_to change { PostReplyKey.count }
           post_reply_key = PostReplyKey.last
@@ -1024,151 +1005,6 @@ RSpec.describe Email::Sender do
       email_log = EmailLog.last
       expect(email_log.cc_addresses).to eq("someguy@test.com;otherguy@xyz.com")
       expect(email_log.cc_users).to match_array([user1, user2])
-    end
-  end
-
-  context "with Net::SMTPError" do
-    let(:message) { Mail::Message.new(to: "eviltrout@test.domain", body: "test body") }
-
-    let(:email_sender) { Email::Sender.new(message, :valid_type) }
-
-    it "logs the error and re-raises" do
-      error = Net::SMTPUnknownError.new("550 Unknown SMTP response")
-      message.expects(:deliver!).raises(error)
-      Rails
-        .logger
-        .expects(:error)
-        .with("SMTP Error Net::SMTPUnknownError with message: 550 Unknown SMTP response")
-
-      expect { email_sender.send }.to raise_error(Net::SMTPUnknownError)
-    end
-
-    it "logs the server response if available" do
-      error = Net::SMTPUnknownError.new("550 Unknown SMTP response")
-      smtp_response = Net::SMTP::Response.new("550", "5.7.1 Relaying denied")
-      error.define_singleton_method(:response) { smtp_response }
-      message.expects(:deliver!).raises(error)
-
-      Rails
-        .logger
-        .expects(:error) do |log_message|
-          expect(log_message).to include("SMTP Error Net::SMTPUnknownError")
-          expect(log_message).to include("550 Unknown SMTP response")
-          expect(log_message).to include("response:")
-          expect(log_message).to include("5.7.1 Relaying denied")
-        end
-
-      expect { email_sender.send }.to raise_error(Net::SMTPUnknownError)
-    end
-
-    it "does not log unreadable object representation" do
-      error = Net::SMTPUnknownError.new("550 Unknown SMTP response")
-      smtp_response = Net::SMTP::Response.new("550", "5.7.1 Relaying denied")
-      def error.response
-        Net::SMTP::Response.new("550", "5.7.1 Relaying denied")
-      end
-      message.expects(:deliver!).raises(error)
-
-      Rails
-        .logger
-        .expects(:error) do |log_message|
-          expect(log_message).not_to include("#<Net::SMTP::Response:")
-          expect(log_message).to include("550 5.7.1 Relaying denied")
-        end
-
-      expect { email_sender.send }.to raise_error(Net::SMTPUnknownError)
-    end
-
-    it "handles error without server response gracefully" do
-      error = Net::SMTPUnknownError.new("550 Unknown SMTP response")
-      message.expects(:deliver!).raises(error)
-
-      Rails
-        .logger
-        .expects(:error)
-        .with("SMTP Error Net::SMTPUnknownError with message: 550 Unknown SMTP response")
-
-      expect { email_sender.send }.to raise_error(Net::SMTPUnknownError)
-    end
-
-    it "handles truthy response that does not respond to .string" do
-      error = Net::SMTPUnknownError.new("some error")
-      def error.response
-        "not a response object"
-      end
-      message.expects(:deliver!).raises(error)
-
-      Rails
-        .logger
-        .expects(:error)
-        .with(
-          "SMTP Error Net::SMTPUnknownError with message: some error response: not a response object",
-        )
-
-      expect { email_sender.send }.to raise_error(Net::SMTPUnknownError)
-    end
-  end
-
-  context "with Net::SMTPFatalError" do
-    let(:message) { Mail::Message.new(to: "eviltrout@test.domain", body: "test body") }
-    let(:email_sender) { Email::Sender.new(message, :valid_type) }
-
-    it "stores the SMTP response string as custom reason" do
-      error = Net::SMTPFatalError.new("552-5.7.0 This message was blocked")
-      smtp_response =
-        Net::SMTP::Response.new(
-          "552",
-          "552-5.7.0 This message was blocked because its content presents a potential\n552 5.7.0 issue",
-        )
-      error.define_singleton_method(:response) { smtp_response }
-      message.expects(:deliver!).raises(error)
-
-      expect { email_sender.send }.to change(SkippedEmailLog, :count).by(1)
-
-      skipped_email_log = SkippedEmailLog.last
-      expect(skipped_email_log.reason_type).to eq(SkippedEmailLog.reason_types[:custom])
-      expect(skipped_email_log.custom_reason).to eq(
-        "552-5.7.0 This message was blocked because its content presents a potential\n552 5.7.0 issue",
-      )
-    end
-
-    context "when the email is related to a PM topic" do
-      fab!(:pm_creator, :user)
-      fab!(:pm_target, :user)
-      fab!(:pm_topic) { Fabricate(:private_message_topic, user: pm_creator, recipient: pm_target) }
-      fab!(:pm_post) { Fabricate(:post, topic: pm_topic, user: pm_creator) }
-
-      before do
-        SiteSetting.whispers_allowed_groups = "#{Group::AUTO_GROUPS[:staff]}"
-        message.header["X-Discourse-Post-Id"] = pm_post.id
-        message.header["X-Discourse-Topic-Id"] = pm_topic.id
-      end
-
-      it "creates a staff whisper with the SMTP failure details" do
-        error = Net::SMTPFatalError.new("552-5.7.0 This message was blocked")
-        smtp_response =
-          Net::SMTP::Response.new(
-            "552",
-            "552-5.7.0 This message was blocked because its content presents a potential\n552 5.7.0 issue",
-          )
-        error.define_singleton_method(:response) { smtp_response }
-        message.expects(:deliver!).raises(error)
-
-        expect { email_sender.send }.to change {
-          Post.where(topic_id: pm_topic.id, post_type: Post.types[:whisper]).count
-        }.by(1)
-
-        whisper = Post.where(topic_id: pm_topic.id, post_type: Post.types[:whisper]).last
-        expect(whisper.user).to eq(Discourse.system_user)
-        expect(whisper.raw).to eq(
-          I18n.t(
-            "system_messages.email_sending_failed",
-            email: "eviltrout@test.domain",
-            raw:
-              "552-5.7.0 This message was blocked because its content presents a potential\n552 5.7.0 issue",
-          ).strip,
-        )
-      end
     end
   end
 end

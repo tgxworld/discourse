@@ -8,6 +8,6 @@ class Service::ActionBase
   end
 
   def call
-    raise NotImplementedError
+    raise "Not implemented"
   end
 end

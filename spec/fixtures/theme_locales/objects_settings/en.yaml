@@ -9,17 +9,9 @@ en:
               label: Name
               description: "Section Name"
             links:
-              schema:
-                properties:
-                  name:
-                    label: Name
-                    description: "Name of the link"
-                  url:
-                    label: URL
-                    description: "URL of the link"
-                  child_links:
-                    schema:
-                      properties:
-                        title:
-                          label: Title
-                          description: "Title of the child link"
+              name:
+                label: Name
+                description: "Name of the link"
+              url:
+                label: URL
+                description: "URL of the link"

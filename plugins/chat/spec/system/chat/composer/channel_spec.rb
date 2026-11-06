@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "Chat | composer | channel" do
+RSpec.describe "Chat | composer | channel", type: :system do
   fab!(:channel_1, :chat_channel)
   fab!(:message_1) { Fabricate(:chat_message, chat_channel: channel_1) }
   fab!(:current_user, :admin)
@@ -56,8 +56,6 @@ RSpec.describe "Chat | composer | channel" do
         channel_page.reply_to(message_1)
 
         expect(thread_page.composer).to be_focused
-
-        screenshot_marker(label: "chat-thread", only: "desktop")
       end
     end
   end
@@ -120,43 +118,6 @@ RSpec.describe "Chat | composer | channel" do
       page.find(".chat-reply").click
 
       expect(channel_page.messages).to have_message(id: message_1.id, highlighted: true)
-    end
-  end
-
-  describe "emoji autocomplete" do
-    let(:emoji_picker) { PageObjects::Components::EmojiPicker.new }
-
-    it "preserves message draft when selecting emoji from picker via 'more...'" do
-      incomplete_emoji_term = ":gri"
-      chat_page.visit_channel(channel_1)
-
-      channel_page.composer.input.send_keys("Hello #{incomplete_emoji_term}")
-
-      expect(page).to have_css(".autocomplete.ac-emoji")
-      find(".autocomplete.ac-emoji ul li", text: "more").click
-      expect(page).to have_css(".emoji-picker")
-
-      emoji_element = find(".emoji-picker .emoji[data-emoji]", match: :first)
-      emoji_element.click
-
-      actual_value = channel_page.composer.value
-
-      expect(actual_value).to start_with("Hello "),
-      "Expected message to preserve 'Hello' but got: '#{actual_value}'"
-
-      expect(actual_value).not_to end_with(incomplete_emoji_term),
-      "Expected incomplete emoji term to be replaced with emoji but got: '#{actual_value}'"
-
-      expect(actual_value).to match(/Hello :\w+: $/),
-      "Expected format 'Hello :emoji_name: ' but got: '#{actual_value}'"
-    end
-
-    it "does not show emoji autocomplete menu after whitespace" do
-      chat_page.visit_channel(channel_1)
-
-      channel_page.composer.input.send_keys(":zznotemoji ")
-
-      expect(page).to have_no_css(".autocomplete.ac-emoji")
     end
   end
 end

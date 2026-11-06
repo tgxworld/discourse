@@ -8,7 +8,6 @@ module PageObjects
         path += "/#{badge_id}" if badge_id
         page.visit path
         expect(page).to have_current_path(path)
-        expect(page).to have_css(".admin-badge-list")
         self
       end
 
@@ -19,23 +18,6 @@ module PageObjects
 
       def has_badge?(title)
         page.has_css?(".current-badge-header .badge-display-name", text: title)
-      end
-
-      def filter_badges(text)
-        page.fill_in(class: "d-filter-controls__input", with: text)
-        self
-      end
-
-      def has_badge_in_list?(name)
-        page.has_css?(".admin-badge-list-item .badge-display-name", text: name)
-      end
-
-      def has_no_badge_in_list?(name)
-        page.has_no_css?(".admin-badge-list-item .badge-display-name", text: name)
-      end
-
-      def has_no_badges_found_message?
-        page.has_css?(".d-filter-controls__no-results")
       end
 
       def has_saved_form?
@@ -54,7 +36,7 @@ module PageObjects
 
       def choose_icon(name)
         form.choose_conditional("choose-icon")
-        form.field("icon").select(name)
+        form.field("icon").select("truck-medical")
         self
       end
 
@@ -67,7 +49,7 @@ module PageObjects
         form.choose_conditional("upload-image")
 
         attach_file(File.absolute_path(file_from_fixtures(name))) do
-          form.field("image_url").find(".file-uploader__controls .btn").click
+          form.field("image_url").find(".image-upload-controls .btn").click
         end
 
         expect(form.field("image_url")).to have_css(".btn-danger")

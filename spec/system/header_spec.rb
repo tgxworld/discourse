@@ -1,10 +1,8 @@
 # frozen_string_literal: true
 
-RSpec.describe "Glimmer Header" do
+RSpec.describe "Glimmer Header", type: :system do
   let(:header) { PageObjects::Pages::Header.new }
   let(:search) { PageObjects::Pages::Search.new }
-  let(:user_menu) { PageObjects::Components::UserMenu.new }
-
   fab!(:current_user, :user)
   fab!(:topic)
 
@@ -117,11 +115,6 @@ RSpec.describe "Glimmer Header" do
   end
 
   it "moves focus between tabs using arrow keys" do
-    %i[replied mentioned liked edited].each do |type|
-      Fabricate(:notification, user: current_user, notification_type: Notification.types[type])
-    end
-    SiteSetting.enable_user_menu_mentions_tab = true
-
     sign_in(current_user)
     visit "/"
     find(".header-dropdown-toggle.current-user").click
@@ -129,9 +122,6 @@ RSpec.describe "Glimmer Header" do
 
     find("##{header.active_element_id}").send_keys(:down)
     expect(header.active_element_id).to eq("user-menu-button-replies")
-
-    find("##{header.active_element_id}").send_keys(:down)
-    expect(header.active_element_id).to eq("user-menu-button-mentions")
 
     4.times { find("##{header.active_element_id}").send_keys(:down) }
     expect(header.active_element_id).to eq("user-menu-button-profile")
@@ -141,42 +131,6 @@ RSpec.describe "Glimmer Header" do
 
     find("##{header.active_element_id}").send_keys(:up)
     expect(header.active_element_id).to eq("user-menu-button-profile")
-  end
-
-  shared_examples "navigating a reduced notification menu" do |expected_tabs:|
-    it "cycles through available tabs and selects bookmarks" do
-      sign_in(current_user)
-      visit "/"
-      user_menu.open
-
-      expect(user_menu).to have_focused_tab("all-notifications")
-
-      expected_tabs.each do |tab|
-        user_menu.press_key(:down)
-        expect(user_menu).to have_focused_tab(tab)
-      end
-      user_menu.press_key(:down)
-      expect(user_menu).to have_focused_tab("all-notifications")
-      user_menu.press_key(:up)
-      expect(user_menu).to have_focused_tab("profile")
-      user_menu.press_key(:up)
-      expect(user_menu).to have_focused_tab("bookmarks")
-      user_menu.press_key(:enter)
-      expect(user_menu).to have_selected_tab("bookmarks")
-    end
-  end
-
-  context "without available notification types" do
-    include_examples "navigating a reduced notification menu", expected_tabs: %w[bookmarks profile]
-  end
-
-  context "with an available like notification" do
-    before do
-      Fabricate(:notification, user: current_user, notification_type: Notification.types[:liked])
-    end
-
-    include_examples "navigating a reduced notification menu",
-                     expected_tabs: %w[likes bookmarks profile]
   end
 
   it "prioritizes new personal messages bubble over unseen reviewables and regular notifications bubbles" do
@@ -334,9 +288,7 @@ RSpec.describe "Glimmer Header" do
 
       current_user.publish_do_not_disturb(ends_at: 1.hour.from_now)
 
-      try_until_success(reason: "Relies on messagebus updates") do
-        expect(page).to have_css(".d-header .do-not-disturb-background")
-      end
+      try_until_success { expect(page).to have_css(".d-header .do-not-disturb-background") }
 
       current_user.publish_do_not_disturb(ends_at: 1.second.from_now)
 

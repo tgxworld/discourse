@@ -3,15 +3,15 @@ import { tracked } from "@glimmer/tracking";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
+import { and, not } from "truth-helpers";
+import DButton from "discourse/components/d-button";
+import avatar from "discourse/helpers/bound-avatar-template";
+import icon from "discourse/helpers/d-icon";
 import { ajax } from "discourse/lib/ajax";
 import { popupAjaxError } from "discourse/lib/ajax-error";
-import { removeValueFromArray } from "discourse/lib/array-tools";
 import { bind } from "discourse/lib/decorators";
-import DButton from "discourse/ui-kit/d-button";
-import dBoundAvatarTemplate from "discourse/ui-kit/helpers/d-bound-avatar-template";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { i18n } from "discourse-i18n";
-import PolicyBuilder from "./modal/policy-builder.gjs";
+import PolicyBuilder from "./modal/policy-builder";
 
 export default class PostPolicy extends Component {
   @service appEvents;
@@ -23,6 +23,12 @@ export default class PostPolicy extends Component {
 
   constructor() {
     super(...arguments);
+
+    this.post?.setProperties({
+      policy_accepted_by: this.post?.policy_accepted_by || [],
+      policy_not_accepted_by: this.post?.policy_not_accepted_by || [],
+    });
+
     this.appEvents.on("policy:changed", this, "policyChanged");
   }
 
@@ -37,6 +43,31 @@ export default class PostPolicy extends Component {
 
   get policy() {
     return this.args.policy;
+  }
+
+  @bind
+  async policyChanged(data) {
+    if (data.message.id !== this.post.id) {
+      return;
+    }
+
+    const stream = data.controller.get("model.postStream");
+    const post = stream.findLoadedPost(data.message.id);
+
+    if (post) {
+      const result = await ajax(`/posts/${post.id}.json`);
+
+      this.post.setProperties({
+        policy_can_accept: result.policy_can_accept,
+        policy_can_revoke: result.policy_can_revoke,
+        policy_accepted: result.policy_accepted,
+        policy_revoked: result.policy_revoked,
+        policy_not_accepted_by: result.policy_not_accepted_by || [],
+        policy_not_accepted_by_count: result.policy_not_accepted_by_count,
+        policy_accepted_by: result.policy_accepted_by || [],
+        policy_accepted_by_count: result.policy_accepted_by_count,
+      });
+    }
   }
 
   get policyHasUsers() {
@@ -65,13 +96,13 @@ export default class PostPolicy extends Component {
 
   get remainingAcceptedUsers() {
     return (
-      (this.post?.get("policy_accepted_by_count") || 0) -
-      (this.post?.get("policy_accepted_by") || []).length
+      (this.post?.policy_accepted_by_count || 0) -
+      (this.post?.policy_accepted_by || []).length
     );
   }
 
   get acceptedUsers() {
-    return this.post?.get("policy_accepted_by") || [];
+    return this.post?.policy_accepted_by || [];
   }
 
   get remainingNotAcceptedUsers() {
@@ -93,42 +124,21 @@ export default class PostPolicy extends Component {
     );
   }
 
-  @bind
-  async policyChanged(data) {
-    if (data.message.id !== this.post.id) {
-      return;
-    }
-
-    const stream = data.controller.get("model.postStream");
-    const post = stream.findLoadedPost(data.message.id);
-
-    if (post) {
-      const result = await ajax(`/posts/${post.id}.json`);
-
-      this.post.setProperties({
-        policy_can_accept: result.policy_can_accept,
-        policy_can_revoke: result.policy_can_revoke,
-        policy_accepted: result.policy_accepted,
-        policy_revoked: result.policy_revoked,
-        policy_not_accepted_by: result.policy_not_accepted_by || [],
-        policy_not_accepted_by_count: result.policy_not_accepted_by_count,
-        policy_accepted_by: result.policy_accepted_by || [],
-        policy_accepted_by_count: result.policy_accepted_by_count,
-      });
-    }
-  }
-
   @action
   revokePolicy() {
-    this.post.policy_not_accepted_by.push(this.currentUser);
-    this.post.policy_not_accepted_by_count += 1;
-
-    const obj = this.post.policy_accepted_by.find(
-      (item) => item.id === this.currentUser.id
+    this.post.policy_not_accepted_by.pushObject(this.currentUser);
+    this.post.set(
+      "policy_not_accepted_by_count",
+      this.post.policy_not_accepted_by_count + 1
     );
+
+    const obj = this.post.policy_accepted_by.findBy("id", this.currentUser.id);
     if (obj) {
-      removeValueFromArray(this.post.policy_accepted_by, obj);
-      this.post.policy_accepted_by_count -= 1;
+      this.post.policy_accepted_by.removeObject(obj);
+      this.post.set(
+        "policy_accepted_by_count",
+        this.post.policy_accepted_by_count - 1
+      );
     }
 
     if (this.post.policy_can_accept !== this.post.policy_can_revoke) {
@@ -145,16 +155,23 @@ export default class PostPolicy extends Component {
 
   @action
   acceptPolicy() {
-    this.post.policy_accepted_by.push(this.currentUser);
-    this.post.policy_accepted_by_count += 1;
+    this.post.policy_accepted_by.pushObject(this.currentUser);
+    this.post.set(
+      "policy_accepted_by_count",
+      this.post.policy_accepted_by_count + 1
+    );
 
-    const obj = this.post.policy_not_accepted_by.find(
-      (item) => item.id === this.currentUser.id
+    const obj = this.post.policy_not_accepted_by.findBy(
+      "id",
+      this.currentUser.id
     );
 
     if (obj) {
-      removeValueFromArray(this.post.policy_not_accepted_by, obj);
-      this.post.policy_not_accepted_by_count -= 1;
+      this.post.policy_not_accepted_by.removeObject(obj);
+      this.post.set(
+        "policy_not_accepted_by_count",
+        this.post.policy_not_accepted_by_count - 1
+      );
     }
 
     if (this.post.policy_can_accept !== this.post.policy_can_revoke) {
@@ -182,7 +199,7 @@ export default class PostPolicy extends Component {
       });
 
       result.users.forEach((user) => {
-        this.post.policy_accepted_by.push(user);
+        this.post.policy_accepted_by.pushObject(user);
       });
     } catch (e) {
       popupAjaxError(e);
@@ -194,14 +211,14 @@ export default class PostPolicy extends Component {
     event.preventDefault();
 
     try {
-      const result = await ajax(`/policy/not-accepted`, {
+      const result = await ajax(`/policy/accepted`, {
         data: {
           post_id: this.post.id,
           offset: this.post.policy_not_accepted_by.length,
         },
       });
       result.users.forEach((user) => {
-        this.post.policy_not_accepted_by.push(user);
+        this.post.policy_not_accepted_by.pushObject(user);
       });
     } catch (e) {
       popupAjaxError(e);
@@ -246,21 +263,21 @@ export default class PostPolicy extends Component {
         <div class="policy-actions">
           {{#if this.post.policy_can_accept}}
             <DButton
-              class={{this.acceptButtonClasses}}
-              @action={{this.acceptPolicy}}
-              @icon={{if this.post.policy_accepted "check"}}
               @isLoading={{this.isLoading}}
+              @action={{this.acceptPolicy}}
+              class={{this.acceptButtonClasses}}
               @translatedLabel={{this.policy.accept}}
+              @icon={{if this.post.policy_accepted "check"}}
             />
           {{/if}}
 
           {{#if this.post.policy_can_revoke}}
             <DButton
-              class={{this.revokeButtonClasses}}
-              @action={{this.revokePolicy}}
-              @icon={{if this.post.policy_revoked "check"}}
               @isLoading={{this.isLoading}}
+              @action={{this.revokePolicy}}
+              class={{this.revokeButtonClasses}}
               @translatedLabel={{this.policy.revoke}}
+              @icon={{if this.post.policy_revoked "check"}}
             />
           {{/if}}
         </div>
@@ -274,33 +291,33 @@ export default class PostPolicy extends Component {
 
           {{#if this.post.policy_accepted_by_count}}
             <a
-              class="toggle toggle-accepted"
               href
-              title={{i18n "discourse_policy.accepted_tooltip"}}
               {{on "click" this.toggleShowUsers}}
+              title={{i18n "discourse_policy.accepted_tooltip"}}
+              class="toggle toggle-accepted"
             >
               <span class="user-count">
                 {{this.post.policy_accepted_by_count}}
               </span>
-              {{dIcon "user-check"}}
+              {{icon "user-check"}}
             </a>
 
             {{#unless this.showNotAccepted}}
               {{#if this.acceptedUsers.length}}
                 <div class="users accepted">
                   {{#each this.acceptedUsers as |acceptedUser|}}
-                    {{dBoundAvatarTemplate acceptedUser.avatar_template "tiny"}}
+                    {{avatar acceptedUser.avatar_template "tiny"}}
                   {{/each}}
 
                   {{#if this.remainingAcceptedUsers}}
                     <a
-                      class="load-more-users"
                       href
                       {{on "click" this.loadRemainingAcceptedUsers}}
+                      class="load-more-users"
                     >
                       +
                       {{this.remainingAcceptedUsers}}
-                      {{dIcon "user"}}
+                      {{icon "user"}}
                     </a>
                   {{/if}}
                 </div>
@@ -312,35 +329,32 @@ export default class PostPolicy extends Component {
             <div class="separator"></div>
 
             <a
-              class="toggle toggle-not-accepted"
               href
-              title={{i18n "discourse_policy.not_accepted_tooltip"}}
               {{on "click" this.toggleShowUsers}}
+              title={{i18n "discourse_policy.not_accepted_tooltip"}}
+              class="toggle toggle-not-accepted"
             >
               <span class="user-count">
                 {{this.post.policy_not_accepted_by_count}}
               </span>
-              {{dIcon "user-xmark"}}
+              {{icon "user-xmark"}}
             </a>
 
             {{#if this.showNotAccepted}}
               <div class="users not-accepted">
                 {{#each this.notAcceptedUsers as |notAcceptedUser|}}
-                  {{dBoundAvatarTemplate
-                    notAcceptedUser.avatar_template
-                    "tiny"
-                  }}
+                  {{avatar notAcceptedUser.avatar_template "tiny"}}
                 {{/each}}
 
                 {{#if this.remainingNotAcceptedUsers}}
                   <a
-                    class="load-more-users"
                     href
                     {{on "click" this.loadRemainingNotAcceptedUsers}}
+                    class="load-more-users"
                   >
                     +
                     {{this.remainingNotAcceptedUsers}}
-                    {{dIcon "user"}}
+                    {{icon "user"}}
                   </a>
                 {{/if}}
               </div>
@@ -350,9 +364,9 @@ export default class PostPolicy extends Component {
 
         {{#if this.canManagePolicy}}
           <DButton
-            class="no-text btn-default edit-policy-settings-btn"
             @action={{this.editPolicy}}
             @icon="gear"
+            class="no-text btn-default edit-policy-settings-btn"
           />
         {{/if}}
       </div>

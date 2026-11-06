@@ -12,6 +12,7 @@ ug:
           spoiler_alert: "Discourse بۇزغۇنچى ئاگاھلاندۇرۇشى"
   js:
     spoiler:
+      title: ۋەقەلىكنى غۇۋالاشتۇر
       label:
         show: "يوشۇرۇن مەزمۇننى كۆرسەت"
     composer:

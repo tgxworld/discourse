@@ -8,10 +8,6 @@
   color: var(--primary);
 
   @media (hover: none) {
-    // avoid the native long-press callout/selection on the row link
-    -webkit-touch-callout: none;
-    user-select: none;
-
     &:hover,
     &:focus {
       background: transparent;
@@ -20,17 +16,6 @@
     &:active {
       background: var(--primary-low);
     }
-
-    // no hover to reveal the button, so it stays visible
-    &.can-leave {
-      .toggle-channel-membership-button.-leave {
-        display: block;
-
-        > * {
-          pointer-events: auto;
-        }
-      }
-    }
   }
 
   @media (hover: hover) {
@@ -38,19 +23,19 @@
     &.active {
       background: var(--primary-very-low);
     }
+  }
 
-    &.can-leave:hover {
-      .toggle-channel-membership-button.-leave {
-        display: block;
+  &.can-leave:hover {
+    .toggle-channel-membership-button.-leave {
+      display: block;
 
-        > * {
-          pointer-events: auto;
-        }
+      > * {
+        pointer-events: auto;
       }
+    }
 
-      .chat-channel__metadata {
-        display: none;
-      }
+    .chat-channel__metadata {
+      display: none;
     }
   }
 
@@ -61,7 +46,7 @@
     }
 
     .d-icon-lock {
-      background-color: var(--primary-very-low);
+      background-color: var(--primary-low);
     }
   }
 
@@ -71,12 +56,6 @@
 
   &.muted {
     opacity: 0.65;
-  }
-
-  &.is-long-pressed {
-    .chat-channel-row__content {
-      background: var(--d-hover);
-    }
   }
 
   &__content {
@@ -94,24 +73,6 @@
     align-items: center;
     flex-grow: 1;
     overflow: hidden;
-  }
-
-  &__name-container {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    overflow: hidden;
-  }
-
-  &__starred-icon {
-    display: flex;
-    align-items: center;
-    color: var(--primary-low-mid);
-    flex-shrink: 0;
-
-    .d-icon {
-      font-size: var(--font-down-2);
-    }
   }
 
   .chat-channel {
@@ -156,10 +117,5 @@
   .toggle-channel-membership-button.-leave {
     display: none;
     margin-left: auto;
-  }
-
-  .desktop-view .full-page-chat & {
-    padding: var(--space-2) var(--space-4);
-    border-bottom: 1px solid var(--content-border-color);
   }
 }

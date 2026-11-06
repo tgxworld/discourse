@@ -64,9 +64,9 @@ RSpec.describe PostAnalyzer do
       expect(cooked).to eq("<p><em>this is italic</em></p>")
     end
 
-    it "respects SiteSetting.max_oneboxes_per_post" do
+    it "should respect SiteSetting.max_oneboxes_per_post" do
       SiteSetting.max_oneboxes_per_post = 2
-      Oneboxer.stubs(:cached_onebox).with(url).returns("something")
+      Oneboxer.expects(:cached_onebox).with(url).returns("something").twice
 
       cooked = post_analyzer.cook(<<~RAW)
         #{url}
@@ -79,20 +79,8 @@ RSpec.describe PostAnalyzer do
       expect(cooked).to match_html(<<~HTML)
         <p>something</p>
         <p>something</p>
-        <p><a href="#{url}" rel="noopener nofollow ugc">#{url}</a></p>
+        <p><a href="#{url}" class="onebox" target="_blank" rel="noopener nofollow ugc">#{url}</a></p>
       HTML
-    end
-
-    it "only renders max_oneboxes_per_post oneboxes for repeats of a cached URL" do
-      SiteSetting.max_oneboxes_per_post = 2
-      Oneboxer.stubs(:cached_onebox).with(url).returns("<div>something</div>")
-
-      raw = Array.new(3, "<a class=\"onebox\" href=\"#{url}\">#{url}</a>").join("\n\n")
-
-      cooked = post_analyzer.cook(raw)
-
-      expect(cooked).to have_tag("div", text: "something", count: 2)
-      expect(cooked).to have_tag("a", with: { href: url }, count: 1)
     end
   end
 
@@ -158,7 +146,7 @@ RSpec.describe PostAnalyzer do
         expect(post_analyzer.linked_hosts).to eq("disneyland.disney.go.com" => 1, "reddit.com" => 1)
       end
 
-      it "counts each host once when multiple links share a host" do
+      it "it counts properly with more than one link on the same host" do
         post_analyzer = PostAnalyzer.new(raw_three_links, default_topic_id)
         expect(post_analyzer.linked_hosts).to eq("discourse.org" => 1, "www.imdb.com" => 1)
       end
@@ -254,7 +242,7 @@ RSpec.describe PostAnalyzer do
       expect(post_analyzer.link_count).to eq(0)
     end
 
-    it "returns zero links for a post with hashtags" do
+    it "returns 0 links for a post with mentions" do
       SiteSetting.tagging_enabled = true
       post_analyzer = PostAnalyzer.new(raw_post_with_hashtags, default_topic_id)
       expect(post_analyzer.link_count).to eq(0)

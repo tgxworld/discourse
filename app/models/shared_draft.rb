@@ -9,11 +9,11 @@ end
 #
 # Table name: shared_drafts
 #
-#  id          :bigint           not null, primary key
+#  topic_id    :integer          not null
+#  category_id :integer          not null
 #  created_at  :datetime         not null
 #  updated_at  :datetime         not null
-#  category_id :integer          not null
-#  topic_id    :integer          not null
+#  id          :bigint           not null, primary key
 #
 # Indexes
 #

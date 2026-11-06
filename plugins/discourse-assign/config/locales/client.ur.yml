@@ -26,10 +26,11 @@ ur:
       cant_act: "آپ دوسرے صارفین کو اسائین کردہ فلیگ پر کاروائی نہیں کر سکتے"
       cant_act_unclaimed: "فلَیگز پر عمل کرنے سے پہلے آپ کو یہ ٹاپک کَلَیم کرنا ہوگا۔"
       topic_search_placeholder: "عنوان یا پوسٹ مواد کے ذریعہ موضوعات تلاش کریں"
-      sidebar_name_filter_placeholder: "نام/اسمِ صارف"
+      sidebar_name_filter_placeholder: "نام/صارف نام"
       assigned: "تفویض کردہ"
       group_everyone: "ہر کوئی"
       assigned_to: "کو تفویض"
+      assigned_to_w_ellipsis: "کو تفویض..."
       unassign:
         title: "غیر اسائین کریں"
         title_w_ellipsis: "غیر تفویض کریں..."
@@ -98,6 +99,10 @@ ur:
           unassigned: "غیرتفویض شدہ ہیں"
         assigned:
           label: "کو تفویض"
+    topics:
+      bulk:
+        unassign: "موضوعات کو غیر تفویض کریں"
+        assign: "موضوعات تفویض کریں"
     discourse_automation:
       scriptables:
         random_assign:
@@ -109,32 +114,10 @@ ur:
               label: تفویض کا روں کاگروپ
             minimum_time_between_assignments:
               label: اسائنمنٹس کے درمیان کم از کم گھنٹے
-    notification_reason:
-      user: "آپ کو نئے جوابات کی تعداد نظر آئے گی کیونکہ یہ موضوع آپ کو تفویض کیا گیا."
     notifications:
       assigned: "<span>%{username}</span> %{description}"
       titles:
         assigned: "تفویض کردہ"
     edit_assignments_modal:
-      topic: "موضوع"
-      post: "دھاگہ"
-    discourse_workflows:
-      nodes:
-        "trigger:assigned": "تفویض کردہ"
-        "trigger:unassigned": "غیر اسائین کریں"
-      assign_topic:
-        resource: "وسائل"
-        resources:
-          topic: "ٹاپک"
-          post: "دھاگہ"
-        operations:
-          assign: "تفویض"
-          unassign: "غیر اسائین کریں"
-        topic_id: "ٹاپک ID"
-        post_id: "پوسٹ ID"
-      check_assignment:
-        target_types:
-          topic: "ٹاپک"
-          post: "دھاگہ"
-        topic_id: "ٹاپک ID"
-        post_id: "پوسٹ ID"
+      topic: "ٹاپک"
+      post: "پوسٹ"

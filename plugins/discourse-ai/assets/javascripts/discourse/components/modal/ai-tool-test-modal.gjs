@@ -3,17 +3,15 @@ import { tracked } from "@glimmer/tracking";
 import { fn } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
+import DButton from "discourse/components/d-button";
+import DModal from "discourse/components/d-modal";
 import { ajax } from "discourse/lib/ajax";
 import { popupAjaxError } from "discourse/lib/ajax-error";
-import DButton from "discourse/ui-kit/d-button";
-import DCookText from "discourse/ui-kit/d-cook-text";
-import DModal from "discourse/ui-kit/d-modal";
 import { i18n } from "discourse-i18n";
-import { jsonToHtml } from "../../lib/utilities.js";
+import { jsonToHtml } from "../../lib/utilities";
 
 export default class AiToolTestModal extends Component {
   @tracked testResult;
-  @tracked customRaw;
   @tracked isLoading = false;
   parameterValues = {};
 
@@ -25,22 +23,19 @@ export default class AiToolTestModal extends Component {
   @action
   async runTest() {
     this.isLoading = true;
-    this.testResult = null;
-    this.customRaw = null;
     try {
       const response = await ajax(
-        `/admin/plugins/discourse-ai/ai-tools/${this.args.model.toolId}/test.json`,
+        `/admin/plugins/discourse-ai/ai-tools/${this.args.model.tool.id}/test.json`,
         {
           type: "POST",
           data: JSON.stringify({
-            ai_tool: this.args.model.toolData,
+            ai_tool: this.args.model.tool,
             parameters: this.parameterValues,
           }),
           contentType: "application/json",
         }
       );
       this.testResult = jsonToHtml(response.output);
-      this.customRaw = response.custom_raw;
     } catch (error) {
       popupAjaxError(error);
     } finally {
@@ -50,19 +45,19 @@ export default class AiToolTestModal extends Component {
 
   <template>
     <DModal
-      class="ai-tool-test-modal"
-      @bodyClass="ai-tool-test-modal__body"
-      @closeModal={{@closeModal}}
       @title={{i18n "discourse_ai.tools.test_modal.title"}}
+      @closeModal={{@closeModal}}
+      @bodyClass="ai-tool-test-modal__body"
+      class="ai-tool-test-modal"
     >
       <:body>
-        {{#each @model.toolData.parameters as |param|}}
+        {{#each @model.tool.parameters as |param|}}
           <div class="control-group">
             <label>{{param.name}}</label>
             <input
+              {{on "input" (fn this.updateParameter param.name)}}
               name={{param.name}}
               type="text"
-              {{on "input" (fn this.updateParameter param.name)}}
             />
           </div>
         {{/each}}
@@ -73,20 +68,14 @@ export default class AiToolTestModal extends Component {
             <div>{{this.testResult}}</div>
           </div>
         {{/if}}
-
-        {{#if this.customRaw}}
-          <div class="ai-tool-test-modal__custom-raw">
-            <DCookText @rawText={{this.customRaw}} />
-          </div>
-        {{/if}}
       </:body>
 
       <:footer>
         <DButton
-          class="btn-primary ai-tool-test-modal__run-button"
           @action={{this.runTest}}
-          @isLoading={{this.isLoading}}
           @label="discourse_ai.tools.test_modal.run"
+          @disabled={{this.isLoading}}
+          class="btn-primary ai-tool-test-modal__run-button"
         />
       </:footer>
     </DModal>

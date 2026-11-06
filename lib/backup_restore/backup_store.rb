@@ -73,6 +73,10 @@ module BackupRestore
       fail NotImplementedError
     end
 
+    def generate_upload_url(filename)
+      fail NotImplementedError
+    end
+
     def stats
       {
         used_bytes: used_bytes,

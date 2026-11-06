@@ -17,7 +17,7 @@ RSpec.describe SingleSignOnRecordSerializer do
       SingleSignOnRecordSerializer.new(sso, scope: Guardian.new(admin), root: false)
     end
 
-    it "includes user SSO information" do
+    it "should include user sso info" do
       payload = serializer.as_json
       expect(payload[:user_id]).to eq(user.id)
       expect(payload[:external_id]).to eq("12345")
@@ -31,7 +31,7 @@ RSpec.describe SingleSignOnRecordSerializer do
       SingleSignOnRecordSerializer.new(sso, scope: Guardian.new(moderator), root: false)
     end
 
-    it "omits the user SSO payload" do
+    it "should not include user sso payload" do
       payload = serializer.as_json
       expect(payload[:user_id]).to eq(user.id)
       expect(payload[:external_id]).to eq("12345")

@@ -1,6 +1,6 @@
 .composer-toggle-switch {
-  --toggle-switch-width: 52px;
-  --toggle-switch-height: 26px;
+  --toggle-switch-width: 40px;
+  --toggle-switch-height: 24px;
   justify-content: center;
   display: flex;
   align-items: center;
@@ -24,19 +24,11 @@
     height: var(--toggle-switch-height);
     position: relative;
     vertical-align: middle;
-    border-radius: var(--d-border-radius);
+    border-radius: 0.25em;
 
     :focus-visible & {
       outline: 2px solid var(--tertiary);
       outline-offset: 2px;
-    }
-
-    &:hover {
-      background: var(--d-hover);
-    }
-
-    &:active {
-      background-color: var(--primary-low);
     }
 
     &::before {
@@ -44,10 +36,10 @@
       display: block;
       position: absolute;
       background-color: var(--tertiary-low);
-      width: calc(var(--toggle-switch-height) - var(--space-half));
-      height: calc(var(--toggle-switch-height) - var(--space-1));
-      top: var(--space-half);
-      border-radius: var(--d-border-radius);
+      width: calc(var(--toggle-switch-height) - 0.125rem);
+      height: calc(var(--toggle-switch-height) - 0.25rem);
+      top: 0.125rem;
+      border-radius: 0.25em;
       box-shadow: 0 1px 2px 1px rgb(var(--tertiary-rgb), 0.2);
 
       .--markdown & {
@@ -59,6 +51,10 @@
           calc(var(--toggle-switch-width) - var(--toggle-switch-height))
         );
       }
+
+      @media (prefers-reduced-motion: reduce) {
+        transition-duration: 0ms;
+      }
     }
   }
 
@@ -68,11 +64,12 @@
     align-items: center;
     justify-content: center;
     position: absolute;
+    opacity: 0;
     height: 100%;
-    width: calc(var(--toggle-switch-height) - var(--space-half));
-    color: var(--primary-high);
+    width: calc(var(--toggle-switch-height) - 0.125rem);
 
     .d-icon {
+      color: var(--primary);
       vertical-align: text-bottom;
     }
 
@@ -82,18 +79,18 @@
   }
 
   &__left-icon {
-    left: var(--space-half);
+    left: 0.125rem;
 
     .--markdown & {
-      color: var(--primary);
+      opacity: 1;
     }
   }
 
   &__right-icon {
-    right: var(--space-half);
+    right: 0.125rem;
 
     .--rte & {
-      color: var(--primary);
+      opacity: 1;
     }
   }
 }

@@ -1,7 +1,7 @@
 import Component from "@glimmer/component";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
-import AssignActionsDropdown from "./assign-actions-dropdown.js";
+import AssignActionsDropdown from "./assign-actions-dropdown";
 
 export default class AssignedTopicListColumn extends Component {
   @service taskActions;
@@ -23,18 +23,18 @@ export default class AssignedTopicListColumn extends Component {
   <template>
     {{#if @topic.assigned_to_user}}
       <AssignActionsDropdown
-        @assignee={{@topic.assigned_to_user.username}}
-        @reassign={{this.reassign}}
         @topic={{@topic}}
+        @assignee={{@topic.assigned_to_user.username}}
         @unassign={{this.unassign}}
+        @reassign={{this.reassign}}
       />
     {{else if @topic.assigned_to_group}}
       <AssignActionsDropdown
+        @topic={{@topic}}
         @assignee={{@topic.assigned_to_group.name}}
         @group={{true}}
-        @reassign={{this.reassign}}
-        @topic={{@topic}}
         @unassign={{this.unassign}}
+        @reassign={{this.reassign}}
       />
     {{else}}
       <AssignActionsDropdown @topic={{@topic}} @unassign={{this.unassign}} />

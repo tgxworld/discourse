@@ -16,45 +16,45 @@ RSpec.describe DiscourseAi::Admin::AiSpamController do
             params: {
               is_enabled: true,
               llm_model_id: llm_model.id,
-              ai_agent_id:
-                DiscourseAi::Agents::Agent.system_agents[DiscourseAi::Agents::SpamDetector],
+              ai_persona_id:
+                DiscourseAi::Personas::Persona.system_personas[DiscourseAi::Personas::SpamDetector],
               custom_instructions: "custom instructions",
             }
 
         expect(response.status).to eq(200)
         expect(SiteSetting.ai_spam_detection_enabled).to eq(true)
         expect(AiModerationSetting.spam.llm_model_id).to eq(llm_model.id)
-        expect(AiModerationSetting.spam.ai_agent_id).to eq(
-          DiscourseAi::Agents::Agent.system_agents[DiscourseAi::Agents::SpamDetector],
+        expect(AiModerationSetting.spam.ai_persona_id).to eq(
+          DiscourseAi::Personas::Persona.system_personas[DiscourseAi::Personas::SpamDetector],
         )
         expect(AiModerationSetting.spam.data["custom_instructions"]).to eq("custom instructions")
       end
 
-      it "validates the selected agent has a valid response format" do
-        ai_agent = Fabricate(:ai_agent, response_format: nil)
+      it "validates the selected persona has a valid response format" do
+        ai_persona = Fabricate(:ai_persona, response_format: nil)
 
         put "/admin/plugins/discourse-ai/ai-spam.json",
             params: {
               is_enabled: true,
               llm_model_id: llm_model.id,
-              ai_agent_id: ai_agent.id,
+              ai_persona_id: ai_persona.id,
               custom_instructions: "custom instructions",
             }
 
         expect(response.status).to eq(422)
 
-        ai_agent.update!(response_format: [{ "key" => "spam", "type" => "boolean" }])
+        ai_persona.update!(response_format: [{ "key" => "spam", "type" => "boolean" }])
 
         put "/admin/plugins/discourse-ai/ai-spam.json",
             params: {
               is_enabled: true,
               llm_model_id: llm_model.id,
-              ai_agent_id: ai_agent.id,
+              ai_persona_id: ai_persona.id,
               custom_instructions: "custom instructions",
             }
 
         expect(response.status).to eq(200)
-        expect(AiModerationSetting.spam.ai_agent_id).to eq(ai_agent.id)
+        expect(AiModerationSetting.spam.ai_persona_id).to eq(ai_persona.id)
       end
 
       it "can not enable spam detection without a model selected" do
@@ -68,25 +68,6 @@ RSpec.describe DiscourseAi::Admin::AiSpamController do
       it "can not fiddle with custom instructions without an llm" do
         put "/admin/plugins/discourse-ai/ai-spam.json", params: { is_enabled: true }
         expect(response.status).to eq(422)
-      end
-
-      it "can enable spam detection with only a decision model" do
-        decision_model = Fabricate(:decision_model)
-
-        put "/admin/plugins/discourse-ai/ai-spam.json",
-            params: {
-              is_enabled: true,
-              llm_model_id: "",
-              decision_model_id: decision_model.id,
-            }
-
-        expect(response.status).to eq(200)
-        expect(SiteSetting.ai_spam_detection_enabled).to eq(true)
-        expect(AiModerationSetting.spam.slice(:llm_model_id, :decision_model_id)).to eq(
-          "llm_model_id" => nil,
-          "decision_model_id" => decision_model.id,
-        )
-        expect(response.parsed_body["decision_model_id"]).to eq(decision_model.id)
       end
 
       context "when spam detection was already set" do
@@ -165,15 +146,15 @@ RSpec.describe DiscourseAi::Admin::AiSpamController do
           expect(history.details).to include("llm_model_id")
         end
 
-        it "logs staff actio when ai_agent_id changes" do
-          new_agent =
+        it "logs staff actio when ai_persona_id changes" do
+          new_persona =
             Fabricate(
-              :ai_agent,
-              name: "Updated Agent",
+              :ai_persona,
+              name: "Updated Persona",
               response_format: [{ "key" => "spam", "type" => "boolean" }],
             )
 
-          put "/admin/plugins/discourse-ai/ai-spam.json", params: { ai_agent_id: new_agent.id }
+          put "/admin/plugins/discourse-ai/ai-spam.json", params: { ai_persona_id: new_persona.id }
 
           expect(response.status).to eq(200)
 
@@ -184,8 +165,8 @@ RSpec.describe DiscourseAi::Admin::AiSpamController do
               custom_type: "update_ai_spam_settings",
             ).last
           expect(history).to be_present
-          expect(history.details).to include("ai_agent_id")
-          expect(history.details).to include(new_agent.name)
+          expect(history.details).to include("ai_persona_id")
+          expect(history.details).to include(new_persona.name)
         end
 
         it "does not log staff action when only is_enabled changes" do
@@ -238,7 +219,7 @@ RSpec.describe DiscourseAi::Admin::AiSpamController do
   end
 
   describe "#test" do
-    fab!(:spam_post, :post)
+    fab!(:spam_post) { Fabricate(:post) }
     fab!(:spam_post2) { Fabricate(:post, topic: spam_post.topic, raw: "something special 123") }
     fab!(:setting) do
       AiModerationSetting.create(
@@ -261,9 +242,7 @@ RSpec.describe DiscourseAi::Admin::AiSpamController do
 
       llm2 = Fabricate(:llm_model, name: "DiffLLM")
 
-      DiscourseAi::Completions::Llm.with_prepared_responses(
-        [{ spam: true, reason: "just because" }],
-      ) do
+      DiscourseAi::Completions::Llm.with_prepared_responses([true, "just because"]) do
         post "/admin/plugins/discourse-ai/ai-spam/test.json",
              params: {
                post_url: spam_post2.url,
@@ -274,15 +253,12 @@ RSpec.describe DiscourseAi::Admin::AiSpamController do
       expect(response.status).to eq(200)
 
       parsed = response.parsed_body
-      expect(parsed["sent_message"]).to include(spam_post2.raw)
-      expect(parsed["llm_name"]).to eq("DiffLLM")
-      expect(parsed["reason"]).to eq("just because")
+      expect(parsed["log"]).to include(spam_post2.raw)
+      expect(parsed["log"]).to include("DiffLLM")
     end
 
     it "can scan using post id" do
-      DiscourseAi::Completions::Llm.with_prepared_responses(
-        [{ spam: true, reason: "because apples" }],
-      ) do
+      DiscourseAi::Completions::Llm.with_prepared_responses([true, "because apples"]) do
         post "/admin/plugins/discourse-ai/ai-spam/test.json",
              params: {
                post_url: spam_post.id.to_s,
@@ -292,40 +268,7 @@ RSpec.describe DiscourseAi::Admin::AiSpamController do
       expect(response.status).to eq(200)
 
       parsed = response.parsed_body
-      expect(parsed["sent_message"]).to include(spam_post.raw)
-      expect(parsed["reason"]).to eq("because apples")
-    end
-
-    it "tests with only a decision model" do
-      decision_model = Fabricate(:decision_model)
-
-      DiscourseAi::Decisions.with_canned_answers(spam: 0.8) do
-        post "/admin/plugins/discourse-ai/ai-spam/test.json",
-             params: {
-               post_url: spam_post.url,
-               llm_id: "",
-               decision_model_id: decision_model.id,
-             }
-      end
-
-      expect(response.status).to eq(200)
-      expect(
-        response.parsed_body.slice("is_spam", "spam_probability", "decision_model_name"),
-      ).to eq(
-        "is_spam" => true,
-        "spam_probability" => 0.8,
-        "decision_model_name" => decision_model.display_name,
-      )
-    end
-
-    it "rejects llm_id that is not a valid LlmModel" do
-      post "/admin/plugins/discourse-ai/ai-spam/test.json",
-           params: {
-             post_url: spam_post.id.to_s,
-             llm_id: -999,
-           }
-
-      expect(response.status).to eq(422)
+      expect(parsed["log"]).to include(spam_post.raw)
     end
 
     it "returns proper spam test results" do
@@ -340,9 +283,7 @@ RSpec.describe DiscourseAi::Admin::AiSpamController do
 
       AiSpamLog.create!(post: spam_post, llm_model: llm_model, is_spam: true, created_at: 1.day.ago)
 
-      DiscourseAi::Completions::Llm.with_prepared_responses(
-        [{ spam: true, reason: "because banana" }],
-      ) do
+      DiscourseAi::Completions::Llm.with_prepared_responses([true, "because banana"]) do
         post "/admin/plugins/discourse-ai/ai-spam/test.json",
              params: {
                post_url: spam_post.url,
@@ -353,11 +294,11 @@ RSpec.describe DiscourseAi::Admin::AiSpamController do
       expect(response.status).to eq(200)
 
       parsed = response.parsed_body
-      expect(parsed["system_prompt"]).to include("special custom instructions")
-      expect(parsed["sent_message"]).to include(spam_post.raw)
+      expect(parsed["log"]).to include("special custom instructions")
+      expect(parsed["log"]).to include(spam_post.raw)
       expect(parsed["is_spam"]).to eq(true)
-      expect(parsed["scan_history"]).to include("Scan History:")
-      expect(parsed["reason"]).to eq("because banana")
+      expect(parsed["log"]).to include("Scan History:")
+      expect(parsed["log"]).to include("banana")
     end
   end
 

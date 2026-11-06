@@ -29,7 +29,6 @@ module DiscourseDev
         user_id: ::Discourse::SYSTEM_USER_ID,
         color: Faker::Color.hex_color.last(6),
         parent_category_id: parent_category_id,
-        permissions: permissions,
       }
     end
 
@@ -46,7 +45,8 @@ module DiscourseDev
 
     def create!
       super do |category|
-        category.save_custom_fields
+        category.set_permissions(permissions)
+        category.save!
 
         @parent_category_ids << category.id if category.parent_category_id.blank?
       end

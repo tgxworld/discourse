@@ -1,18 +1,13 @@
 # frozen_string_literal: true
 
 describe Jobs::RecalculateScores do
-  fab!(:current_user, :admin)
-  fab!(:leaderboard, :gamification_leaderboard)
+  fab!(:current_user) { Fabricate(:admin) }
 
   before { RateLimiter.enable }
 
   it "publishes MessageBus and executes job" do
     since = 10.days.ago
-    DiscourseGamification::GamificationLeaderboardScore.expects(:calculate_all).with(
-      since_date: since,
-    )
-
-    DiscourseGamification::LeaderboardCachedView.expects(:regenerate_all)
+    DiscourseGamification::GamificationScore.expects(:calculate_scores).with(since_date: since)
 
     MessageBus
       .expects(:publish)

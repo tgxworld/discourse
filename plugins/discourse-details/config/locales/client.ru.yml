@@ -5,14 +5,9 @@
 # https://translate.discourse.org/
 
 ru:
-  admin_js:
-    admin:
-      site_settings:
-        categories:
-          discourse_details: "Подробности Discourse"
   js:
     details:
-      title: Скрыть подробности
+      title: Скрыть под спойлер
     composer:
       details_title: Спойлер
       details_text: "Этот текст будет скрыт"

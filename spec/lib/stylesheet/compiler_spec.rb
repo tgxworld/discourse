@@ -4,19 +4,16 @@ require "stylesheet/compiler"
 
 RSpec.describe Stylesheet::Compiler do
   describe "compilation" do
-    # rubocop:disable Discourse/NoIterationOverRSpecDefinitions
-    Dir["#{Rails.root.join("app/assets/stylesheets/*.scss")}"].each do |path|
-      path = File.basename(path, ".scss")
+    Dir["#{Rails.root.join("app/assets/stylesheets")}/*.scss"].each do |path|
+      next if path =~ /ember_cli/
 
-      # mobile and desktop scss files are intentionally empty stubs
-      next if path.start_with?("mobile", "desktop")
+      path = File.basename(path, ".scss")
 
       it "can compile '#{path}' css" do
         css, _map = Stylesheet::Compiler.compile_asset(path)
         expect(css.length).to be > 500
       end
     end
-    # rubocop:enable Discourse/NoIterationOverRSpecDefinitions
   end
 
   context "with a theme" do
@@ -247,8 +244,8 @@ RSpec.describe Stylesheet::Compiler do
         }
       SCSS
 
+      expect(css).to include("-webkit-min-device-pixel-ratio")
       expect(css).to include("csstools-light-dark-toggle")
-      expect(css).not_to include("& * {") # No native nesting
       expect(map.size).to be > 10
     end
 
@@ -261,7 +258,7 @@ RSpec.describe Stylesheet::Compiler do
       SCSS
 
       expect { Stylesheet::Compiler.compile(bad_css, "test.scss") }.to raise_error(
-        AssetProcessor::TranspileError,
+        DiscourseJsProcessor::TranspileError,
         /Missed semicolon/,
       )
     end

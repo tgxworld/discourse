@@ -8,7 +8,6 @@ module DiscourseAi
 
         class Error < StandardError
         end
-
         class NoMatchError < Error
         end
 

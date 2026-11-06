@@ -1,1 +1,1 @@
-export { default } from "../../components/chat-header.gjs";
+export { default } from "../../components/chat-header";

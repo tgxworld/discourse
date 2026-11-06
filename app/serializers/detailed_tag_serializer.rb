@@ -6,7 +6,7 @@ class DetailedTagSerializer < TagSerializer
   has_many :categories, serializer: BasicCategorySerializer
 
   def synonyms
-    TagsController.tag_counts_json(DiscourseTagging.filter_visible(object.synonyms, scope), scope)
+    TagsController.tag_counts_json(object.synonyms, scope)
   end
 
   def categories
@@ -22,9 +22,6 @@ class DetailedTagSerializer < TagSerializer
   end
 
   def tag_group_names
-    TagGroup
-      .visible(scope)
-      .where(id: object.tag_group_memberships.select(:tag_group_id))
-      .pluck(:name)
+    object.tag_groups.map(&:name)
   end
 end

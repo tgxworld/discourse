@@ -48,7 +48,7 @@ class BulkImport::VBulletin < BulkImport::Base
 
   def execute
     # enable as per requirement:
-    # SiteSetting.backup_frequency = 0
+    # SiteSetting.automatic_backups_enabled = false
     # SiteSetting.disable_emails = "non-staff"
     # SiteSetting.authorized_extensions = '*'
     # SiteSetting.max_image_size_kb = 102400
@@ -637,7 +637,7 @@ class BulkImport::VBulletin < BulkImport::Base
       Dir.foreach(AVATAR_DIR) do |item|
         print "\r%7d - %6d/sec" % [count, count.to_f / (Time.now - start)]
 
-        next if item == "." || item == ".." || item == ".DS_Store"
+        next if item == (".") || item == ("..") || item == (".DS_Store")
         next unless item =~ /avatar(\d+)_(\d).gif/
         scan = item.scan(/avatar(\d+)_(\d).gif/)
         next if scan[0][0].blank?

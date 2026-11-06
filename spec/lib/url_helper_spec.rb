@@ -42,16 +42,18 @@ RSpec.describe UrlHelper do
 
   describe "#absolute" do
     it "returns an absolute URL for CDN" do
-      Rails.configuration.action_controller.asset_host = "//cdn.awesome.com"
-      expect(UrlHelper.absolute("/test.jpg")).to eq("https://cdn.awesome.com/test.jpg")
+      begin
+        Rails.configuration.action_controller.asset_host = "//cdn.awesome.com"
+        expect(UrlHelper.absolute("/test.jpg")).to eq("https://cdn.awesome.com/test.jpg")
 
-      Rails.configuration.action_controller.asset_host = "https://cdn.awesome.com"
-      expect(UrlHelper.absolute("/test.jpg")).to eq("https://cdn.awesome.com/test.jpg")
+        Rails.configuration.action_controller.asset_host = "https://cdn.awesome.com"
+        expect(UrlHelper.absolute("/test.jpg")).to eq("https://cdn.awesome.com/test.jpg")
 
-      Rails.configuration.action_controller.asset_host = "http://cdn.awesome.com"
-      expect(UrlHelper.absolute("/test.jpg")).to eq("http://cdn.awesome.com/test.jpg")
-    ensure
-      Rails.configuration.action_controller.asset_host = nil
+        Rails.configuration.action_controller.asset_host = "http://cdn.awesome.com"
+        expect(UrlHelper.absolute("/test.jpg")).to eq("http://cdn.awesome.com/test.jpg")
+      ensure
+        Rails.configuration.action_controller.asset_host = nil
+      end
     end
 
     it "does not change non-relative url" do
@@ -167,7 +169,7 @@ RSpec.describe UrlHelper do
       long_url = "https://#{"a" * 2_000}.com"
       expect do UrlHelper.normalized_encode(long_url) end.to raise_error(
         ArgumentError,
-        "URL is too long (#{long_url.length} characters): #{long_url.truncate(UrlHelper::MAX_URL_LENGTH)}",
+        "URL starting with #{long_url[0..100]} is too long",
       )
     end
   end
@@ -176,7 +178,7 @@ RSpec.describe UrlHelper do
     let(:url) { "/#{Discourse.store.upload_path}/1X/575bcc2886bf7a39684b57ca90be85f7d399bbc7.png" }
     let(:asset_host) { "//my.awesome.cdn" }
 
-    it "returns CDN URLs for local relative URLs" do
+    it "should return correct cdn url for local relative urls" do
       set_cdn_url asset_host
       cdn_url = UrlHelper.local_cdn_url(url)
       expect(cdn_url).to eq("#{asset_host}#{url}")
@@ -271,42 +273,42 @@ RSpec.describe UrlHelper do
   end
 
   describe ".is_valid_url?" do
-    it "accepts a valid HTTP URL" do
+    it "should return true for a valid HTTP URL" do
       expect(described_class.is_valid_url?("http://www.example.com")).to eq(true)
     end
 
-    it "accepts a valid HTTPS URL" do
+    it "should return true for a valid HTTPS URL" do
       expect(described_class.is_valid_url?("https://www.example.com")).to eq(true)
     end
 
-    it "accepts a valid FTP URL" do
+    it "should return true for a valid FTP URL" do
       expect(described_class.is_valid_url?("ftp://example.com")).to eq(true)
     end
 
-    it "accepts a valid mailto URL" do
+    it "should return true for a valid mailto URL" do
       expect(described_class.is_valid_url?("mailto:someone@discourse.org")).to eq(true)
     end
 
-    it "accepts a valid LDAP URL" do
+    it "should return true for a valid LDAP URL" do
       expect(described_class.is_valid_url?("ldap://ldap.example.com/dc=example;dc=com?quer")).to eq(
         true,
       )
     end
 
-    it "accepts a path" do
+    it "should return true for a path" do
       expect(described_class.is_valid_url?("/some/path")).to eq(true)
     end
 
-    it "accepts a path with query parameters" do
+    it "should return true for a path with query params" do
       expect(described_class.is_valid_url?("/some/path?query=param")).to eq(true)
     end
 
-    it "accepts anchor links" do
+    it "should return true for anchor links" do
       expect(described_class.is_valid_url?("#anchor")).to eq(true)
       expect(described_class.is_valid_url?("#")).to eq(true)
     end
 
-    it "rejects invalid URLs" do
+    it "should return false for invalid urls" do
       expect(described_class.is_valid_url?("")).to eq(false)
       expect(described_class.is_valid_url?("http//www.example.com")).to eq(false)
       expect(described_class.is_valid_url?("http:/www.example.com")).to eq(false)

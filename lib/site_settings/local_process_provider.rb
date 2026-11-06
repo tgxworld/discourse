@@ -46,7 +46,6 @@ class SiteSettings::LocalProcessProvider
       settings[name] = setting
     end
     setting.value = value.to_s
-
     setting
   end
 

@@ -1,22 +1,20 @@
 # frozen_string_literal: true
 
+require_relative "../support/assign_allowed_group"
+
 describe TopicQuery do
   before { SiteSetting.assign_enabled = true }
 
   fab!(:user)
-  fab!(:user2, :user)
-  fab!(:user3, :user)
-  fab!(:user4, :user)
+  fab!(:user2) { Fabricate(:user) }
+  fab!(:user3) { Fabricate(:user) }
+  fab!(:user4) { Fabricate(:user) }
 
   include_context "with group that is allowed to assign"
 
   before do
-    assign_allowed_group.add(user)
-    assign_allowed_group.add(user2)
-  end
-
-  def assign_to(topic:, user:, assignee:)
-    topic.tap { |assigned_topic| Assigner.new(assigned_topic, user).assign(assignee) }
+    add_to_assign_allowed_group(user)
+    add_to_assign_allowed_group(user2)
   end
 
   describe "#list_messages_assigned" do
@@ -26,9 +24,9 @@ describe TopicQuery do
     fab!(:group_topic) { Fabricate(:post, user: user).topic }
 
     before do
-      assign_to(topic: private_message, user: user, assignee: user)
-      assign_to(topic: topic, user: user, assignee: user)
-      assign_to(topic: group_topic, user: user, assignee: assign_allowed_group)
+      assign_to(private_message, user, user)
+      assign_to(topic, user, user)
+      assign_to(group_topic, user, assign_allowed_group)
     end
 
     it "Includes topics and PMs assigned to user" do
@@ -75,9 +73,9 @@ describe TopicQuery do
     fab!(:group_topic) { Fabricate(:post, user: user).topic }
 
     before do
-      assign_to(topic: private_message, user: user, assignee: user)
-      assign_to(topic: topic, user: user2, assignee: user2)
-      assign_to(topic: group_topic, user: user, assignee: assign_allowed_group)
+      assign_to(private_message, user, user)
+      assign_to(topic, user2, user2)
+      assign_to(group_topic, user, assign_allowed_group)
     end
 
     it "Includes topics and PMs assigned to user" do
@@ -105,47 +103,6 @@ describe TopicQuery do
 
       expect(assigned_messages).to contain_exactly(group_topic)
     end
-
-    it "excludes assignments to deleted posts and topics" do
-      # Create a new topic with only a post assignment (no topic assignment)
-      post_only_topic = Fabricate(:post, user: user).topic
-      post_in_topic = Fabricate(:post, topic: post_only_topic)
-      assign_to(topic: post_in_topic, user: user, assignee: user)
-
-      assigned_messages =
-        TopicQuery.new(user, { page: 0 }).list_group_topics_assigned(assign_allowed_group).topics
-      expect(assigned_messages).to contain_exactly(
-        private_message,
-        topic,
-        group_topic,
-        post_only_topic,
-      )
-
-      # delete entire topic (soft deletion)
-      post_only_topic.update!(deleted_at: Time.current)
-      assigned_messages =
-        TopicQuery.new(user, { page: 0 }).list_group_topics_assigned(assign_allowed_group).topics
-      expect(assigned_messages).to contain_exactly(private_message, topic, group_topic)
-
-      # restore topic, but delete the post (moderator deletion)
-      post_only_topic.update!(deleted_at: nil)
-      post_in_topic.update!(deleted_at: Time.current)
-      assigned_messages =
-        TopicQuery.new(user, { page: 0 }).list_group_topics_assigned(assign_allowed_group).topics
-      expect(assigned_messages).to contain_exactly(private_message, topic, group_topic)
-
-      # user deletion of post
-      post_in_topic.update!(deleted_at: nil, user_deleted: true)
-      assigned_messages =
-        TopicQuery.new(user, { page: 0 }).list_group_topics_assigned(assign_allowed_group).topics
-      expect(assigned_messages).to contain_exactly(private_message, topic, group_topic)
-
-      # system deletion of post
-      post_in_topic.update!(user_deleted: false, deleted_by_id: Discourse.system_user.id)
-      assigned_messages =
-        TopicQuery.new(user, { page: 0 }).list_group_topics_assigned(assign_allowed_group).topics
-      expect(assigned_messages).to contain_exactly(private_message, topic, group_topic)
-    end
   end
 
   describe "#list_private_messages_assigned" do
@@ -170,7 +127,7 @@ describe TopicQuery do
           archetype: Archetype.private_message,
         ).topic
 
-      assign_to(topic: topic, user: user, assignee: user)
+      assign_to(topic, user, user)
     end
 
     let(:group2) { Fabricate(:group, messageable_level: Group::ALIAS_LEVELS[:everyone]) }
@@ -183,7 +140,7 @@ describe TopicQuery do
           archetype: Archetype.private_message,
         ).topic
 
-      assign_to(topic: topic, user: user, assignee: user)
+      assign_to(topic, user, user)
     end
 
     before do
@@ -196,7 +153,7 @@ describe TopicQuery do
       group_assigned_topic
     end
 
-    it "returns messages assigned to the user or their group" do
+    it "should return the right topics" do
       expect(TopicQuery.new(user).list_private_messages_assigned(user).topics).to contain_exactly(
         assigned_topic,
         group_assigned_topic,
@@ -271,20 +228,9 @@ describe TopicQuery do
       expect(query.topics.length).to eq(1)
       expect(query.topics.first).to eq(assigned_topic)
     end
+  end
 
-    it "ignores the assigned filter for scoped users" do
-      SiteSetting.assign_allowed_on_groups = ""
-      category = Fabricate(:category)
-      scoped_group = Fabricate(:group)
-      scoped_user = Fabricate(:user, groups: [scoped_group])
-      allow_group_to_assign_in_category(category, scoped_group)
-      assigned_topic = Fabricate(:post).topic.tap { |topic| topic.update!(category: category) }
-      unassigned_topic = Fabricate(:topic)
-
-      Assigner.new(assigned_topic, scoped_user).assign(scoped_user)
-      query = TopicQuery.new(scoped_user, assigned: scoped_user.username).list_latest
-
-      expect(query.topics).to contain_exactly(assigned_topic, unassigned_topic)
-    end
+  def assign_to(topic, user, assignee)
+    topic.tap { |t| Assigner.new(t, user).assign(assignee) }
   end
 end

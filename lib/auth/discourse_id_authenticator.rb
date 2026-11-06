@@ -24,7 +24,6 @@ class Auth::DiscourseIdAuthenticator < Auth::ManagedAuthenticator
     info do
       {
         nickname: access_token.params["info"]["username"],
-        name: access_token.params["info"]["name"],
         email: access_token.params["info"]["email"],
         image: access_token.params["info"]["image"],
       }
@@ -43,16 +42,13 @@ class Auth::DiscourseIdAuthenticator < Auth::ManagedAuthenticator
     site
   end
 
-  def enable_setting
-    :enable_discourse_id
-  end
-
-  def required_settings
-    %i[discourse_id_client_id discourse_id_client_secret]
+  def enabled?
+    SiteSetting.enable_discourse_id && SiteSetting.discourse_id_client_id.present? &&
+      SiteSetting.discourse_id_client_secret.present?
   end
 
   def site
-    DiscourseId.provider_url
+    SiteSetting.discourse_id_provider_url.presence || "https://id.discourse.com"
   end
 
   def register_middleware(omniauth)

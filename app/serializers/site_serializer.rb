@@ -11,9 +11,6 @@ class SiteSerializer < ApplicationSerializer
     :trust_levels,
     :groups,
     :filters,
-    :anonymous_list_filters,
-    :homepage_choices,
-    :homepage_options,
     :periods,
     :top_menu_items,
     :anonymous_top_menu_items,
@@ -22,7 +19,6 @@ class SiteSerializer < ApplicationSerializer
     :post_action_types,
     :topic_flag_types,
     :can_create_tag,
-    :can_search,
     :can_tag_topics,
     :can_tag_pms,
     :tags_filter_regexp,
@@ -55,12 +51,6 @@ class SiteSerializer < ApplicationSerializer
     :valid_flag_applies_to_types,
     :full_name_required_for_signup,
     :full_name_visible_in_signup,
-    :admin_config_login_routes,
-    :email_configured,
-    :upcoming_changes_with_css,
-    :permanent_upcoming_change_names,
-    :access_control,
-    :category_types,
   )
 
   has_many :archetypes, embed: :objects, serializer: ArchetypeSerializer
@@ -70,19 +60,10 @@ class SiteSerializer < ApplicationSerializer
 
   def user_themes
     cache_fragment("user_themes") do
-      themes =
-        Theme
-          .where("id = :default OR user_selectable", default: SiteSetting.default_theme_id)
-          .order("lower(name)")
-          .pluck(:id, :name, :color_scheme_id, :dark_color_scheme_id)
-
-      modifier_theme_ids =
-        ThemeModifierSet
-          .where(theme_id: themes.map(&:first), only_theme_color_schemes: true)
-          .pluck(:theme_id)
-          .to_set
-
-      themes
+      Theme
+        .where("id = :default OR user_selectable", default: SiteSetting.default_theme_id)
+        .order("lower(name)")
+        .pluck(:id, :name, :color_scheme_id, :dark_color_scheme_id)
         .map do |id, name, color_scheme_id, dark_color_scheme_id|
           {
             theme_id: id,
@@ -90,7 +71,6 @@ class SiteSerializer < ApplicationSerializer
             default: id == SiteSetting.default_theme_id,
             color_scheme_id: color_scheme_id,
             dark_color_scheme_id: dark_color_scheme_id,
-            only_theme_color_schemes: modifier_theme_ids.include?(id),
           }
         end
         .as_json
@@ -99,16 +79,7 @@ class SiteSerializer < ApplicationSerializer
 
   def user_color_schemes
     cache_fragment("user_color_schemes") do
-      theme_ids_with_modifier =
-        ThemeModifierSet.where(only_theme_color_schemes: true).pluck(:theme_id)
-
-      schemes =
-        ColorScheme
-          .includes(:color_scheme_colors)
-          .where(user_selectable: true)
-          .or(ColorScheme.where(theme_id: theme_ids_with_modifier))
-          .order(:name)
-
+      schemes = ColorScheme.includes(:color_scheme_colors).where("user_selectable").order(:name)
       ActiveModel::ArraySerializer.new(
         schemes,
         each_serializer: ColorSchemeSelectableSerializer,
@@ -138,7 +109,6 @@ class SiteSerializer < ApplicationSerializer
         .select(
           :id,
           :name,
-          :full_name,
           :flair_icon,
           :flair_upload_id,
           :flair_bg_color,
@@ -149,8 +119,6 @@ class SiteSerializer < ApplicationSerializer
           {
             id: g.id,
             name: g.name,
-            full_name: g.full_name.presence || g.name,
-            display_name: g.full_name.presence || g.name,
             flair_url: g.flair_url,
             flair_bg_color: g.flair_bg_color,
             flair_color: g.flair_color,
@@ -175,7 +143,7 @@ class SiteSerializer < ApplicationSerializer
             flags,
             each_serializer: FlagSerializer,
             target: :post_action,
-            used_flag_ids: used_flag_ids(flags.map(&:id)),
+            used_flag_ids: self.used_flag_ids(flags.map(&:id)),
           ).as_json
         end
       end
@@ -201,7 +169,7 @@ class SiteSerializer < ApplicationSerializer
             flags,
             each_serializer: FlagSerializer,
             target: :topic_flag,
-            used_flag_ids: used_flag_ids(flags.map(&:id)),
+            used_flag_ids: self.used_flag_ids(flags.map(&:id)),
           ).as_json
         end
       end
@@ -227,24 +195,6 @@ class SiteSerializer < ApplicationSerializer
     Discourse.filters.map(&:to_s)
   end
 
-  def anonymous_list_filters
-    Discourse.anonymous_list_filters.map(&:to_s)
-  end
-
-  def homepage_choices
-    HomepageSiteSetting.choices
-  end
-
-  def homepage_options
-    DiscoursePluginRegistry.homepage_options.map do |option|
-      {
-        id: option[:id],
-        path: HomepageHelper.option_path(option, scope),
-        server_side: option[:server_side],
-      }
-    end
-  end
-
   def periods
     TopTopic.periods.map(&:to_s)
   end
@@ -267,10 +217,6 @@ class SiteSerializer < ApplicationSerializer
 
   def can_create_tag
     scope.can_create_tag?
-  end
-
-  def can_search
-    scope.can_search?
   end
 
   def can_tag_topics
@@ -322,7 +268,7 @@ class SiteSerializer < ApplicationSerializer
   end
 
   def censored_regexp
-    WordWatcher.serialized_regexps_for_action(:censor)
+    WordWatcher.serialized_regexps_for_action(:censor, engine: :js)
   end
 
   def custom_emoji_translation
@@ -338,11 +284,11 @@ class SiteSerializer < ApplicationSerializer
   end
 
   def watched_words_replace
-    WordWatcher.regexps_for_action(:replace)
+    WordWatcher.regexps_for_action(:replace, engine: :js)
   end
 
   def watched_words_link
-    WordWatcher.regexps_for_action(:link)
+    WordWatcher.regexps_for_action(:link, engine: :js)
   end
 
   def categories
@@ -369,12 +315,11 @@ class SiteSerializer < ApplicationSerializer
 
   def navigation_menu_site_top_tags
     if top_tags.present?
-      top_tag_objects = top_tags[0...SIDEBAR_TOP_TAGS_TO_SHOW]
-      tag_ids = top_tag_objects.map { |t| t[:id] }
-      serialized = serialize_tags(Tag.where(id: tag_ids))
+      tag_names = top_tags[0...SIDEBAR_TOP_TAGS_TO_SHOW]
+      serialized = serialize_tags(Tag.where(name: tag_names))
 
       # Ensures order of top tags is preserved
-      serialized.sort_by { |tag| tag_ids.index(tag[:id]) }
+      serialized.sort_by { |tag| tag_names.index(tag[:name]) }
     else
       []
     end
@@ -387,10 +332,11 @@ class SiteSerializer < ApplicationSerializer
   def anonymous_default_navigation_menu_tags
     @anonymous_default_navigation_menu_tags ||=
       begin
-        tags = Tag.where(name: SiteSetting.default_navigation_menu_tags.split("|"))
-        tags = DiscourseTagging.filter_visible(tags, scope)
+        tag_names =
+          SiteSetting.default_navigation_menu_tags.split("|") -
+            DiscourseTagging.hidden_tag_names(scope)
 
-        serialize_tags(tags.order(:name))
+        serialize_tags(Tag.where(name: tag_names).order(:name))
       end
   end
 
@@ -460,44 +406,12 @@ class SiteSerializer < ApplicationSerializer
     scope.is_admin?
   end
 
-  def admin_config_login_routes
-    DiscoursePluginRegistry.admin_config_login_routes
-  end
-
-  def include_admin_config_login_routes?
-    scope.is_admin?
-  end
-
-  def email_configured
-    GlobalSetting.smtp_address.present?
-  end
-
   def full_name_required_for_signup
     Site.full_name_required_for_signup
   end
 
   def full_name_visible_in_signup
     Site.full_name_visible_in_signup
-  end
-
-  def upcoming_changes_with_css
-    UpcomingChanges.including_css
-  end
-
-  def permanent_upcoming_change_names
-    UpcomingChanges.permanent_upcoming_change_names
-  end
-
-  def include_permanent_upcoming_change_names?
-    scope.is_staff?
-  end
-
-  def category_types
-    Categories::TypeRegistry.list(only_visible: true, guardian: scope)
-  end
-
-  def include_category_types?
-    scope.is_staff?
   end
 
   private

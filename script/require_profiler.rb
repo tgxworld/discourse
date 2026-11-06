@@ -78,7 +78,8 @@ module RequireProfiler
       @stack ||= []
       self.stats ||= {}
 
-      stat = stats.fetch(path) { |key| stats[key] = { calls: 0, time: 0, parent_time: 0 } }
+      stat =
+        self.stats.fetch(path) { |key| self.stats[key] = { calls: 0, time: 0, parent_time: 0 } }
 
       @stack << stat
 
@@ -126,9 +127,11 @@ end
 
 RequireProfiler.profile do
   Bundler.definition.dependencies.each do |dep|
-    require dep.name
-  rescue Exception
-    # don't care
+    begin
+      require dep.name
+    rescue Exception
+      # don't care
+    end
   end
 end
 

@@ -8,7 +8,6 @@ module DiscourseAi
       # 10 minutes is enough for vast majority of cases
       # there is a small chance that some reasoning models may take longer
       MAX_STREAM_DELAY_SECONDS = 600
-      FALLBACK_TITLE_LENGTH = 80
 
       attr_reader :bot
 
@@ -16,20 +15,23 @@ module DiscourseAi
       # The bot will take care of completions while this class updates the topic title
       # and stream replies.
 
-      def self.find_chat_agent(message, channel, user)
-        modality = channel.direct_message_channel? ? :chat_direct_message : :chat_channel_mention
-        candidates =
-          AiAgent.allowed_modalities(
-            user: user,
-            allow_chat_direct_messages: modality == :chat_direct_message,
-            allow_chat_channel_mentions: modality == :chat_channel_mention,
-          )
-
-        if modality == :chat_direct_message
-          candidates.find { |agent| agent[:user_id].in?(channel.allowed_user_ids) }
-        elsif message.message.include?("@")
-          mentions = message.parsed_mentions.parsed_direct_mentions
-          candidates.find { |agent| mentions.include?(agent[:username]) }
+      def self.find_chat_persona(message, channel, user)
+        if channel.direct_message_channel?
+          AiPersona
+            .allowed_modalities(allow_chat_direct_messages: true)
+            .find do |p|
+              p[:user_id].in?(channel.allowed_user_ids) && (user.group_ids & p[:allowed_group_ids])
+            end
+        else
+          # let's defer on the parse if there is no @ in the message
+          if message.message.include?("@")
+            mentions = message.parsed_mentions.parsed_direct_mentions
+            if mentions.present?
+              AiPersona
+                .allowed_modalities(allow_chat_channel_mentions: true)
+                .find { |p| p[:username].in?(mentions) && (user.group_ids & p[:allowed_group_ids]) }
+            end
+          end
         end
       end
 
@@ -37,252 +39,169 @@ module DiscourseAi
         return if !SiteSetting.ai_bot_enabled
 
         all_chat =
-          AiAgent.allowed_modalities(
+          AiPersona.allowed_modalities(
             allow_chat_channel_mentions: true,
             allow_chat_direct_messages: true,
           )
         return if all_chat.blank?
-        return if all_chat.any? { |agent| agent[:user_id] == user.id }
+        return if all_chat.any? { |m| m[:user_id] == user.id }
 
-        agent = find_chat_agent(message, channel, user)
-        return if agent.blank?
+        persona = find_chat_persona(message, channel, user)
+        return if !persona
 
-        modality = channel.direct_message_channel? ? :chat_direct_message : :chat_channel_mention
-        route =
-          ConversationRoute.resolve(
-            authorization_user: user,
-            modality:,
-            agent_id: agent[:id],
-            selection_source: :snapshot,
-          )
+        post_ids = nil
         post_ids = context.dig(:context, :post_ids) if context.is_a?(Hash)
 
         ::Jobs.enqueue(
           :create_ai_chat_reply,
           channel_id: channel.id,
           message_id: message.id,
-          agent_id: route.agent_id,
-          bot_user_id: route.speaker.id,
-          llm_model_id: route.llm_model_id,
-          model_selection_source: route.model_source.to_s,
-          authorization_user_id: user.id,
+          persona_id: persona[:id],
           context_post_ids: post_ids,
-        )
-      rescue ConversationRoute::Error => error
-        Rails.logger.warn("Unable to schedule AI chat reply: #{error.message}")
-        report_chat_route_error(
-          message:,
-          channel:,
-          authorization_user: user,
-          agent_id: agent&.dig(:id),
-          speaker_id: agent&.dig(:user_id),
-          details: error.message,
-        )
-      end
-
-      def self.report_chat_route_error(
-        message:,
-        channel:,
-        authorization_user:,
-        agent_id:,
-        details:,
-        speaker_id: nil
-      )
-        return if message.blank? || channel.blank? || authorization_user.blank?
-        return if !authorization_user.guardian.can_join_chat_channel?(channel)
-        return if !authorization_user.guardian.can_create_chat_message?
-
-        agent_record = AiAgent.find_by(id: agent_id)
-        speaker = User.find_by(id: speaker_id)
-        if speaker.blank? || !speaker.active? || agent_record&.user_id != speaker.id ||
-             !speaker.guardian.can_join_chat_channel?(channel)
-          modality = channel.direct_message_channel? ? :chat_direct_message : :chat_channel_mention
-          agent = DiscourseAi::Agents::Agent.find_by(user: authorization_user, id: agent_id.to_i)
-          allowed =
-            (
-              if modality == :chat_direct_message
-                agent&.allow_chat_direct_messages
-              else
-                agent&.allow_chat_channel_mentions
-              end
-            )
-          return if !allowed
-
-          speaker = AiAgent.find_by(id: agent.id)&.user
-          if speaker.blank? || !speaker.active? || !speaker.guardian.can_join_chat_channel?(channel)
-            return
-          end
-        end
-
-        ChatSDK::Message.create(
-          raw: I18n.t("discourse_ai.ai_bot.reply_error", details:),
-          channel_id: channel.id,
-          guardian: speaker.guardian,
-          thread_id: message.thread_id,
-          in_reply_to_id: channel.direct_message_channel? ? message.id : nil,
-          force_thread: message.thread_id.nil? && channel.direct_message_channel?,
-          enforce_membership: !channel.direct_message_channel?,
         )
       end
 
       def self.is_bot_user_id?(user_id)
+        # this will catch everything and avoid any feedback loops
+        # we could get feedback loops between say discobot and ai-bot or third party plugins
+        # and bots
         user_id.to_i <= 0
       end
 
-      def self.schedule_reply(
-        post,
-        authorization_user: post.user,
-        requested_agent_id: nil,
-        requested_model_id: nil
-      )
-        return if is_bot_user_id?(post.user_id)
-        return if post.custom_fields[BYPASS_AI_REPLY_CUSTOM_FIELD].present?
-
-        private_message = post.topic.private_message?
-        modality = private_message ? :personal_message : :topic_mention
-        mentionables =
-          AiAgent.allowed_modalities(
-            user: authorization_user,
-            allow_personal_messages: private_message,
-            allow_topic_mentions: !private_message,
-          )
-        mentions = post.mentions.map(&:downcase)
-        if post.reply_to_post_number && post.reply_to_post&.user
-          mentions << post.reply_to_post.user.username_lower
-        end
-        mentioned_agent = mentionables.find { |agent| mentions.include?(agent[:username]) }
-        legacy_model_id = mentioned_legacy_model_id(mentions)
-        topic_agent_id = post.topic.custom_fields[TOPIC_AI_AGENT_ID_FIELD].presence
-        if !private_message && mentioned_agent.blank? && legacy_model_id.blank?
-          return
-        elsif !mentioned_agent && post.reply_to_post_number && !post.reply_to_post&.user&.bot?
-          return
-        end
-
-        requested_or_topic_agent_id = requested_agent_id.presence || topic_agent_id
-        authorized_agent_id =
-          mentionables.find { |agent| agent[:id] == requested_or_topic_agent_id.to_i }&.dig(:id)
-        authorized_agent_id ||= mentioned_agent&.dig(:id)
-        addressed_agent_user_id =
-          if requested_agent_id.present?
-            AiAgent.where(id: requested_agent_id.to_i).pick(:user_id)
-          elsif mentioned_agent
-            mentioned_agent[:user_id]
-          elsif topic_agent_id
-            AiAgent.where(id: topic_agent_id.to_i).pick(:user_id)
+      def self.get_bot_user(post:, all_llm_users:, mentionables:)
+        bot_user = nil
+        if post.topic.private_message?
+          # this ensures that we reply using the correct llm
+          # 1. if we have a preferred llm user we use that
+          # 2. if we don't just take first topic allowed user
+          # 3. if we don't have that we take the first mentionable
+          bot_user = nil
+          if preferred_user =
+               all_llm_users.find { |id, username|
+                 id == post.topic.custom_fields[BOT_USER_PREF_ID_CUSTOM_FIELD].to_i
+               }
+            bot_user = User.find_by(id: preferred_user[0])
           end
-        recipient_user =
-          if addressed_agent_user_id
-            User.find_by(id: addressed_agent_user_id)
-          else
-            legacy_recipient_for(post.topic, mentionables)
-          end
-
-        if private_message && mentioned_agent.blank? && topic_agent_id.blank? &&
-             recipient_user.blank?
-          return
+          bot_user ||=
+            post.topic.topic_allowed_users.where(user_id: all_llm_users.map(&:first)).first&.user
+          bot_user ||=
+            post
+              .topic
+              .topic_allowed_users
+              .where(user_id: mentionables.map { |m| m[:user_id] })
+              .first
+              &.user
         end
-
-        route =
-          ConversationRoute.resolve(
-            authorization_user:,
-            modality:,
-            agent_id: requested_agent_id.presence || mentioned_agent&.dig(:id) || topic_agent_id,
-            llm_model_id: requested_model_id.presence || legacy_model_id,
-            topic: post.topic,
-            recipient_user:,
-            selection_source: requested_model_id.present? || legacy_model_id ? :request : :topic,
-          )
-
-        topic_model_id = post.topic.custom_fields[TOPIC_AI_LLM_MODEL_ID_FIELD].presence
-        turn_only_agent_mention =
-          requested_agent_id.blank? && mentioned_agent.present? && topic_agent_id.present? &&
-            mentioned_agent[:id] != topic_agent_id.to_i
-        normalize_topic_route!(
-          post.topic,
-          route,
-          persist_agent: requested_agent_id.present? || topic_agent_id.blank?,
-          persist_model:
-            requested_model_id.present? || requested_agent_id.present? ||
-              ((topic_model_id.blank? || route.replaced_topic_model) && !turn_only_agent_mention),
-        )
-        add_agent_to_private_message!(post.topic, route.speaker) if private_message
-
-        bot =
-          DiscourseAi::Agents::Bot.as(
-            route.speaker,
-            agent: route.agent_class.new,
-            model: route.model,
-          )
-        new(bot, model_selection_source: route.model_source).update_playground_with(
-          post,
-          authorization_user: route.authorization_user,
-        )
-      rescue ConversationRoute::Error => error
-        Rails.logger.warn("Unable to schedule AI reply for post #{post.id}: #{error.message}")
-        report_route_error(post, error, authorized_agent_id, authorization_user:)
+        bot_user
       end
 
-      def self.report_route_error(post, error, agent_id, authorization_user:)
-        return if agent_id.blank? || authorization_user.blank?
-        return if !authorization_user.guardian.can_create_post_on_topic?(post.topic)
+      def self.schedule_reply(post)
+        return if is_bot_user_id?(post.user_id)
+        mentionables = nil
 
-        agent = DiscourseAi::Agents::Agent.find_by(user: authorization_user, id: agent_id.to_i)
-        allowed =
-          post.topic.private_message? ? agent&.allow_personal_messages : agent&.allow_topic_mentions
-        return if !allowed
+        if post.topic.private_message?
+          mentionables =
+            AiPersona.allowed_modalities(user: post.user, allow_personal_messages: true)
+        else
+          mentionables = AiPersona.allowed_modalities(user: post.user, allow_topic_mentions: true)
+        end
 
-        speaker = AiAgent.find_by(id: agent.id)&.user
-        return if speaker.blank? || !speaker.active?
-        if post.topic.private_message? && !speaker.guardian.can_create_post_on_topic?(post.topic)
+        mentioned = nil
+
+        all_llm_users =
+          LlmModel
+            .where(enabled_chat_bot: true)
+            .joins(:user)
+            .pluck("users.id", "users.username_lower")
+
+        bot_user =
+          get_bot_user(post: post, all_llm_users: all_llm_users, mentionables: mentionables)
+
+        mentions = nil
+        if mentionables.present? || (bot_user && post.topic.private_message?)
+          mentions = post.mentions.map(&:downcase)
+
+          # in case we are replying to a post by a bot
+          if post.reply_to_post_number && post.reply_to_post&.user
+            mentions << post.reply_to_post.user.username_lower
+          end
+        end
+
+        if mentionables.present?
+          mentioned = mentionables.find { |mentionable| mentions.include?(mentionable[:username]) }
+
+          # direct PM to mentionable
+          if !mentioned && bot_user
+            mentioned = mentionables.find { |mentionable| bot_user.id == mentionable[:user_id] }
+          end
+
+          # public topic so we need to use the persona user
+          bot_user ||= User.find_by(id: mentioned[:user_id]) if mentioned
+        end
+
+        if !mentioned && bot_user && post.reply_to_post_number && !post.reply_to_post.user&.bot?
+          # replying to a non-bot user
           return
         end
 
-        PostCreator.create!(
-          speaker,
-          topic_id: post.topic_id,
-          raw: I18n.t("discourse_ai.ai_bot.reply_error", details: error.message),
-          skip_validations: true,
-          skip_guardian: true,
-          custom_fields: {
-            POST_AI_AGENT_ID_FIELD => agent_id,
-          },
-        )
+        if bot_user
+          topic_persona_id = post.topic.custom_fields["ai_persona_id"]
+          topic_persona_id = topic_persona_id.to_i if topic_persona_id.present?
+
+          persona_id = mentioned&.dig(:id) || topic_persona_id
+
+          persona = nil
+
+          if persona_id
+            persona = DiscourseAi::Personas::Persona.find_by(user: post.user, id: persona_id.to_i)
+          end
+
+          if !persona && persona_name = post.topic.custom_fields["ai_persona"]
+            persona = DiscourseAi::Personas::Persona.find_by(user: post.user, name: persona_name)
+          end
+
+          # edge case, llm was mentioned in an ai persona conversation
+          if persona_id == topic_persona_id && post.topic.private_message? && persona &&
+               all_llm_users.present?
+            if !persona.force_default_llm && mentions.present?
+              mentioned_llm_user_id, _ =
+                all_llm_users.find { |id, username| mentions.include?(username) }
+
+              if mentioned_llm_user_id
+                bot_user = User.find_by(id: mentioned_llm_user_id) || bot_user
+              end
+            end
+          end
+
+          persona ||= DiscourseAi::Personas::General
+
+          bot_user = User.find(persona.user_id) if persona && persona.force_default_llm
+
+          bot = DiscourseAi::Personas::Bot.as(bot_user, persona: persona.new)
+          new(bot).update_playground_with(post)
+        end
       end
 
       def self.reply_to_post(
         post:,
         user: nil,
-        agent_id: nil,
-        llm_model_id: nil,
+        persona_id: nil,
         whisper: nil,
         add_user_to_pm: false,
         stream_reply: false,
         auto_set_title: false,
         silent_mode: false,
-        feature_name: nil,
-        attributed_user: nil,
-        feature_context: nil
+        feature_name: nil
       )
-        route =
-          ConversationRoute.resolve(
-            authorization_user: attributed_user || post.user,
-            modality: :automation,
-            agent_id:,
-            llm_model_id:,
-            speaker: user,
-            selection_source: :snapshot,
-            allow_general_fallback: false,
-          )
+        ai_persona = AiPersona.find_by(id: persona_id)
+        raise Discourse::InvalidParameters.new(:persona_id) if !ai_persona
+        persona_class = ai_persona.class_instance
+        persona = persona_class.new
 
-        playground =
-          new(
-            DiscourseAi::Agents::Bot.as(
-              route.speaker,
-              agent: route.agent_class.new,
-              model: route.model,
-            ),
-          )
+        bot_user = user || ai_persona.user
+        raise Discourse::InvalidParameters.new(:user) if bot_user.nil?
+        bot = DiscourseAi::Personas::Bot.as(bot_user, persona: persona)
+        playground = new(bot)
 
         playground.reply_to(
           post,
@@ -293,64 +212,22 @@ module DiscourseAi
           auto_set_title: auto_set_title,
           silent_mode: silent_mode,
           feature_name: feature_name,
-          attributed_user: attributed_user,
-          feature_context: feature_context,
-          authorization_user_id: route.authorization_user&.id,
         )
-      end
-
-      def self.legacy_recipient_for(topic, mentionables)
-        return if !topic.private_message?
-
-        participant_ids = topic.topic_allowed_users.pluck(:user_id)
-        agent_user_ids = participant_ids & mentionables.map { |agent| agent[:user_id] }
-        model_user_ids = participant_ids & LlmModel.with_user.pluck(:user_id)
-        recipient_ids = (agent_user_ids + model_user_ids).uniq
-
-        preferred_user_id = topic.custom_fields[BOT_USER_PREF_ID_CUSTOM_FIELD].to_i
-        if agent_user_ids.empty? && model_user_ids.include?(preferred_user_id)
-          return User.find_by(id: preferred_user_id)
-        end
-
-        if recipient_ids.many?
-          key = agent_user_ids.any? ? "ambiguous_agent" : "ambiguous_model"
-          raise ConversationRoute::Error.new(
-                  I18n.t("discourse_ai.ai_bot.errors.#{key}"),
-                  param: :target_username,
-                )
-        end
-
-        User.find_by(id: recipient_ids.first) if recipient_ids.one?
-      end
-
-      def self.mentioned_legacy_model_id(mentions)
-        return if mentions.blank?
-
-        matches = LlmModel.joins(:user).where(users: { username_lower: mentions }).pluck(:id)
-        matches.one? ? matches.first : nil
-      end
-
-      def self.normalize_topic_route!(topic, route, persist_agent:, persist_model:)
-        topic.with_lock do
-          topic.custom_fields[TOPIC_AI_AGENT_ID_FIELD] = route.agent_id if persist_agent
-          topic.custom_fields[TOPIC_AI_LLM_MODEL_ID_FIELD] = route.llm_model_id if persist_model
-          topic.save_custom_fields
+      rescue => e
+        if Rails.env.test?
+          p e
+          puts e.backtrace[0..10]
+        else
+          raise e
         end
       end
 
-      def self.add_agent_to_private_message!(topic, speaker)
-        topic.topic_allowed_users.find_or_create_by!(user_id: speaker.id)
-      rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
-        topic.topic_allowed_users.find_by!(user_id: speaker.id)
-      end
-
-      def initialize(bot, model_selection_source: :snapshot)
+      def initialize(bot)
         @bot = bot
-        @model_selection_source = model_selection_source
       end
 
-      def update_playground_with(post, authorization_user: post.user)
-        schedule_bot_reply(post, authorization_user: authorization_user) if can_attach?(post)
+      def update_playground_with(post)
+        schedule_bot_reply(post) if can_attach?(post)
       end
 
       def title_playground(post, user)
@@ -359,9 +236,7 @@ module DiscourseAi
             post,
             max_posts: 5,
             bot_usernames: available_bot_usernames,
-            include_image_uploads: include_image_uploads?,
-            include_document_uploads: include_document_uploads?,
-            allowed_attachment_types: bot.model.allowed_attachment_types,
+            include_uploads: bot.persona.class.vision_enabled,
           )
 
         # conversation context may contain tool calls, and confusing user names
@@ -401,36 +276,17 @@ module DiscourseAi
           )
 
         new_title =
-          DiscourseAi::Completions::Llm.text_from_response(
-            bot.llm.generate(title_prompt, user: user, feature_name: "bot_title"),
-          )
-        new_title = new_title.to_s.strip.split("\n").last.to_s
-        new_title = new_title.delete_prefix('"').delete_suffix('"')
+          bot
+            .llm
+            .generate(title_prompt, user: user, feature_name: "bot_title")
+            .strip
+            .split("\n")
+            .last
 
-        first_post = post.topic.first_post
-
-        if new_title.blank?
-          new_title =
-            PrettyText.excerpt(
-              first_post.cooked,
-              FALLBACK_TITLE_LENGTH,
-              strip_links: true,
-              text_entities: true,
-            )
-        end
-
-        return if new_title.blank?
-
-        new_title = new_title.truncate(SiteSetting.max_topic_title_length, separator: /\s/)
-
-        revised =
-          PostRevisor.new(first_post, post.topic).revise!(
-            bot.bot_user,
-            { title: new_title },
-            bypass_rate_limiter: true,
-          )
-
-        return if !revised
+        PostRevisor.new(post.topic.first_post, post.topic).revise!(
+          bot.bot_user,
+          title: new_title.sub(/\A"/, "").sub(/"\Z/, ""),
+        )
 
         allowed_users = post.topic.topic_allowed_users.pluck(:user_id)
         MessageBus.publish(
@@ -438,108 +294,28 @@ module DiscourseAi
           { title: post.topic.title },
           user_ids: allowed_users,
         )
-        MessageBus.publish(
-          "/discourse-ai/ai-bot/topic-titles",
-          { title: post.topic.title, topic_id: post.topic.id },
-          user_ids: allowed_users,
-        )
-      rescue StandardError => e
-        Discourse.warn_exception(e, message: "Discourse AI: Unable to generate title")
       end
 
-      def reply_to_chat_message(message, channel, context_post_ids, **options)
-        ReplyLock.synchronize(
-          "discourse_ai:reply:chat:#{channel.id}:#{message.thread_id || "channel"}",
-        ) { reply_to_chat_message_unlocked(message, channel, context_post_ids, **options) }
-      end
-
-      # Posts the queued tool action as its own chat message carrying the
-      # Approve/Reject blocks, in the same thread as the bot's reply so it sits
-      # with the conversation. It must be a fresh message (not an edit of the
-      # reply): the chat client only renders blocks present at message creation.
-      # Scoped to bot direct-message channels; elsewhere the reviewable is still
-      # created and remains actionable from /review.
-      def post_chat_tool_approval(info, channel:, guardian:, thread_id:, fallback_in_reply_to_id:)
-        return if !channel.direct_message_channel?
-
-        ChatSDK::Message.create(
-          raw: info[:details],
-          channel_id: channel.id,
-          guardian: guardian,
-          thread_id: thread_id,
-          in_reply_to_id: thread_id ? nil : fallback_in_reply_to_id,
-          force_thread: thread_id.blank?,
-          enforce_membership: !channel.direct_message_channel?,
-          blocks:
-            DiscourseAi::AiBot::ChatToolApproval.pending_blocks(info[:reviewable_id], info: info),
-        )
-      end
-
-      def reply_to(post, **options, &block)
-        ReplyLock.synchronize("discourse_ai:reply:topic:#{post.topic_id}") do
-          reply_to_unlocked(post, **options, &block)
-        end
-      end
-
-      def available_bot_usernames
-        @bot_usernames ||=
-          AiAgent
-            .joins(:user)
-            .pluck(:username)
-            .concat(available_bot_users.map(&:username))
-            .push(bot.bot_user.username)
-            .uniq
-      end
-
-      def available_bot_user_ids
-        @bot_ids ||=
-          AiAgent
-            .joins(:user)
-            .pluck("users.id")
-            .concat(available_bot_users.map(&:id))
-            .push(bot.bot_user.id)
-            .uniq
-      end
-
-      def include_image_uploads?
-        bot.agent.class.vision_enabled
-      end
-
-      def include_document_uploads?
-        bot.model.allowed_attachment_types.present?
-      end
-
-      private
-
-      def reply_to_chat_message_unlocked(
-        message,
-        channel,
-        context_post_ids,
-        custom_instructions: nil,
-        additional_messages: []
-      )
-        agent_user = User.find(bot.agent.class.user_id)
+      def reply_to_chat_message(message, channel, context_post_ids)
+        persona_user = User.find(bot.persona.class.user_id)
 
         participants = channel.user_chat_channel_memberships.map { |m| m.user.username }
 
         context_post_ids = nil if !channel.direct_message_channel?
+
+        max_chat_messages = 40
+        if bot.persona.class.respond_to?(:max_context_posts)
+          max_chat_messages = bot.persona.class.max_context_posts || 40
+        end
 
         if !channel.direct_message_channel?
           # we are interacting via mentions ... strip mention
           instruction_message = message.message.gsub(/@#{bot.bot_user.username}/i, "").strip
         end
 
-        context_llm = bot.llm
-        history_snapshot =
-          DiscourseAi::Completions::HistorySnapshot.chat(
-            message,
-            guardian: message.user.guardian,
-            bot_user_ids: available_bot_user_ids,
-          )
         context =
-          DiscourseAi::Agents::BotContext.new(
+          DiscourseAi::Personas::BotContext.new(
             participants: participants,
-            custom_instructions: custom_instructions,
             message_id: message.id,
             channel_id: channel.id,
             context_post_ids: context_post_ids,
@@ -548,27 +324,18 @@ module DiscourseAi
                 message,
                 channel: channel,
                 context_post_ids: context_post_ids,
-                include_image_uploads: include_image_uploads?,
-                include_document_uploads: include_document_uploads?,
-                allowed_attachment_types: bot.model.allowed_attachment_types,
-                max_messages: DiscourseAi::Completions::PromptMessagesBuilder::MAX_CONTEXT_MESSAGES,
-                history_snapshot: history_snapshot,
-                tokenizer: context_llm.tokenizer,
+                include_uploads: bot.persona.class.vision_enabled,
+                max_messages: max_chat_messages,
                 bot_user_ids: available_bot_user_ids,
                 instruction_message: instruction_message,
               ),
             user: message.user,
-            skip_show_thinking: true,
+            skip_tool_details: true,
             cancel_manager: DiscourseAi::Completions::CancelManager.new,
           )
 
-        context.user_turn_count = history_snapshot.user_turn_count
-        context.protected_message_count = additional_messages.length + 1
-        context.history_snapshot = history_snapshot
-        context.messages.concat(additional_messages)
-
         reply = nil
-        guardian = agent_user.guardian
+        guardian = Guardian.new(persona_user)
 
         force_thread = message.thread_id.nil? && channel.direct_message_channel?
         in_reply_to_id = channel.direct_message_channel? ? message.id : nil
@@ -584,26 +351,14 @@ module DiscourseAi
             cancel_manager: context.cancel_manager,
           )
 
-        pending_approvals = []
         new_prompts =
           bot.reply(context) do |partial, placeholder, type|
-            # no support for thinking by design
-            next if type == :thinking || type == :partial_tool
-            if type == :chat_approval
-              pending_approvals << partial
-              next
-            end
+            # no support for tools or thinking by design
+            next if type == :thinking || type == :tool_details || type == :partial_tool
             streamer << partial
           end
 
         reply = streamer.reply
-        if reply
-          reply.custom_fields[CHAT_MESSAGE_AI_LLM_NAME_FIELD] = bot.model.display_name
-          reply.custom_fields[CHAT_MESSAGE_AI_LLM_MODEL_ID_FIELD] = bot.model.id
-          reply.custom_fields[CHAT_MESSAGE_AI_AGENT_ID_FIELD] = bot.agent.id
-          reply.custom_fields[CHAT_MESSAGE_AI_AGENT_AUTHORIZATION_USER_ID_FIELD] = message.user_id
-          reply.save_custom_fields
-        end
         if new_prompts.length > 1 && reply
           ChatMessageCustomPrompt.create!(message_id: reply.id, custom_prompt: new_prompts)
         end
@@ -613,101 +368,14 @@ module DiscourseAi
           streamer = nil
         end
 
-        pending_approvals.each do |pending_approval|
-          post_chat_tool_approval(
-            pending_approval,
-            channel: channel,
-            guardian: guardian,
-            thread_id: reply&.thread_id || message.reload.thread_id,
-            fallback_in_reply_to_id: message.id,
-          )
-        end
-
         reply
-      rescue DiscourseAi::Completions::ContextPreparation::Error,
-             LlmQuotaUsage::QuotaExceededError => error
-        if error.is_a?(DiscourseAi::Completions::ContextPreparation::Error) &&
-             error.reason == "cancelled"
-          return
-        end
-        partial_context = context&.partial_raw_context
-        if streamer
-          streamer << error.message
-          reply = streamer.reply
-          if reply && partial_context.present?
-            preserved = partial_context
-            if preserved.last && [nil, "model"].include?(preserved.last[2])
-              preserved.last[0] = "#{preserved.last[0]}\n\n#{error.message}"
-            else
-              preserved << [
-                error.message,
-                agent_user.username,
-                nil,
-                nil,
-                nil,
-                nil,
-                nil,
-                partial_context.first[7],
-              ]
-            end
-            ChatMessageCustomPrompt.create!(message_id: reply.id, custom_prompt: preserved)
-          end
-        else
-          ChatSDK::Message.create(
-            raw: error.message,
-            channel_id: channel.id,
-            guardian: agent_user.guardian,
-            thread_id: message.thread_id,
-            in_reply_to_id: channel.direct_message_channel? ? message.id : nil,
-            force_thread: message.thread_id.nil? && channel.direct_message_channel?,
-            enforce_membership: !channel.direct_message_channel?,
-          )
-        end
-        nil
-      rescue LlmCreditAllocation::CreditLimitExceeded => e
-        if streamer && streamer.instance_variable_get(:@client_id)
-          ChatSDK::Channel.stop_reply(
-            channel_id: channel.id,
-            client_id: streamer.instance_variable_get(:@client_id),
-            guardian: guardian,
-            thread_id: message.thread_id,
-          )
-        end
-
-        reset_time = e.allocation&.formatted_reset_time || ""
-        locale_key = message.user.admin? ? "limit_exceeded_admin" : "limit_exceeded_user"
-        error_message =
-          I18n.t("discourse_ai.llm_credit_allocation.#{locale_key}", reset_time: reset_time)
-
-        # Convert HTML links to markdown format for chat
-        error_message =
-          error_message.gsub(%r{<a\s+href=['"]([^'"]+)['"][^>]*>([^<]+)</a>}i, '[\2](\1)')
-
-        error_reply =
-          ChatSDK::Message.create(
-            raw: error_message,
-            channel_id: channel.id,
-            guardian: guardian,
-            thread_id: message.thread_id,
-            in_reply_to_id: in_reply_to_id,
-            force_thread: force_thread,
-            enforce_membership: !channel.direct_message_channel?,
-          )
-
-        if context&.partial_raw_context.present?
-          entries = context.partial_raw_context
-          entries << [error_message, agent_user.username, nil, nil, nil, nil, nil, entries.first[7]]
-          ChatMessageCustomPrompt.create!(message_id: error_reply.id, custom_prompt: entries)
-        end
-        nil
       ensure
         streamer.done if streamer
       end
 
-      def reply_to_unlocked(
+      def reply_to(
         post,
         custom_instructions: nil,
-        additional_messages: [],
         whisper: nil,
         context_style: nil,
         add_user_to_pm: true,
@@ -715,13 +383,7 @@ module DiscourseAi
         auto_set_title: true,
         silent_mode: false,
         feature_name: nil,
-        existing_reply_post: nil,
-        append_to_existing_reply: false,
         cancel_manager: nil,
-        attributed_user: nil,
-        feature_context: nil,
-        authorization_user_id: nil,
-        visibility_user: post.user,
         &blk
       )
         # this is a multithreading issue
@@ -736,113 +398,77 @@ module DiscourseAi
 
         reply = +""
         post_streamer = nil
-        stream_user_ids = nil
-        stream_group_ids = nil
 
         post_type =
           (
-            if whisper || post.post_type == Post.types[:whisper]
+            if (whisper || post.post_type == Post.types[:whisper])
               Post.types[:whisper]
             else
               Post.types[:regular]
             end
           )
 
-        context_llm = bot.llm
-        visibility_guardian = visibility_user.guardian
-        history_snapshot =
-          DiscourseAi::Completions::HistorySnapshot.post(
-            post,
-            guardian: visibility_guardian,
-            bot_usernames: available_bot_usernames,
-          )
+        # safeguard
+        max_context_posts = 40
+        if bot.persona.class.respond_to?(:max_context_posts)
+          max_context_posts = bot.persona.class.max_context_posts || 40
+        end
+
         context =
-          DiscourseAi::Agents::BotContext.new(
+          DiscourseAi::Personas::BotContext.new(
             post: post,
-            user: attributed_user,
-            guardian: visibility_guardian,
             custom_instructions: custom_instructions,
-            feature_name: feature_name.presence || "bot",
-            feature_context: feature_context,
+            feature_name: feature_name,
             messages:
               DiscourseAi::Completions::PromptMessagesBuilder.messages_from_post(
                 post,
-                guardian: visibility_guardian,
                 style: context_style,
-                max_posts: DiscourseAi::Completions::PromptMessagesBuilder::MAX_CONTEXT_MESSAGES,
-                history_snapshot: history_snapshot,
-                tokenizer: context_llm.tokenizer,
-                include_image_uploads: include_image_uploads?,
-                include_document_uploads: include_document_uploads?,
-                allowed_attachment_types: bot.model.allowed_attachment_types,
+                max_posts: max_context_posts,
+                include_uploads: bot.persona.class.vision_enabled,
                 bot_usernames: available_bot_usernames,
               ),
           )
 
-        context.user_turn_count = history_snapshot.user_turn_count
-        context.protected_message_count = additional_messages.length + 1
-        context.history_snapshot = history_snapshot
-        context.messages.concat(additional_messages)
-
         reply_user = bot.bot_user
-        if bot.agent.class.respond_to?(:user_id)
-          reply_user = User.find_by(id: bot.agent.class.user_id) || reply_user
-        end
-
-        original_reply_raw = existing_reply_post&.raw
-        if existing_reply_post
-          if existing_reply_post.topic_id != post.topic_id ||
-               !EntryPoint.ai_response?(existing_reply_post)
-            raise Discourse::InvalidParameters.new(:reply_post_id)
-          end
-
-          reply_user = existing_reply_post.user
-
-          if append_to_existing_reply
-            reply << existing_reply_post.raw << "\n\n"
-            previous_custom_prompts =
-              existing_reply_post.post_custom_prompt&.custom_prompt.presence ||
-                [[existing_reply_post.raw, reply_user.username]]
-          end
+        if bot.persona.class.respond_to?(:user_id)
+          reply_user = User.find_by(id: bot.persona.class.user_id) || reply_user
         end
 
         stream_reply = post.topic.private_message? if stream_reply.nil?
 
-        # we need to ensure agent user is allowed to reply to the pm
+        # we need to ensure persona user is allowed to reply to the pm
         if post.topic.private_message? && add_user_to_pm
-          self.class.add_agent_to_private_message!(post.topic, reply_user)
+          if !post.topic.topic_allowed_users.exists?(user_id: reply_user.id)
+            post.topic.topic_allowed_users.create!(user_id: reply_user.id)
+          end
+          # edge case, maybe the llm user is missing?
+          if !post.topic.topic_allowed_users.exists?(user_id: bot.bot_user.id)
+            post.topic.topic_allowed_users.create!(user_id: bot.bot_user.id)
+          end
+
+          # we store the id of the last bot_user, this is then used to give it preference
+          if post.topic.custom_fields[BOT_USER_PREF_ID_CUSTOM_FIELD].to_i != bot.bot_user.id
+            post.topic.custom_fields[BOT_USER_PREF_ID_CUSTOM_FIELD] = bot.bot_user.id
+            post.topic.save_custom_fields
+          end
         end
 
         if stream_reply
-          reply_post = existing_reply_post
+          reply_post =
+            PostCreator.create!(
+              reply_user,
+              topic_id: post.topic_id,
+              raw: "",
+              skip_validations: true,
+              skip_jobs: true,
+              post_type: post_type,
+              skip_guardian: true,
+              custom_fields: {
+                DiscourseAi::AiBot::POST_AI_LLM_NAME_FIELD => bot.llm.llm_model.display_name,
+              },
+            )
 
-          if !reply_post
-            reply_post =
-              PostCreator.create!(
-                reply_user,
-                topic_id: post.topic_id,
-                raw: "",
-                skip_validations: true,
-                skip_jobs: true,
-                post_type: post_type,
-                skip_guardian: true,
-                custom_fields: ai_custom_fields(authorization_user_id: authorization_user_id),
-              )
-          end
-
-          save_ai_custom_fields(reply_post, authorization_user_id: authorization_user_id)
-
-          stream_user_ids = reply_post.topic.allowed_users.pluck(:id)
-          stream_group_ids = reply_post.topic.allowed_groups.pluck(:id)
-
-          publish_update(
-            reply_post,
-            payload: {
-              raw: reply.dup,
-            },
-            user_ids: stream_user_ids,
-            group_ids: stream_group_ids,
-          )
+          publish_update(reply_post, { raw: reply_post.cooked })
 
           redis_stream_key = "gpt_cancel:#{reply_post.id}"
           Discourse.redis.setex(redis_stream_key, MAX_STREAM_DELAY_SECONDS, 1)
@@ -860,61 +486,39 @@ module DiscourseAi
           )
         end
 
-        context.skip_show_thinking ||= !bot.agent.class.show_thinking
+        context.skip_tool_details ||= !bot.persona.class.tool_details
         post_streamer = PostStreamer.new(delay: Rails.env.test? ? 0 : 0.5) if stream_reply
         started_thinking = false
 
         new_custom_prompts =
           bot.reply(context) do |partial, placeholder, type|
-            if context.skip_show_thinking && %i[thinking partial_tool partial_invoke].include?(type)
-              next
-            end
-            next if type == :structured_output && !partial.finished?
-
-            if should_start_thinking?(partial:, context:, type:, started_thinking:, placeholder:)
-              reply << "\n\n" if reply.present? && !reply.end_with?("\n")
-              reply << "<details class='ai-thinking'><summary>#{I18n.t("discourse_ai.ai_bot.thinking")}</summary>\n\n"
+            if type == :thinking && !started_thinking
+              reply << "<details><summary>#{I18n.t("discourse_ai.ai_bot.thinking")}</summary>"
               started_thinking = true
-            elsif should_stop_thinking?(partial:, context:, type:, started_thinking:, placeholder:)
-              reply << "\n" if !reply.end_with?("\n")
+            end
+
+            if type != :thinking && started_thinking
               reply << "</details>\n\n"
               started_thinking = false
-            end
-
-            if type == :thinking && partial.present? && placeholder.blank? && started_thinking &&
-                 !reply.end_with?("\n")
-              reply << "\n\n"
             end
 
             reply << partial
             raw = reply.dup
             raw << "\n\n" << placeholder if placeholder.present?
 
-            if blk && type != :thinking && type != :partial_tool && type != :partial_invoke
+            if blk && type != :tool_details && type != :partial_tool && type != :partial_invoke
               blk.call(partial)
             end
 
             if post_streamer
               post_streamer.run_later do
                 Discourse.redis.expire(redis_stream_key, MAX_STREAM_DELAY_SECONDS)
-                publish_update(
-                  reply_post,
-                  payload: {
-                    raw: raw,
-                  },
-                  user_ids: stream_user_ids,
-                  group_ids: stream_group_ids,
-                )
+                publish_update(reply_post, { raw: raw })
               end
             end
           end
 
         return if reply.blank? || silent_mode
-
-        if started_thinking
-          reply << "\n\n</details>"
-          started_thinking = false
-        end
 
         if stream_reply
           post_streamer.finish
@@ -922,7 +526,7 @@ module DiscourseAi
 
           # land the final message prior to saving so we don't clash
           reply_post.cooked = PrettyText.cook(reply)
-          publish_final_update(reply_post, user_ids: stream_user_ids, group_ids: stream_group_ids)
+          publish_final_update(reply_post)
 
           reply_post.revise(
             bot.bot_user,
@@ -930,16 +534,6 @@ module DiscourseAi
             skip_validations: true,
             skip_revision: true,
           )
-        elsif existing_reply_post
-          reply_post = existing_reply_post
-          reply_post.revise(
-            bot.bot_user,
-            { raw: reply },
-            skip_validations: true,
-            force_new_version: true,
-            bypass_rate_limiter: true,
-          )
-          save_ai_custom_fields(reply_post, authorization_user_id: authorization_user_id)
         else
           reply_post =
             PostCreator.create!(
@@ -949,105 +543,24 @@ module DiscourseAi
               skip_validations: true,
               post_type: post_type,
               skip_guardian: true,
-              custom_fields: ai_custom_fields(authorization_user_id: authorization_user_id),
             )
         end
 
         # a bit messy internally, but this is how we tell
         is_thinking = new_custom_prompts.any? { |prompt| prompt[4].present? }
 
-        if previous_custom_prompts || is_thinking || new_custom_prompts.length > 1
+        if is_thinking || new_custom_prompts.length > 1
           reply_post.post_custom_prompt ||= reply_post.build_post_custom_prompt(custom_prompt: [])
-          prompt = (previous_custom_prompts || []).dup
+          prompt = reply_post.post_custom_prompt.custom_prompt || []
           prompt.concat(new_custom_prompts)
           reply_post.post_custom_prompt.update!(custom_prompt: prompt)
-        elsif !append_to_existing_reply
-          reply_post.post_custom_prompt&.destroy!
         end
 
-        reply_completed = true
         reply_post
-      rescue DiscourseAi::Completions::ContextPreparation::Error => error
-        return if silent_mode || error.reason == "cancelled"
-        failure_reply =
-          "#{reply}#{started_thinking ? "\n\n</details>" : ""}\n\n#{error.message}".strip
-        failure_reply = "#{original_reply_raw}\n\n#{error.message}" if existing_reply_post &&
-          reply.blank?
-        if reply_post
-          reply_post.revise(
-            bot.bot_user,
-            { raw: failure_reply },
-            skip_validations: true,
-            skip_revision: true,
-          )
-        else
-          reply_post =
-            PostCreator.create!(
-              bot.bot_user,
-              topic_id: post.topic_id,
-              raw: failure_reply,
-              skip_validations: true,
-              skip_guardian: true,
-              post_type: post_type,
-              custom_fields: ai_custom_fields(authorization_user_id: authorization_user_id),
-            )
-        end
-        persist_failure_evidence(reply_post, error.raw_context, previous_custom_prompts)
-        blk&.call(error.message)
-        nil
-      rescue LlmCreditAllocation::CreditLimitExceeded => e
-        return if silent_mode
-
-        reset_time = e.allocation&.formatted_reset_time || ""
-        locale_key = post.user.admin? ? "limit_exceeded_admin" : "limit_exceeded_user"
-        error_message =
-          I18n.t("discourse_ai.llm_credit_allocation.#{locale_key}", reset_time: reset_time)
-
-        if reply_post
-          reply = original_reply_raw if existing_reply_post && reply.blank?
-          reply = "#{reply}#{started_thinking ? "\n\n</details>" : ""}\n\n#{error_message}"
-          reply_post.revise(
-            bot.bot_user,
-            { raw: reply },
-            skip_validations: true,
-            skip_revision: true,
-          )
-        else
-          reply_post =
-            PostCreator.create!(
-              bot.bot_user,
-              topic_id: post.topic_id,
-              raw: error_message,
-              skip_validations: true,
-              skip_guardian: true,
-              post_type: post_type,
-              custom_fields: ai_custom_fields(authorization_user_id: authorization_user_id),
-            )
-        end
-
-        persist_failure_evidence(reply_post, context&.partial_raw_context, previous_custom_prompts)
-        nil
       rescue => e
-        if !reply_post && context&.partial_raw_context.present?
-          details = e.message.to_s
-          failure_reply =
-            "#{reply}#{started_thinking ? "\n\n</details>" : ""}\n\n#{I18n.t("discourse_ai.ai_bot.reply_error", details: details)}"
-          reply_post =
-            PostCreator.create!(
-              bot.bot_user,
-              topic_id: post.topic_id,
-              raw: failure_reply,
-              skip_validations: true,
-              skip_guardian: true,
-              post_type: post_type,
-              custom_fields: ai_custom_fields(authorization_user_id: authorization_user_id),
-            )
-        end
         if reply_post
-          reply = original_reply_raw if existing_reply_post && reply.blank?
           details = e.message.to_s
-          reply =
-            "#{reply}#{started_thinking ? "\n\n</details>" : ""}\n\n#{I18n.t("discourse_ai.ai_bot.reply_error", details: details)}"
+          reply = "#{reply}\n\n#{I18n.t("discourse_ai.ai_bot.reply_error", details: details)}"
           reply_post.revise(
             bot.bot_user,
             { raw: reply },
@@ -1055,7 +568,6 @@ module DiscourseAi
             skip_revision: true,
           )
         end
-        persist_failure_evidence(reply_post, context&.partial_raw_context, previous_custom_prompts)
         raise e
       ensure
         context.cancel_manager.stop_monitor if context&.cancel_manager
@@ -1067,101 +579,37 @@ module DiscourseAi
           reply_post.topic.update!(participant_count: 2)
         end
         post_streamer&.finish(skip_callback: true)
-        if stream_reply
-          publish_final_update(reply_post, user_ids: stream_user_ids, group_ids: stream_group_ids)
-        end
-        if reply_completed && reply_post && post.post_number == 1 && post.topic.private_message? &&
-             auto_set_title && !context.cancel_manager&.cancelled?
+        publish_final_update(reply_post) if stream_reply
+        if reply_post && post.post_number == 1 && post.topic.private_message? && auto_set_title
           title_playground(reply_post, post.user)
         end
       end
 
-      def persist_failure_evidence(reply_post, entries, previous_custom_prompts = nil)
-        return if !reply_post || entries.blank?
-        preserved = (previous_custom_prompts || []).dup + entries
-        if preserved.last && [nil, "model"].include?(preserved.last[2])
-          preserved.last[0] = "#{preserved.last[0]}\n\n#{reply_post.raw}"
-        else
-          preserved << [
-            reply_post.raw,
-            bot.bot_user.username,
-            nil,
-            nil,
-            nil,
-            nil,
-            nil,
-            entries.first[7],
-          ]
-        end
-        record = reply_post.post_custom_prompt || reply_post.build_post_custom_prompt
-        record.update!(custom_prompt: preserved)
+      def available_bot_usernames
+        @bot_usernames ||=
+          AiPersona.joins(:user).pluck(:username).concat(available_bot_users.map(&:username))
       end
 
-      def ai_custom_fields(authorization_user_id: nil)
-        fields = {
-          DiscourseAi::AiBot::POST_AI_LLM_NAME_FIELD => bot.llm.llm_model.display_name,
-          DiscourseAi::AiBot::POST_AI_LLM_MODEL_ID_FIELD => bot.llm.llm_model.id,
-          DiscourseAi::AiBot::POST_AI_AGENT_ID_FIELD => bot.agent.id,
-        }
-        if authorization_user_id
-          fields[
-            DiscourseAi::AiBot::POST_AI_AGENT_AUTHORIZATION_USER_ID_FIELD
-          ] = authorization_user_id
-        end
-        fields
+      def available_bot_user_ids
+        @bot_ids ||= AiPersona.joins(:user).pluck("users.id").concat(available_bot_users.map(&:id))
       end
 
-      def save_ai_custom_fields(reply_post, authorization_user_id: nil)
-        reply_post.custom_fields.merge!(ai_custom_fields(authorization_user_id:))
-        reply_post.save_custom_fields
-      end
-
-      def should_stop_thinking?(partial:, context:, type:, started_thinking:, placeholder:)
-        return false if context.skip_show_thinking
-        return false if !started_thinking
-        return false if partial.blank? && placeholder.blank?
-        return true if type.nil? || type == :structured_output || type == :custom_raw
-
-        false
-      end
-
-      def should_start_thinking?(partial:, context:, type:, started_thinking:, placeholder:)
-        return false if context.skip_show_thinking
-        return false if started_thinking
-        return false if partial.blank? && placeholder.blank?
-        return false if type.nil? || type == :structured_output || type == :custom_raw
-
-        true
-      end
+      private
 
       def available_bot_users
-        @available_bots ||= User.where(id: EntryPoint.historical_bot_user_ids)
+        @available_bots ||=
+          User.joins("INNER JOIN llm_models llm ON llm.user_id = users.id").where(active: true)
       end
 
-      def publish_final_update(reply_post, user_ids:, group_ids:)
+      def publish_final_update(reply_post)
         return if @published_final_update
         if reply_post
-          publish_update(
-            reply_post,
-            payload: {
-              cooked: reply_post.cooked,
-              done: true,
-            },
-            user_ids: user_ids,
-            group_ids: group_ids,
-          )
+          publish_update(reply_post, { cooked: reply_post.cooked, done: true })
           # we subscribe at position -2 so we will always get this message
           # moving all cooked on every page load is wasteful ... this means
           # we have a benign message at the end, 2 is set to ensure last message
           # is delivered
-          publish_update(
-            reply_post,
-            payload: {
-              noop: true,
-            },
-            user_ids: user_ids,
-            group_ids: group_ids,
-          )
+          publish_update(reply_post, { noop: true })
           @published_final_update = true
         end
       end
@@ -1169,22 +617,20 @@ module DiscourseAi
       def can_attach?(post)
         return false if bot.bot_user.nil?
         return false if post.topic.private_message? && post.post_type != Post.types[:regular]
-        return false if !post.user.in_any_groups?(SiteSetting.ai_bot_allowed_groups_map)
+        return false if (SiteSetting.ai_bot_allowed_groups_map & post.user.group_ids).blank?
         return false if post.custom_fields[BYPASS_AI_REPLY_CUSTOM_FIELD].present?
 
         true
       end
 
-      def schedule_bot_reply(post, authorization_user: post.user)
-        agent_id = DiscourseAi::Agents::Agent.system_agents[bot.agent.class] || bot.agent.class.id
+      def schedule_bot_reply(post)
+        persona_id =
+          DiscourseAi::Personas::Persona.system_personas[bot.persona.class] || bot.persona.class.id
         ::Jobs.enqueue(
           :create_ai_reply,
           post_id: post.id,
           bot_user_id: bot.bot_user.id,
-          agent_id: agent_id,
-          llm_model_id: bot.model.id,
-          model_selection_source: @model_selection_source.to_s,
-          authorization_user_id: authorization_user&.id,
+          persona_id: persona_id,
         )
       end
 
@@ -1198,18 +644,14 @@ module DiscourseAi
         }
       end
 
-      def publish_update(bot_reply_post, payload:, user_ids:, group_ids:)
-        return if user_ids.blank? && group_ids.blank?
-
+      def publish_update(bot_reply_post, payload)
         payload = { post_id: bot_reply_post.id, post_number: bot_reply_post.post_number }.merge(
           payload,
         )
-
         MessageBus.publish(
           "discourse-ai/ai-bot/topic/#{bot_reply_post.topic_id}",
           payload,
-          user_ids: user_ids.presence,
-          group_ids: group_ids.presence,
+          user_ids: bot_reply_post.topic.allowed_user_ids,
           max_backlog_size: 2,
           max_backlog_age: MAX_STREAM_DELAY_SECONDS,
         )

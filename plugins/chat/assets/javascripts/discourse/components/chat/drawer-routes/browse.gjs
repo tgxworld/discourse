@@ -8,6 +8,7 @@ import Navbar from "discourse/plugins/chat/discourse/components/chat/navbar";
 export default class ChatDrawerRoutesBrowse extends Component {
   @service chat;
   @service chatStateManager;
+  @service chatHistory;
 
   <template>
     <div class="c-drawer-routes --browse">

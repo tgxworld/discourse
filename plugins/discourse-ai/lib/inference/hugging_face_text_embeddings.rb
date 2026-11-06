@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module DiscourseAi
+module ::DiscourseAi
   module Inference
     class HuggingFaceTextEmbeddings
       def initialize(endpoint, key, referer = Discourse.base_url)
@@ -54,13 +54,7 @@ module DiscourseAi
       end
 
       def perform!(content)
-        response = request(content)
-        if response.status != 200
-          raise EmbeddingInferenceError.from_response(
-                  provider: EmbeddingDefinition::HUGGING_FACE,
-                  response: response,
-                )
-        end
+        response = do_request!(content)
 
         JSON.parse(response.body, symbolize_names: true).first
       end
@@ -68,13 +62,6 @@ module DiscourseAi
       private
 
       def do_request!(content)
-        response = request(content)
-        raise Net::HTTPBadResponse.new(response.body.to_s) if response.status != 200
-
-        response
-      end
-
-      def request(content)
         headers = { "Referer" => referer, "Content-Type" => "application/json" }
         body = { inputs: content, truncate: true }.to_json
 
@@ -84,7 +71,11 @@ module DiscourseAi
         end
 
         conn = Faraday.new { |f| f.adapter FinalDestination::FaradayAdapter }
-        conn.post(endpoint, body, headers)
+        response = conn.post(endpoint, body, headers)
+
+        raise Net::HTTPBadResponse.new(response.body.to_s) if ![200].include?(response.status)
+
+        response
       end
     end
   end

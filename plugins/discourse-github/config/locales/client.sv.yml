@@ -5,12 +5,5 @@
 # https://translate.discourse.org/
 
 sv:
-  js:
-    github:
-      pr_status:
-        draft: "Utkast"
-        open: "Öppen"
-        approved: "Godkända"
-        closed: "Stängda"
   replace_github_link:
     edit_reason: "Github-länken ersattes med en permanent länk"

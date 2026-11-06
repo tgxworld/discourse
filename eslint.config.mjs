@@ -4,42 +4,34 @@ export default [
   ...DiscourseRecommended,
   {
     rules: {
-      "ember/template-no-capital-arguments": "off",
-      "ember/template-require-button-type": "off",
+      "qunit/no-assert-equal": "error",
+      "qunit/no-loose-assertions": "error",
+      "ember/no-classic-components": "error",
     },
   },
   {
     ignores: [
+      "app/assets/javascripts/ember-addons/",
+      "lib/javascripts/locale/*",
+      "lib/javascripts/messageformat.js",
+      "lib/javascripts/messageformat-lookup.js",
       "plugins/**/lib/javascripts/locale",
-      "plugins/blog/vendor/",
       "plugins/discourse-math/public",
       "public/",
       "vendor/",
+      "app/assets/javascripts/discourse/tests/fixtures",
       "**/node_modules/",
       "spec/",
-      "frontend/discourse/dist/",
-      "**/*.d.ts",
-      "**/*.d.*.ts",
-      "frontend/discourse-types/external-types",
-      "frontend/discourse-types/dts-generator.{js,ts}",
+      "app/assets/javascripts/discourse/dist/",
       "tmp/",
     ],
   },
   {
-    files: ["themes/**/*.{js,gjs,ts,gts}"],
+    files: ["themes/**/*.{js,gjs}"],
     languageOptions: {
       globals: {
         settings: "readonly",
         themePrefix: "readonly",
-      },
-    },
-  },
-  {
-    languageOptions: {
-      parserOptions: {
-        babelOptions: {
-          configFile: false,
-        },
       },
     },
   },

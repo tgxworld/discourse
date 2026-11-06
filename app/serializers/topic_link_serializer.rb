@@ -12,14 +12,6 @@ class TopicLinkSerializer < ApplicationSerializer
              :domain,
              :root_domain
 
-  def url
-    if object.internal && SiteSetting.force_https && object.url.start_with?("http://")
-      object.url.sub("http://", "https://")
-    else
-      object.url
-    end
-  end
-
   def attachment
     Discourse.store.has_been_uploaded?(object.url)
   end

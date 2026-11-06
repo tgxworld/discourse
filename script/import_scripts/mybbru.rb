@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "csv"
-require_relative "base"
+require File.expand_path(File.dirname(__FILE__) + "/base.rb")
 
 # Import script for forums created via mybb.ru service (or anything else that uses this simple JSON format),
 # using export format produced by https://github.com/AlexP11223/MybbRuUserscripts

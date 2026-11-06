@@ -4,14 +4,14 @@ class WatchedWord < ActiveRecord::Base
   MAX_WORDS_PER_ACTION = 2000
 
   before_validation do
-    self.word = WatchedWord.normalize_word(word)
-    self.replacement = WatchedWord.normalize_word(replacement) if replacement.present?
+    self.word = WatchedWord.normalize_word(self.word)
+    self.replacement = WatchedWord.normalize_word(self.replacement) if self.replacement.present?
   end
 
   before_validation do
-    if action == WatchedWord.actions[:link] && replacement !~ %r{\Ahttps?://}
+    if self.action == WatchedWord.actions[:link] && self.replacement !~ %r{\Ahttps?://}
       self.replacement =
-        "#{Discourse.base_url}#{replacement&.starts_with?("/") ? "" : "/"}#{replacement}"
+        "#{Discourse.base_url}#{self.replacement&.starts_with?("/") ? "" : "/"}#{self.replacement}"
     end
   end
 
@@ -28,8 +28,8 @@ class WatchedWord < ActiveRecord::Base
     end
   end
 
-  after_destroy -> { WordWatcher.clear_cache! }
   after_save -> { WordWatcher.clear_cache! }
+  after_destroy -> { WordWatcher.clear_cache! }
 
   scope :for,
         ->(word:) do
@@ -120,14 +120,14 @@ end
 # Table name: watched_words
 #
 #  id                    :integer          not null, primary key
-#  action                :integer          not null
-#  case_sensitive        :boolean          default(FALSE), not null
-#  html                  :boolean          default(FALSE), not null
-#  replacement           :string
 #  word                  :string           not null
+#  action                :integer          not null
 #  created_at            :datetime         not null
 #  updated_at            :datetime         not null
+#  replacement           :string
+#  case_sensitive        :boolean          default(FALSE), not null
 #  watched_word_group_id :bigint
+#  html                  :boolean          default(FALSE), not null
 #
 # Indexes
 #

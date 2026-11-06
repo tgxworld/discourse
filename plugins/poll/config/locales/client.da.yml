@@ -33,8 +33,6 @@ da:
       cast-votes:
         title: "Afgiv dine stemmer"
         label: "Stem nu!"
-      keep-vote:
-        label: "Tilbage"
       show-results:
         title: "Vis afstemningsresultat"
         label: "Resultater"
@@ -80,6 +78,7 @@ da:
       error_while_fetching_voters: "Beklager, der opstod en fejl med at vise deltagerne."
       error_while_exporting_results: "Beklager, der opstod en fejl under eksport af afstemningsresultater."
       ui_builder:
+        title: Opret afstemning
         insert: Indsæt afstemning
         help:
           options_min_count: Indtast mindst 1 valgmulighed.
@@ -118,3 +117,5 @@ da:
           add: Tilføj mulighed
         automatic_close:
           label: Luk afstemning automatisk
+        show_advanced: "Vis Avancerede Indstillinger"
+        hide_advanced: "Skjul Avancerede Indstillinger"

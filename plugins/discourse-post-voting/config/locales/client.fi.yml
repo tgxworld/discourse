@@ -5,12 +5,14 @@
 # https://translate.discourse.org/
 
 fi:
+  admin_js:
+    site_settings:
+      categories:
+        post_voting: Viestiäänestys
   post_voting:
     reviewables:
       comment_already_handled: "Kiitos, mutta olemme jo käsitelleet tämän kommentin ja todenneet, ettei sitä tarvitse liputtaa uudelleen."
   js:
-    discourse_post_voting:
-      title: "Viestiäänestys"
     notifications:
       question_answer_user_commented: "<span>%{username}</span> %{description}"
       titles:
@@ -26,14 +28,15 @@ fi:
         label: "Luo viestiäänestysketju"
       composer_actions:
         create_as_post_voting:
+          label: "Viestiäänestys käyttöön/pois käytöstä"
           desc: "Äänestettäviä viestejä sisältävä ketju luodaan"
         remove_as_post_voting:
+          label: "Poista viestiäänestys"
           desc: "Ketju luodaan tavallisessa muodossa"
     vote:
       already_voted: "Voit äänestää vain yhtä vastausta tähän kysymykseen."
       user_over_limit: "Et voi ylittää luottamustasosi äänimäärää."
       one_vote_per_post: "Voit äänestää kutakin viestiä vain kerran."
-      toggle_voters: "Näytä äänestäneet"
     last_answer_lowercase: viimeisin vastaus
     answer_lowercase:
       one: vastaus
@@ -55,8 +58,6 @@ fi:
           edit: "muokkaa"
           cancel: "peruuta"
           add: "Lisää kommentti"
-          actions:
-            delete: "Poista kommentti"
           show:
             one: Näytä %{count} kommentti lisää
             other: Näytä %{count} kommenttia lisää
@@ -110,9 +111,6 @@ fi:
         answer_count:
           one: "%{count} vastaus"
           other: "%{count} vastausta"
-        voters_count_diff:
-          one: "ja %{count} muu käyttäjä..."
-          other: "ja %{count} muuta käyttäjää..."
     review:
       transcript:
         view: "Näytä aiempien viestien transkriptio"

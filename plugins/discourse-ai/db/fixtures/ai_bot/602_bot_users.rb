@@ -1,3 +1,3 @@
 # frozen_string_literal: true
 
-DiscourseAi::AiBot::UserFlair.sync_all!
+DiscourseAi::AiBot::SiteSettingsExtension.enable_or_disable_ai_bots

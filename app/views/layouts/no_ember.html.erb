@@ -13,13 +13,12 @@
   <%- end %>
 
   <%= yield(:no_ember_head) %>
-  <%= markdown_alternate_link_tag %>
 
   <%- if allow_plugins? %>
     <%= build_plugin_html 'server:before-head-close' %>
   <%- end -%>
 
-  <%= preload_script "js/pageview" %>
+  <%= preload_script "pageview" %>
 </head>
 <body class="no-ember <%= @custom_body_class %>">
   <%- if allow_plugins? %>

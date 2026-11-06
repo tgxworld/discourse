@@ -15,12 +15,12 @@ class ThemeSerializer < BasicThemeSerializer
              :enabled?,
              :disabled_at,
              :theme_fields,
-             :screenshot_dark_url,
-             :screenshot_light_url,
-             :system,
-             :only_theme_color_schemes
+             :screenshot_url,
+             :system
 
   has_one :color_scheme, serializer: ColorSchemeSerializer, embed: :object
+  has_one :owned_color_palette, serializer: ColorSchemeSerializer, embed: :object
+  has_one :base_palette, serializer: ColorSchemeSerializer, embed: :object
   has_one :user, serializer: UserNameSerializer, embed: :object
   has_one :disabled_by, serializer: UserNameSerializer, embed: :object
 
@@ -58,6 +58,14 @@ class ThemeSerializer < BasicThemeSerializer
 
   def parent_themes
     object.parent_themes
+  end
+
+  def base_palette
+    ColorScheme.base
+  end
+
+  def include_base_palette?
+    object.color_scheme_id.blank? && object.owned_color_palette.blank?
   end
 
   def settings
@@ -105,9 +113,5 @@ class ThemeSerializer < BasicThemeSerializer
 
   def system
     object.system?
-  end
-
-  def only_theme_color_schemes
-    object.theme_modifier_set&.only_theme_color_schemes || false
   end
 end

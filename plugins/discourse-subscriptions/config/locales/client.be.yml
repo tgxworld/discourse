@@ -25,9 +25,6 @@ be:
           status: Статус
           created_at: створаны
           cancel: адмена
-      subscribe:
-        countries:
-          BY: "Беларусь"
       billing:
         email: Электронная пошта
       admin:

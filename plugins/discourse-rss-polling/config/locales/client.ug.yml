@@ -12,13 +12,3 @@ ug:
         feed_url: تور ئادرېسى
         discourse_category: سەھىپە
         discourse_tags: بەلگە
-        feeds:
-          edit: تەھرىر
-          delete: ئۆچۈر
-          save: ساقلا
-        test:
-          title: ئالدىن كۆزەت
-          dismiss: پەرۋا قىلما
-        status:
-          enabled: قوزغىتىلدى
-          disabled: چەكلەندى

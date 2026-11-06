@@ -66,7 +66,7 @@ module DiscourseAi
         end
 
         def max_prompt_tokens
-          max_prompt_tokens_with_reserved_output
+          llm_model.max_prompt_tokens
         end
 
         def native_tool_support?
@@ -111,7 +111,7 @@ module DiscourseAi
           config[:top_k] = ic[:top_k] if ic[:top_k]
           config[:stopSequences] = ic[:stop_sequences] if ic[:stop_sequences]
 
-          config.presence
+          config.present? ? config : nil
         end
 
         def detect_format(mime_type)
@@ -140,8 +140,6 @@ module DiscourseAi
         end
 
         def user_msg(msg)
-          content = prepend_user_id(DiscourseAi::Completions::Prompt.text_only(msg), msg)
-
           images = nil
           if vision_support?
             encoded_uploads = prompt.encoded_uploads(msg)
@@ -158,7 +156,7 @@ module DiscourseAi
             end
           end
 
-          { role: "user", content: content, images: images }
+          { role: "user", content: DiscourseAi::Completions::Prompt.text_only(msg), images: images }
         end
 
         def model_msg(msg)

@@ -1,8 +1,7 @@
 # frozen_string_literal: true
 
-describe "hide_user_profiles_from_public" do
+describe "hide_user_profiles_from_public", type: :system do
   let(:user) { Fabricate(:user) }
-
   before { SiteSetting.hide_user_profiles_from_public = true }
 
   it "displays an error when navigating straight to a profile" do
@@ -26,6 +25,6 @@ describe "hide_user_profiles_from_public" do
     expect(page).to have_current_path("/u/#{user.username}")
 
     find(".error-page .buttons .btn-primary", text: "Back").click
-    expect(page).to have_current_path(post.url).or have_current_path(post.topic.relative_url)
+    expect(page).to have_current_path(post.url)
   end
 end

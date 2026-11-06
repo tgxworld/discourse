@@ -3,34 +3,15 @@
 module DiscourseAi
   module Translation
     class TopicLocalizer
-      include LocalizableQuota
-
-      def self.localize(
-        topic,
-        target_locale = I18n.locale,
-        topic_title_llm_model: nil,
-        post_raw_llm_model: nil
-      )
+      def self.localize(topic, target_locale = I18n.locale)
         return if topic.blank? || target_locale.blank? || topic.locale == target_locale.to_s
 
         target_locale = target_locale.to_s.sub("-", "_")
 
         translated_title =
-          TopicTitleTranslator.new(
-            text: topic.title,
-            target_locale:,
-            topic:,
-            llm_model: topic_title_llm_model,
-          ).translate
-        translated_excerpt = nil
-
+          TopicTitleTranslator.new(text: topic.title, target_locale:, topic:).translate
         translated_excerpt =
-          PostRawTranslator.new(
-            text: topic.excerpt,
-            target_locale:,
-            topic:,
-            llm_model: post_raw_llm_model,
-          ).translate if topic.excerpt.present?
+          PostRawTranslator.new(text: topic.excerpt, target_locale:, topic:).translate
 
         localization =
           TopicLocalization.find_or_initialize_by(topic_id: topic.id, locale: target_locale)
@@ -41,10 +22,6 @@ module DiscourseAi
         localization.localizer_user_id = Discourse.system_user.id
         localization.save!
         localization
-      end
-
-      def self.model_name
-        "topic"
       end
     end
   end

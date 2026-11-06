@@ -11,11 +11,11 @@
   &__buttons {
     display: flex;
     flex-wrap: wrap;
-    width: 100%;
     gap: 0.5rem;
 
-    button {
-      flex: 1;
+    .chat-drawer-content & {
+      flex-direction: column;
+      width: 100%;
     }
   }
 

@@ -4,16 +4,13 @@ desc "Creates sample sentiment / emotion data"
 task "ai:sentiment:populate", [:start_post] => [:environment] do |_, args|
   raise "Don't run this task in production!" if Rails.env.production?
 
-  sentiment_model = DiscourseAi::Sentiment::PostClassification.active_model_name_for(:sentiment)
-  emotion_model = DiscourseAi::Sentiment::PostClassification.active_model_name_for(:emotion)
-
   Post
-    .joins(ActiveRecord::Base.sanitize_sql_array([<<~SQL, sentiment_model]))
-        LEFT JOIN classification_results ON
-          posts.id = classification_results.target_id AND
-          classification_results.target_type = 'Post' AND
-          model_used = ?
-      SQL
+    .joins(<<~SQL)
+      LEFT JOIN classification_results ON
+        posts.id = classification_results.target_id AND
+        classification_results.target_type = 'Post' AND
+        model_used = 'cardiffnlp/twitter-roberta-base-sentiment-latest'
+    SQL
     .where("classification_results.id IS NULL")
     .where("posts.id > ?", args[:start_post].to_i || 0)
     .find_each do |post|
@@ -23,7 +20,7 @@ task "ai:sentiment:populate", [:start_post] => [:environment] do |_, args|
 
       ClassificationResult.create!(
         target_id: post.id,
-        model_used: sentiment_model,
+        model_used: "cardiffnlp/twitter-roberta-base-sentiment-latest",
         classification_type: "sentiment",
         target_type: "Post",
         classification: {
@@ -35,12 +32,12 @@ task "ai:sentiment:populate", [:start_post] => [:environment] do |_, args|
     end
 
   Post
-    .joins(ActiveRecord::Base.sanitize_sql_array([<<~SQL, emotion_model]))
-        LEFT JOIN classification_results ON
-          posts.id = classification_results.target_id AND
-          classification_results.target_type = 'Post' AND
-          classification_results.model_used = ?
-      SQL
+    .joins(<<~SQL)
+      LEFT JOIN classification_results ON
+        posts.id = classification_results.target_id AND
+        classification_results.target_type = 'Post' AND
+        classification_results.model_used = 'SamLowe/roberta-base-go_emotions'
+    SQL
     .where("classification_results.id IS NULL")
     .where("posts.id > ?", args[:start_post].to_i || 0)
     .find_each do |post|
@@ -56,7 +53,7 @@ task "ai:sentiment:populate", [:start_post] => [:environment] do |_, args|
 
       ClassificationResult.create!(
         target_id: post.id,
-        model_used: emotion_model,
+        model_used: "SamLowe/roberta-base-go_emotions",
         classification_type: "sentiment",
         target_type: "Post",
         classification: emotions,

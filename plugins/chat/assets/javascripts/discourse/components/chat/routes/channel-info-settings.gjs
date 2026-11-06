@@ -4,15 +4,14 @@ import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { LinkTo } from "@ember/routing";
 import { service } from "@ember/service";
-import DTooltip from "discourse/float-kit/components/d-tooltip";
+import DButton from "discourse/components/d-button";
+import DToggleSwitch from "discourse/components/d-toggle-switch";
+import categoryBadge from "discourse/helpers/category-badge";
+import icon from "discourse/helpers/d-icon";
+import replaceEmoji from "discourse/helpers/replace-emoji";
 import { popupAjaxError } from "discourse/lib/ajax-error";
-import ComboBox from "discourse/select-kit/components/combo-box";
-import DButton from "discourse/ui-kit/d-button";
-import DToggleSwitch from "discourse/ui-kit/d-toggle-switch";
-import dCategoryBadge from "discourse/ui-kit/helpers/d-category-badge";
-import dIcon from "discourse/ui-kit/helpers/d-icon";
-import dReplaceEmoji from "discourse/ui-kit/helpers/d-replace-emoji";
 import { i18n } from "discourse-i18n";
+import ComboBox from "select-kit/components/combo-box";
 import ChatForm from "discourse/plugins/chat/discourse/components/chat/form";
 import ChatModalArchiveChannel from "discourse/plugins/chat/discourse/components/chat/modal/archive-channel";
 import ChatModalDeleteChannel from "discourse/plugins/chat/discourse/components/chat/modal/delete-channel";
@@ -32,6 +31,7 @@ export default class ChatRouteChannelInfoSettings extends Component {
   @service chatApi;
   @service chatGuardian;
   @service chatChannelsManager;
+  @service currentUser;
   @service siteSettings;
   @service dialog;
   @service modal;
@@ -91,17 +91,6 @@ export default class ChatRouteChannelInfoSettings extends Component {
     return this.chatGuardian.canArchiveChannel(this.args.channel);
   }
 
-  get canToggleChannelState() {
-    return this.args.channel.isClosed;
-  }
-
-  get openChannelDisabledReason() {
-    if (this.args.channel.isArchived) {
-      return i18n("chat.channel_settings.open_channel_disabled_archived");
-    }
-    return i18n("chat.channel_settings.open_channel_disabled_read_only");
-  }
-
   get toggleChannelWideMentionsAvailable() {
     return this.args.channel.isCategoryChannel && this.args.channel.isOpen;
   }
@@ -124,18 +113,12 @@ export default class ChatRouteChannelInfoSettings extends Component {
     return this.args.channel.currentUserMembership.muted;
   }
 
-  get shouldRenderMuteSection() {
-    return this.args.channel.currentUserMembership.following;
-  }
-
   get shouldRenderChannelWideMentionsAvailable() {
     return this.args.channel.isCategoryChannel;
   }
 
   get shouldRenderNotificationsLevelSection() {
-    return (
-      this.args.channel.currentUserMembership.following && !this.isChannelMuted
-    );
+    return !this.isChannelMuted;
   }
 
   get autoJoinAvailable() {
@@ -143,15 +126,6 @@ export default class ChatRouteChannelInfoSettings extends Component {
       this.siteSettings.max_chat_auto_joined_users > 0 &&
       this.args.channel.isCategoryChannel &&
       this.args.channel.isOpen
-    );
-  }
-
-  get shouldRenderSettingsSection() {
-    return (
-      this.args.channel.isOpen &&
-      (this.shouldRenderMuteSection ||
-        this.shouldRenderNotificationsLevelSection ||
-        this.toggleThreadingDirectMessage)
     );
   }
 
@@ -276,6 +250,19 @@ export default class ChatRouteChannelInfoSettings extends Component {
   }
 
   @action
+  async _updateChannelProperty(channel, property, value) {
+    try {
+      const result = await this.chatApi.updateChannel(channel.id, {
+        [property]: value,
+      });
+      this.toasts.success({ data: { message: i18n("saved") } });
+      return result;
+    } catch (error) {
+      popupAjaxError(error);
+    }
+  }
+
+  @action
   async onToggleThreadingEnabled(value) {
     try {
       this.args.channel.threadingEnabled = !value;
@@ -331,19 +318,6 @@ export default class ChatRouteChannelInfoSettings extends Component {
     });
   }
 
-  @action
-  async _updateChannelProperty(channel, property, value) {
-    try {
-      const result = await this.chatApi.updateChannel(channel.id, {
-        [property]: value,
-      });
-      this.toasts.success({ data: { message: i18n("saved") } });
-      return result;
-    } catch (error) {
-      popupAjaxError(error);
-    }
-  }
-
   <template>
     <div class="c-routes --channel-info-settings">
       <div class="c-channel-settings">
@@ -352,14 +326,14 @@ export default class ChatRouteChannelInfoSettings extends Component {
             <section.row>
               <:default>
                 <div class="c-channel-settings__name">
-                  {{dReplaceEmoji @channel.title}}
+                  {{replaceEmoji @channel.title}}
                 </div>
 
                 {{#if @channel.isCategoryChannel}}
                   <div class="c-channel-settings__slug">
                     <LinkTo
-                      @models={{@channel.routeModels}}
                       @route="chat.channel"
+                      @models={{@channel.routeModels}}
                     >
                       /chat/c/{{@channel.slug}}/{{@channel.id}}
                     </LinkTo>
@@ -370,9 +344,9 @@ export default class ChatRouteChannelInfoSettings extends Component {
               <:action>
                 {{#if this.canEditChannel}}
                   <DButton
-                    class="edit-name-slug-btn btn-flat"
-                    @action={{this.onEditChannelTitle}}
                     @label="chat.channel_settings.edit"
+                    @action={{this.onEditChannelTitle}}
+                    class="edit-name-slug-btn btn-flat"
                   />
                 {{/if}}
               </:action>
@@ -394,13 +368,13 @@ export default class ChatRouteChannelInfoSettings extends Component {
                 <:action>
                   {{#if this.canEditChannel}}
                     <DButton
-                      class="edit-description-btn btn-flat"
-                      @action={{this.onEditChannelDescription}}
                       @label={{if
                         @channel.description.length
                         "chat.channel_settings.edit"
                         "chat.channel_settings.add"
                       }}
+                      @action={{this.onEditChannelDescription}}
+                      class="edit-description-btn btn-flat"
                     />
                   {{/if}}
                 </:action>
@@ -418,33 +392,31 @@ export default class ChatRouteChannelInfoSettings extends Component {
             </form.section>
           {{/if}}
 
-          {{#if this.shouldRenderSettingsSection}}
+          {{#if @channel.isOpen}}
             <form.section @title={{this.settingsSectionTitle}} as |section|>
-              {{#if this.shouldRenderMuteSection}}
-                <section.row @label={{this.muteSectionLabel}}>
-                  <:action>
-                    <DToggleSwitch
-                      class="c-channel-settings__mute-switch"
-                      @state={{@channel.currentUserMembership.muted}}
-                      {{on "click" this.onToggleMuted}}
-                    />
-                  </:action>
-                </section.row>
-              {{/if}}
+              <section.row @label={{this.muteSectionLabel}}>
+                <:action>
+                  <DToggleSwitch
+                    @state={{@channel.currentUserMembership.muted}}
+                    class="c-channel-settings__mute-switch"
+                    {{on "click" this.onToggleMuted}}
+                  />
+                </:action>
+              </section.row>
 
               {{#if this.shouldRenderNotificationsLevelSection}}
                 <section.row @label={{this.notificationsLevelLabel}}>
                   <:action>
                     <ComboBox
-                      class="c-channel-settings__selector c-channel-settings__notifications-selector"
                       @content={{this.notificationLevels}}
+                      @value={{@channel.currentUserMembership.notificationLevel}}
+                      @valueProperty="value"
                       @onChange={{fn
                         this.saveNotificationSettings
                         "notificationLevel"
                         "notification_level"
                       }}
-                      @value={{@channel.currentUserMembership.notificationLevel}}
-                      @valueProperty="value"
+                      class="c-channel-settings__selector c-channel-settings__notifications-selector"
                     />
                   </:action>
                 </section.row>
@@ -454,8 +426,8 @@ export default class ChatRouteChannelInfoSettings extends Component {
                 <section.row @label={{this.toggleThreadingLabel}}>
                   <:action>
                     <DToggleSwitch
-                      class="c-channel-settings__threading-switch"
                       @state={{@channel.threadingEnabled}}
+                      class="c-channel-settings__threading-switch"
                       {{on
                         "click"
                         (fn
@@ -477,7 +449,7 @@ export default class ChatRouteChannelInfoSettings extends Component {
           <form.section @title={{this.channelInfoSectionTitle}} as |section|>
             {{#if @channel.isCategoryChannel}}
               <section.row @label={{this.categoryLabel}}>
-                {{dCategoryBadge
+                {{categoryBadge
                   @channel.chatable
                   link=true
                   allowUncategorized=true
@@ -492,16 +464,16 @@ export default class ChatRouteChannelInfoSettings extends Component {
 
           {{#if this.shouldRenderAdminSection}}
             <form.section
-              data-section="admin"
               @title={{this.adminSectionTitle}}
+              data-section="admin"
               as |section|
             >
               {{#if this.autoJoinAvailable}}
                 <section.row @label={{this.autoJoinLabel}}>
                   <:action>
                     <DToggleSwitch
-                      class="c-channel-settings__auto-join-switch"
                       @state={{@channel.autoJoinUsers}}
+                      class="c-channel-settings__auto-join-switch"
                       {{on
                         "click"
                         (fn this.onToggleAutoJoinUsers @channel.autoJoinUsers)
@@ -537,8 +509,8 @@ export default class ChatRouteChannelInfoSettings extends Component {
                 <section.row @label={{this.toggleThreadingLabel}}>
                   <:action>
                     <DToggleSwitch
-                      class="c-channel-settings__threading-switch"
                       @state={{@channel.threadingEnabled}}
+                      class="c-channel-settings__threading-switch"
                       {{on
                         "click"
                         (fn
@@ -560,10 +532,10 @@ export default class ChatRouteChannelInfoSettings extends Component {
                   <section.row>
                     <:action>
                       <DButton
-                        class="archive-btn chat-form__btn btn-transparent"
                         @action={{this.onArchiveChannel}}
-                        @icon="box-archive"
                         @label="chat.channel_settings.archive_channel"
+                        @icon="box-archive"
+                        class="archive-btn chat-form__btn btn-transparent"
                       />
                     </:action>
                   </section.row>
@@ -573,35 +545,18 @@ export default class ChatRouteChannelInfoSettings extends Component {
                   <:action>
                     {{#if @channel.isOpen}}
                       <DButton
-                        class="close-btn chat-form__btn btn-transparent"
                         @action={{this.onToggleChannelState}}
-                        @icon="lock"
                         @label="chat.channel_settings.close_channel"
-                      />
-                    {{else if this.canToggleChannelState}}
-                      <DButton
-                        class="open-btn chat-form__btn btn-transparent"
-                        @action={{this.onToggleChannelState}}
-                        @icon="unlock"
-                        @label="chat.channel_settings.open_channel"
+                        @icon="lock"
+                        class="close-btn chat-form__btn btn-transparent"
                       />
                     {{else}}
-                      <DTooltip
-                        @identifier="channel-open-disabled"
-                        @placement="left"
-                      >
-                        <:trigger>
-                          <DButton
-                            class="open-btn chat-form__btn btn-transparent"
-                            @disabled={{true}}
-                            @icon="unlock"
-                            @label="chat.channel_settings.open_channel"
-                          />
-                        </:trigger>
-                        <:content>
-                          {{this.openChannelDisabledReason}}
-                        </:content>
-                      </DTooltip>
+                      <DButton
+                        @action={{this.onToggleChannelState}}
+                        @label="chat.channel_settings.open_channel"
+                        @icon="unlock"
+                        class="open-btn chat-form__btn btn-transparent"
+                      />
                     {{/if}}
                   </:action>
                 </section.row>
@@ -609,10 +564,10 @@ export default class ChatRouteChannelInfoSettings extends Component {
                 <section.row>
                   <:action>
                     <DButton
-                      class="delete-btn chat-form__btn btn-transparent"
                       @action={{this.onDeleteChannel}}
-                      @icon="trash-can"
                       @label="chat.channel_settings.delete_channel"
+                      @icon="trash-can"
+                      class="delete-btn chat-form__btn btn-transparent"
                     />
                   </:action>
                 </section.row>
@@ -624,7 +579,7 @@ export default class ChatRouteChannelInfoSettings extends Component {
           <form.section class="--leave-channel" as |section|>
             {{#if @channel.chatable.group}}
               <div class="c-channel-settings__leave-info">
-                {{dIcon "triangle-exclamation"}}
+                {{icon "triangle-exclamation"}}
                 {{i18n "chat.channel_settings.leave_groupchat_info"}}
               </div>
             {{/if}}
@@ -635,10 +590,9 @@ export default class ChatRouteChannelInfoSettings extends Component {
                   @onLeave={{this.onLeaveChannel}}
                   @options={{hash
                     joinClass="btn-primary"
-                    leaveClass="btn-default"
+                    leaveClass="btn-danger"
                     joinIcon="right-to-bracket"
                     leaveIcon="right-from-bracket"
-                    leaveDestructive=true
                   }}
                 />
               </:action>

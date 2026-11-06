@@ -10,6 +10,12 @@ export default class PostVotingCommentComposer extends Component {
 
   @tracked value = this.args.raw ?? "";
 
+  @action
+  onInput(event) {
+    this.value = event.target.value;
+    this.args.onInput?.(event.target.value);
+  }
+
   get errorMessage() {
     if (this.value.length < this.siteSettings.min_post_length) {
       return i18n("post_voting.post.post_voting_comment.composer.too_short", {
@@ -32,17 +38,10 @@ export default class PostVotingCommentComposer extends Component {
     );
   }
 
-  @action
-  onInput(event) {
-    this.value = event.target.value;
-    this.args.onInput?.(event.target.value);
-  }
-
   <template>
-    <div class="post-voting-comments__composer">
+    <div class="post-voting-comment-composer">
       <textarea
-        class="post-voting-comments__composer-textarea"
-        maxlength={{this.siteSettings.post_voting_comment_max_raw_length}}
+        class="post-voting-comment-composer-textarea"
         value={{this.value}}
         {{on "input" this.onInput}}
         {{on "keydown" @onKeyDown}}
@@ -50,13 +49,15 @@ export default class PostVotingCommentComposer extends Component {
 
       {{#if this.value.length}}
         {{#if this.errorMessage}}
-          <div class="post-voting-comments__composer-flash has-error">
+          <div class="post-voting-comment-composer-flash error">
             {{this.errorMessage}}
           </div>
         {{else}}
-          <div class="post-voting-comments__composer-flash">
-            {{this.value.length}}/<span
-            >{{this.siteSettings.post_voting_comment_max_raw_length}}</span>
+          <div class="post-voting-comment-composer-flash">
+            {{i18n
+              "post_voting.post.post_voting_comment.composer.length_ok"
+              count=this.remainingCharacters
+            }}
           </div>
         {{/if}}
       {{/if}}

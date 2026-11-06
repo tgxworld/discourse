@@ -1,8 +1,8 @@
-import { trustHTML } from "@ember/template";
+import { htmlSafe } from "@ember/template";
 import { withPluginApi } from "discourse/lib/plugin-api";
 import { emojiUnescape } from "discourse/lib/text";
 import { i18n } from "discourse-i18n";
-import UserMenuAssignNotificationsList from "../components/user-menu/assigns-list.js";
+import UserMenuAssignNotificationsList from "../components/user-menu/assigns-list";
 
 export default {
   name: "assign-user-menu",
@@ -45,7 +45,7 @@ export default {
               }
 
               get description() {
-                return trustHTML(
+                return htmlSafe(
                   emojiUnescape(
                     i18n(`user.assignment_description.${this.postOrTopic()}`, {
                       topic_title: this.notification.fancy_title,
@@ -70,7 +70,7 @@ export default {
         );
       }
 
-      if (currentUser?.can_assign_globally && api.registerUserMenuTab) {
+      if (api.registerUserMenuTab) {
         api.registerUserMenuTab((UserMenuTab) => {
           return class extends UserMenuTab {
             id = "assign-list";

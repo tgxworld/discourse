@@ -1,8 +1,7 @@
 # frozen_string_literal: true
 
-RSpec.describe "Sidebar New Topic Button" do
+RSpec.describe "Sidebar New Topic Button", system: true do
   before { upload_theme }
-
   fab!(:group)
   fab!(:user) { Fabricate(:user, trust_level: 3, groups: [group]) }
   fab!(:category)
@@ -35,41 +34,14 @@ RSpec.describe "Sidebar New Topic Button" do
       expect(page).to have_css(".sidebar-new-topic-button__wrapper .topic-drafts-menu-trigger")
     end
 
-    it "opens the composer with the tag pre-filled when on a tag page" do
-      tag = Fabricate(:tag)
-      Fabricate(:topic, tags: [tag])
-
-      visit("/tag/#{tag.slug}/#{tag.id}")
-      find(".sidebar-new-topic-button").click
-
-      expect(page).to have_css("#reply-title")
-
-      tag_chooser = PageObjects::Components::SelectKit.new(".mini-tag-chooser")
-      expect(tag_chooser).to have_selected_name(tag.name)
-    end
-
-    it "does not disable button when visiting read-only category" do
+    it "disables button when visiting read-only category" do
       visit("/c/#{private_category.slug}/#{private_category.id}")
 
-      expect(page).to have_no_css(".sidebar-new-topic-button[disabled]")
+      expect(page).to have_css(".sidebar-new-topic-button[disabled]")
 
       visit("/c/#{category.slug}/#{category.id}")
 
       expect(page).to have_no_css(".sidebar-new-topic-button[disabled]")
-    end
-  end
-
-  context "when another panel has taken over the sidebar" do
-    fab!(:admin)
-
-    before { sign_in(admin) }
-
-    it "hides the button in the admin sidebar and brings it back on the way out" do
-      visit("/admin")
-      expect(page).to have_no_css(".sidebar-new-topic-button__wrapper")
-
-      visit("/latest")
-      expect(page).to have_css(".sidebar-new-topic-button__wrapper")
     end
   end
 

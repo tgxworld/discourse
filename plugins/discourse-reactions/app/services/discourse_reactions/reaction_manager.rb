@@ -4,10 +4,6 @@ module DiscourseReactions
   class ReactionManager
     attr_reader :reaction_value, :previous_reaction_value
 
-    def self.reaction_value_for(user:, post:)
-      new(reaction_value: nil, user:, post:).previous_reaction_value
-    end
-
     def initialize(reaction_value:, user:, post:)
       @reaction_value = reaction_value
       @user = user
@@ -26,38 +22,27 @@ module DiscourseReactions
     end
 
     def toggle!
-      raise Discourse::InvalidAccess unless @user.guardian.can_use_reactions?(@post)
-
       if (@like && !@user.guardian.can_delete_post_action?(@like)) ||
            (reaction_user && !@user.guardian.can_delete_reaction_user?(reaction_user))
         raise Discourse::InvalidAccess
       end
 
-      ActiveRecord::Base
-        .transaction do
-          @reaction = reaction_scope&.first_or_create
-          @reaction_user = reaction_user_scope
-          if @reaction_value == DiscourseReactions::Reaction.main_reaction_id
-            toggle_like
-          else
-            toggle_reaction
-          end
+      ActiveRecord::Base.transaction do
+        @reaction = reaction_scope&.first_or_create
+        @reaction_user = reaction_user_scope
+        if @reaction_value == DiscourseReactions::Reaction.main_reaction_id
+          toggle_like
+        else
+          toggle_reaction
         end
-        .tap do
-          DiscourseEvent.trigger(:post_reaction_toggled, @post, @user, @previous_reaction_value)
-        end
+      end
     end
 
     private
 
     def toggle_like
-      if reaction_user.present?
-        remove_reaction
-        @reaction = reaction_scope&.first_or_create
-        add_reaction
-      else
-        @like ? remove_shadow_like : add_shadow_like
-      end
+      remove_reaction if reaction_user.present?
+      @like ? remove_shadow_like : add_shadow_like
     end
 
     def toggle_reaction
@@ -96,11 +81,7 @@ module DiscourseReactions
           user_id: @user.id,
           post_id: @post.id,
         )
-      if search_reaction_user.length > 0
-        search_reaction_user.first
-      else
-        create_reaction_user
-      end
+      search_reaction_user.length > 0 ? search_reaction_user.first : create_reaction_user
     end
 
     def reaction_user

@@ -244,7 +244,7 @@ RSpec.describe Invite do
       context "when adding to another topic" do
         fab!(:another_topic) { Fabricate(:topic, user: topic.user) }
 
-        it "returns the same invite" do
+        it "should be the same invite" do
           new_invite = Invite.generate(topic.user, email: "test@example.com", topic: another_topic)
           expect(invite).to eq(new_invite)
           expect(invite.topics).to contain_exactly(topic, another_topic)
@@ -253,144 +253,12 @@ RSpec.describe Invite do
         end
       end
     end
-
-    context "with admin invites" do
-      fab!(:admin)
-
-      it "creates a single-use email invite" do
-        invite = Invite.generate(admin, email: "test@example.com", admin: true)
-
-        expect(invite.admin).to eq(true)
-        expect(invite.max_redemptions_allowed).to eq(1)
-      end
-
-      it "creates a single-use invite link when a shareable link is chosen" do
-        invite = Invite.generate(admin, admin: true)
-
-        expect(invite.admin).to eq(true)
-        expect(invite.is_invite_link?).to eq(true)
-        expect(invite.max_redemptions_allowed).to eq(1)
-      end
-
-      it "can be combined with a domain restriction when created as a link" do
-        invite = Invite.generate(admin, domain: "example.com", admin: true)
-
-        expect(invite.admin).to eq(true)
-        expect(invite.domain).to eq("example.com")
-      end
-
-      it "requires the inviter to be an admin" do
-        expect { Invite.generate(user, email: "test@example.com", admin: true) }.to raise_error(
-          ActiveRecord::RecordInvalid,
-          /#{I18n.t("invite.admin_invite_requires_admin_inviter")}/,
-        )
-      end
-
-      it "requires the inviter to still be an admin when the email is removed" do
-        invite = Invite.generate(admin, email: "test@example.com", admin: true)
-        admin.update!(admin: false)
-
-        invite.email = nil
-        expect(invite).not_to be_valid
-        expect(invite.errors[:base]).to include(
-          I18n.t("invite.admin_invite_requires_admin_inviter"),
-        )
-      end
-
-      it "requires the inviter to still be an admin when the domain restriction is removed" do
-        invite = Invite.generate(admin, domain: "example.com", admin: true)
-        admin.update!(admin: false)
-
-        invite.domain = nil
-        expect(invite).not_to be_valid
-        expect(invite.errors[:base]).to include(
-          I18n.t("invite.admin_invite_requires_admin_inviter"),
-        )
-      end
-
-      it "requires the inviter to still be an admin when the domain restriction is changed" do
-        invite = Invite.generate(admin, domain: "example.com", admin: true)
-        admin.update!(admin: false)
-
-        invite.domain = "other-example.com"
-        expect(invite).not_to be_valid
-        expect(invite.errors[:base]).to include(
-          I18n.t("invite.admin_invite_requires_admin_inviter"),
-        )
-      end
-
-      it "requires the inviter to still be staff when a moderator invite's domain restriction is removed" do
-        invite = Invite.generate(admin, domain: "example.com", moderator: true)
-        admin.update!(admin: false)
-
-        invite.domain = nil
-        expect(invite).not_to be_valid
-        expect(invite.errors[:base]).to include(
-          I18n.t("invite.moderator_invite_requires_staff_inviter"),
-        )
-      end
-
-      it "must be single-use" do
-        invite = Invite.generate(admin, admin: true)
-
-        invite.max_redemptions_allowed = 2
-        expect(invite).not_to be_valid
-        expect(invite.errors[:max_redemptions_allowed]).to include(
-          I18n.t("invite.max_redemptions_allowed_one_staff"),
-        )
-      end
-
-      it "triggers an event when created" do
-        events =
-          DiscourseEvent.track_events(:admin_invite_created) do
-            Invite.generate(admin, email: "test@example.com", admin: true)
-          end
-
-        expect(events.first[:params].first.email).to eq("test@example.com")
-      end
-
-      it "clears the admin flag when the invite is reused without it" do
-        invite = Invite.generate(admin, email: "test@example.com", admin: true)
-        reused = Invite.generate(admin, email: "test@example.com")
-
-        expect(reused.id).to eq(invite.id)
-        expect(reused.admin).to eq(false)
-      end
-
-      it "keeps the admin flag when the invite is reused with it" do
-        invite = Invite.generate(admin, email: "test@example.com", admin: true)
-        reused = Invite.generate(admin, email: "test@example.com", admin: true)
-
-        expect(reused.id).to eq(invite.id)
-        expect(reused.admin).to eq(true)
-      end
-
-      it "clears topic and group associations when a member invite is reused as an admin invite" do
-        topic = Fabricate(:topic)
-        group = Fabricate(:group)
-        invite =
-          Invite.generate(
-            admin,
-            email: "test@example.com",
-            topic_id: topic.id,
-            group_ids: [group.id],
-          )
-        expect(invite.topics).to contain_exactly(topic)
-        expect(invite.groups).to contain_exactly(group)
-
-        reused = Invite.generate(admin, email: "test@example.com", admin: true)
-
-        expect(reused.id).to eq(invite.id)
-        expect(reused.topics).to be_empty
-        expect(reused.groups).to be_empty
-      end
-    end
   end
 
   describe "#redeem" do
     fab!(:invite)
 
-    it "redeems the invite" do
+    it "works" do
       user = invite.redeem
       expect(invite.invited_users.map(&:user)).to contain_exactly(user)
       expect(user.is_a?(User)).to eq(true)
@@ -443,17 +311,15 @@ RSpec.describe Invite do
     end
 
     context "as a moderator" do
-      it "gives the user a moderator flag" do
+      it "will give the user a moderator flag" do
         invite.update!(moderator: true, invited_by: Fabricate(:admin))
 
         user = invite.redeem
         expect(user).to be_moderator
       end
 
-      it "does not give the user a moderator flag when the inviter is not staff" do
-        # update_columns skips the ensure_valid_moderator_invite validation so we
-        # can exercise the redeemer's own inviter check in isolation
-        invite.update_columns(moderator: true)
+      it "will not give the user a moderator flag if the inviter is not staff" do
+        invite.update!(moderator: true)
 
         user = invite.redeem
         expect(user).not_to be_moderator
@@ -472,8 +338,7 @@ RSpec.describe Invite do
         user = invite.redeem
         expect(user.groups).to contain_exactly(group)
       end
-
-      it "does not raise an error when group and site tag preferences match" do
+      it "should not raise error when both group & site tag preferences same" do
         tag = Fabricate(:tag)
         group.tracking_tags = [tag.name]
         group.save!
@@ -484,13 +349,10 @@ RSpec.describe Invite do
     end
 
     context "when inviting to a topic" do
-      fab!(:topic) { Fabricate(:private_message_topic, user: invite.invited_by) }
+      fab!(:topic, :private_message_topic)
       fab!(:another_topic, :private_message_topic)
 
-      before do
-        Group.refresh_automatic_groups_for_user!(invite.invited_by)
-        invite.topic_invites.create!(topic: topic)
-      end
+      before { invite.topic_invites.create!(topic: topic) }
 
       it "adds the user to topic_users" do
         invited_user = invite.redeem
@@ -773,26 +635,6 @@ RSpec.describe Invite do
         expect(invite).to be_invalid
         expect { invalidate }.to change { invite.invalidated_at }.to Time.current
       end
-    end
-  end
-
-  describe "redemption_count decrement when user is deleted" do
-    fab!(:invite) { Fabricate(:invite, email: nil, invited_by: user, max_redemptions_allowed: 5) }
-
-    it "decrements redemption_count when invited_user is destroyed" do
-      expect(invite.redemption_count).to eq(0)
-
-      user1 = invite.redeem(email: "user1@example.com")
-      expect(invite.reload.redemption_count).to eq(1)
-
-      user2 = invite.redeem(email: "user2@example.com")
-      expect(invite.reload.redemption_count).to eq(2)
-
-      user1.destroy
-      expect(invite.reload.redemption_count).to eq(1)
-
-      user2.destroy
-      expect(invite.reload.redemption_count).to eq(0)
     end
   end
 end

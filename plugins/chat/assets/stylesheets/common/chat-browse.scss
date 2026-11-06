@@ -1,5 +1,4 @@
 @use "lib/viewport";
-@use "lib/container";
 
 .chat-browse-view {
   position: relative;
@@ -25,37 +24,39 @@
   &__cards {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 1.25rem;
+    grid-gap: 1.25rem;
 
-    @include container.until(md) {
-      gap: 1rem;
+    @include viewport.until(md) {
+      grid-template-columns: repeat(1, 1fr);
+      grid-gap: 1rem;
     }
   }
 
   &__actions {
     display: flex;
-    align-items: center;
-    gap: 1rem;
-
-    .d-filter-controls {
-      margin-inline-start: auto;
-    }
+    justify-content: space-between;
+    align-items: end;
 
     .c-drawer-routes.--browse & {
       flex-direction: column;
-      align-items: stretch;
+      gap: 1rem;
+      align-items: flex-start;
 
-      .d-filter-controls {
-        margin-inline-start: 0;
+      .filter-input {
+        width: 100%;
       }
     }
 
     @include viewport.until(md) {
       flex-direction: column;
-      align-items: stretch;
 
-      .d-filter-controls {
-        margin-inline-start: 0;
+      .filter-input-container {
+        margin-top: 1rem;
+      }
+
+      .filter-input-container,
+      nav {
+        width: 100%;
       }
     }
   }

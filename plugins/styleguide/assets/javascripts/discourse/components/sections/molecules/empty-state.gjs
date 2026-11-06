@@ -1,9 +1,10 @@
+import EmptyState from "discourse/components/empty-state";
 import StyleguideExample from "discourse/plugins/styleguide/discourse/components/styleguide-example";
-import EmptyStateExample from "../../examples/molecules/empty-state.gjs";
-import emptyStateSource from "../../examples/molecules/empty-state?source=file";
 
-export default <template>
-  <StyleguideExample @code={{emptyStateSource}} @title="<DEmptyState>">
-    <EmptyStateExample />
+const EmptyStateMolecule = <template>
+  <StyleguideExample @title="<EmptyState>">
+    <EmptyState @title={{@dummy.sentence}} @body={{@dummy.short_sentence}} />
   </StyleguideExample>
-</template>
+</template>;
+
+export default EmptyStateMolecule;

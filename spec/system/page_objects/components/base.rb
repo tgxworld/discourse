@@ -6,10 +6,6 @@ module PageObjects
       include Capybara::DSL
       include RSpec::Matchers
       include SystemHelpers
-
-      def context_component
-        page.find(@context)
-      end
     end
   end
 end

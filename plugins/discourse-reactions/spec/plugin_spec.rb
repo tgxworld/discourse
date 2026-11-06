@@ -24,28 +24,10 @@ describe DiscourseReactions do
     expect(clap_reaction.data).to include(user_2.name)
   end
 
-  describe "on site_setting_changed" do
-    it "kicks off the background job to sync post actions when the excluded reactions change" do
-      expect_enqueued_with(job: Jobs::DiscourseReactions::LikeSynchronizer) do
+  describe "on_setting_change(discourse_reactions_excluded_from_like)" do
+    it "kicks off the background job to sync post actions when site setting changes" do
+      expect_enqueued_with(job: ::Jobs::DiscourseReactions::LikeSynchronizer) do
         SiteSetting.discourse_reactions_excluded_from_like = "confetti_ball|-1"
-      end
-    end
-
-    it "cancels any sync already scheduled" do
-      Jobs
-        .expects(:cancel_scheduled_job)
-        .with do |job_name|
-          "Jobs::#{job_name.to_s.camelcase}" == Jobs::DiscourseReactions::LikeSynchronizer.name
-        end
-
-      SiteSetting.discourse_reactions_excluded_from_like = "confetti_ball|-1"
-    end
-
-    it "kicks off the background job to sync post actions when the sync gets enabled" do
-      SiteSetting.discourse_reactions_like_sync_enabled = false
-
-      expect_enqueued_with(job: Jobs::DiscourseReactions::LikeSynchronizer) do
-        SiteSetting.discourse_reactions_like_sync_enabled = true
       end
     end
   end

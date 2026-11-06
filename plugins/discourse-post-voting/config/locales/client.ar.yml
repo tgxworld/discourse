@@ -6,16 +6,13 @@
 
 ar:
   admin_js:
-    admin:
-      site_settings:
-        categories:
-          discourse_post_voting: "تصويت على منشورات Discourse"
+    site_settings:
+      categories:
+        post_voting: التصويت على المنشورات
   post_voting:
     reviewables:
       comment_already_handled: "شكرًا، لكننا راجعنا هذا التعليق بالفعل وقررنا أنه لا يلزم الإبلاغ عنه مرة أخرى."
   js:
-    discourse_post_voting:
-      title: "التصويت على المنشورات"
     notifications:
       question_answer_user_commented: "<span>%{username}</span> %{description}"
       titles:
@@ -31,7 +28,7 @@ ar:
         label: "إنشاء موضوع للتصويت على المنشورات"
       composer_actions:
         create_as_post_voting:
-          label: "تفعيل/إيقاف التصويت على المنشورات"
+          label: "تبديل التصويت على المنشورات"
           desc: "سيتم إنشاء الموضوع مع منشورات قابلة للتصويت"
         remove_as_post_voting:
           label: "إزالة التصويت على المنشورات"
@@ -40,14 +37,6 @@ ar:
       already_voted: "يمكنك التصويت مرة واحدة فقط لكل سؤال."
       user_over_limit: "لا يمكنك تجاوز عدد الأصوات لمستوى ثقتك."
       one_vote_per_post: "يمكنك التصويت مرة واحدة فقط لكل منشور."
-      button:
-        upvote: "تصويت إيجابي"
-        remove_upvote: "إلغاء التصويت الإيجابي"
-        downvote: "تصويت سلبي"
-        remove_downvote: "إلغاء التصويت السلبي"
-      toggle_voters: "عرض أسماء المصوِّتين"
-      upvotes: "التصويتات الإيجابية"
-      downvotes: "التصويتات السلبية"
     last_answer_lowercase: الإجابة الأخيرة
     answer_lowercase:
       zero: إجابات
@@ -85,10 +74,6 @@ ar:
           edit: "تعديل"
           cancel: "إلغاء"
           add: "إضافة تعليق"
-          actions:
-            edit: "تعديل التعليق"
-            delete: "حذف التعليق"
-            flag: "الإبلاغ عن التعليق"
           show:
             zero: عرض %{count} تعليقًا إضافيًا
             one: عرض تعليق واحد (%{count}) إضافي
@@ -150,13 +135,6 @@ ar:
           few: "%{count} إجابات"
           many: "%{count} إجابات"
           other: "%{count} إجابات"
-        voters_count_diff:
-          zero: "و%{count} من المستخدمين الآخرين..."
-          one: "ومستخدم %{count} آخر..."
-          two: "ومستخدمين %{count} آخرين..."
-          few: "و%{count} مستخدمين آخرين..."
-          many: "و%{count} مستخدمًا آخرين..."
-          other: "و%{count} مستخدم آخرين..."
     review:
       transcript:
         view: "عرض نص الرسائل السابقة"

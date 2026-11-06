@@ -19,13 +19,13 @@ RSpec.describe Onebox::Engine::AllowlistedGenericOnebox do
       end
     end
 
-    it "doesn't return the HTML when the provider does not match the URL host" do
-      Onebox::Engine::AllowlistedGenericOnebox.html_providers = {}
+    it "doesn't return the HTML when not in the `html_providers`" do
+      Onebox::Engine::AllowlistedGenericOnebox.html_providers = []
       expect(HTMLOnebox.new("http://coolsite.com").to_html).to be_nil
     end
 
-    it "returns the HTML when the provider matches the URL host" do
-      Onebox::Engine::AllowlistedGenericOnebox.html_providers = { "CoolSite" => ["coolsite.com"] }
+    it "returns the HMTL when in the `html_providers`" do
+      Onebox::Engine::AllowlistedGenericOnebox.html_providers = ["CoolSite"]
       expect(HTMLOnebox.new("http://coolsite.com").to_html).to eq "cool html"
     end
   end
@@ -103,7 +103,6 @@ RSpec.describe Onebox::Engine::AllowlistedGenericOnebox do
       let(:canonical_url) do
         "https://www.etsy.com/in-en/listing/87673424/personalized-word-pillow-case-letter"
       end
-
       before do
         stub_request(:get, mobile_url).to_return(status: 200, body: onebox_response("etsy_mobile"))
         stub_request(:get, canonical_url).to_return(status: 200, body: onebox_response("etsy"))
@@ -133,7 +132,6 @@ RSpec.describe Onebox::Engine::AllowlistedGenericOnebox do
       let(:discourse_topic_reply_url) do
         "https://meta.discourse.org/t/congratulations-most-stars-in-2013-github-octoverse/12483/2"
       end
-
       before do
         stub_request(:get, discourse_topic_url).to_return(
           status: 200,
@@ -194,7 +192,6 @@ RSpec.describe Onebox::Engine::AllowlistedGenericOnebox do
 
   describe "missing description" do
     let(:url) { "https://en-americas-support.nintendo.com/app/answers/detail/a_id/67660" }
-
     before do
       stub_request(:get, url).to_return(status: 200, body: onebox_response("title_no_description"))
       stub_request(
@@ -254,11 +251,10 @@ RSpec.describe Onebox::Engine::AllowlistedGenericOnebox do
 
     context "when using basic meta description when necessary" do
       before do
-        stub_request(:get, "https://www.example.com/og-content").to_return(
-          status: 200,
-          body:
-            '<html><head><meta property="og:title" content="OG Title"/><meta property="og:description" content="OG description for testing"/></head><body></body></html>',
-        )
+        stub_request(
+          :get,
+          "https://www.reddit.com/r/colors/comments/b4d5xm/literally_nothing_black_edition/",
+        ).to_return(status: 200, body: onebox_response("reddit_image"))
         stub_request(:get, "https://www.example.com/content").to_return(
           status: 200,
           body: onebox_response("basic_description"),
@@ -266,8 +262,11 @@ RSpec.describe Onebox::Engine::AllowlistedGenericOnebox do
       end
 
       it "uses opengraph tags when present" do
-        onebox = described_class.new("https://www.example.com/og-content")
-        expect(onebox.to_html).to include("OG description for testing")
+        onebox =
+          described_class.new(
+            "https://www.reddit.com/r/colors/comments/b4d5xm/literally_nothing_black_edition/",
+          )
+        expect(onebox.to_html).to include("4 votes and 1 comment so far on Reddit")
       end
 
       it "fallback to basic meta description if other description tags are missing" do

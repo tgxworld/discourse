@@ -2,15 +2,12 @@
 
 require "mobile_detection"
 require "crawler_detection"
-require "digest"
 require "guardian"
 require "http_language_parser"
 require "http_user_agent_encoder"
 
 module Middleware
   class AnonymousCache
-    CACHEABLE_ENV = "discourse.anonymous_cache.cacheable"
-
     def self.cache_key_segments
       @@cache_key_segments ||= {
         m: "key_is_mobile?",
@@ -21,10 +18,8 @@ module Middleware
         t: "key_cache_theme_ids",
         ca: "key_compress_anon",
         l: "key_locale",
-        lat: "key_automatically_translate",
+        lso: "key_show_original_content",
         cm: "key_forced_color_mode",
-        cs: "key_color_scheme_id",
-        ds: "key_dark_scheme_id",
       }
     end
 
@@ -68,6 +63,7 @@ module Middleware
 
     # This gives us an API to insert anonymous cache segments
     class Helper
+      RACK_SESSION = "rack.session"
       USER_AGENT = "HTTP_USER_AGENT"
       ACCEPT_ENCODING = "HTTP_ACCEPT_ENCODING"
       DISCOURSE_RENDER = "HTTP_DISCOURSE_RENDER"
@@ -89,16 +85,12 @@ module Middleware
       end
 
       def blocked_crawler?
-        return false if !@request.get?
-        return false if @request.xhr?
-        return false if @request.path.ends_with?("robots.txt")
-        return false if @request.path.ends_with?("llms.txt")
-        return false if @request.path.ends_with?("srv/status")
-        return false if @request[Auth::DefaultCurrentUserProvider::API_KEY]
-        return false if @env[Auth::DefaultCurrentUserProvider::USER_API_KEY]
-        return false if @env[Auth::DefaultCurrentUserProvider::HEADER_API_KEY]
-
-        CrawlerDetection.is_blocked_crawler?(crawler_identifier)
+        @request.get? && !@request.xhr? && !@request.path.ends_with?("robots.txt") &&
+          !@request.path.ends_with?("srv/status") &&
+          @request[Auth::DefaultCurrentUserProvider::API_KEY].nil? &&
+          @env[Auth::DefaultCurrentUserProvider::USER_API_KEY].nil? &&
+          @env[Auth::DefaultCurrentUserProvider::HEADER_API_KEY].nil? &&
+          CrawlerDetection.is_blocked_crawler?(crawler_identifier)
       end
 
       # rubocop:disable Lint/BooleanSymbol
@@ -107,46 +99,53 @@ module Middleware
       end
 
       def is_mobile?
-        @is_mobile ||= MobileDetection.mobile_device?(@user_agent) ? :true : :false
+        @is_mobile ||=
+          begin
+            session = @env[RACK_SESSION]
+            # don't initialize params until later
+            # otherwise you get a broken params on the request
+            params = {}
+
+            MobileDetection.resolve_mobile_view!(@user_agent, params, session) ? :true : :false
+          end
+
         @is_mobile == :true
       end
       alias_method :key_is_mobile?, :is_mobile?
 
       def key_has_brotli?
-        @has_brotli ||= @env[ACCEPT_ENCODING].to_s =~ /br/ ? :true : :false
-
+        @has_brotli ||=
+          begin
+            @env[ACCEPT_ENCODING].to_s =~ /br/ ? :true : :false
+          end
         @has_brotli == :true
       end
       # rubocop:enable Lint/BooleanSymbol
 
       def key_locale
-        locale = Discourse.anonymous_locale(@request).to_s
-
-        # Crawler pages at a locale param URL also depend on the locale the plain URL serves.
-        # A blank param still skips the other locale sources, so check for the key.
-        if ContentLocalization.crawler_locale_param_enabled? &&
-             @request.params.key?(Discourse::LOCALE_PARAM)
-          locale += "|#{Discourse.anonymous_locale(@request, include_param: false)}"
+        if locale = Discourse.anonymous_locale(@request)
+          locale
+        else
+          "" # No need to key, it is the same for all anon users
         end
-
-        locale
       end
 
       # rubocop:disable Lint/BooleanSymbol
       def is_crawler?
         @is_crawler ||=
-          if @env[DISCOURSE_RENDER] == "crawler" ||
-               CrawlerDetection.crawler?(@user_agent, @env["HTTP_VIA"])
-            :true
-          else
-            if @user_agent.downcase.include?("discourse") &&
-                 !@user_agent.downcase.include?("mobile")
+          begin
+            if @env[DISCOURSE_RENDER] == "crawler" ||
+                 CrawlerDetection.crawler?(@user_agent, @env["HTTP_VIA"])
               :true
             else
-              :false
+              if @user_agent.downcase.include?("discourse") &&
+                   !@user_agent.downcase.include?("mobile")
+                :true
+              else
+                :false
+              end
             end
           end
-
         @is_crawler == :true
       end
       alias_method :key_is_crawler?, :is_crawler?
@@ -171,13 +170,8 @@ module Middleware
         @cache_key =
           +"ANON_CACHE_#{is_xhr}_#{@env["HTTP_ACCEPT"]}_#{@env[Rack::RACK_URL_SCHEME]}_#{@env["HTTP_HOST"]}#{@env["REQUEST_URI"]}"
 
-        @cache_key << key_embed_referer if @request.path.start_with?("/embed/")
         @cache_key << AnonymousCache.build_cache_key(self)
         @cache_key
-      end
-
-      def key_embed_referer
-        "|er=#{Digest::SHA256.hexdigest(@env["HTTP_REFERER"].to_s)}"
       end
 
       def key_cache_theme_ids
@@ -189,24 +183,12 @@ module Middleware
         %w[light dark].include?(val) ? val : ""
       end
 
-      def key_color_scheme_id
-        valid_color_scheme_cookie_id("color_scheme_id")
-      end
-
-      def key_dark_scheme_id
-        valid_color_scheme_cookie_id("dark_scheme_id")
-      end
-
-      def valid_color_scheme_cookie_id(cookie_name)
-        ColorScheme.valid_id(@request.cookies[cookie_name])
-      end
-
       def key_compress_anon
         GlobalSetting.compress_anon_cache
       end
 
-      def key_automatically_translate
-        ContentLocalization.automatically_translate_anonymously?(@request.cookies)
+      def key_show_original_content
+        @request.cookies.key?(ContentLocalization::SHOW_ORIGINAL_COOKIE)
       end
 
       def theme_ids
@@ -278,7 +260,7 @@ module Middleware
       ADP = "action_dispatch.request.parameters"
 
       def should_force_anonymous?
-        if (queue_time = @env[Middleware::ProcessingRequest::REQUEST_QUEUE_SECONDS_ENV_KEY]) && get?
+        if (queue_time = @env["REQUEST_QUEUE_SECONDS"]) && get?
           if queue_time > GlobalSetting.force_anonymous_min_queue_seconds
             return check_logged_in_rate_limit!
           elsif queue_time >= MIN_TIME_TO_CHECK
@@ -388,11 +370,10 @@ module Middleware
     PAYLOAD_INVALID_REQUEST_METHODS = %w[GET HEAD]
 
     def call(env)
-      env[CACHEABLE_ENV] = false
       return @app.call(env) if defined?(@@disabled) && @@disabled
 
       if PAYLOAD_INVALID_REQUEST_METHODS.include?(env[Rack::REQUEST_METHOD]) &&
-           !env[Rack::RACK_INPUT].read(1).nil?
+           env[Rack::RACK_INPUT].size > 0
         return 413, { "Cache-Control" => "private, max-age=0, must-revalidate" }, []
       end
 
@@ -409,8 +390,7 @@ module Middleware
         helper.force_anonymous!
       end
 
-      if (env["HTTP_DISCOURSE_BACKGROUND"] == "true") &&
-           (queue_time = env[Middleware::ProcessingRequest::REQUEST_QUEUE_SECONDS_ENV_KEY])
+      if (env["HTTP_DISCOURSE_BACKGROUND"] == "true") && (queue_time = env["REQUEST_QUEUE_SECONDS"])
         max_time = GlobalSetting.background_requests_max_queue_length.to_f
         if max_time > 0 && queue_time.to_f > max_time
           return [
@@ -428,9 +408,8 @@ module Middleware
         end
       end
 
-      cacheable = env[CACHEABLE_ENV] = helper.cacheable?
       result =
-        if cacheable
+        if helper.cacheable?
           helper.cached(env) || helper.cache(@app.call(env), env)
         else
           @app.call(env)

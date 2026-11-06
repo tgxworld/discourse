@@ -38,7 +38,7 @@ RSpec.describe FormTemplate, type: :model do
       )
     end
 
-    it "updates validation limits when the site setting changes" do
+    it "should update validation limits when the site setting has been changed" do
       SiteSetting.max_form_template_content_length = 100
       SiteSetting.max_form_template_title_length = 100
 
@@ -96,9 +96,8 @@ RSpec.describe FormTemplate, type: :model do
     fab!(:tag5, :tag)
     fab!(:tag_group) { Fabricate(:tag_group, tags: [tag1, tag2, tag3]) }
     fab!(:tag_group2) { Fabricate(:tag_group, tags: [tag4, tag5]) }
-    fab!(:synonym) { Fabricate(:tag, target_tag: tag1) }
 
-    it "automatically adds tags choices, but no synonyms, to the template" do
+    it "automatically adds tags choices to the template" do
       template = <<~YAML
         - type: tag-chooser
           id: tag-chooser
@@ -117,11 +116,7 @@ RSpec.describe FormTemplate, type: :model do
 
       g1, g2 = YAML.safe_load(form_template.template)
 
-      expect(g1["choices"]).to contain_exactly(
-        { "id" => tag1.id, "name" => tag1.name },
-        { "id" => tag2.id, "name" => tag2.name },
-        { "id" => tag3.id, "name" => tag3.name },
-      )
+      expect(g1["choices"]).to eq([tag1.name, tag2.name, tag3.name].sort)
       expect(g2["attributes"]["tag_group"]).to eq(tag_group2.name)
       expect(g2["attributes"]["multiple"]).to eq(true)
     end

@@ -14,7 +14,7 @@ RSpec.describe SiteSettings::Validations do
       }.not_to raise_error
     end
 
-    it "rejects invalid category IDs" do
+    it "won't allow you to input junk categories" do
       expect { validations.validate_default_categories_watching("junk") }.to raise_error(
         Discourse::InvalidParameters,
       )
@@ -45,22 +45,22 @@ RSpec.describe SiteSettings::Validations do
         SiteSetting.set(other_setting_name, value)
       end
 
-      it "accepts two blank buckets" do
+      it "shouldn't raise an error when both buckets are blank" do
         change_bucket_value("")
         validate("")
       end
 
-      it "accepts a single configured bucket" do
+      it "shouldn't raise an error when only one bucket is set" do
         change_bucket_value("")
         validate("my-awesome-bucket")
       end
 
-      it "accepts the same bucket with different paths" do
+      it "shouldn't raise an error when both buckets are equal, but use a different path" do
         change_bucket_value("my-awesome-bucket/foo")
         validate("my-awesome-bucket/bar")
       end
 
-      it "rejects identical bucket locations" do
+      it "should raise an error when both buckets are equal" do
         change_bucket_value("my-awesome-bucket")
         expect { validate("my-awesome-bucket") }.to raise_error(
           Discourse::InvalidParameters,
@@ -68,7 +68,7 @@ RSpec.describe SiteSettings::Validations do
         )
       end
 
-      it "rejects identical bucket locations with a trailing slash" do
+      it "should raise an error when both buckets are equal except for a trailing slash" do
         change_bucket_value("my-awesome-bucket/")
         expect { validate("my-awesome-bucket") }.to raise_error(
           Discourse::InvalidParameters,
@@ -92,7 +92,7 @@ RSpec.describe SiteSettings::Validations do
 
       it_behaves_like "s3 bucket validation"
 
-      it "accepts a backup bucket below the upload bucket" do
+      it "shouldn't raise an error when the 's3_backup_bucket' is a subdirectory of 's3_upload_bucket'" do
         SiteSetting.s3_upload_bucket = "my-awesome-bucket"
         validate("my-awesome-bucket/backups")
 
@@ -110,7 +110,7 @@ RSpec.describe SiteSettings::Validations do
 
       it_behaves_like "s3 bucket validation"
 
-      it "rejects an upload bucket below the backup bucket" do
+      it "should raise an error when the 's3_upload_bucket' is a subdirectory of 's3_backup_bucket'" do
         SiteSetting.s3_backup_bucket = "my-awesome-bucket"
         expect { validate("my-awesome-bucket/uploads") }.to raise_error(
           Discourse::InvalidParameters,
@@ -141,10 +141,9 @@ RSpec.describe SiteSettings::Validations do
         let(:error_message) do
           I18n.t("errors.site_settings.second_factor_cannot_be_enforced_with_disabled_local_login")
         end
-
         before { SiteSetting.enable_local_logins = false }
 
-        it "rejects enforcement when local logins are disabled" do
+        it "should raise an error" do
           expect { validations.validate_enforce_second_factor("t") }.to raise_error(
             Discourse::InvalidParameters,
             error_message,
@@ -155,7 +154,7 @@ RSpec.describe SiteSettings::Validations do
       context "when local logins are enabled" do
         before { SiteSetting.enable_local_logins = true }
 
-        it "allows enforcement with local logins enabled" do
+        it "should be ok" do
           expect { validations.validate_enforce_second_factor("t") }.not_to raise_error
         end
       end
@@ -166,14 +165,12 @@ RSpec.describe SiteSettings::Validations do
             "errors.site_settings.second_factor_cannot_be_enforced_with_discourse_connect_enabled",
           )
         end
-
         before do
           SiteSetting.discourse_connect_url = "https://www.example.com/sso"
-          SiteSetting.discourse_connect_secret = "x" * 10
           SiteSetting.enable_discourse_connect = true
         end
 
-        it "rejects enforcement when SSO is enabled" do
+        it "should raise an error" do
           expect { validations.validate_enforce_second_factor("t") }.to raise_error(
             Discourse::InvalidParameters,
             error_message,
@@ -191,7 +188,7 @@ RSpec.describe SiteSettings::Validations do
         context "when enforce second factor is enabled" do
           before { SiteSetting.enforce_second_factor = "all" }
 
-          it "rejects disabling local logins" do
+          it "should raise an error" do
             expect { validations.validate_enable_local_logins("f") }.to raise_error(
               Discourse::InvalidParameters,
               error_message,
@@ -202,14 +199,14 @@ RSpec.describe SiteSettings::Validations do
         context "when enforce second factor is disabled" do
           before { SiteSetting.enforce_second_factor = "no" }
 
-          it "allows disabling local logins" do
+          it "should be ok" do
             expect { validations.validate_enable_local_logins("f") }.not_to raise_error
           end
         end
       end
 
       context "when the new value is true" do
-        it "allows enabling local logins" do
+        it "should be ok" do
           expect { validations.validate_enable_local_logins("t") }.not_to raise_error
         end
       end
@@ -221,7 +218,7 @@ RSpec.describe SiteSettings::Validations do
       end
 
       context "when the new value has trailing slash" do
-        it "rejects an origin with a trailing slash" do
+        it "should raise an error" do
           expect { validations.validate_cors_origins("https://www.rainbows.com/") }.to raise_error(
             Discourse::InvalidParameters,
             error_message,
@@ -238,7 +235,6 @@ RSpec.describe SiteSettings::Validations do
 
         context "if secure uploads is enabled" do
           let(:error_message) { I18n.t("errors.site_settings.page_publishing_requirements") }
-
           before { enable_secure_uploads }
 
           it "is not ok" do
@@ -252,34 +248,46 @@ RSpec.describe SiteSettings::Validations do
     end
 
     describe "#validate_secure_uploads" do
-      it "allows enabling with ACLs and access control tags disabled" do
-        SiteSetting.enable_s3_uploads = true
-        SiteSetting.s3_use_acls = false
-        SiteSetting.s3_enable_access_control_tags = false
+      let(:error_message) { I18n.t("errors.site_settings.secure_uploads_requirements") }
 
-        expect { validations.validate_secure_uploads("t") }.not_to raise_error
-      end
+      context "when the new secure uploads value is true" do
+        context "if site setting for enable_s3_uploads is enabled" do
+          before { SiteSetting.enable_s3_uploads = true }
 
-      it "raises when S3 uploads are disabled" do
-        SiteSetting.enable_s3_uploads = false
+          it "should be ok" do
+            expect { validations.validate_secure_uploads("t") }.not_to raise_error
+          end
+        end
 
-        expect { validations.validate_secure_uploads("t") }.to raise_error(
-          Discourse::InvalidParameters,
-          "S3 uploads must be enabled before enabling secure uploads.",
-        )
-      end
+        context "if site setting for enable_s3_uploads is not enabled" do
+          before { SiteSetting.enable_s3_uploads = false }
 
-      it "allows enabling when S3 uploads are enabled globally" do
-        SiteSetting.enable_s3_uploads = false
-        GlobalSetting.stubs(:use_s3?).returns(true)
+          it "is not ok" do
+            expect { validations.validate_secure_uploads("t") }.to raise_error(
+              Discourse::InvalidParameters,
+              error_message,
+            )
+          end
 
-        expect { validations.validate_secure_uploads("t") }.not_to raise_error
-      end
+          context "if global s3 setting is enabled" do
+            before { GlobalSetting.stubs(:use_s3?).returns(true) }
 
-      it "allows disabling when S3 uploads are disabled" do
-        SiteSetting.enable_s3_uploads = false
+            it "should be ok" do
+              expect { validations.validate_secure_uploads("t") }.not_to raise_error
+            end
+          end
+        end
 
-        expect { validations.validate_secure_uploads("f") }.not_to raise_error
+        context "if site setting for s3_use_acls is not enabled" do
+          before { SiteSetting.s3_use_acls = false }
+
+          it "is not ok" do
+            expect { validations.validate_secure_uploads("t") }.to raise_error(
+              Discourse::InvalidParameters,
+              error_message,
+            )
+          end
+        end
       end
     end
 
@@ -303,7 +311,7 @@ RSpec.describe SiteSettings::Validations do
         context "when s3 uploads are not already globally enabled" do
           before { GlobalSetting.stubs(:use_s3?).returns(false) }
 
-          it "allows enabling S3 uploads" do
+          it "should be ok" do
             expect { validations.validate_enable_s3_uploads("t") }.not_to raise_error
           end
         end
@@ -311,7 +319,7 @@ RSpec.describe SiteSettings::Validations do
         context "when the s3_upload_bucket is blank" do
           let(:error_message) { I18n.t("errors.site_settings.s3_upload_bucket_is_required") }
 
-          before { SiteSetting.s3_upload_bucket = "" }
+          before { SiteSetting.s3_upload_bucket = nil }
 
           it "is not ok" do
             expect { validations.validate_enable_s3_uploads("t") }.to raise_error(
@@ -324,7 +332,7 @@ RSpec.describe SiteSettings::Validations do
         context "when the s3_upload_bucket is not blank" do
           before { SiteSetting.s3_upload_bucket = "some-bucket" }
 
-          it "allows enabling S3 uploads" do
+          it "should be ok" do
             expect { validations.validate_enable_s3_uploads("t") }.not_to raise_error
           end
         end
@@ -403,7 +411,7 @@ RSpec.describe SiteSettings::Validations do
         context "when composer_media_optimization_image_enabled is enabled" do
           before { SiteSetting.composer_media_optimization_image_enabled = true }
 
-          it "rejects disabling metadata stripping" do
+          it "should raise an error" do
             expect { validations.validate_strip_image_metadata("f") }.to raise_error(
               Discourse::InvalidParameters,
               error_message,
@@ -414,14 +422,14 @@ RSpec.describe SiteSettings::Validations do
         context "when composer_media_optimization_image_enabled is disabled" do
           before { SiteSetting.composer_media_optimization_image_enabled = false }
 
-          it "allows disabling metadata stripping" do
+          it "should be ok" do
             expect { validations.validate_strip_image_metadata("f") }.not_to raise_error
           end
         end
       end
 
       context "when the new value is true" do
-        it "allows enabling metadata stripping" do
+        it "should be ok" do
           expect { validations.validate_strip_image_metadata("t") }.not_to raise_error
         end
       end

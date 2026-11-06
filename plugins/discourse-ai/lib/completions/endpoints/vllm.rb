@@ -3,226 +3,98 @@
 module DiscourseAi
   module Completions
     module Endpoints
-      class Vllm < OpenAi
-        ENABLE_THINKING_PARSERS = %w[qwen3 gemma4 deepseek_v4].freeze
-        THINKING_PARSERS = %w[granite deepseek_v3 holo2].freeze
-        VLLM_REASONING_EFFORTS = %w[none low medium high].freeze
-        VLLM_REASONING_EFFORT_BY_CANONICAL = {
-          "none" => "none",
-          "minimal" => "low",
-          "low" => "low",
-          "medium" => "medium",
-          "high" => "high",
-          "xhigh" => "high",
-          "max" => "high",
-        }.freeze
+      class Vllm < Base
+        def self.can_contact?(model_provider)
+          model_provider == "vllm"
+        end
 
-        def self.can_contact?(llm_model)
-          llm_model.provider == "vllm"
+        def normalize_model_params(model_params)
+          model_params = model_params.dup
+
+          # max_tokens, temperature are already supported
+          if model_params[:stop_sequences]
+            model_params[:stop] = model_params.delete(:stop_sequences)
+          end
+
+          model_params
+        end
+
+        def default_options
+          { max_tokens: 2000, model: llm_model.name }
         end
 
         def provider_id
           AiApiAuditLog::Provider::Vllm
         end
 
-        def decode(response_raw)
-          parsed = JSON.parse(response_raw, symbolize_names: true)
-          result = processor.process_message(parsed)
-          attach_tool_batch(result, parsed[:id])
-
-          if output_thinking
-            reasoning = parsed.dig(:choices, 0, :message, :reasoning).presence
-            reasoning ||= parsed.dig(:choices, 0, :message, :reasoning_content)
-            result.unshift(Thinking.new(message: reasoning)) if reasoning.present?
-          end
-
-          result
-        end
-
-        def decode_chunk(chunk)
-          @decoder ||= JsonStreamDecoder.new
-
-          elements = []
-          (@decoder << chunk).each do |parsed_json|
-            @tool_batch_id = parsed_json[:id] if parsed_json[:id].present?
-
-            if output_thinking
-              delta = parsed_json.dig(:choices, 0, :delta) || {}
-              reasoning = delta[:reasoning].presence || delta[:reasoning_content]
-              if reasoning.present?
-                if @thinking.nil?
-                  @thinking = Thinking.new(message: reasoning.dup, partial: true)
-                else
-                  @thinking.message << reasoning
-                end
-                elements << Thinking.new(message: reasoning, partial: true)
-              end
-
-              # a delta may carry both reasoning and content; close the thinking
-              # block before any content from the same delta is emitted
-              if @thinking && (delta[:content].present? || delta[:tool_calls].present?)
-                @thinking.partial = false
-                elements << @thinking
-                @thinking = nil
-              end
-            end
-
-            result = processor.process_streamed_message(parsed_json)
-            attach_tool_batch(result, parsed_json[:id].presence || @tool_batch_id)
-            elements << result if result
-          end
-
-          elements = elements.flatten.compact
-
-          seen_tools = Set.new
-          elements.select { |item| !item.is_a?(ToolCall) || seen_tools.add?(item) }
-        end
-
-        def decode_chunk_finish
-          result = []
-          if @thinking
-            @thinking.partial = false
-            result << @thinking
-            @thinking = nil
-          end
-          result.concat(processor.finish)
-          attach_tool_batch(result, @tool_batch_id)
-          @tool_batch_id = nil
-          result
-        end
-
-        def resolve_thinking_config(model_params)
-          effort =
-            DiscourseAi::Completions::ThinkingConfig.normalize_effort(
-              model_params[:thinking_effort],
-            )
-
-          if effort.present?
-            provider_effort = VLLM_REASONING_EFFORT_BY_CANONICAL[effort]
-          else
-            provider_effort = raw_custom_param("reasoning_effort")
-            effort = provider_effort
-          end
-
-          return DiscourseAi::Completions::ThinkingConfig.disabled if effort.blank?
-
-          if provider_effort.blank? || !VLLM_REASONING_EFFORTS.include?(provider_effort)
-            return DiscourseAi::Completions::ThinkingConfig.unsupported(canonical_effort: effort)
-          end
-
-          DiscourseAi::Completions::ThinkingConfig.new(
-            canonical_effort: effort,
-            provider_effort: provider_effort,
-            enabled: provider_effort != "none",
-            explicit_none: provider_effort == "none",
-            strip_temperature: provider_effort != "none",
-            strip_top_p: provider_effort != "none",
-          )
-        end
-
-        protected
-
-        def reset_attempt_state!
-          super
-          @thinking = nil
-          @tool_batch_id = nil
-        end
-
         private
 
-        def attach_tool_batch(result, response_id)
-          return if response_id.blank?
-
-          Array(result).each do |item|
-            next unless item.is_a?(ToolCall)
-
-            item.provider_data = item.provider_data.deep_merge(vllm: { tool_batch_id: response_id })
+        def model_uri
+          if llm_model.url.to_s.starts_with?("srv://")
+            service = DiscourseAi::Utils::DnsSrv.lookup(llm_model.url.sub("srv://", ""))
+            api_endpoint = "https://#{service.target}:#{service.port}/v1/chat/completions"
+          else
+            api_endpoint = llm_model.url
           end
+
+          @uri ||= URI(api_endpoint)
         end
 
         def prepare_payload(prompt, model_params, dialect)
-          payload = super
-
-          if @streaming_mode && !payload.key?(:stream_options)
+          payload = default_options.merge(model_params).merge(messages: prompt)
+          if @streaming_mode
+            payload[:stream] = true if @streaming_mode
             payload[:stream_options] = { include_usage: true }
           end
 
-          apply_thinking_template_kwargs(payload)
-          apply_thinking_token_budget(payload)
-
           payload
-        end
-
-        def apply_thinking_template_kwargs(payload)
-          template_kwargs = thinking_template_kwargs
-          return if template_kwargs.blank?
-
-          payload[:chat_template_kwargs] ||= {}
-          payload[:chat_template_kwargs].merge!(template_kwargs)
-        end
-
-        def thinking_template_kwargs
-          return {} if thinking_config&.explicit_none?
-
-          override = active_custom_param("thinking_override")
-
-          if override
-            return {} if !%w[on off].include?(override)
-
-            parser = active_custom_param("reasoning_parser")
-            thinking_enabled = override == "on"
-
-            if ENABLE_THINKING_PARSERS.include?(parser)
-              { enable_thinking: thinking_enabled }
-            elsif THINKING_PARSERS.include?(parser)
-              { thinking: thinking_enabled }
-            else
-              {}
-            end
-          elsif llm_model.lookup_custom_param("enable_thinking")
-            { enable_thinking: true }
-          else
-            {}
-          end
-        end
-
-        def apply_thinking_token_budget(payload)
-          return if active_custom_param("reasoning_parser").blank?
-          return if reasoning_effort == "none"
-
-          budget = llm_model.lookup_custom_param("thinking_token_budget").to_i
-          payload[:thinking_token_budget] = budget if budget.positive?
-        end
-
-        def active_custom_param(key)
-          value = llm_model.lookup_custom_param(key)
-          value = value.strip if value.respond_to?(:strip)
-          return nil if value.blank? || value == "default"
-
-          value
-        end
-
-        def reasoning_effort
-          thinking_config&.provider_effort
-        end
-
-        def raw_custom_param(key)
-          value = llm_model.provider_params&.dig(key) || llm_model.provider_params&.dig(key.to_sym)
-          value = value.strip if value.respond_to?(:strip)
-          return nil if value.blank? || value == "default"
-
-          value
         end
 
         def prepare_request(payload)
           headers = { "Referer" => Discourse.base_url, "Content-Type" => "application/json" }
 
           api_key = llm_model&.api_key || SiteSetting.ai_vllm_api_key
-          headers["Authorization"] = "Bearer #{api_key}" if api_key.present?
-
-          headers.merge!(extra_request_headers)
+          headers["X-API-KEY"] = api_key if api_key.present?
 
           Net::HTTP::Post.new(model_uri, headers).tap { |r| r.body = payload }
+        end
+
+        def xml_tools_enabled?
+          true
+        end
+
+        def final_log_update(log)
+          log.request_tokens = @prompt_tokens if @prompt_tokens
+          log.response_tokens = @completion_tokens if @completion_tokens
+        end
+
+        def decode(response_raw)
+          json = JSON.parse(response_raw, symbolize_names: true)
+          @prompt_tokens = json.dig(:usage, :prompt_tokens)
+          @completion_tokens = json.dig(:usage, :completion_tokens)
+          [json.dig(:choices, 0, :message, :content)]
+        end
+
+        def decode_chunk(chunk)
+          @json_decoder ||= JsonStreamDecoder.new
+          (@json_decoder << chunk)
+            .map do |parsed|
+              # vLLM keeps sending usage over and over again
+              prompt_tokens = parsed.dig(:usage, :prompt_tokens)
+              completion_tokens = parsed.dig(:usage, :completion_tokens)
+
+              @prompt_tokens = prompt_tokens if prompt_tokens
+
+              @completion_tokens = completion_tokens if completion_tokens
+
+              text = parsed.dig(:choices, 0, :delta, :content)
+              if text.to_s.empty?
+                nil
+              else
+                text
+              end
+            end
+            .compact
         end
       end
     end

@@ -44,7 +44,7 @@ class PublishedPagesController < ApplicationController
           "published-page",
           params[:slug],
           "topic-#{@topic.id}",
-          @topic.tags.visible(guardian).pluck(:name),
+          @topic.tags.pluck(:name),
         ].flatten.compact,
       )
 
@@ -79,9 +79,6 @@ class PublishedPagesController < ApplicationController
   end
 
   def check_slug
-    ensure_logged_in
-    guardian.ensure_is_staff!
-
     pp = PublishedPage.new(topic: Topic.new, slug: params[:slug].strip)
 
     if pp.valid?

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "User profile" do
+RSpec.describe "User profile", type: :system do
   fab!(:current_user, :user)
   fab!(:user)
 
@@ -21,12 +21,16 @@ RSpec.describe "User profile" do
     end
   end
 
+  def visit_user_profile
+    visit("/u/" + user.username + "/summary")
+  end
+
   context "when user" do
     context "with chat disabled" do
       before do
         SiteSetting.chat_enabled = false
         sign_in(current_user)
-        visit("/u/#{user.username}/summary")
+        visit_user_profile
       end
 
       include_examples "not showing chat button"
@@ -35,7 +39,7 @@ RSpec.describe "User profile" do
     context "with chat enabled" do
       before do
         sign_in(current_user)
-        visit("/u/#{user.username}/summary")
+        visit_user_profile
       end
 
       include_examples "showing chat button"
@@ -43,7 +47,7 @@ RSpec.describe "User profile" do
   end
 
   context "when anonymous" do
-    before { visit("/u/#{user.username}/summary") }
+    before { visit_user_profile }
 
     include_examples "not showing chat button"
   end

@@ -4,137 +4,34 @@ require "discourse_ip_info"
 
 RSpec.describe UserAuthToken do
   fab!(:user)
-  fab!(:admin)
 
-  describe "#user" do
-    context "when no impersonation is happening" do
-      it "returns the user associated with the session" do
-        token =
-          UserAuthToken.generate!(
-            user_id: user.id,
-            user_agent: "some user agent 2",
-            client_ip: "1.1.2.3",
-          )
+  it "can remove old expired tokens" do
+    SiteSetting.verbose_auth_token_logging = true
 
-        expect(token.user).to eq(user)
-        expect(token.user.is_impersonating).to be_falsey
-        expect(token.user.impersonation_expires_at).to be_nil
-      end
-    end
+    freeze_time Time.zone.now
+    SiteSetting.maximum_session_age = 1
 
-    context "when impersonating another user" do
-      it "returns the user being impersonated if not expired" do
-        freeze_time
+    token =
+      UserAuthToken.generate!(
+        user_id: user.id,
+        user_agent: "some user agent 2",
+        client_ip: "1.1.2.3",
+      )
 
-        token =
-          UserAuthToken.generate!(
-            user_id: admin.id,
-            user_agent: "some user agent 2",
-            client_ip: "1.1.2.3",
-          )
+    freeze_time 1.hour.from_now
+    UserAuthToken.cleanup!
 
-        token.update!(impersonated_user_id: user.id, impersonation_expires_at: 15.minutes.from_now)
+    expect(UserAuthToken.where(id: token.id).count).to eq(1)
 
-        expect(token.user).to eq(user)
-        expect(token.user.is_impersonating).to eq(true)
-        expect(token.user.impersonation_expires_at).to eq_time(15.minutes.from_now)
-      end
+    freeze_time 1.second.from_now
+    UserAuthToken.cleanup!
 
-      it "returns the user associated with the session if expired" do
-        token =
-          UserAuthToken.generate!(
-            user_id: admin.id,
-            user_agent: "some user agent 2",
-            client_ip: "1.1.2.3",
-          )
+    expect(UserAuthToken.where(id: token.id).count).to eq(1)
 
-        token.update!(impersonated_user_id: user.id, impersonation_expires_at: 1.hour.ago)
+    freeze_time UserAuthToken::ROTATE_TIME.from_now
+    UserAuthToken.cleanup!
 
-        expect(token.user).to eq(admin)
-        expect(token.user.is_impersonating).to be_falsey
-        expect(token.user.impersonation_expires_at).to be_nil
-      end
-
-      it "returns the user associated with the session if can no longer impersonate" do
-        token =
-          UserAuthToken.generate!(
-            user_id: admin.id,
-            user_agent: "some user agent 2",
-            client_ip: "1.1.2.3",
-          )
-
-        token.update!(impersonated_user_id: user.id, impersonation_expires_at: 15.minutes.from_now)
-        Guardian.any_instance.stubs(:can_impersonate?).returns(false)
-
-        expect(token.user).to eq(admin)
-        expect(token.user.is_impersonating).to be_falsey
-        expect(token.user.impersonation_expires_at).to be_nil
-      end
-    end
-  end
-
-  describe ".unexpired" do
-    it "returns only tokens within maximum_session_age" do
-      SiteSetting.maximum_session_age = 1
-
-      fresh = UserAuthToken.generate!(user_id: user.id)
-      fresh.update!(rotated_at: 30.minutes.ago)
-
-      stale = UserAuthToken.generate!(user_id: user.id)
-      stale.update!(rotated_at: 2.hours.ago)
-
-      expect(UserAuthToken.unexpired).to contain_exactly(fresh)
-    end
-  end
-
-  describe ".cleanup!" do
-    it "can remove old expired tokens" do
-      freeze_time Time.zone.now
-      SiteSetting.maximum_session_age = 1
-
-      token =
-        UserAuthToken.generate!(
-          user_id: user.id,
-          user_agent: "some user agent 2",
-          client_ip: "1.1.2.3",
-        )
-
-      freeze_time 1.hour.from_now
-      UserAuthToken.cleanup!
-
-      expect(UserAuthToken.where(id: token.id).count).to eq(1)
-
-      freeze_time 1.second.from_now
-      UserAuthToken.cleanup!
-
-      expect(UserAuthToken.where(id: token.id).count).to eq(1)
-
-      freeze_time UserAuthToken::ROTATE_TIME.from_now
-      UserAuthToken.cleanup!
-
-      expect(UserAuthToken.where(id: token.id).count).to eq(0)
-    end
-
-    it "deletes old logs excluding the `suspicious` and `generate` types" do
-      SiteSetting.maximum_session_age = 1
-      UserAuthTokenLog.delete_all
-
-      preserved = []
-
-      preserved << UserAuthTokenLog.create!(action: "suspicious").id
-      preserved << UserAuthTokenLog.create!(action: "suspicious", created_at: 10.days.ago).id
-
-      preserved << UserAuthTokenLog.create!(action: "generate").id
-      preserved << UserAuthTokenLog.create!(action: "generate", created_at: 10.years.ago).id
-
-      preserved << UserAuthTokenLog.create!(action: "random but fresh").id
-
-      UserAuthTokenLog.create!(action: "random but not very fresh", created_at: 2.hours.ago)
-
-      expect do UserAuthToken.cleanup! end.to change { UserAuthTokenLog.count }.by(-1)
-
-      expect(UserAuthTokenLog.pluck(:id)).to contain_exactly(*preserved)
-    end
+    expect(UserAuthToken.where(id: token.id).count).to eq(0)
   end
 
   it "can lookup hashed" do
@@ -378,7 +275,7 @@ RSpec.describe UserAuthToken do
     expect(user.user_auth_token_logs.last.client_ip).to eq("1.1.2.3")
   end
 
-  it "does not mark the token unseen when previous and current match" do
+  it "will not mark token unseen when prev and current are the same" do
     token =
       UserAuthToken.generate!(user_id: user.id, user_agent: "some user agent", client_ip: "1.1.2.3")
 

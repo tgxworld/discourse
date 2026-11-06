@@ -4,19 +4,20 @@ import { fn } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
-import DMenu from "discourse/float-kit/components/d-menu";
+import { eq } from "truth-helpers";
+import DButton from "discourse/components/d-button";
+import categoryBadge from "discourse/helpers/category-badge";
 import { ajax } from "discourse/lib/ajax";
 import { popupAjaxError } from "discourse/lib/ajax-error";
-import { uniqueItemsFromArray } from "discourse/lib/array-tools";
-import DButton from "discourse/ui-kit/d-button";
-import dCategoryBadge from "discourse/ui-kit/helpers/d-category-badge";
-import { tagSuggestionParams } from "../lib/ai-helper-suggestions.js";
+import DMenu from "float-kit/components/d-menu";
 
 export default class AiSplitTopicSuggester extends Component {
   @service site;
+  @service menu;
 
   @tracked suggestions = [];
   @tracked loading = false;
+  @tracked icon = "discourse-sparkles";
 
   SUGGESTION_TYPES = {
     title: "suggest_title",
@@ -40,18 +41,9 @@ export default class AiSplitTopicSuggester extends Component {
 
     this.loading = true;
 
-    const data = { text: this.input };
-
-    if (this.args.mode === this.SUGGESTION_TYPES.tag) {
-      Object.assign(
-        data,
-        tagSuggestionParams(this.args.categoryId, this.args.currentValue)
-      );
-    }
-
     ajax(`/discourse-ai/ai-helper/${this.args.mode}`, {
       method: "POST",
-      data,
+      data: { text: this.input },
     })
       .then((result) => {
         if (this.args.mode === this.SUGGESTION_TYPES.title) {
@@ -65,7 +57,6 @@ export default class AiSplitTopicSuggester extends Component {
         } else if (this.args.mode === this.SUGGESTION_TYPES.tag) {
           this.suggestions = result.assistant.map((s) => {
             return {
-              id: s.id,
               name: s.name,
               count: s.count,
             };
@@ -98,10 +89,10 @@ export default class AiSplitTopicSuggester extends Component {
       if (this.args.currentValue) {
         if (Array.isArray(this.args.currentValue)) {
           const updatedTags = [...this.args.currentValue, suggestion];
-          this.args.updateAction(uniqueItemsFromArray(updatedTags));
+          this.args.updateAction([...new Set(updatedTags)]);
         } else {
           const updatedTags = [this.args.currentValue, suggestion];
-          this.args.updateAction(uniqueItemsFromArray(updatedTags));
+          this.args.updateAction([...new Set(updatedTags)]);
         }
       } else {
         if (Array.isArray(suggestion)) {
@@ -130,11 +121,11 @@ export default class AiSplitTopicSuggester extends Component {
       />
     {{/if}}
     <DMenu
+      @icon="discourse-sparkles"
+      @interactive={{true}}
+      @identifier="ai-split-topic-suggestion-menu"
       class="ai-split-topic-suggestion-button"
       data-suggestion-mode={{@mode}}
-      @icon="discourse-sparkles"
-      @identifier="ai-split-topic-suggestion-menu"
-      @interactive={{true}}
       {{on "click" this.loadSuggestions}}
       as |menu|
     >
@@ -143,21 +134,21 @@ export default class AiSplitTopicSuggester extends Component {
           {{#each this.suggestions as |suggestion index|}}
             {{#if (eq @mode "suggest_category")}}
               <li
-                class="ai-split-topic-suggestion__category-result"
                 data-name={{suggestion.name}}
                 data-value={{suggestion.id}}
+                class="ai-split-topic-suggestion__category-result"
                 role="button"
                 {{on "click" (fn this.applySuggestion suggestion menu)}}
               >
-                {{dCategoryBadge suggestion}}
+                {{categoryBadge suggestion}}
                 <span class="topic-count">x
                   {{suggestion.totalTopicCount}}</span>
               </li>
             {{else if (eq @mode "suggest_tags")}}
               <li data-name={{suggestion.name}} data-value={{index}}>
                 <DButton
-                  @action={{fn this.applySuggestion suggestion menu}}
                   @translatedLabel={{suggestion.name}}
+                  @action={{fn this.applySuggestion suggestion.name menu}}
                 >
                   <span class="topic-count">x{{suggestion.count}}</span>
                 </DButton>
@@ -165,8 +156,8 @@ export default class AiSplitTopicSuggester extends Component {
             {{else}}
               <li data-name={{suggestion}} data-value={{index}}>
                 <DButton
-                  @action={{fn this.applySuggestion suggestion menu}}
                   @translatedLabel={{suggestion}}
+                  @action={{fn this.applySuggestion suggestion menu}}
                 />
               </li>
             {{/if}}

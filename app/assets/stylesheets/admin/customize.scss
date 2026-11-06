@@ -113,10 +113,10 @@
 
   .field-error,
   .field-warning {
-    margin-top: var(--space-2);
-    margin-bottom: 0;
+    margin-top: 10px;
+    margin-bottom: 10px;
     background-color: var(--danger-low-mid);
-    padding: var(--space-2);
+    padding: 10px;
     white-space: pre-wrap;
   }
 
@@ -127,10 +127,9 @@
   .field-info {
     background-color: var(--tertiary-low);
     padding: 10px;
-    margin: 10px 0 0;
+    margin: 10px 0;
     white-space: nowrap;
     overflow-x: auto;
-    border-radius: var(--d-border-radius) var(--d-border-radius) 0 0;
   }
 
   .admin-container {
@@ -255,13 +254,6 @@
           width: auto;
           margin-left: auto;
         }
-
-        .translation-selector-controls {
-          display: flex;
-          align-items: center;
-          gap: 0.5em;
-          margin-left: auto;
-        }
       }
 
       &.remote-theme-metadata {
@@ -336,7 +328,7 @@
     }
 
     .setting-label {
-      overflow-wrap: break-word;
+      word-wrap: break-word;
 
       @include viewport.from(md) {
         width: 25%;
@@ -362,43 +354,18 @@
     display: flex;
     align-items: center;
     font-size: var(--font-up-1);
-    flex-wrap: wrap;
-    border-bottom: 1px solid var(--content-border-color);
-    padding-bottom: var(--space-2);
-    gap: var(--space-2);
+    margin-bottom: 0.5em;
 
     .editor-back-button {
       margin-right: 0.25em;
-      font-size: var(--font-down-3);
     }
 
     .editor-theme-name-wrapper {
       margin-left: 0.25em;
-      margin-right: auto;
     }
 
     .editor-theme-name {
       font-weight: bold;
-    }
-
-    &__title {
-      margin-right: auto;
-      display: flex;
-      line-height: var(--line-height-medium);
-      align-items: baseline;
-    }
-
-    &__admin-actions {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      font-size: var(--font-down-1);
-      white-space: nowrap;
-
-      @include viewport.until(sm) {
-        width: 100%;
-        justify-content: space-between;
-      }
     }
   }
 
@@ -427,7 +394,6 @@
       position: relative;
       min-height: unset;
       flex: 1 1 0;
-      border-radius: 0 0 var(--d-border-radius) var(--d-border-radius);
     }
 
     &.maximized {
@@ -471,12 +437,34 @@
         margin-right: 0;
         display: flex;
 
+        &.spacer {
+          flex-grow: 1;
+        }
+
         &:last-of-type > a {
           margin-right: 0;
         }
 
+        a.no-text .d-icon {
+          margin-right: 0;
+        }
+
+        label {
+          padding: 6px 12px;
+          margin-bottom: 0;
+        }
+
         a.blank:not(.active) {
           color: var(--primary-medium);
+        }
+
+        input {
+          margin-bottom: 0;
+          margin-left: 6px;
+        }
+
+        button {
+          margin-right: 0;
         }
       }
     }
@@ -556,6 +544,7 @@
     }
 
     .color-picker input {
+      width: 80px;
       margin-bottom: 0;
     }
 
@@ -718,7 +707,7 @@
     }
 
     tr td {
-      overflow-wrap: break-word;
+      word-wrap: break-word;
       max-width: 25vw;
       align-self: start;
     }
@@ -787,28 +776,6 @@
 }
 
 .admin-embedding {
-  .admin-embedding-index__full-app-toggle {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-3);
-    margin-bottom: var(--space-4);
-  }
-
-  .admin-embedding-index__full-app-toggle-text {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-
-  .admin-embedding-index__full-app-toggle-label {
-    font-weight: 700;
-  }
-
-  .admin-embedding-index__full-app-toggle-description {
-    color: var(--primary-medium);
-    font-size: var(--font-down-1);
-  }
-
   .admin-embeddable-host-item__delete {
     &:hover {
       svg.d-icon {
@@ -877,18 +844,6 @@
 
   .d-editor {
     height: 50vh;
-  }
-
-  .back-to-email-templates {
-    margin-bottom: var(--space-2);
-  }
-
-  .email-templates-list {
-    &__row {
-      &.overridden {
-        border-left: 3px solid var(--highlight-medium);
-      }
-    }
   }
 }
 
@@ -1006,6 +961,12 @@
 }
 
 .mobile-view .admin-customize {
+  .admin-container {
+    display: flex;
+    flex-wrap: wrap;
+    padding: 0;
+  }
+
   .color-scheme {
     h1,
     h1 input {

@@ -16,10 +16,7 @@ class Jobs::NotifyReviewable < ::Jobs::Base
       Reviewable
         .where(id: args[:updated_reviewable_ids])
         .each do |r|
-          payload = {
-            last_performing_username: args[:performing_username],
-            status: r.status_for_database,
-          }
+          payload = { last_performing_username: args[:performing_username], status: r.status }
 
           all_updates[:admins][r.id] = payload
           all_updates[:moderators][r.id] = payload if r.reviewable_by_moderator?
@@ -38,7 +35,10 @@ class Jobs::NotifyReviewable < ::Jobs::Base
       notify_users(User.real.admins, all_updates[:admins])
 
       if reviewable.reviewable_by_moderator?
-        notify_users(User.real.moderators.where.not(id: @contacted), all_updates[:moderators])
+        notify_users(
+          User.real.moderators.where("id NOT IN (?)", @contacted),
+          all_updates[:moderators],
+        )
       end
 
       if SiteSetting.enable_category_group_moderation? && reviewable.category.present?
@@ -50,7 +50,7 @@ class Jobs::NotifyReviewable < ::Jobs::Base
               "INNER JOIN category_moderation_groups ON category_moderation_groups.group_id = group_users.group_id",
             )
             .where("category_moderation_groups.category_id": reviewable.category.id)
-            .where.not(id: @contacted)
+            .where("users.id NOT IN (?)", @contacted)
             .distinct
 
         users.find_each do |user|

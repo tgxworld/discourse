@@ -2,7 +2,8 @@
 
 class FixAiSummariesSequence < ActiveRecord::Migration[7.0]
   def up
-    execute <<-SQL
+    begin
+      execute <<-SQL
         SELECT
           SETVAL (
             'ai_summaries_id_seq',
@@ -26,8 +27,9 @@ class FixAiSummariesSequence < ActiveRecord::Migration[7.0]
             true
           );
       SQL
-  rescue ActiveRecord::StatementInvalid => e
-    # if the summary_table does not exist, we can ignore the error
+    rescue ActiveRecord::StatementInvalid => e
+      # if the summary_table does not exist, we can ignore the error
+    end
   end
 
   def down

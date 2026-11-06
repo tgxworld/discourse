@@ -8,11 +8,11 @@ module DiscourseTemplates::TopicExtension
   end
 
   def template_item_usage_count
-    template_item_usage&.usage_count.to_i
+    self.template_item_usage&.usage_count.to_i
   end
 
   def increment_template_item_usage_count!
-    DB.exec(<<~SQL, topic_id: id)
+    DB.exec(<<~SQL, topic_id: self.id)
       INSERT INTO discourse_templates_usage_count AS uc
       (topic_id, usage_count, created_at, updated_at)
       VALUES

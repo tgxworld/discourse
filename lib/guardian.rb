@@ -6,14 +6,11 @@ require "guardian/ensure_magic"
 require "guardian/group_guardian"
 require "guardian/invite_guardian"
 require "guardian/flag_guardian"
-require "guardian/permalink_guardian"
 require "guardian/post_guardian"
 require "guardian/post_revision_guardian"
 require "guardian/sidebar_guardian"
-require "guardian/staff_action_log_guardian"
 require "guardian/tag_guardian"
 require "guardian/topic_guardian"
-require "guardian/upload_guardian"
 require "guardian/user_guardian"
 require "guardian/localization_guardian"
 
@@ -25,15 +22,12 @@ class Guardian
   include FlagGuardian
   include GroupGuardian
   include InviteGuardian
-  include PermalinkGuardian
   include PostGuardian
   include PostRevisionGuardian
   include LocalizationGuardian
   include SidebarGuardian
-  include StaffActionLogGuardian
   include TagGuardian
   include TopicGuardian
-  include UploadGuardian
   include UserGuardian
 
   class AnonymousUser
@@ -102,18 +96,7 @@ class Guardian
     end
 
     def in_any_groups?(group_ids)
-      if !SiteSetting.granular_anonymous_and_logged_in_groups_permissions
-        return(
-          group_ids.include?(Group::AUTO_GROUPS[:everyone]) ||
-            group_ids.include?(Group::AUTO_GROUPS[:anonymous_users])
-        )
-      end
-
-      group_ids.include?(Group::AUTO_GROUPS[:anonymous_users])
-    end
-
-    def permission_acl
-      @permission_acl ||= AccessControlList.matching_user(nil).user_acl
+      false
     end
   end
 
@@ -157,8 +140,15 @@ class Guardian
     return false if !category
     return false if !category_group_moderation_allowed?
 
-    @moderated_category_ids ||= category_group_moderator_scope.pluck(:id).to_set
-    @moderated_category_ids.include?(category.id)
+    @group_moderator_categories ||= {}
+
+    if @group_moderator_categories.key?(category.id)
+      @group_moderator_categories[category.id]
+    else
+      @group_moderator_categories[category.id] = category_group_moderator_scope.exists?(
+        id: category.id,
+      )
+    end
   end
 
   def is_silenced?
@@ -169,7 +159,10 @@ class Guardian
     @user &&
       (
         Rails.env.development? || (is_admin? && Developer.user_ids.include?(@user.id)) ||
-          Developer.configured_email?(@user.email)
+          (
+            Rails.configuration.respond_to?(:developer_emails) &&
+              Rails.configuration.developer_emails.include?(@user.email)
+          )
       )
   end
 
@@ -179,38 +172,6 @@ class Guardian
 
   def is_anonymous?
     @user.anonymous?
-  end
-
-  def has_acl_permission?(target, permission)
-    @user.permission_acl.has_target_permission?(target, permission)
-  end
-
-  def has_any_acl_permission?(target, permissions)
-    @user.permission_acl.has_any_target_permission?(target, permissions)
-  end
-
-  def is_acl_owner?(target)
-    has_acl_permission?(target, Acl::Permissions::OWNER)
-  end
-
-  def can_manage_acl_owner?(target)
-    authenticated? && (is_admin? || is_acl_owner?(target))
-  end
-
-  def target_ids_with_acl_permission(target_klass, permission)
-    @user.permission_acl.target_ids_with_permission(target_klass, permission)
-  end
-
-  def target_ids_with_any_acl_permissions(target_klass, permissions)
-    @user.permission_acl.target_ids_with_any_permissions(target_klass, permissions)
-  end
-
-  def in_any_groups?(group_ids)
-    @user.in_any_groups?(group_ids)
-  end
-
-  def can_search?
-    authenticated? || SiteSetting.allow_anonymous_search
   end
 
   # Can the user see the object?
@@ -266,14 +227,7 @@ class Guardian
           (obj.is_a?(Topic) && @user.has_trust_level?(TrustLevel[4]) && can_see_topic?(obj))
       )
   end
-
-  def can_see_flags?(obj)
-    is_staff? && can_moderate?(obj)
-  end
-
-  def can_delete_all_posts_and_topics?
-    @user.in_any_groups?(SiteSetting.delete_all_posts_and_topics_allowed_groups_map)
-  end
+  alias can_see_flags? can_moderate?
 
   def can_tag?(topic)
     return false if topic.blank?
@@ -322,10 +276,6 @@ class Guardian
     return false if group.members_visibility_level == Group.visibility_levels[:staff]
 
     true
-  end
-
-  def can_see_group_and_members?(group)
-    can_see_group?(group) && can_see_group_members?(group)
   end
 
   def can_see_groups?(groups)
@@ -392,13 +342,9 @@ class Guardian
   end
 
   def can_suspend?(user)
-    can_unsuspend?(user) && user.regular?
+    user && is_staff? && user.regular?
   end
   alias can_deactivate? can_suspend?
-
-  def can_unsuspend?(user)
-    user && is_staff? && (!user.staff? || is_admin?)
-  end
 
   def can_revoke_admin?(admin)
     can_administer_user?(admin) && admin.admin?
@@ -451,8 +397,7 @@ class Guardian
   end
 
   def can_change_trust_level?(user)
-    user &&
-      (is_admin? || (is_moderator? && SiteSetting.moderators_change_trust_levels && !user.staff?))
+    user && is_staff?
   end
 
   # Support sites that have to approve users
@@ -497,7 +442,7 @@ class Guardian
   ##
   # This should be used as a final check for when a user is sending a message
   # to a target user or group.
-  def can_send_private_message?(target, notify_moderators: false, private_message_context: nil)
+  def can_send_private_message?(target, notify_moderators: false)
     target_is_user = target.is_a?(User)
     target_is_group = target.is_a?(Group)
     from_system = @user.is_system_user?
@@ -517,22 +462,8 @@ class Guardian
     # even if they are not in personal_message_enabled_groups
     group_is_messageable = target_is_group && Group.messageable(@user).where(id: target.id).exists?
 
-    plugin_can_send_private_message_to_target =
-      authenticated? &&
-        DiscoursePluginRegistry.apply_modifier(
-          :guardian_can_send_private_message_to_target,
-          false,
-          guardian: self,
-          target: target,
-          private_message_context: private_message_context,
-          notify_moderators: notify_moderators,
-        )
-
     # User is authenticated and can send PMs, this can be covered by trust levels as well via AUTO_GROUPS
-    (
-      can_send_private_messages?(notify_moderators: notify_moderators) || group_is_messageable ||
-        plugin_can_send_private_message_to_target
-    ) &&
+    (can_send_private_messages?(notify_moderators: notify_moderators) || group_is_messageable) &&
       # User disabled private message
       (is_staff? || target_is_group || target.user_option.allow_private_messages) &&
       # Can't send PMs to suspended users
@@ -553,20 +484,11 @@ class Guardian
       @user.in_any_groups?(SiteSetting.send_email_messages_allowed_groups_map)
   end
 
-  def can_export_entity?(entity, entity_id = nil, args = nil)
+  def can_export_entity?(entity, entity_id = nil)
     return false if anonymous?
     return true if is_admin?
-    return can_see_emails? && can_see_ip? if entity == "screened_email"
-    return can_see_ip? if entity == "screened_ip"
-
-    if is_moderator? && (entity != "user_archive" || entity_id.nil?)
-      if entity == "report"
-        report_name = args&.[](:name) || args&.[]("name")
-        return true if report_name.blank?
-        return !Report.hidden?(report_name, guardian: self)
-      end
-      return %w[staff_action screened_url report user_archive].include?(entity)
-    end
+    return can_see_emails? if entity == "screened_email"
+    return entity != "user_list" if is_moderator? && (entity != "user_archive" || entity_id.nil?)
 
     # Regular users can only export their archives
     return false unless entity == "user_archive"
@@ -623,7 +545,7 @@ class Guardian
     return false if !@user.admin?
 
     allowed_repos = GlobalSetting.allowed_theme_repos
-    if allowed_repos.present?
+    if !allowed_repos.blank?
       urls = allowed_repos.split(",").map(&:strip)
       return urls.include?(repo)
     end
@@ -686,19 +608,17 @@ class Guardian
   end
 
   def can_lazy_load_categories?
-    in_any_groups?(SiteSetting.lazy_load_categories_groups_map)
+    SiteSetting.lazy_load_categories_groups_map.include?(Group::AUTO_GROUPS[:everyone]) ||
+      @user.in_any_groups?(SiteSetting.lazy_load_categories_groups_map)
+  end
+
+  def can_see_reviewable_ui_refresh?
+    SiteSetting.reviewable_ui_refresh_map.include?(Group::AUTO_GROUPS[:everyone]) ||
+      @user.in_any_groups?(SiteSetting.reviewable_ui_refresh_map)
   end
 
   def is_me?(other)
     other && authenticated? && other.is_a?(User) && @user == other
-  end
-
-  def category_group_moderator_scope
-    Category.joins(category_moderation_groups: { group: :group_users }).where(
-      group_users: {
-        user_id: user.id,
-      },
-    )
   end
 
   private
@@ -745,5 +665,12 @@ class Guardian
 
   def category_group_moderation_allowed?
     authenticated? && SiteSetting.enable_category_group_moderation
+  end
+
+  def category_group_moderator_scope
+    Category
+      .joins(:category_moderation_groups)
+      .joins("INNER JOIN group_users ON group_users.group_id = category_moderation_groups.group_id")
+      .where("group_users.user_id": user.id)
   end
 end

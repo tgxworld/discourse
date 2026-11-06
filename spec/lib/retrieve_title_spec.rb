@@ -2,19 +2,19 @@
 
 RSpec.describe RetrieveTitle do
   describe ".extract_title" do
-    it "extracts the title tag's value" do
+    it "will extract the value from the title tag" do
       title = RetrieveTitle.extract_title("<html><title>My Cool Title</title></html>")
 
       expect(title).to eq("My Cool Title")
     end
 
-    it "strips surrounding whitespace" do
+    it "will strip whitespace" do
       title = RetrieveTitle.extract_title("<html><title>   Another Title\n\n </title></html>")
 
       expect(title).to eq("Another Title")
     end
 
-    it "uses og:title when the title tag is missing" do
+    it "will pick og:title if title is missing" do
       title = RetrieveTitle.extract_title(<<~HTML)
         <html>
           <meta property="og:title" content="Good Title"
@@ -24,7 +24,7 @@ RSpec.describe RetrieveTitle do
       expect(title).to eq("Good Title")
     end
 
-    it "prefers the title tag over og:title" do
+    it "will prefer the title over the opengraph tag" do
       title = RetrieveTitle.extract_title(<<~HTML)
         <html>
           <title>Good Title</title>
@@ -35,7 +35,7 @@ RSpec.describe RetrieveTitle do
       expect(title).to eq("Good Title")
     end
 
-    it "parses a YouTube URL from JavaScript" do
+    it "will parse a YouTube url from javascript" do
       title = RetrieveTitle.extract_title(<<~HTML)
         <html>
           <title>YouTube</title>
@@ -45,7 +45,7 @@ RSpec.describe RetrieveTitle do
       expect(title).to eq("Video Title")
     end
 
-    it "handles invalid HTML" do
+    it "will not exception out for invalid html" do
       attributes = (1..1000).map { |x| " attr#{x}='1' " }.join
       title = RetrieveTitle.extract_title <<~HTML
         <html>
@@ -190,20 +190,14 @@ RSpec.describe RetrieveTitle do
       expect(RetrieveTitle.crawl("https://example.com")).to eq(nil)
     end
 
-    it "raises errors other than Net::ReadTimeout" do
+    it "it raises errors other than Net::ReadTimeout, e.g. NoMethodError" do
       stub_request(:get, "https://example.com").to_raise(NoMethodError)
 
       expect { RetrieveTitle.crawl("https://example.com") }.to raise_error(NoMethodError)
     end
 
-    it "ignores Net::ReadTimeout errors" do
+    it "it ignores Net::ReadTimeout errors" do
       stub_request(:get, "https://example.com").to_raise(Net::ReadTimeout)
-
-      expect(RetrieveTitle.crawl("https://example.com")).to eq(nil)
-    end
-
-    it "ignores connection reset errors" do
-      described_class.stubs(:fetch_title).raises(Errno::ECONNRESET)
 
       expect(RetrieveTitle.crawl("https://example.com")).to eq(nil)
     end

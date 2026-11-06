@@ -1,9 +1,9 @@
 import Component from "@glimmer/component";
 import { fn } from "@ember/helper";
-import DButton from "discourse/ui-kit/d-button";
-import DConditionalLoadingSpinner from "discourse/ui-kit/d-conditional-loading-spinner";
-import dBoundAvatarTemplate from "discourse/ui-kit/helpers/d-bound-avatar-template";
-import PollVotersRankedChoice from "./poll-voters-ranked-choice.gjs";
+import ConditionalLoadingSpinner from "discourse/components/conditional-loading-spinner";
+import DButton from "discourse/components/d-button";
+import avatar from "discourse/helpers/bound-avatar-template";
+import PollVotersRankedChoice from "./poll-voters-ranked-choice";
 
 export default class PollVotersComponent extends Component {
   get showMore() {
@@ -18,21 +18,25 @@ export default class PollVotersComponent extends Component {
         {{else}}
           {{#each @voters as |user|}}
             <li>
-              <a data-user-card={{user.username}} title={{user.username}}>
-                {{dBoundAvatarTemplate user.avatar_template "tiny"}}
-              </a>
+              <a data-user-card={{user.username}}>{{avatar
+                  user.avatar_template
+                  "tiny"
+                  usernamePath=user.username
+                  namePath=user.name
+                  title=user.username
+                }}</a>
             </li>
           {{/each}}
         {{/if}}
       </ul>
       {{#if this.showMore}}
-        <DConditionalLoadingSpinner @condition={{@loading}}>
+        <ConditionalLoadingSpinner @condition={{@loading}}>
           <DButton
-            class="poll-voters-toggle-expand"
             @action={{fn @fetchVoters @optionId}}
             @icon="chevron-down"
+            class="poll-voters-toggle-expand"
           />
-        </DConditionalLoadingSpinner>
+        </ConditionalLoadingSpinner>
       {{/if}}
     </div>
   </template>

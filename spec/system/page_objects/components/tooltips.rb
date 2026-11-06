@@ -11,10 +11,6 @@ module PageObjects
         @identifier = identifier
       end
 
-      def element(**kwargs)
-        page.find("#{SELECTOR}[data-identifier='#{identifier}']", **kwargs)
-      end
-
       def find(selector, **kwargs)
         page.find("#{SELECTOR}[data-identifier='#{identifier}'] #{selector}", **kwargs)
       end

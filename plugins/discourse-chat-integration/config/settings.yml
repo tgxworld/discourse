@@ -17,15 +17,12 @@ chat_integration:
     validator: "ChatIntegrationSlackEnabledSettingValidator"
   chat_integration_slack_access_token:
     default: ''
-    secret: true
   chat_integration_slack_incoming_webhook_token:
     default: ''
-    secret: true
   chat_integration_slack_excerpt_length:
     default: 400
   chat_integration_slack_outbound_webhook_url:
     default: ''
-    secret: true
     regex: '^https:\/\/hooks\.slack\.com\/(services|workflows)\/.+$'
   chat_integration_slack_icon_url:
     default: ''
@@ -39,10 +36,6 @@ chat_integration:
     default: false
   chat_integration_telegram_access_token:
     default: ''
-    secret: true
-  chat_integration_telegram_api_base_url:
-    default: 'https://api.telegram.org'
-    validator: "ChatIntegrationTelegramApiBaseUrlSettingValidator"
   chat_integration_telegram_excerpt_length:
     default: 400
   chat_integration_telegram_enable_slash_commands:
@@ -60,7 +53,7 @@ chat_integration:
     default: ""
   chat_integration_discord_excerpt_length:
     default: 400
-
+  
 #######################################
 ########## GUILDED SETTINGS ###########
 #######################################
@@ -68,7 +61,7 @@ chat_integration:
     default: false
   chat_integration_guilded_excerpt_length:
     default: 400
-
+  
 
 #######################################
 ######## MATTERMOST SETTINGS ##########
@@ -77,10 +70,8 @@ chat_integration:
     default: false
   chat_integration_mattermost_webhook_url:
     default: ''
-    secret: true
   chat_integration_mattermost_incoming_webhook_token:
     default: ''
-    secret: true
   chat_integration_mattermost_icon_url:
     default: ''
   chat_integration_mattermost_excerpt_length:
@@ -95,7 +86,6 @@ chat_integration:
     default: 'https://matrix.org'
   chat_integration_matrix_access_token:
     default: ''
-    secret: true
   chat_integration_matrix_excerpt_length:
     default: 400
   chat_integration_matrix_use_notice:
@@ -112,7 +102,6 @@ chat_integration:
     default: ''
   chat_integration_zulip_bot_api_key:
     default: ''
-    secret: true
   chat_integration_zulip_excerpt_length:
     default: 400
 
@@ -123,7 +112,6 @@ chat_integration:
     default: false
   chat_integration_rocketchat_webhook_url:
     default: ''
-    secret: true
   chat_integration_rocketchat_excerpt_length:
     default: 400
 
@@ -132,6 +120,15 @@ chat_integration:
 #######################################
   chat_integration_gitter_enabled:
     default: false
+
+#######################################
+########## FLOWDOCK SETTINGS ##########
+#######################################
+  chat_integration_flowdock_enabled:
+    default: false
+  chat_integration_flowdock_excerpt_length:
+    default: 400
+
 
 #######################################
 ########## GROUPME SETTINGS ##########

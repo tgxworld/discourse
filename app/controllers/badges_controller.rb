@@ -14,12 +14,14 @@ class BadgesController < ApplicationController
       badges = badges.where("name ILIKE ?", "%#{search}%")
     end
 
-    if !guardian.is_staff? || params[:only_listable] == "true" || !request.xhr?
+    if (params[:only_listable] == "true") || !request.xhr?
       # NOTE: this is sorted client side if needed
-      badges = badges.where(enabled: true, listable: true)
+      badges =
+        badges
+          .includes(:badge_grouping)
+          .includes(:badge_type, :image_upload)
+          .where(enabled: true, listable: true)
     end
-
-    badges = badges.includes(:badge_grouping).includes(:badge_type, :image_upload)
 
     badges = badges.to_a
 

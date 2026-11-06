@@ -1,5 +1,5 @@
 import { apiInitializer } from "discourse/lib/api";
-import { automaticallyTranslate } from "discourse/lib/content-localization";
+import cookie from "discourse/lib/cookie";
 
 export default apiInitializer((api) => {
   const settings = api.container.lookup("service:site-settings");
@@ -8,17 +8,16 @@ export default apiInitializer((api) => {
     return;
   }
 
-  // When AI translation is enabled, deprioritize the manual language selector since language is auto-detected
-  api.registerValueTransformer("post-language-selector-priority", () => "last");
-
   api.registerCustomPostMessageCallback(
     "localized",
     (topicController, data) => {
-      const currentUser = api.getCurrentUser();
-
-      if (automaticallyTranslate(currentUser)) {
+      if (!cookie("content-localization-show-original")) {
         const postStream = topicController.get("model.postStream");
-        postStream.triggerChangedPost(data.id, data.updated_at);
+        postStream.triggerChangedPost(data.id, data.updated_at).then(() => {
+          topicController.appEvents.trigger("post-stream:refresh", {
+            id: data.id,
+          });
+        });
       }
     }
   );

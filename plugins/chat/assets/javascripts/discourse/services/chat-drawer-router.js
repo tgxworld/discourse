@@ -5,13 +5,10 @@ import ChatDrawerRoutesBrowse from "discourse/plugins/chat/discourse/components/
 import ChatDrawerRoutesChannel from "discourse/plugins/chat/discourse/components/chat/drawer-routes/channel";
 import ChatDrawerRoutesChannelInfoMembers from "discourse/plugins/chat/discourse/components/chat/drawer-routes/channel-info-members";
 import ChatDrawerRoutesChannelInfoSettings from "discourse/plugins/chat/discourse/components/chat/drawer-routes/channel-info-settings";
-import ChatDrawerRoutesChannelPins from "discourse/plugins/chat/discourse/components/chat/drawer-routes/channel-pins";
 import ChatDrawerRoutesChannelThread from "discourse/plugins/chat/discourse/components/chat/drawer-routes/channel-thread";
 import ChatDrawerRoutesChannelThreads from "discourse/plugins/chat/discourse/components/chat/drawer-routes/channel-threads";
 import ChatDrawerRoutesChannels from "discourse/plugins/chat/discourse/components/chat/drawer-routes/channels";
 import ChatDrawerRoutesDirectMessages from "discourse/plugins/chat/discourse/components/chat/drawer-routes/direct-messages";
-import ChatDrawerRoutesSearch from "discourse/plugins/chat/discourse/components/chat/drawer-routes/search";
-import ChatDrawerRoutesStarredChannels from "discourse/plugins/chat/discourse/components/chat/drawer-routes/starred-channels";
 import ChatDrawerRoutesThreads from "discourse/plugins/chat/discourse/components/chat/drawer-routes/threads";
 
 const ROUTES = {
@@ -156,45 +153,11 @@ const ROUTES = {
       this.chat.activeChannel = null;
     },
   },
-  "chat.channel.pins": {
-    name: ChatDrawerRoutesChannelPins,
-
-    extractParams: (route) => {
-      return {
-        channelId: route.parent.params.channelId,
-      };
-    },
-
-    async model(params) {
-      const channel = await this.chatChannelsManager.find(params.channelId);
-      const pinnedMessages = await this.chatApi.pinnedMessages(channel);
-      return { channel, pinnedMessages };
-    },
-
-    afterModel(model) {
-      this.chat.activeChannel = model.channel;
-    },
-
-    deactivate() {
-      this.chat.activeChannel = null;
-    },
-  },
   "chat.direct-messages": {
     name: ChatDrawerRoutesDirectMessages,
   },
-  "chat.starred-channels": {
-    name: ChatDrawerRoutesStarredChannels,
-    redirect: (context) => {
-      if (!context.chatChannelsManager.hasStarredChannels) {
-        return "/chat/channels";
-      }
-    },
-  },
   "chat.threads": {
     name: ChatDrawerRoutesThreads,
-  },
-  "chat.search": {
-    name: ChatDrawerRoutesSearch,
   },
   "chat.channel.near-message": {
     name: ChatDrawerRoutesChannel,
@@ -290,9 +253,8 @@ export default class ChatDrawerRouter extends Service {
   @service router;
   @service chatHistory;
   @service chat;
-  // eslint-disable-next-line discourse/no-unused-services -- used in ROUTES model functions
-  @service chatApi;
   @service siteSettings;
+  @service chatStateManager;
   @service chatChannelsManager;
 
   @tracked component = null;
@@ -303,6 +265,10 @@ export default class ChatDrawerRouter extends Service {
 
   routeNames = Object.keys(ROUTES);
 
+  canHandleRoute(route) {
+    return !!ROUTES[this.#forceParentRouteForIndex(route).name];
+  }
+
   get activeChannelId() {
     return this.model?.channel?.id;
   }
@@ -312,15 +278,11 @@ export default class ChatDrawerRouter extends Service {
       return false;
     }
 
-    return this.chatChannelsManager.shouldShowMyThreads;
+    return this.chatChannelsManager.hasThreadedChannels;
   }
 
   get hasDirectMessages() {
     return this.chat.userCanAccessDirectMessages;
-  }
-
-  canHandleRoute(route) {
-    return !!ROUTES[this.#forceParentRouteForIndex(route).name];
   }
 
   async stateFor(route) {
@@ -343,7 +305,7 @@ export default class ChatDrawerRouter extends Service {
 
     const redirectedRoute = this.drawerRoute.redirect?.(this);
     if (redirectedRoute) {
-      await this.stateFor(this.#routeFromURL(redirectedRoute));
+      this.stateFor(this.#routeFromURL(redirectedRoute));
     }
   }
 

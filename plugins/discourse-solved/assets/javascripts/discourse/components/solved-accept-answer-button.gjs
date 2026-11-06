@@ -2,16 +2,12 @@ import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
+import DButton from "discourse/components/d-button";
 import { ajax } from "discourse/lib/ajax";
 import { popupAjaxError } from "discourse/lib/ajax-error";
-import DButton from "discourse/ui-kit/d-button";
-import setAcceptedSolutions from "../lib/set-accepted-solutions.js";
 
 export default class SolvedAcceptAnswerButton extends Component {
-  static hidden(args, context) {
-    if (context.siteSettings.solved_allow_multiple_solutions) {
-      return false;
-    }
+  static hidden(args) {
     return args.post.topic_accepted_answer;
   }
 
@@ -33,6 +29,11 @@ export default class SolvedAcceptAnswerButton extends Component {
       await acceptPost(post, this.currentUser);
 
       this.appEvents.trigger("discourse-solved:solution-toggled", post);
+
+      // TODO (glimmer-post-stream) the Glimmer Post Stream does not listen to this event
+      post.get("topic.postStream.posts").forEach((p) => {
+        this.appEvents.trigger("post-stream:refresh", { id: p.id });
+      });
     } catch (e) {
       popupAjaxError(e);
     } finally {
@@ -61,12 +62,12 @@ async function acceptPost(post) {
   const topic = post.topic;
 
   try {
-    const acceptedAnswers = await ajax("/solution/accept", {
+    const acceptedAnswer = await ajax("/solution/accept", {
       type: "POST",
       data: { id: post.id },
     });
 
-    setAcceptedSolutions(topic, acceptedAnswers);
+    topic.setAcceptedSolution(acceptedAnswer);
   } catch (e) {
     popupAjaxError(e);
   }

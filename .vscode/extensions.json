@@ -5,8 +5,7 @@
     "esbenp.prettier-vscode",
     "dbaeumer.vscode-eslint",
     "lifeart.vscode-glimmer-syntax",
-    "typed-ember.glint2-vscode",
-    "TypeScriptTeam.native-preview",
-    "stylelint.vscode-stylelint",
+    "typed-ember.glint-vscode",
+    "stylelint.vscode-stylelint"
   ]
 }

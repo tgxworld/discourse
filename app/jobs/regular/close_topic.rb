@@ -11,7 +11,7 @@ module Jobs
         return
       end
 
-      if !Guardian.new(user).can_set_topic_timer?(topic)
+      if !Guardian.new(user).can_close_topic?(topic)
         topic_timer.destroy!
         topic.reload
 
@@ -25,11 +25,7 @@ module Jobs
       # this handles deleting the topic timer as well, see TopicStatusUpdater
       topic.update_status("autoclosed", true, user, { silent: silent })
 
-      MessageBus.publish(
-        "/topic/#{topic.id}",
-        { reload_topic: true },
-        topic.secure_audience_publish_messages,
-      )
+      MessageBus.publish("/topic/#{topic.id}", reload_topic: true)
     end
   end
 end

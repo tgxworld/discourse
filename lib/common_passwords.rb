@@ -12,7 +12,7 @@
 #   Discourse.redis.without_namespace.del CommonPasswords::LIST_KEY
 
 class CommonPasswords
-  PASSWORD_FILE = Rails.root.join("lib/common_passwords/10-char-common-passwords.txt").to_s
+  PASSWORD_FILE = File.join(Rails.root, "lib", "common_passwords", "10-char-common-passwords.txt")
   LIST_KEY = "discourse-common-passwords"
 
   @mutex = Mutex.new

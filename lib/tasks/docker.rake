@@ -26,7 +26,7 @@ end
 
 def setup_redis
   log "Starting background redis"
-  data_directory = "#{Rails.root.join("tmp/test_data/redis")}"
+  data_directory = "#{Rails.root}/tmp/test_data/redis"
   `rm -rf #{data_directory} && mkdir -p #{data_directory}`
   Process.spawn("redis-server --dir #{data_directory}")
 end
@@ -51,7 +51,7 @@ def setup_test_env(
   success &&= run_or_fail("bundle exec rake plugin:install_all_official") if install_all_official
   success &&= run_or_fail("bundle exec rake plugin:update_all") if update_all_plugins
 
-  if plugins_to_remove.present?
+  if !plugins_to_remove.blank?
     plugins_to_remove
       .split(",")
       .map(&:strip)
@@ -157,7 +157,6 @@ task "docker:test" do
   begin
     @good = true
     @good &&= run_or_fail("pnpm install")
-    @good &&= run_or_fail("pnpm playwright-install")
 
     unless ENV["SKIP_LINT"]
       puts "Running linters/prettyfiers"
@@ -184,7 +183,7 @@ task "docker:test" do
       else
         @good &&= run_or_fail("bundle exec rake plugin:update_all") unless ENV["SKIP_PLUGINS"]
         @good &&= run_or_fail("bundle exec rubocop") unless ENV["SKIP_CORE"]
-        @good &&= run_or_fail("pnpm eslint frontend") unless ENV["SKIP_CORE"]
+        @good &&= run_or_fail("pnpm eslint app/assets/javascripts") unless ENV["SKIP_CORE"]
         @good &&=
           run_or_fail(
             "pnpm eslint --ext .js,.js.es6 --no-error-on-unmatched-pattern plugins",
@@ -203,7 +202,7 @@ task "docker:test" do
           puts "Listing prettier offenses in core:"
           @good &&=
             run_or_fail(
-              'pnpm pprettier --list-different "app/assets/stylesheets/**/*.scss" "frontend/**/*.js"',
+              'pnpm pprettier --list-different "app/assets/stylesheets/**/*.scss" "app/assets/javascripts/**/*.js"',
             )
         end
 
@@ -221,7 +220,6 @@ task "docker:test" do
       @redis_pid = setup_redis
       @pg_pid = setup_postgres(skip_init: ENV["SKIP_DB_CREATE"].present?)
 
-      load_plugins = !ENV["SKIP_PLUGINS"]
       @good &&=
         setup_test_env(
           setup_multisite: !ENV["JS_ONLY"],
@@ -230,14 +228,11 @@ task "docker:test" do
           install_all_official: !!ENV["INSTALL_OFFICIAL_PLUGINS"],
           update_all_plugins: !!ENV["UPDATE_ALL_PLUGINS"],
           plugins_to_remove: ENV["SKIP_INSTALL_PLUGINS"] || "",
-          load_plugins:,
+          load_plugins: !ENV["SKIP_PLUGINS"],
         )
 
       unless ENV["JS_ONLY"]
-        @good &&=
-          run_or_fail("LOAD_PLUGINS=#{load_plugins ? 1 : 0} script/assemble_ember_build.rb") if ENV[
-          "RUN_SYSTEM_TESTS"
-        ]
+        @good &&= run_or_fail("bin/ember-cli --build") if ENV["RUN_SYSTEM_TESTS"]
 
         if ENV["WARMUP_TMP_FOLDER"]
           run_or_fail("bundle exec rspec ./spec/requests/groups_controller_spec.rb")
@@ -305,7 +300,7 @@ task "docker:test" do
 
       unless ENV["RUBY_ONLY"]
         unless ENV["SKIP_CORE"]
-          @good &&= run_or_fail("CI=1 QUNIT_PARALLEL=#{qunit_concurrency} bin/qunit --standalone")
+          @good &&= run_or_fail("CI=1 QUNIT_PARALLEL=#{qunit_concurrency} bin/rake qunit:test")
         end
 
         unless ENV["SKIP_PLUGINS"]

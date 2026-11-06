@@ -1,12 +1,9 @@
 # frozen_string_literal: true
 
-require "htmlentities"
-
 class ExcerptParser < Nokogiri::XML::SAX::Document
   attr_reader :excerpt
 
   CUSTOM_EXCERPT_REGEX = /<\s*(span|div)[^>]*class\s*=\s*['"]excerpt['"][^>]*>/
-  IMAGE_MODES = [%i[strip_images strip], %i[markdown_images markdown], %i[keep_images keep]].freeze
 
   def initialize(length, options = nil)
     @length = length
@@ -14,7 +11,9 @@ class ExcerptParser < Nokogiri::XML::SAX::Document
     @current_length = 0
     options || {}
     @strip_links = options[:strip_links] == true
+    @strip_images = options[:strip_images] == true
     @text_entities = options[:text_entities] == true
+    @markdown_images = options[:markdown_images] == true
     @keep_newlines = options[:keep_newlines] == true
     @keep_emoji_images = options[:keep_emoji_images] == true
     @keep_onebox_source = options[:keep_onebox_source] == true
@@ -25,18 +24,13 @@ class ExcerptParser < Nokogiri::XML::SAX::Document
     @start_excerpt = false
     @start_hashtag_icon = false
     @in_details_depth = 0
-    @image_mode = normalize_image_mode(options)
   end
 
-  def normalize_image_mode(options)
-    IMAGE_MODES.each { |key, mode| return mode if options[key] }
-  end
-
-  def self.get_excerpt(html, length, options = {})
+  def self.get_excerpt(html, length, options)
     return "" if html.blank?
 
     length = html.length if html.include?("excerpt") && CUSTOM_EXCERPT_REGEX === html
-    me = new(length, options)
+    me = self.new(length, options)
     parser = Nokogiri::HTML4::SAX::Parser.new(me, Encoding::UTF_8)
     catch(:done) { parser.parse(html) }
     excerpt = me.excerpt.strip
@@ -44,11 +38,6 @@ class ExcerptParser < Nokogiri::XML::SAX::Document
       options[:keep_onebox_body]
     excerpt = CGI.unescapeHTML(excerpt) if options[:text_entities] == true
     excerpt
-  end
-
-  def self.to_plain_text(excerpt)
-    @html_entities ||= HTMLEntities.new
-    @html_entities.decode(excerpt.to_s.gsub(/<[^>]*>/, "")).presence
   end
 
   def escape_attribute(v)
@@ -88,20 +77,19 @@ class ExcerptParser < Nokogiri::XML::SAX::Document
         end
       end
 
-      return include_tag(name, attributes) if @image_mode == :keep
+      unless @strip_images
+        # If include_images is set, include the image in markdown
+        characters("!") if @markdown_images
 
-      if @image_mode != :strip
-        characters("!") if @image_mode == :markdown
-
-        if attributes["alt"].present?
+        if !attributes["alt"].blank?
           characters("[#{attributes["alt"]}]")
-        elsif attributes["title"].present?
+        elsif !attributes["title"].blank?
           characters("[#{attributes["title"]}]")
         else
-          characters("[#{I18n.t("excerpt_image")}]")
+          characters("[#{I18n.t "excerpt_image"}]")
         end
 
-        characters("(#{attributes["src"]})") if @image_mode == :markdown
+        characters("(#{attributes["src"]})") if @markdown_images
       end
     when "a"
       unless @strip_links
@@ -122,8 +110,7 @@ class ExcerptParser < Nokogiri::XML::SAX::Document
     when "article"
       @in_quote = !@keep_onebox_body if attributes.include?(%w[class onebox-body])
     when "header"
-      classes = attributes.to_h["class"].to_s.split
-      @in_quote = !@keep_onebox_source if classes.include?("source")
+      @in_quote = !@keep_onebox_source if attributes.include?(%w[class source])
     when "div", "span"
       attributes = Hash[*attributes.flatten]
 

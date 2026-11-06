@@ -25,8 +25,8 @@ class ContentSecurityPolicy
       style_src
     ].freeze
 
-    def initialize(base_url:, report_only: false)
-      @directives = Default.new(report_only: report_only).directives
+    def initialize(base_url:)
+      @directives = Default.new(base_url: base_url).directives
       @base_url = base_url
     end
 

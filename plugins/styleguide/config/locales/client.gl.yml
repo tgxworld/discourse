@@ -8,9 +8,7 @@ gl:
   js:
     styleguide:
       title: "Guía de estilo"
-      example:
-        kind:
-          component: "Compoñente"
+      welcome: "Para comezar, escolla unha sección do menú da esquerda."
       categories:
         atoms: Átomos
         molecules: Moléculas
@@ -22,14 +20,6 @@ gl:
           paragraph: "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, are in culpa qui officia deserunt mollit anim id is laborum."
         date_time_inputs:
           title: "Entradas de data/hora"
-        context_menu:
-          actions:
-            delete: "Eliminar"
-        reorderable_list:
-          policies_pinned: "Fixado"
-          policies_required: "Obrigatorio"
-          table_type: "Tipo"
-          cross_list_primary: "Primario"
         font_scale:
           title: "Sistema de tipos de letra"
         colors:
@@ -53,6 +43,8 @@ gl:
           title: "Navegación vertical"
         categories_list:
           title: "Lista de categorías"
+        topic_link:
+          title: "Ligazón do tema"
         topic_list_item:
           title: "Elemento da lista de temas"
         topic_statuses:
@@ -61,6 +53,8 @@ gl:
           title: "Listaxe de temas"
         basic_topic_list:
           title: "Listaxe de temas básicos"
+        footer_message:
+          title: "Mensaxe rodapé"
         signup_cta:
           title: "Subscrición CTA"
         topic_timer_info:
@@ -75,25 +69,10 @@ gl:
           title: "Mapa de temas"
         site_header:
           title: "Cabeceira do sitio"
-        more_topics:
-          title: "Máis temas"
+        suggested_topics:
+          title: "Temas suxeridos"
         post_menu:
           title: "Menú de publicación"
-        roving_focus:
-          toolbar:
-            copy: "Copiar"
-          adjacent:
-            label: "Filtros"
-            field: "Buscar"
-            open: "Abrir"
-            recent: "Recentes"
-          combobox:
-            daily: "Diario"
-            weekly: "Semanal"
-            monthly: "Mensual"
-            never: "Nunca"
-          tree:
-            components: "Compoñentes"
         modal:
           title: "Modal"
           header: "Título da modal"

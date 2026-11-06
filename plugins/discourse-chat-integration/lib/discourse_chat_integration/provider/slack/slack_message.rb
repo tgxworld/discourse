@@ -97,7 +97,7 @@ module DiscourseChatIntegration::Provider::SlackProvider
     end
 
     def processed_text_with_attachments
-      text + attachments_string
+      self.text + attachments_string
     end
 
     def raw_text

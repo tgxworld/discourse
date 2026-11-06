@@ -1,19 +1,15 @@
 # frozen_string_literal: true
 
-describe "User preferences | Profile" do
+describe "User preferences | Profile", type: :system do
   fab!(:user) { Fabricate(:user, active: true) }
   let(:user_preferences_profile_page) { PageObjects::Pages::UserPreferencesProfile.new }
   let(:user_preferences_page) { PageObjects::Pages::UserPreferences.new }
-  let(:dialog) { PageObjects::Components::Dialog.new }
 
   before { sign_in(user) }
 
   describe "changing bio" do
     it "correctly updates the bio" do
-      user.user_option.update!(timezone: nil)
-
       user_preferences_profile_page.visit(user)
-      expect(user.user_option.reload.timezone).to be_present
 
       user_preferences_profile_page.expand_profile_details
       user_preferences_profile_page.fill_bio(with: "I am a human.")
@@ -46,13 +42,6 @@ describe "User preferences | Profile" do
         requirement: :for_all_users,
         editable: true,
       )
-      UserField.create!(
-        field_type: "confirm",
-        name: "Updated terms",
-        description: "Please accept our updated our terms of service.",
-        requirement: :for_all_users,
-        editable: true,
-      )
     end
 
     it "server-side redirects to the profile page to fill up required fields" do
@@ -69,7 +58,7 @@ describe "User preferences | Profile" do
     it "client-side redirects to the profile page to fill up required fields" do
       visit("/faq")
 
-      expect(page).to have_current_path("/guidelines")
+      expect(page).to have_current_path("/faq")
 
       click_logo
 
@@ -93,7 +82,6 @@ describe "User preferences | Profile" do
       user_preferences_profile_page.visit(user)
 
       find(".user-field-favourite-pokemon input").fill_in(with: "Mudkip")
-      find(".user-field-updated-terms input").check
       find(".save-button .btn-primary").click
 
       expect(page).to have_selector(".pref-bio")
@@ -101,23 +89,6 @@ describe "User preferences | Profile" do
       visit("/")
 
       expect(page).to have_current_path("/")
-    end
-
-    it "does not allow submitting blank values for required fields" do
-      user_preferences_profile_page.visit(user)
-
-      find(".user-field-updated-terms input").check
-      find(".save-button .btn-primary").click
-
-      expect(dialog).to be_open
-      expect(dialog).to have_content(I18n.t("login.missing_user_field"))
-
-      dialog.click_yes
-
-      expect(page).to have_selector(
-        ".alert-error",
-        text: I18n.t("js.user.preferences.profile.enforced_required_fields"),
-      )
     end
 
     it "allows enabling safe-mode" do
@@ -128,19 +99,6 @@ describe "User preferences | Profile" do
       page.find("#btn-enter-safe-mode").click
 
       expect(page).to have_current_path("/u/#{user.username}/preferences/profile")
-    end
-
-    it "redirects back to the original destination after filling required fields" do
-      category = Fabricate(:category)
-      visit("/new-topic?category_id=#{category.id}")
-
-      expect(page).to have_current_path("/u/#{user.username}/preferences/profile")
-
-      find(".user-field-favourite-pokemon input").fill_in(with: "Mudkip")
-      find(".user-field-updated-terms input").check
-      find(".save-button .btn-primary").click
-
-      expect(page).to have_current_path("/new-topic?category_id=#{category.id}")
     end
   end
 end

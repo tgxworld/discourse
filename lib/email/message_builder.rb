@@ -20,14 +20,6 @@ module Email
         hostname: Discourse.current_hostname,
       }.merge!(@opts)
 
-      if @opts[:recipient_user].present?
-        @template_args[:recipient_username] = @opts[:recipient_user].username
-      end
-
-      if @opts[:template].present? && I18n.exists?("#{@opts[:template]}.preview")
-        @template_args[:email_preview] ||= I18n.t("#{@opts[:template]}.preview", @template_args)
-      end
-
       return if @template_args[:url].blank?
 
       @template_args[:header_instructions] ||= I18n.t(
@@ -108,21 +100,35 @@ module Email
     end
 
     def subject
-      has_override =
-        TranslationOverride.exists?(
-          locale: I18n.locale,
-          translation_key: "#{@opts[:template]}.subject_template",
-        )
-
-      if @opts[:template] && has_override
+      if @opts[:template] &&
+           TranslationOverride.exists?(
+             locale: I18n.locale,
+             translation_key: "#{@opts[:template]}.subject_template",
+           )
         augmented_template_args =
           @template_args.merge(
-            site_name: @template_args[:email_prefix],
-            optional_re: @opts[:add_re_to_subject] ? I18n.t("subject_re") : "",
-            optional_pm: @opts[:private_reply] ? @template_args[:subject_pm] : "",
-            optional_cat: format_category,
-            optional_tags: format_tags,
-            topic_title: @template_args[:topic_title] ? @template_args[:topic_title] : "",
+            {
+              site_name: @template_args[:email_prefix],
+              optional_re: @opts[:add_re_to_subject] ? I18n.t("subject_re") : "",
+              optional_pm: @opts[:private_reply] ? @template_args[:subject_pm] : "",
+              optional_cat:
+                (
+                  if @template_args[:show_category_in_subject]
+                    "[#{@template_args[:show_category_in_subject]}] "
+                  else
+                    ""
+                  end
+                ),
+              optional_tags:
+                (
+                  if @template_args[:show_tags_in_subject]
+                    "#{@template_args[:show_tags_in_subject]} "
+                  else
+                    ""
+                  end
+                ),
+              topic_title: @template_args[:topic_title] ? @template_args[:topic_title] : "",
+            },
           )
         subject = I18n.t("#{@opts[:template]}.subject_template", augmented_template_args)
       elsif @opts[:use_site_subject]
@@ -130,26 +136,31 @@ module Email
         subject.gsub!("%{site_name}", @template_args[:email_prefix])
         subject.gsub!("%{optional_re}", @opts[:add_re_to_subject] ? I18n.t("subject_re") : "")
         subject.gsub!("%{optional_pm}", @opts[:private_reply] ? @template_args[:subject_pm] : "")
-        subject.gsub!("%{optional_cat}", format_category)
-        subject.gsub!("%{optional_tags}", format_tags)
+        subject.gsub!(
+          "%{optional_cat}",
+          (
+            if @template_args[:show_category_in_subject]
+              "[#{@template_args[:show_category_in_subject]}] "
+            else
+              ""
+            end
+          ),
+        )
+        subject.gsub!(
+          "%{optional_tags}",
+          @template_args[:show_tags_in_subject] ? "#{@template_args[:show_tags_in_subject]} " : "",
+        )
         if @template_args[:topic_title]
           subject.gsub!("%{topic_title}", @template_args[:topic_title])
-        end
+        end # must be last for safety
       elsif @opts[:use_topic_title_subject]
         subject = @opts[:add_re_to_subject] ? I18n.t("subject_re") : ""
         subject = "#{subject}#{@template_args[:topic_title]}"
       elsif @opts[:template]
-        subject_key = "#{@opts[:template]}.subject_template"
-
-        if SiteSetting.simple_email_subject && I18n.exists?("#{subject_key}_improved")
-          subject_key += "_improved"
-        end
-
-        subject = I18n.t(subject_key, @template_args)
+        subject = I18n.t("#{@opts[:template]}.subject_template", @template_args)
       else
         subject = @opts[:subject]
       end
-
       DiscoursePluginRegistry.apply_modifier(:message_builder_subject, subject, @opts, @to)
     end
 
@@ -162,13 +173,6 @@ module Email
         html_override.gsub!("%{unsubscribe_instructions}", unsubscribe_instructions)
       else
         html_override.gsub!("%{unsubscribe_instructions}", "")
-      end
-
-      if @template_args[:email_preview].present?
-        email_preview = PrettyText.cook(@template_args[:email_preview], sanitize: false).html_safe
-        html_override.gsub!("%{email_preview}", email_preview)
-      else
-        html_override.gsub!("%{email_preview}", "")
       end
 
       if @template_args[:header_instructions].present?
@@ -207,30 +211,17 @@ module Email
       body = nil
 
       if @opts[:template]
-        %i[topic_title inviter_name].each do |key|
-          @template_args[key] = escaped_template_arg(key) if @template_args.key?(key)
+        template_args_to_escape = %i[topic_title inviter_name]
+
+        template_args_to_escape.each do |key|
+          next if !@template_args.key?(key)
+
+          @template_args[key] = escaped_template_arg(key)
         end
 
-        if @opts.key?(:body_topic_title)
-          @template_args[:topic_title] = ERB::Util.html_escape(@opts[:body_topic_title])
-        end
-
-        augmented_template_args =
-          @template_args.merge(
-            optional_re: "",
-            optional_pm: "",
-            optional_cat: format_category,
-            optional_tags: ->(_) { format_tag_hashtags },
-          )
-
-        body = I18n.t("#{@opts[:template]}.text_body_template", augmented_template_args).dup
+        body = I18n.t("#{@opts[:template]}.text_body_template", template_args).dup
       else
         body = @opts[:body].dup
-      end
-
-      if key = @template_args[:body_suffix_key]
-        paragraph = I18n.t(key, @template_args)
-        body = "#{body.rstrip}\n\n#{paragraph}"
       end
 
       if @template_args[:unsubscribe_instructions].present?
@@ -264,10 +255,6 @@ module Email
     def header_args
       result = {}
 
-      if @template_args[:email_preview].present?
-        result["X-Discourse-Email-Preview"] = @template_args[:email_preview]
-      end
-
       if @opts[:add_unsubscribe_link]
         if unsubscribe_url = @template_args[:unsubscribe_url].presence
           result["List-Unsubscribe"] = "<#{unsubscribe_url}>"
@@ -297,9 +284,6 @@ module Email
 
       # Please, don't send us automatic responses...
       result["X-Auto-Response-Suppress"] = "All"
-
-      # Disable Outlook's noisy "reaction via email" feature
-      result["x-ms-reactions"] = "disallow"
 
       if !allow_reply_by_email?
         # This will end up being the notification_email, which is a
@@ -396,31 +380,6 @@ module Email
       # explicitly escaped twice, as Mailers will mark the body as html_safe
       once_escaped = String.new(ERB::Util.html_escape(value))
       ERB::Util.html_escape(once_escaped)
-    end
-
-    def format_category
-      if @template_args[:show_category_in_subject]
-        "[#{@template_args[:show_category_in_subject]}] "
-      else
-        ""
-      end
-    end
-
-    def format_tags
-      if @template_args[:show_tags_in_subject]
-        "#{@template_args[:show_tags_in_subject]} "
-      else
-        ""
-      end
-    end
-
-    def format_tag_hashtags
-      return "" if @opts[:tag_names].blank?
-      return format_tags if HashtagAutocompleteService.data_source_types.exclude?("tag")
-
-      guardian = @opts[:recipient_user]&.guardian || Guardian.new
-      hashtags = HashtagAutocompleteService.new(guardian).hashtags_for("tag", @opts[:tag_names])
-      "#{hashtags.join(" ")} "
     end
   end
 end

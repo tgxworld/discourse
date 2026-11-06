@@ -75,7 +75,8 @@ class ImportScripts::Base
       min_first_post_length: 1,
       min_personal_message_post_length: 1,
       min_personal_message_title_length: 1,
-      duplicate_topic_titles: "allowed",
+      allow_duplicate_topic_titles: true,
+      allow_duplicate_topic_titles_category: false,
       disable_emails: "yes",
       max_attachment_size_kb: 102_400,
       max_image_size_kb: 102_400,
@@ -88,6 +89,14 @@ class ImportScripts::Base
   end
 
   def change_site_settings
+    if SiteSetting.bootstrap_mode_enabled
+      SiteSetting.default_trust_level = TrustLevel[0] if SiteSetting.default_trust_level ==
+        TrustLevel[1]
+      SiteSetting.default_email_digest_frequency =
+        10_080 if SiteSetting.default_email_digest_frequency == 1440
+      SiteSetting.bootstrap_mode_enabled = false
+    end
+
     @site_settings_during_import = get_site_settings_for_import
 
     @site_settings_during_import.each do |key, value|
@@ -216,23 +225,25 @@ class ImportScripts::Base
     return false if import_ids.empty?
 
     ActiveRecord::Base.transaction do
-      connection = ActiveRecord::Base.connection.raw_connection
-      connection.exec("CREATE TEMP TABLE import_ids(val text PRIMARY KEY)")
+      begin
+        connection = ActiveRecord::Base.connection.raw_connection
+        connection.exec("CREATE TEMP TABLE import_ids(val text PRIMARY KEY)")
 
-      import_id_clause =
-        import_ids.map { |id| "('#{PG::Connection.escape_string(id.to_s)}')" }.join(",")
+        import_id_clause =
+          import_ids.map { |id| "('#{PG::Connection.escape_string(id.to_s)}')" }.join(",")
 
-      connection.exec("INSERT INTO import_ids VALUES #{import_id_clause}")
+        connection.exec("INSERT INTO import_ids VALUES #{import_id_clause}")
 
-      existing = "#{type.to_s.classify}CustomField".constantize
-      existing = existing.where(name: "import_id").joins("JOIN import_ids ON val = value").count
+        existing = "#{type.to_s.classify}CustomField".constantize
+        existing = existing.where(name: "import_id").joins("JOIN import_ids ON val = value").count
 
-      if existing == import_ids.length
-        puts "Skipping #{import_ids.length} already imported #{type}"
-        true
+        if existing == import_ids.length
+          puts "Skipping #{import_ids.length} already imported #{type}"
+          true
+        end
+      ensure
+        connection.exec("DROP TABLE import_ids") unless connection.nil?
       end
-    ensure
-      connection.exec("DROP TABLE import_ids") unless connection.nil?
     end
   end
 
@@ -361,9 +372,6 @@ class ImportScripts::Base
       end
 
       u.activate if opts[:active] && opts[:password].present?
-    rescue ActiveRecord::RecordInvalid => e
-      puts "Invalid user info, skipped: #{original_opts.inspect}"
-      return
     rescue => e
       # try based on email
       if e.try(:record).try(:errors).try(:messages).try(:[], :primary_email).present?
@@ -486,7 +494,7 @@ class ImportScripts::Base
         position: opts[:position],
         parent_category_id: opts[:parent_category_id],
         color: opts[:color] || category_color(opts[:parent_category_id]),
-        text_color: opts[:text_color] || "FFFFFF",
+        text_color: opts[:text_color] || "FFF",
         read_restricted: opts[:read_restricted] || false,
       )
 

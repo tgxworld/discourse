@@ -2,7 +2,7 @@
 
 module DiscourseAutomation
   class AdminScriptablesController < ::Admin::AdminController
-    requires_plugin PLUGIN_NAME
+    requires_plugin DiscourseAutomation::PLUGIN_NAME
 
     def index
       scriptables =

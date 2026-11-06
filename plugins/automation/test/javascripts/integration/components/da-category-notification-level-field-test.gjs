@@ -7,7 +7,7 @@ import AutomationField from "discourse/plugins/automation/admin/components/autom
 import AutomationFabricators from "discourse/plugins/automation/admin/lib/fabricators";
 
 module(
-  "Integration | Component | DaCategoryNotificationLevelField",
+  "Integration | Component | da-category-notification-level-field",
   function (hooks) {
     setupRenderingTest(hooks);
 
@@ -16,6 +16,8 @@ module(
     });
 
     test("set value", async function (assert) {
+      const self = this;
+
       this.field = new AutomationFabricators(getOwner(this)).field({
         component: "category_notification_level",
       });
@@ -23,8 +25,8 @@ module(
       await render(
         <template>
           <AutomationField
-            @automation={{this.automation}}
-            @field={{this.field}}
+            @automation={{self.automation}}
+            @field={{self.field}}
           />
         </template>
       );

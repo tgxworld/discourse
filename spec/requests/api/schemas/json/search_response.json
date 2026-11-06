@@ -22,19 +22,7 @@
     "tags": {
       "type": "array",
       "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer"
-          },
-          "name": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          }
-        },
-        "required": ["id", "name", "slug"]
+
       }
     },
     "groups": {

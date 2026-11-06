@@ -1,17 +1,20 @@
-import Component from "@glimmer/component";
-import { tracked } from "@glimmer/tracking";
+/* eslint-disable ember/no-classic-components */
+import Component from "@ember/component";
 import { fn, get } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
 import { classify } from "@ember/string";
-import { trustHTML } from "@ember/template";
+import { htmlSafe } from "@ember/template";
+import { eq } from "truth-helpers";
+import DModal from "discourse/components/d-modal";
+import concatClass from "discourse/helpers/concat-class";
 import { ajax } from "discourse/lib/ajax";
 import { popupAjaxError } from "discourse/lib/ajax-error";
-import ComboBox from "discourse/select-kit/components/combo-box";
-import DModal from "discourse/ui-kit/d-modal";
-import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
+import discourseComputed from "discourse/lib/decorators";
+import loadScript from "discourse/lib/load-script";
 import { i18n } from "discourse-i18n";
+import ComboBox from "select-kit/components/combo-box";
 import PollBreakdownChart from "discourse/plugins/poll/discourse/components/poll-breakdown-chart";
 import PollBreakdownOption from "discourse/plugins/poll/discourse/components/poll-breakdown-option";
 
@@ -19,21 +22,25 @@ export default class PollBreakdownModal extends Component {
   @service dialog;
   @service siteSettings;
 
-  @tracked charts = null;
-  @tracked groupedBy = null;
-  @tracked highlightedOption = null;
-  @tracked displayMode = "percentage";
+  model = null;
+  charts = null;
+  groupedBy = null;
+  highlightedOption = null;
+  displayMode = "percentage";
 
-  constructor() {
-    super(...arguments);
-    this.groupedBy = this.groupableUserFields[0]?.id;
-    this.fetchGroupedPollData();
+  init() {
+    this.set("groupedBy", this.groupableUserFields[0]?.id);
+    loadScript("/javascripts/Chart.min.js")
+      .then(() => loadScript("/javascripts/chartjs-plugin-datalabels.min.js"))
+      .then(() => {
+        this.fetchGroupedPollData();
+      });
+    super.init(...arguments);
   }
 
-  get title() {
-    return this.args.model?.poll?.title
-      ? trustHTML(this.args.model?.poll?.title)
-      : this.args.model?.post?.topic?.title;
+  @discourseComputed("model.poll.title", "model.post.topic.title")
+  title(pollTitle, topicTitle) {
+    return pollTitle ? htmlSafe(pollTitle) : topicTitle;
   }
 
   get groupableUserFields() {
@@ -51,18 +58,16 @@ export default class PollBreakdownModal extends Component {
       });
   }
 
-  get totalVotes() {
-    return this.args.model?.poll?.options?.reduce(
-      (sum, option) => sum + option.votes,
-      0
-    );
+  @discourseComputed("model.poll.options")
+  totalVotes(options) {
+    return options.reduce((sum, option) => sum + option.votes, 0);
   }
 
   fetchGroupedPollData() {
     return ajax("/polls/grouped_poll_results.json", {
       data: {
-        post_id: this.args.model.post.id,
-        poll_name: this.args.model.poll.name,
+        post_id: this.model.post.id,
+        poll_name: this.model.poll.name,
         user_field_name: this.groupedBy,
       },
     })
@@ -74,43 +79,43 @@ export default class PollBreakdownModal extends Component {
         }
       })
       .then((result) => {
-        if (this.isDestroying) {
+        if (this.isDestroying || this.isDestroyed) {
           return;
         }
 
-        this.charts = result.grouped_results;
+        this.set("charts", result.grouped_results);
       });
   }
 
   @action
   setGrouping(value) {
-    this.groupedBy = value;
+    this.set("groupedBy", value);
     this.fetchGroupedPollData();
   }
 
   @action
   onSelectPanel(panel) {
-    this.displayMode = panel.id;
+    this.set("displayMode", panel.id);
   }
 
   <template>
-    {{! eslint-disable ember/template-no-invalid-interactive }}
+    {{! template-lint-disable no-invalid-interactive }}
     <DModal
-      class="poll-breakdown has-tabs"
-      @closeModal={{@closeModal}}
       @title={{i18n "poll.breakdown.title"}}
+      @closeModal={{@closeModal}}
+      class="poll-breakdown has-tabs"
     >
       <:headerBelowTitle>
         <ul class="modal-tabs">
           <li
-            class={{dConcatClass
+            class={{concatClass
               "modal-tab percentage"
               (if (eq this.displayMode "percentage") "is-active")
             }}
             {{on "click" (fn (mut this.displayMode) "percentage")}}
           >{{i18n "poll.breakdown.percentage"}}</li>
           <li
-            class={{dConcatClass
+            class={{concatClass
               "modal-tab count"
               (if (eq this.displayMode "count") "is-active")
             }}
@@ -126,20 +131,20 @@ export default class PollBreakdownModal extends Component {
 
           <div class="poll-breakdown-total-votes">{{i18n
               "poll.breakdown.votes"
-              count=@model.poll.voters
+              count=this.model.poll.voters
             }}</div>
 
           <ul class="poll-breakdown-options">
-            {{#each @model.poll.options as |option index|}}
+            {{#each this.model.poll.options as |option index|}}
               <PollBreakdownOption
+                @option={{option}}
+                @index={{index}}
+                @totalVotes={{this.totalVotes}}
+                @optionsCount={{this.model.poll.options.length}}
                 @displayMode={{this.displayMode}}
                 @highlightedOption={{this.highlightedOption}}
-                @index={{index}}
-                @onMouseOut={{fn (mut this.highlightedOption) null}}
                 @onMouseOver={{fn (mut this.highlightedOption) index}}
-                @option={{option}}
-                @optionsCount={{@model.poll.options.length}}
-                @totalVotes={{this.totalVotes}}
+                @onMouseOut={{fn (mut this.highlightedOption) null}}
               />
             {{/each}}
           </ul>
@@ -152,21 +157,21 @@ export default class PollBreakdownModal extends Component {
               }}</label>
 
             <ComboBox
-              class="poll-breakdown-dropdown"
               @content={{this.groupableUserFields}}
+              @value={{this.groupedBy}}
               @nameProperty="label"
               @onChange={{this.setGrouping}}
-              @value={{this.groupedBy}}
+              class="poll-breakdown-dropdown"
             />
           </div>
 
           <div class="poll-breakdown-charts">
             {{#each this.charts as |chart|}}
               <PollBreakdownChart
-                @displayMode={{this.displayMode}}
                 @group={{get chart "group"}}
-                @highlightedOption={{this.highlightedOption}}
                 @options={{get chart "options"}}
+                @displayMode={{this.displayMode}}
+                @highlightedOption={{this.highlightedOption}}
                 @setHighlightedOption={{fn (mut this.highlightedOption)}}
               />
             {{/each}}

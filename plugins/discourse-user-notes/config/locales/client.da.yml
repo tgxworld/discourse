@@ -7,5 +7,9 @@
 da:
   js:
     user_notes:
-      title: "bruger noter"
+      title: "Bruger Noter"
+      attach: "Tilføj Brugernote"
+      remove: "Fjern Brugernote"
+      show: "Bruger Noter (%{count})"
       delete_confirm: "Er du sikker på, at du vil slette bruger noten?"
+      show_post: "Vis indlæg"

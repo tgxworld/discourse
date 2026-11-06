@@ -18,7 +18,7 @@ class DiscourseGamification::AdminGamificationScoreEventController < Admin::Admi
 
   def create
     params.require(%i[user_id date points])
-    params.permit(:description, :category_id)
+    params.permit(:description)
 
     event =
       DiscourseGamification::GamificationScoreEvent.new(
@@ -26,7 +26,6 @@ class DiscourseGamification::AdminGamificationScoreEventController < Admin::Admi
         date: params[:date],
         points: params[:points],
         description: params[:description],
-        category_id: params[:category_id].presence,
       )
 
     if event.save
@@ -38,16 +37,12 @@ class DiscourseGamification::AdminGamificationScoreEventController < Admin::Admi
 
   def update
     params.require(%i[id points])
-    params.permit(:description, :category_id)
+    params.permit(:description)
 
     event = DiscourseGamification::GamificationScoreEvent.find(params[:id])
     raise Discourse::NotFound unless event
 
-    event.assign_attributes(
-      points: params[:points],
-      description: params[:description] || event.description,
-    )
-    event.category_id = params[:category_id].presence if params.key?(:category_id)
+    event.update(points: params[:points], description: params[:description] || event.description)
 
     if event.save
       render json: success_json

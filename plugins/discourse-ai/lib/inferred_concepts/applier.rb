@@ -60,7 +60,7 @@ module DiscourseAi
         existing_concepts = DiscourseAi::InferredConcepts::Manager.new.list_concepts
         return [] if existing_concepts.empty?
 
-        # Use the ConceptMatcher agent to match concepts
+        # Use the ConceptMatcher persona to match concepts
         matched_concept_names = match_concepts_to_content(content, existing_concepts)
 
         # Find concepts in the database
@@ -83,7 +83,7 @@ module DiscourseAi
         existing_concepts = DiscourseAi::InferredConcepts::Manager.new.list_concepts
         return [] if existing_concepts.empty?
 
-        # Use the ConceptMatcher agent to match concepts
+        # Use the ConceptMatcher persona to match concepts
         matched_concept_names = match_concepts_to_content(content, existing_concepts)
 
         # Find concepts in the database
@@ -95,30 +95,33 @@ module DiscourseAi
         matched_concepts
       end
 
-      # Use ConceptMatcher agent to match content against provided concepts
+      # Use ConceptMatcher persona to match content against provided concepts
       def match_concepts_to_content(content, concept_list)
         return [] if content.blank? || concept_list.blank?
 
-        # Use the ConceptMatcher agent to match concepts
+        # Prepare user message with only the content
+        user_message = content
 
-        agent =
-          AiAgent
-            .all_agents(enabled_only: false)
-            .find { |p| p.id == SiteSetting.inferred_concepts_match_agent.to_i }
+        # Use the ConceptMatcher persona to match concepts
+
+        persona =
+          AiPersona
+            .all_personas(enabled_only: false)
+            .find { |p| p.id == SiteSetting.inferred_concepts_match_persona.to_i }
             .new
 
-        llm = LlmModel.find(agent.class.default_llm_id || SiteSetting.ai_default_llm_model)
+        llm = LlmModel.find(persona.class.default_llm_id)
 
         input = { type: :user, content: content }
 
         context =
-          DiscourseAi::Agents::BotContext.new(
+          DiscourseAi::Personas::BotContext.new(
             messages: [input],
             user: Discourse.system_user,
             inferred_concepts: concept_list,
           )
 
-        bot = DiscourseAi::Agents::Bot.as(Discourse.system_user, agent: agent, model: llm)
+        bot = DiscourseAi::Personas::Bot.as(Discourse.system_user, persona: persona, model: llm)
         structured_output = nil
 
         bot.reply(context) do |partial, _, type|

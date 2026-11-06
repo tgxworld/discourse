@@ -2,18 +2,8 @@
 
 class SessionController < ApplicationController
   before_action :check_local_login_allowed,
-                only: %i[
-                  create
-                  forgot_password
-                  redeem_password_reset_code
-                  passkey_challenge
-                  passkey_login
-                ]
-  before_action :ensure_login_code_allowed, only: %i[create_login_code verify_login_code]
+                only: %i[create forgot_password passkey_challenge passkey_login]
   before_action :rate_limit_login, only: %i[create email_login]
-  before_action :rate_limit_login_code_request, only: %i[create_login_code]
-  before_action :rate_limit_login_code_verify,
-                only: %i[verify_login_code redeem_password_reset_code]
   skip_before_action :redirect_to_login_if_required
   skip_before_action :redirect_to_profile_if_required
   skip_before_action :preload_json,
@@ -23,26 +13,10 @@ class SessionController < ApplicationController
   skip_before_action :check_xhr, only: %i[second_factor_auth_show]
 
   allow_in_readonly_mode :email_login
-  allow_in_staff_writes_only_mode :create,
-                                  :forgot_password,
-                                  :redeem_password_reset_code,
-                                  :create_login_code,
-                                  :verify_login_code
-
-  # Every SessionController action is part of auth. An archived site permits
-  # all of them so existing users can log in, log out, and reset passwords.
-  # New account creation via these actions (SSO first-login, invite login code)
-  # is blocked at the model layer by guards in DiscourseConnect and
-  # InviteRedeemer.
-  skip_before_action :block_if_archived
+  allow_in_staff_writes_only_mode :create, :forgot_password
 
   ACTIVATE_USER_KEY = "activate_user"
   FORGOT_PASSWORD_EMAIL_LIMIT_PER_DAY = 6
-  LOGIN_CODE_SIGNUP_KEY_PREFIX = "login-code-signup-"
-  LOGIN_CODE_USERNAME_STEP_KEY = "login-code-username-step"
-  GENERATED_USERNAME_SIGNUP_KEY_PREFIX = "login-code-generated-username-"
-  GENERATED_USERNAME_SIGNUP_INDEX_KEY = "login-code-generated-username-ids"
-  GENERATED_USERNAME_ATTEMPTS = 5
 
   def csrf
     render json: { csrf: form_authenticity_token }
@@ -51,7 +25,7 @@ class SessionController < ApplicationController
   def sso
     raise Discourse::NotFound unless SiteSetting.enable_discourse_connect?
 
-    destination_url = cookies[:destination_url] || server_session[:destination_url]
+    destination_url = cookies[:destination_url] || session[:destination_url]
     return_path = params[:return_path] || path("/")
 
     if destination_url && return_path == path("/")
@@ -59,10 +33,10 @@ class SessionController < ApplicationController
       return_path = "#{uri.path}#{uri.query ? "?#{uri.query}" : ""}"
     end
 
-    server_session.delete(:destination_url)
+    session.delete(:destination_url)
     cookies.delete(:destination_url)
 
-    sso = DiscourseConnect.generate_sso(return_path, server_session:)
+    sso = DiscourseConnect.generate_sso(return_path, secure_session: secure_session)
     connect_verbose_warn { "Verbose SSO log: Started SSO process\n\n#{sso.diagnostics}" }
     redirect_to sso_url(sso), allow_other_host: true
   end
@@ -82,8 +56,8 @@ class SessionController < ApplicationController
     if result.second_factor_auth_skipped?
       data = result.data
       if data[:logout]
-        PushNotificationPusher.clear_subscriptions(current_user) if current_user
-        destroy(trusted_return_url: data[:return_sso_url])
+        params[:return_url] = data[:return_sso_url]
+        destroy
         return
       end
 
@@ -99,16 +73,14 @@ class SessionController < ApplicationController
       end
 
       if request.xhr?
-        # This is needed for DiscourseConnect provider to redirect users correctly
-        cookies[:sso_destination_url] = data[:sso_redirect_url]
+        cookies[:destination_url] = data[:sso_redirect_url]
         render json: success_json.merge(redirect_url: data[:sso_redirect_url])
       else
         redirect_to data[:sso_redirect_url], allow_other_host: true
       end
     elsif result.no_second_factors_enabled?
       if request.xhr?
-        # This is needed for DiscourseConnect provider to redirect users correctly
-        cookies[:sso_destination_url] = result.data[:sso_redirect_url]
+        cookies[:destination_url] = result.data[:sso_redirect_url]
       else
         redirect_to result.data[:sso_redirect_url], allow_other_host: true
       end
@@ -117,15 +89,14 @@ class SessionController < ApplicationController
       render json: success_json.merge(redirect_url: redirect_url)
     end
   rescue DiscourseConnectProvider::BlankSecret
-    render plain: I18n.t("discourse_connect.missing_secret"), status: :bad_request
+    render plain: I18n.t("discourse_connect.missing_secret"), status: 400
   rescue DiscourseConnectProvider::ParseError
     # Do NOT pass the error text to the client, it would give them the correct signature
-    render plain: I18n.t("discourse_connect.login_error"), status: :unprocessable_entity
+    render plain: I18n.t("discourse_connect.login_error"), status: 422
   rescue DiscourseConnectProvider::BlankReturnUrl
-    render plain: "return_sso_url is blank, it must be provided", status: :bad_request
+    render plain: "return_sso_url is blank, it must be provided", status: 400
   rescue DiscourseConnectProvider::InvalidParameterValueError => e
-    render plain: I18n.t("discourse_connect.invalid_parameter_value", param: e.param),
-           status: :bad_request
+    render plain: I18n.t("discourse_connect.invalid_parameter_value", param: e.param), status: 400
   end
 
   # For use in development mode only when login options could be limited or disabled.
@@ -137,7 +108,7 @@ class SessionController < ApplicationController
       raise Discourse::InvalidAccess if Rails.env.production?
 
       if ENV["DISCOURSE_DEV_ALLOW_ANON_TO_IMPERSONATE"] != "1"
-        return render plain: <<~TEXT, status: :forbidden
+        return render plain: <<~TEXT, status: 403
           To enable impersonating any user without typing passwords set the following ENV var
 
           export DISCOURSE_DEV_ALLOW_ANON_TO_IMPERSONATE=1
@@ -149,9 +120,9 @@ class SessionController < ApplicationController
       user = User.find_by_username(params[:session_id])
 
       if user.blank?
-        return render plain: "User #{params[:session_id]} not found", status: :forbidden
+        return render plain: "User #{params[:session_id]} not found", status: 403
       elsif !user.active?
-        return render plain: "User #{params[:session_id]} is not active", status: :forbidden
+        return render plain: "User #{params[:session_id]} is not active", status: 403
       end
 
       log_on_user(user)
@@ -184,7 +155,7 @@ class SessionController < ApplicationController
       # but since this is a test route, we allow passing a bad value into the API, catch the error
       # and return a JSON response to assert against.
       if e.message == "running 2fa against another user is not allowed"
-        render json: { result: "wrong user" }, status: :bad_request
+        render json: { result: "wrong user" }, status: 400
       else
         raise e
       end
@@ -199,17 +170,13 @@ class SessionController < ApplicationController
     params.require(:sig)
 
     begin
-      sso = DiscourseConnect.parse(request.query_string, server_session:)
+      sso = DiscourseConnect.parse(request.query_string, secure_session: secure_session)
     rescue DiscourseConnect::PayloadParseError => e
       connect_verbose_warn do
         "Verbose SSO log: Payload is not base64\n\n#{e.message}\n\n#{sso&.diagnostics}"
       end
 
       return render_sso_error(text: I18n.t("discourse_connect.payload_parse_error"), status: 422)
-    rescue DiscourseConnect::BlankSecretError
-      connect_verbose_warn { "Verbose SSO log: blank secret detected" }
-
-      return render_sso_error(text: I18n.t("discourse_connect.signature_error"), status: 422)
     rescue DiscourseConnect::SignatureError => e
       connect_verbose_warn do
         "Verbose SSO log: Signature verification failed\n\n#{e.message}\n\n#{sso&.diagnostics}"
@@ -235,7 +202,7 @@ class SessionController < ApplicationController
     sso.expire_nonce!
 
     begin
-      invite = validate_invitation!(sso)
+      invite = validate_invitiation!(sso)
 
       if user = sso.lookup_or_create_user(request.remote_ip)
         raise Discourse::ReadOnly if @staff_writes_only_mode && !user&.staff?
@@ -253,7 +220,6 @@ class SessionController < ApplicationController
           else
             render_sso_error(text: I18n.t("discourse_connect.account_not_approved"), status: 403)
           end
-
           return
 
           # we only want to redeem the invite if
@@ -272,9 +238,9 @@ class SessionController < ApplicationController
           topic = invite.topics.first
           return_path = topic.present? ? path(topic.relative_url) : path("/")
         elsif !user.active?
-          activation = UserActivator.new(user, request, server_session, cookies)
+          activation = UserActivator.new(user, request, session, cookies)
           activation.finish
-          server_session["user_created_message"] = activation.message
+          session["user_created_message"] = activation.message
           return redirect_to(users_account_created_path)
         else
           login_sso_user(sso, user)
@@ -318,7 +284,7 @@ class SessionController < ApplicationController
       text = nil
 
       # If there's a problem with the email we can explain that
-      if e.record.is_a?(User) && e.record.errors[:primary_email].present?
+      if (e.record.is_a?(User) && e.record.errors[:primary_email].present?)
         if e.record.email.blank?
           text = I18n.t("discourse_connect.no_email")
         else
@@ -353,16 +319,14 @@ class SessionController < ApplicationController
     connect_verbose_warn do
       "Verbose SSO log: User was logged on #{user.username}\n\n#{sso.diagnostics}"
     end
-    log_on_user(user, replay_anonymous_action: true) if user.id != current_user&.id
+    log_on_user(user) if user.id != current_user&.id
   end
 
   def create
     params.require(:login)
-    password = params.require(:password)
+    params.require(:password)
 
-    if !password.is_a?(String) || password.length > User.max_password_length
-      return invalid_credentials
-    end
+    return invalid_credentials if params[:password].length > User.max_password_length
 
     user = User.find_by_username_or_email(normalized_login_param)
 
@@ -371,6 +335,8 @@ class SessionController < ApplicationController
     rate_limit_second_factor!(user)
 
     if user.present?
+      password = params[:password]
+
       # If their password is incorrect
       if !user.confirm_password?(password)
         invalid_credentials
@@ -412,7 +378,7 @@ class SessionController < ApplicationController
   end
 
   def passkey_challenge
-    render json: DiscourseWebauthn.stage_challenge(current_user, server_session)
+    render json: DiscourseWebauthn.stage_challenge(current_user, secure_session)
   end
 
   def passkey_login
@@ -424,20 +390,11 @@ class SessionController < ApplicationController
       ::DiscourseWebauthn::AuthenticationService.new(
         nil,
         params[:publicKeyCredential],
-        session: server_session,
+        session: secure_session,
         factor_type: UserSecurityKey.factor_types[:first_factor],
       ).authenticate_security_key
 
     user = User.where(id: security_key.user_id, active: true).first
-
-    if login_not_approved_for?(user)
-      render json: login_not_approved
-      return
-    end
-
-    if payload = login_error_check(user)
-      return render json: payload
-    end
 
     if user.email_confirmed?
       login(user, passkey_login: true)
@@ -468,9 +425,9 @@ class SessionController < ApplicationController
       end
 
       if matched_user&.security_keys_enabled?
-        DiscourseWebauthn.stage_challenge(matched_user, server_session)
+        DiscourseWebauthn.stage_challenge(matched_user, secure_session)
         response.merge!(
-          DiscourseWebauthn.allowed_credentials(matched_user, server_session).merge(
+          DiscourseWebauthn.allowed_credentials(matched_user, secure_session).merge(
             security_key_required: true,
           ),
         )
@@ -509,49 +466,12 @@ class SessionController < ApplicationController
         return render json: payload
       else
         user.update_timezone_if_missing(params[:timezone])
-        log_on_user(user, replay_anonymous_action: true)
+        log_on_user(user)
         return render json: success_json
       end
     end
 
     render json: { error: I18n.t("email_login.invalid_token", base_url: Discourse.base_url) }
-  end
-
-  def create_login_code
-    expires_now
-
-    # Render the same response as a successful request so bots can't probe
-    # the endpoint. Sending no email at all for honeypot failures matches
-    # the behavior for emails we refuse to deliver to.
-    return render json: success_json if login_code_honeypot_fails?
-
-    return request_invite_login_code if params[:invite_key].present?
-
-    EmailLoginCode::Request.call(
-      service_params.deep_merge(ip_address: request.remote_ip),
-    ) do |result|
-      on_success { render json: success_json }
-      on_failed_policy(:can_register_from_ip) do
-        render json: login_code_registration_ip_limit_error
-      end
-      on_failed_contract do |contract|
-        render json: failed_json.merge(errors: contract.errors.full_messages), status: :bad_request
-      end
-    end
-  end
-
-  def verify_login_code
-    expires_now
-
-    return complete_verified_login_code_signup if params[:signup_token].present?
-
-    EmailLoginCode::Verify.call(login_code_verification_params) do |result|
-      on_success { |user:| process_verified_login_code(user) }
-      on_failed_contract do |contract|
-        render json: failed_json.merge(errors: contract.errors.full_messages), status: :bad_request
-      end
-      on_failure { render json: invalid_login_code }
-    end
   end
 
   def one_time_password
@@ -562,7 +482,7 @@ class SessionController < ApplicationController
         Discourse.redis.del "otp_#{params[:token]}"
         return redirect_to path("/")
       elsif request.post?
-        log_on_user(user, replay_anonymous_action: true)
+        log_on_user(user)
         Discourse.redis.del "otp_#{params[:token]}"
         return redirect_to path("/")
       else
@@ -585,7 +505,7 @@ class SessionController < ApplicationController
       challenge =
         SecondFactor::AuthManager.find_second_factor_challenge(
           nonce: nonce,
-          server_session:,
+          secure_session: secure_session,
           target_user: current_user,
         )
     rescue SecondFactor::BadChallenge => exception
@@ -601,21 +521,12 @@ class SessionController < ApplicationController
         backup_enabled: user.backup_codes_enabled?,
         allowed_methods: challenge[:allowed_methods],
       )
-      passkeys_for_2fa = user.passkeys_available_as_second_factor?
-      if user.security_keys_enabled? || passkeys_for_2fa
-        DiscourseWebauthn.stage_challenge(user, server_session)
-        json.merge!(
-          DiscourseWebauthn.allowed_credentials(
-            user,
-            server_session,
-            include_passkeys: passkeys_for_2fa,
-          ),
-        )
-        json[:security_keys_enabled] = user.security_keys_enabled?
-        json[:passkeys_enabled] = passkeys_for_2fa
+      if user.security_keys_enabled?
+        DiscourseWebauthn.stage_challenge(user, secure_session)
+        json.merge!(DiscourseWebauthn.allowed_credentials(user, secure_session))
+        json[:security_keys_enabled] = true
       else
         json[:security_keys_enabled] = false
-        json[:passkeys_enabled] = false
       end
       json[:description] = challenge[:description] if challenge[:description]
     else
@@ -642,7 +553,7 @@ class SessionController < ApplicationController
       challenge =
         SecondFactor::AuthManager.find_second_factor_challenge(
           nonce: nonce,
-          server_session:,
+          secure_session: secure_session,
           target_user: current_user,
         )
       user = User.find(challenge[:target_user_id])
@@ -680,11 +591,11 @@ class SessionController < ApplicationController
 
     if !challenge[:successful]
       rate_limit_second_factor!(user)
-      second_factor_auth_result = user.authenticate_second_factor(params, server_session)
+      second_factor_auth_result = user.authenticate_second_factor(params, secure_session)
       if second_factor_auth_result.ok
         challenge[:successful] = true
         challenge[:generated_at] += 1.minute.to_i
-        server_session["current_second_factor_auth_challenge"] = challenge.to_json
+        secure_session["current_second_factor_auth_challenge"] = challenge.to_json
       else
         error_json =
           second_factor_auth_result
@@ -692,7 +603,7 @@ class SessionController < ApplicationController
             .deep_symbolize_keys
             .slice(:ok, :error, :reason)
             .merge(failed_json)
-        render json: error_json, status: :bad_request
+        render json: error_json, status: 400
         return
       end
     end
@@ -702,7 +613,7 @@ class SessionController < ApplicationController
              callback_path: challenge[:callback_path],
              redirect_url: challenge[:redirect_url],
            },
-           status: :ok
+           status: 200
   end
 
   def forgot_password
@@ -735,60 +646,25 @@ class SessionController < ApplicationController
         5,
         1.hour,
       ).performed!
-      server_session.delete(:password_reset_code)
     end
 
     json = success_json
-    json[:email_code] = true if password_reset_via_code?(user)
     json[:user_found] = user.present? if !SiteSetting.hide_email_address_taken
     render json: json
   rescue RateLimiter::LimitExceeded
     render_json_error(I18n.t("rate_limiter.slow_down"))
   end
 
-  def redeem_password_reset_code
-    expires_now
-    if !UpcomingChanges.enabled_for_user?(:enable_local_logins_via_code, current_user)
-      raise Discourse::NotFound
-    end
-
-    reset_code = server_session[:password_reset_code] || {}
-    User::CreatePasswordResetToken.call(
-      service_params.deep_merge(
-        login_code_id: reset_code[:login_code_id],
-        user_id: reset_code[:user_id],
-      ),
-    ) do
-      on_success do |email_token:|
-        server_session.delete(:password_reset_code)
-        render json:
-                 success_json.merge(redirect_url: path("/u/password-reset/#{email_token.token}"))
-      end
-      on_failed_policy(:can_write) { raise Discourse::ReadOnly }
-      on_failure { render json: invalid_login_code }
-    end
-  end
-
   def current
     if current_user.present?
       render_serialized(current_user, CurrentUserSerializer, { login_method: login_method })
     else
-      render body: nil, status: :not_found
+      render body: nil, status: 404
     end
   end
 
-  def destroy(trusted_return_url: nil)
-    return_url = params[:return_url].presence
-    if return_url
-      begin
-        uri = URI(return_url)
-        return_url = nil if uri.host.present? || uri.scheme.present? || !uri.path&.start_with?("/")
-      rescue URI::Error, ArgumentError
-        return_url = nil
-      end
-    end
-
-    redirect_url = trusted_return_url || return_url || SiteSetting.logout_redirect.presence
+  def destroy
+    redirect_url = params[:return_url].presence || SiteSetting.logout_redirect.presence
 
     redirect_url ||=
       if SiteSetting.login_required
@@ -811,17 +687,8 @@ class SessionController < ApplicationController
     # `redirect_url` might have been updated by a `before_session_destroy` listener
     redirect_url = data[:redirect_url]
 
-    push_subscription =
-      begin
-        if params[:push_subscription].is_a?(ActionController::Parameters)
-          params.require(:push_subscription).permit(:endpoint, keys: %i[p256dh auth])
-        end
-      rescue StandardError
-        nil # best-effort: malformed push_subscription should never block logout
-      end
-
     reset_session
-    log_off_user(push_subscription:)
+    log_off_user
 
     if request.xhr?
       render json: { redirect_url: }
@@ -831,13 +698,13 @@ class SessionController < ApplicationController
   end
 
   def get_honeypot_value
-    server_session[HONEYPOT_KEY] = honeypot_value
-    server_session[CHALLENGE_KEY] = challenge_value
+    secure_session.set(HONEYPOT_KEY, honeypot_value, expires: 1.hour)
+    secure_session.set(CHALLENGE_KEY, challenge_value, expires: 1.hour)
 
     render json: {
              value: honeypot_value,
              challenge: challenge_value,
-             expires_in: ServerSession.expiry,
+             expires_in: SecureSession.expiry,
            }
   end
 
@@ -847,7 +714,7 @@ class SessionController < ApplicationController
       api_key = ApiKey.active.with_key(key).first
       render_serialized(api_key.api_key_scopes, ApiKeyScopeSerializer, root: "scopes")
     else
-      render body: nil, status: :not_found
+      render body: nil, status: 404
     end
   end
 
@@ -880,12 +747,12 @@ class SessionController < ApplicationController
   end
 
   def authenticate_second_factor(user)
-    second_factor_authentication_result = user.authenticate_second_factor(params, server_session)
+    second_factor_authentication_result = user.authenticate_second_factor(params, secure_session)
     if !second_factor_authentication_result.ok
       failure_payload = second_factor_authentication_result.to_h
       if user.security_keys_enabled?
-        DiscourseWebauthn.stage_challenge(user, server_session)
-        failure_payload.merge!(DiscourseWebauthn.allowed_credentials(user, server_session))
+        DiscourseWebauthn.stage_challenge(user, secure_session)
+        failure_payload.merge!(DiscourseWebauthn.allowed_credentials(user, secure_session))
       end
       @second_factor_failure_payload = failed_json.merge(failure_payload)
       return second_factor_authentication_result
@@ -906,566 +773,6 @@ class SessionController < ApplicationController
 
   def login_not_approved_for?(user)
     SiteSetting.must_approve_users? && !user.approved? && !user.admin?
-  end
-
-  def ensure_login_code_allowed
-    if !UpcomingChanges.enabled_for_user?(:enable_local_logins_via_code, current_user)
-      raise Discourse::NotFound
-    end
-    # Code login is a delivery variant of email login, so it also requires
-    # `enable_local_logins_via_email` (checked via `check_login_via_email`).
-    check_local_login_allowed(check_login_via_email: true)
-    redirect_to path("/") if current_user
-  end
-
-  def rate_limit_login_code_request
-    RateLimiter.new(nil, "login-code-hour-#{request.remote_ip}", 6, 1.hour).performed!
-    RateLimiter.new(nil, "login-code-min-#{request.remote_ip}", 3, 1.minute).performed!
-
-    invite = Invite.find_by(invite_key: params[:invite_key]) if params[:invite_key].present?
-    email = (invite&.email.presence || params[:email]).to_s.strip.downcase
-    if email.present?
-      RateLimiter.new(
-        nil,
-        "login-code-email-#{Digest::SHA256.hexdigest(email)}",
-        3,
-        1.hour,
-      ).performed!
-    end
-  end
-
-  def rate_limit_login_code_verify
-    RateLimiter.new(nil, "login-code-verify-hour-#{request.remote_ip}", 30, 1.hour).performed!
-    RateLimiter.new(nil, "login-code-verify-min-#{request.remote_ip}", 6, 1.minute).performed!
-  end
-
-  def login_code_honeypot_fails?
-    return false if is_api?
-    params[:password_confirmation] != honeypot_value ||
-      params[:challenge] != challenge_value.try(:reverse)
-  end
-
-  def process_verified_login_code(matched_user)
-    # Existing-user login is allowed while archived; account creation is not.
-    # The model-layer guard in CreateFromVerifiedEmail exists too, but the
-    # Service framework swallows exceptions inside ModelStep, so raising here
-    # is what actually surfaces the 503 archive response.
-    raise Discourse::SiteArchived if SiteSetting.site_archived && matched_user.nil?
-
-    if matched_user &&
-         (matched_user.totp_or_backup_codes_enabled? || matched_user.security_keys_enabled?)
-      if missing_second_factor_params?
-        return render json: login_code_second_factor_info(matched_user)
-      end
-
-      rate_limit_second_factor!(matched_user)
-      if !authenticate_second_factor(matched_user).ok
-        return render json: @second_factor_failure_payload
-      end
-    end
-
-    return process_verified_invite_login_code(matched_user) if params[:invite_key].present?
-
-    return begin_verified_login_code_signup if pending_approval_signup?(matched_user)
-
-    if matched_user.nil? && registration_via_login_code_open?
-      user_fields_required = signup_user_fields_missing?
-      name_required = signup_full_name_missing?
-      if user_fields_required || name_required
-        return render json: { user_fields_required:, name_required: }
-      end
-    end
-
-    login_code = EmailLoginCode.login.active.for_email(params[:email].to_s.strip).first
-    generated_username =
-      generated_username_signup?(
-        login_code,
-        params[:email],
-        params[:username],
-        params[:signup_context],
-      )
-    EmailLoginCode::Redeem.call(
-      service_params.deep_merge(
-        ip_address: request.remote_ip,
-        options: {
-          generated_username:,
-          generated_username_login_code_id: login_code&.id,
-        },
-      ),
-    ) do |result|
-      on_success do |user:, existing_user:|
-        login_with_login_code(user, created_account: existing_user.nil?)
-      end
-      on_failed_policy(:can_register_new_account) do
-        render json: { error: I18n.t("login.new_registrations_disabled") }
-      end
-      on_failed_policy(:can_register_from_ip) do
-        render json: login_code_registration_ip_limit_error
-      end
-      on_failed_policy(:username_allowed) do
-        if generated_username
-          render_signup_username_required(
-            result[:params].email,
-            login_code: result[:login_code],
-            signup_context: params[:signup_context],
-          )
-        else
-          render json: { username_errors: [I18n.t("login.reserved_username")] }
-        end
-      end
-      on_failed_policy(:required_fields_provided) do
-        render json: { error: I18n.t("login.missing_user_field") }
-      end
-      on_failed_policy(:required_full_name_provided) do
-        render json: { error: I18n.t("login.missing_full_name") }
-      end
-      on_failed_policy(:required_username_provided) do
-        render_signup_username_required(
-          result[:params].email,
-          login_code: result[:login_code],
-          signup_context: params[:signup_context],
-        )
-      end
-      on_model_errors(:user) do |user|
-        if generated_username && user.errors[:username].present?
-          render_signup_username_required(
-            result[:params].email,
-            login_code: result[:login_code],
-            signup_context: params[:signup_context],
-          )
-        else
-          render json: login_code_account_error(user)
-        end
-      end
-      on_failed_contract do |contract|
-        render json: failed_json.merge(errors: contract.errors.full_messages), status: :bad_request
-      end
-      on_failure { render json: invalid_login_code }
-    end
-  end
-
-  # Required signup details are only collected once the code has proven
-  # ownership of the inbox, so these responses can't be used to probe whether
-  # an account exists.
-  def pending_approval_signup?(matched_user)
-    matched_user.nil? && registration_via_login_code_open? && SiteSetting.must_approve_users? &&
-      !EmailValidator.can_auto_approve_user?(params[:email].to_s.strip.downcase)
-  end
-
-  def begin_verified_login_code_signup
-    login_code = EmailLoginCode.login.active.for_email(params[:email].to_s.strip).first
-    return render json: invalid_login_code if login_code.blank?
-
-    token = SecureRandom.hex(32)
-    expires_in = (login_code.expires_at - Time.zone.now).ceil
-    return render json: invalid_login_code if expires_in <= 0
-
-    proof = { email: login_code.email, code: params[:code] }.merge(verified_login_code_signup_proof)
-    server_session.set("#{LOGIN_CODE_SIGNUP_KEY_PREFIX}#{token}", proof, expires: expires_in)
-
-    username =
-      UserNameSuggester.suggest(login_code.email, allow_generic_fallback: false) ||
-        RandomUsernameGenerator.generate
-
-    render json: {
-             signup_details_required: true,
-             signup_token: token,
-             username: username,
-             expires_in: expires_in,
-           }
-  end
-
-  def complete_verified_login_code_signup
-    token = params[:signup_token].to_s
-    proof = verified_login_code_signup_proof_for(token)
-    return render json: invalid_login_code if !proof.is_a?(Hash)
-
-    key = "#{LOGIN_CODE_SIGNUP_KEY_PREFIX}#{token}"
-    return render json: invalid_login_code if !SiteSetting.must_approve_users?
-    return render json: invalid_login_code if EmailValidator.can_auto_approve_user?(proof[:email])
-
-    signup_params = params.permit(:username, :name, :password, user_fields: {}).to_h
-    EmailLoginCode::Redeem.call(
-      service_params.deep_merge(
-        ip_address: request.remote_ip,
-        params:
-          signup_params.merge(
-            email: proof[:email],
-            code: proof[:code],
-            new_account_required: true,
-            username_required: true,
-          ),
-      ),
-    ) do |result|
-      on_success do |user:, existing_user:|
-        server_session.delete(key)
-        login_with_login_code(user, created_account: existing_user.nil?)
-      end
-      on_failed_policy(:new_account_available) { render json: invalid_login_code }
-      on_failed_policy(:can_register_new_account) do
-        render json: { error: I18n.t("login.new_registrations_disabled") }
-      end
-      on_failed_policy(:can_register_from_ip) do
-        render json: login_code_registration_ip_limit_error
-      end
-      on_failed_policy(:required_username_provided) do
-        render json: { error: I18n.t("login.missing_username") }
-      end
-      on_failed_policy(:username_allowed) do
-        render json: { error: I18n.t("login.reserved_username") }
-      end
-      on_failed_policy(:required_fields_provided) do
-        render json: { error: I18n.t("login.missing_user_field") }
-      end
-      on_failed_policy(:required_full_name_provided) do
-        render json: { error: I18n.t("login.missing_full_name") }
-      end
-      on_model_errors(:user) { |user| render json: login_code_signup_error(user) }
-      on_failed_contract do |contract|
-        render json: { error: contract.errors.full_messages.join(". ") }
-      end
-      on_failure { render json: invalid_login_code }
-    end
-  end
-
-  def verified_login_code_signup_proof
-    {}
-  end
-
-  def verified_login_code_signup_proof_for(token)
-    return if token !~ /\A[0-9a-f]{64}\z/
-
-    server_session["#{LOGIN_CODE_SIGNUP_KEY_PREFIX}#{token}"]
-  end
-
-  def signup_user_fields_missing?
-    params[:user_fields].blank? && UserField.required.where(show_on_signup: true).exists?
-  end
-
-  def signup_full_name_missing?
-    params[:name].blank? && Site.full_name_required_for_signup
-  end
-
-  def registration_via_login_code_open?
-    SiteSetting.allow_new_registrations && !SiteSetting.invite_only &&
-      !SiteSetting.require_invite_code
-  end
-
-  def login_code_second_factor_info(user)
-    response = { second_factor_required: true }
-
-    if user.totp_or_backup_codes_enabled?
-      response[:totp_enabled] = user.totp_enabled?
-      response[:backup_codes_enabled] = user.backup_codes_enabled?
-    end
-
-    if user.security_keys_enabled?
-      DiscourseWebauthn.stage_challenge(user, server_session)
-      response.merge!(
-        DiscourseWebauthn.allowed_credentials(user, server_session).merge(
-          security_key_required: true,
-        ),
-      )
-    end
-
-    response
-  end
-
-  def missing_second_factor_params?
-    params[:second_factor_token].blank?
-  end
-
-  def login_with_login_code(user, created_account: false, redirect_url: nil)
-    raise Discourse::ReadOnly if @staff_writes_only_mode && !user.staff?
-
-    if login_not_approved_for?(user)
-      render json: { pending_approval: true }
-    elsif payload = login_error_check(user)
-      render json: payload
-    elsif created_account
-      session.delete(ACTIVATE_USER_KEY)
-      user.update_timezone_if_missing(params[:timezone])
-      log_on_user(user, replay_anonymous_action: true)
-      complete_login_code_authentication(user)
-      render json:
-               success_json.merge(
-                 account_created: true,
-                 user: serialize_data(user, UserSerializer, root: false),
-                 can_upload_avatar:
-                   user.in_any_groups?(SiteSetting.uploaded_avatars_allowed_groups_map),
-                 # A pending provider handoff takes precedence, since an external
-                 # site is waiting on the answer. Reading it unconditionally also
-                 # consumes the cookie, so a caller-supplied redirect can't leave
-                 # a signed payload behind to be replayed on a later login.
-                 redirect_url: deferred_sso_provider_url || redirect_url,
-               )
-    else
-      response = login(user, redirect_url:)
-      complete_login_code_authentication(user)
-      response
-    end
-  end
-
-  def request_invite_login_code
-    Invite::RequestEmailCode.call(
-      service_params.deep_merge(ip_address: request.remote_ip),
-    ) do |result|
-      on_success { render json: success_json }
-      on_failed_policy(:can_register_from_ip) do
-        render json: login_code_registration_ip_limit_error
-      end
-      on_failed_contract do |contract|
-        render json: failed_json.merge(errors: contract.errors.full_messages), status: :bad_request
-      end
-      on_failure { render json: success_json }
-    end
-  end
-
-  def login_code_verification_params
-    invite = Invite.find_by(invite_key: params[:invite_key]) if params[:invite_key].present?
-    email = invite&.email.presence || params[:email]
-
-    service_params.deep_merge(params: params.to_unsafe_h.merge(email:))
-  end
-
-  def process_verified_invite_login_code(matched_user)
-    if matched_user
-      return render json: login_not_approved if login_not_approved_for?(matched_user)
-      if payload = login_error_check(matched_user)
-        return render json: payload
-      end
-    end
-
-    if matched_user.nil? && (signup_user_fields_missing? || signup_full_name_missing?)
-      return(
-        render json: {
-                 user_fields_required: signup_user_fields_missing?,
-                 name_required: signup_full_name_missing?,
-               }
-      )
-    end
-
-    Invite::RedeemWithEmailCode.call(
-      login_code_verification_params.deep_merge(ip_address: request.remote_ip),
-    ) do |result|
-      on_success do |invite:, user:, existing_user:|
-        login_with_login_code(
-          user,
-          created_account: existing_user.nil?,
-          redirect_url: invite_login_code_redirect(invite, user),
-        )
-      end
-      on_failed_policy(:can_register_new_account) do
-        render json: { error: I18n.t("login.new_registrations_disabled") }
-      end
-      on_failed_policy(:can_register_from_ip) do
-        render json: login_code_registration_ip_limit_error
-      end
-      on_failed_policy(:required_fields_provided) do
-        render json: { error: I18n.t("login.missing_user_field") }
-      end
-      on_failed_policy(:required_full_name_provided) do
-        render json: { error: I18n.t("login.missing_full_name") }
-      end
-      on_failed_policy(:required_username_provided) do
-        render_signup_username_required(
-          result[:params].email,
-          invite: result[:invite],
-          login_code: result[:login_code],
-        )
-      end
-      on_failed_policy(:username_allowed) do
-        render json: { username_errors: [I18n.t("login.reserved_username")] }
-      end
-      on_model_errors(:user) { |user| render json: login_code_account_error(user) }
-      on_model_not_found(:user) do |model_result|
-        if model_result.exception.is_a?(ActiveRecord::RecordInvalid)
-          render json: login_code_account_error(model_result.exception.record)
-        elsif model_result.exception.is_a?(Invite::UserExists)
-          render json: { error: model_result.exception.message }
-        else
-          render json: invalid_login_code
-        end
-      end
-      on_failed_contract do |contract|
-        render json: failed_json.merge(errors: contract.errors.full_messages), status: :bad_request
-      end
-      on_failure { render json: invalid_login_code }
-    end
-  end
-
-  def invite_login_code_redirect(invite, user)
-    topic = invite.topics.first
-    topic && user.guardian.can_see?(topic) ? path(topic.relative_url) : path("/")
-  end
-
-  def render_signup_username_required(email, invite: nil, login_code: nil, signup_context: nil)
-    generated_username =
-      invite.nil? && login_code.present? &&
-        email_login_code_username_mode(email, signup_context) == :generated
-    username =
-      if generated_username
-        generated_signup_username(email)
-      else
-        UserNameSuggester.suggest(email, allow_generic_fallback: false) ||
-          RandomUsernameGenerator.generate
-      end
-    username = nil if UserNameSuggester.generic_username?(username)
-    generated_username = false if username.blank?
-
-    if generated_username
-      store_generated_username_signup(login_code, email, username, signup_context)
-    end
-    store_login_code_username_step(login_code) if login_code
-
-    trust_level = invite ? SiteSetting.default_invitee_trust_level : SiteSetting.default_trust_level
-    group_ids =
-      Group.desired_trust_level_groups(trust_level) + [Group::AUTO_GROUPS[:logged_in_users]]
-    if !SiteSetting.granular_anonymous_and_logged_in_groups_permissions
-      group_ids << Group::AUTO_GROUPS[:everyone]
-    end
-    group_ids.concat(invite.groups.pluck(:id)) if invite
-
-    render json: {
-             username_required: true,
-             username: username,
-             generated_username: generated_username,
-             trust_level: trust_level,
-             avatar_template: username && User.default_template(username),
-             can_upload_avatar:
-               group_ids.intersect?(SiteSetting.uploaded_avatars_allowed_groups_map),
-             can_edit_avatar:
-               !SiteSetting.auth_overrides_avatar &&
-                 !SiteSetting.discourse_connect_overrides_avatar,
-           }
-  end
-
-  def generated_username_signup?(login_code, email, username, signup_context)
-    return false if login_code.blank? || username.blank?
-
-    proof = server_session[generated_username_signup_key(login_code.id)]
-    proof_matches =
-      proof.is_a?(Hash) && proof[:login_code_id] == login_code.id &&
-        proof[:email] == email.to_s.strip.downcase && proof[:username] == username.to_s &&
-        proof[:signup_context] == signup_context.to_s
-    proof_matches && email_login_code_username_mode(email, signup_context) == :generated
-  end
-
-  def email_login_code_username_mode(email, signup_context)
-    DiscoursePluginRegistry.apply_modifier(
-      :email_login_code_username_mode,
-      :required,
-      email,
-      server_session,
-      signup_context,
-      cookies[:destination_url],
-    )
-  end
-
-  def generated_signup_username(email)
-    GENERATED_USERNAME_ATTEMPTS.times do |attempt|
-      username =
-        if attempt.zero?
-          UserNameSuggester.suggest(email, allow_generic_fallback: false)
-        else
-          RandomUsernameGenerator.generate(allow_when_disabled: true)
-        end
-      return username if valid_generated_signup_username?(username, email)
-    end
-
-    nil
-  end
-
-  def valid_generated_signup_username?(username, email)
-    username.present? && UsernameValidator.new(username).valid_format? &&
-      !UsernameValidator.clashing_with_existing_route?(username) &&
-      User.username_available?(username, email)
-  end
-
-  def store_generated_username_signup(login_code, email, username, signup_context)
-    expires_in = (login_code.expires_at - Time.zone.now).ceil
-    return if expires_in <= 0
-
-    server_session.set(
-      generated_username_signup_key(login_code.id),
-      {
-        login_code_id: login_code.id,
-        email: email.to_s.strip.downcase,
-        username: username,
-        signup_context: signup_context.to_s,
-      },
-      expires: expires_in,
-    )
-    ids = Array(server_session[GENERATED_USERNAME_SIGNUP_INDEX_KEY]) | [login_code.id]
-    server_session.set(GENERATED_USERNAME_SIGNUP_INDEX_KEY, ids, expires: ServerSession.expiry)
-  end
-
-  # Lets the username step roll random usernames on login-required sites. Only
-  # reached once the code has matched, so the visitor owns the email.
-  def store_login_code_username_step(login_code)
-    expires_in = (login_code.expires_at - Time.zone.now).ceil
-    return if expires_in <= 0
-
-    server_session.set(LOGIN_CODE_USERNAME_STEP_KEY, true, expires: expires_in)
-  end
-
-  def generated_username_signup_key(login_code_id)
-    "#{GENERATED_USERNAME_SIGNUP_KEY_PREFIX}#{login_code_id}"
-  end
-
-  def complete_login_code_authentication(user)
-    Array(server_session[GENERATED_USERNAME_SIGNUP_INDEX_KEY]).each do |login_code_id|
-      server_session.delete(generated_username_signup_key(login_code_id))
-    end
-    server_session.delete(GENERATED_USERNAME_SIGNUP_INDEX_KEY)
-    DiscourseEvent.trigger(:email_login_code_authenticated, user, server_session)
-  end
-
-  # A pending provider handoff would redirect as soon as the session exists,
-  # skipping the pending avatar upload, so the client follows the URL once
-  # signup is finished (as account activation does). Consumes the
-  # payload so a later login isn't sent through a handoff it didn't start.
-  def deferred_sso_provider_url
-    return if !SiteSetting.enable_discourse_connect_provider
-
-    payload = cookies.delete(:sso_payload)
-    return if payload.blank?
-
-    "#{session_sso_provider_url}?#{payload}"
-  end
-
-  def invalid_login_code
-    { error: I18n.t("email_login_code.invalid_code") }
-  end
-
-  def login_code_registration_ip_limit_error
-    {
-      error:
-        I18n.t(
-          "activerecord.errors.models.user.attributes.ip_address.max_new_accounts_per_registration_ip",
-        ),
-    }
-  end
-
-  def login_code_signup_error(user)
-    response = { error: user.errors.full_messages.join(". ") }
-    password_errors = user.user_password&.errors&.full_messages_for(:password)
-    response[:password_error] = password_errors.join(". ") if password_errors.present?
-    response
-  end
-
-  def login_code_account_error(user)
-    if user.errors[:username].present?
-      return { username_errors: user.errors.full_messages_for(:username) }
-    end
-
-    ip_error =
-      user.errors.find do |error|
-        error.attribute == :ip_address &&
-          error.type.in?(%i[blocked max_new_accounts_per_registration_ip])
-      end
-
-    ip_error ? { error: ip_error.message } : invalid_login_code
   end
 
   def invalid_credentials
@@ -1498,10 +805,10 @@ class SessionController < ApplicationController
     { error: user.suspended_message, reason: "suspended" }
   end
 
-  def login(user, passkey_login: false, second_factor_auth_result: nil, redirect_url: nil)
+  def login(user, passkey_login: false, second_factor_auth_result: nil)
     session.delete(ACTIVATE_USER_KEY)
     user.update_timezone_if_missing(params[:timezone])
-    log_on_user(user, replay_anonymous_action: true)
+    log_on_user(user)
 
     if payload = cookies.delete(:sso_payload)
       confirmed_2fa_during_login =
@@ -1511,8 +818,6 @@ class SessionController < ApplicationController
               second_factor_auth_result.used_2fa_method != UserSecondFactor.methods[:backup_codes]
           )
       sso_provider(payload, confirmed_2fa_during_login)
-    elsif redirect_url
-      render json: success_json.merge(redirect_url:)
     else
       render_serialized(user, UserSerializer)
     end
@@ -1549,14 +854,14 @@ class SessionController < ApplicationController
   # not want to complete the SSO process of creating a user
   # and redeeming the invite if the invite is not redeemable or
   # for the wrong user
-  def validate_invitation!(sso)
-    return unless invite_key = server_session["invite-key"]
+  def validate_invitiation!(sso)
+    invite_key = secure_session["invite-key"]
+    return if invite_key.blank?
 
-    base_url = Discourse.base_url
-    site_name = SiteSetting.title
+    invite = Invite.find_by(invite_key: invite_key)
 
-    unless invite = Invite.find_by(invite_key:)
-      raise Invite::ValidationFailed.new(I18n.t("invite.not_found", base_url:))
+    if invite.blank?
+      raise Invite::ValidationFailed.new(I18n.t("invite.not_found", base_url: Discourse.base_url))
     end
 
     if invite.redeemable?
@@ -1564,9 +869,15 @@ class SessionController < ApplicationController
         raise Invite::ValidationFailed.new(I18n.t("invite.not_matching_email"))
       end
     elsif invite.expired?
-      raise Invite::ValidationFailed.new(I18n.t("invite.expired", base_url:))
+      raise Invite::ValidationFailed.new(I18n.t("invite.expired", base_url: Discourse.base_url))
     elsif invite.redeemed?
-      raise Invite::ValidationFailed.new(I18n.t("invite.not_found_template", site_name:, base_url:))
+      raise Invite::ValidationFailed.new(
+              I18n.t(
+                "invite.not_found_template",
+                site_name: SiteSetting.title,
+                base_url: Discourse.base_url,
+              ),
+            )
     end
 
     invite
@@ -1574,16 +885,15 @@ class SessionController < ApplicationController
 
   def redeem_invitation(invite, sso, redeeming_user)
     InviteRedeemer.new(
-      invite:,
+      invite: invite,
       username: sso.username,
       name: sso.name,
       ip_address: request.remote_ip,
-      session: server_session,
+      session: session,
       email: sso.email,
-      redeeming_user:,
+      redeeming_user: redeeming_user,
     ).redeem
-
-    server_session.delete("invite-key")
+    secure_session["invite-key"] = nil
 
     # note - more specific errors are handled in the sso_login method
   rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved => e
@@ -1599,12 +909,6 @@ class SessionController < ApplicationController
     allowed_domains.split("|").include?(hostname)
   end
 
-  def password_reset_via_code?(user)
-    # Another account's recipient needs a link they can open in their own session.
-    UpcomingChanges.enabled_for_user?(:enable_local_logins_via_code, current_user) &&
-      (!current_user || current_user == user)
-  end
-
   def enqueue_password_reset_for_user(user)
     RateLimiter.new(
       nil,
@@ -1612,22 +916,6 @@ class SessionController < ApplicationController
       FORGOT_PASSWORD_EMAIL_LIMIT_PER_DAY,
       1.day,
     ).performed!
-
-    if password_reset_via_code?(user)
-      user
-        .email_tokens
-        .where(scope: [nil, EmailToken.scopes[:password_reset]])
-        .update_all(expired: true)
-      login_code = EmailLoginCode.generate!(email: user.email, purpose: :password_reset)
-      server_session[:password_reset_code] = { login_code_id: login_code.id, user_id: user.id }
-      Jobs.enqueue(
-        :send_email_login_code,
-        to_address: user.email,
-        code: login_code.code,
-        password_reset: true,
-      )
-      return
-    end
 
     email_token =
       user.email_tokens.create!(email: user.email, scope: EmailToken.scopes[:password_reset])

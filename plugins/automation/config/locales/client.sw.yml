@@ -27,12 +27,6 @@ sw:
         text:
           label: Neno
       triggerables:
-        post_flag_created:
-          fields:
-            categories:
-              label: Kategoria
-            tags:
-              label: Lebo
         user_badge_granted:
           fields:
             badge:
@@ -120,8 +114,6 @@ sw:
               label: Utambulisho wa Mada
             user:
               label: Mtumiaji
-        set_topic_timer:
-          title: Seti Kipima Mda cha Mada
       models:
         trigger:
           name:
@@ -133,5 +125,7 @@ sw:
             label: Anzisha
           version:
             label: Toleo
+          enabled:
+            label: Imeruhusiwa
           disabled:
             label: Imezuiwa

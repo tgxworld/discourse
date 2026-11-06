@@ -8,12 +8,18 @@ describe "AppendLastEditedBy" do
     Fabricate(:automation, script: DiscourseAutomation::Scripts::APPEND_LAST_EDITED_BY)
   end
 
+  def trigger_automation(post)
+    cooked = automation.trigger!("post" => post, "cooked" => post.cooked)
+    updated_at = post.updated_at
+    date_time = updated_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+    [cooked, updated_at]
+  end
+
   describe "#trigger!" do
     it "works for newly created post" do
       freeze_time
 
-      cooked = automation.trigger!("post" => post, "cooked" => post.cooked)
-      updated_at = post.updated_at
+      cooked, updated_at = trigger_automation(post)
       expect(
         cooked.include?(
           PrettyText.cook(
@@ -31,8 +37,7 @@ describe "AppendLastEditedBy" do
     it "works for existing post with last edited by detail" do
       freeze_time
 
-      cooked = automation.trigger!("post" => post, "cooked" => post.cooked)
-      updated_at = post.updated_at
+      cooked, updated_at = trigger_automation(post)
       expect(
         cooked.include?(
           PrettyText.cook(
@@ -48,9 +53,7 @@ describe "AppendLastEditedBy" do
 
       PostRevisor.new(post).revise!(moderator, raw: "this is a post with edit")
 
-      post.reload
-      cooked = automation.trigger!("post" => post, "cooked" => post.cooked)
-      updated_at = post.updated_at
+      cooked, updated_at = trigger_automation(post.reload)
       expect(
         cooked.include?(
           PrettyText.cook(

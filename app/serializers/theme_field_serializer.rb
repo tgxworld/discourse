@@ -1,16 +1,7 @@
 # frozen_string_literal: true
 
 class ThemeFieldSerializer < ApplicationSerializer
-  attributes :name,
-             :target,
-             :value,
-             :error,
-             :type_id,
-             :upload_id,
-             :url,
-             :filename,
-             :migrated,
-             :file_path
+  attributes :name, :target, :value, :error, :type_id, :upload_id, :url, :filename, :migrated
 
   def include_url?
     object.upload

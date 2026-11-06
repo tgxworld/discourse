@@ -12,23 +12,14 @@ nb_NO:
           always: "Alltid"
           never: "Aldri"
     chat:
-      edit_category:
-        channel: "Kanal"
-        description: "Beskrivelse"
-        actions: "Handlinger"
-        settings: "Innstillinger"
       deleted_chat_username: slettet
       dates:
         yesterday: "I går"
       create: "Opprett"
       cancel: "Avbryt"
-      pinned_bar:
-        title: "Fastsatt"
-      pinned: "Fastsatt"
       channel_settings:
         edit: "Endre"
         add: "Legg til"
-        notification_settings_context: "Varsler"
         join: "Bli medlem"
         leave: "Forlat"
       close: "Lukk"
@@ -53,6 +44,7 @@ nb_NO:
       select: "Velg"
       sounds:
         none: "Ingen"
+      exit: "forrige"
       channel_status:
         closed: "Lukket"
         open: "Åpne"
@@ -61,13 +53,9 @@ nb_NO:
         filter_all: Alle
         filter_open: Åpne
         filter_closed: Lukket
-        filter_joined_all: "Alle"
-        filter_joined_joined: "Medlem fra"
       chat_message_separator:
         today: I dag
         yesterday: I går
-      search_view:
-        filter_placeholder: Søk i meldinger
       about_view:
         title: Tittel
         name: Navn
@@ -77,7 +65,6 @@ nb_NO:
         tabs:
           members: Medlemmer
           settings: Instillinger
-          search: Søk
         remove_member: "Fjern"
       new_message_modal:
         filter: "Filtrer"
@@ -88,16 +75,11 @@ nb_NO:
         memberships_count:
           one: "%{count} medlem"
           other: "%{count} medlemmer"
-        preview_card:
-          log_in: "Logg inn"
       create_channel:
-        description: "Beskrivelse"
         type: "Type"
         types:
           category: "Kategori"
           topic: "Emne"
-      reviewable:
-        message_in_channel: "Kanal"
       composer:
         italic_text: "kursiv tekst"
         bold_text: "sterk tekst"
@@ -121,17 +103,6 @@ nb_NO:
         category_label: "Kategori"
         history_label: "Historie"
         members_label: "Medlemmer"
-      search:
-        short_title: Søk
-        no_results: "Ingen treff funnet"
-        sort:
-          relevance: "Relevanse"
-          latest: "Siste"
-      channel_list:
-        options:
-          filter: "Filter"
-        filter:
-          mentions: "Omtalelser"
       incoming_webhooks:
         back: "Forrige"
         description: "Beskrivelse"
@@ -189,20 +160,3 @@ nb_NO:
           fields:
             message:
               label: Send
-    discourse_workflows:
-      chat_message_created:
-        channel_id: "Kanal"
-      send_chat_message:
-        targets:
-          channel: "Kanal"
-        channel_id: "Kanal"
-        message: "Send"
-      chat_approval:
-        message: "Send"
-        buttons: "Knapper"
-        value: "Verdi"
-        style_default: "Forvalg"
-        style_primary: "Primær"
-        style_success: "Suksess"
-        icon: "Ikon"
-        channel_id: "Kanal"

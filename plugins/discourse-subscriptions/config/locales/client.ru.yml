@@ -79,7 +79,7 @@ ru:
         select: Выберите тарифный план
         interval:
           adverb:
-            day: Ежедневно
+            day: За день
             week: За неделю
             month: За месяц
             year: За год
@@ -93,7 +93,7 @@ ru:
         payments:
           id: Идентификатор платежа
           amount: Количество
-          created_at: Создано
+          created_at: Создан
         payments_help: Платежи отсутствуют
         plans:
           rate: Ставка
@@ -107,7 +107,7 @@ ru:
           update_card:
             heading: "Обновить карту для подписки: %{sub_id}"
             single: "Обновить"
-          created_at: Создано
+          created_at: Создан
           cancel: Отмена
           cancelled: отменён
           operations:
@@ -404,6 +404,8 @@ ru:
         confirm_payment: Подтвердить оплату
         success: Назад
       admin:
+        unconfigured: 'Сервис Stripe настроен неправильно. За дополнительной информацией обратитесь к описанию плагина: meta.discourse.org/t/discourse-subscriptions'
+        on_meta: Подписки на Discourse на Meta
         dashboard:
           title: Панель управления
           table:
@@ -432,7 +434,7 @@ ru:
             repurchase_help: Разрешить многократную покупку продукта и связанных с ним тарифных планов
             active: Активна
             active_help: Отключите эту настройку, пока ваш продукт не будет готов для потребителей.
-            created_at: Создано
+            created_at: Создан
             updated_at: Обновлена
           product_help: Прежде чем клиенты смогут подписаться на ваш сайт, вам нужно создать хотя бы один продукт и соответствующий тарифный план.
         plans:
@@ -457,7 +459,7 @@ ru:
             group: Группа пользователей
             group_help: Это группа пользователей, к которой добавляется клиент при создании подписки.
             active: Активна
-            created_at: Создано
+            created_at: Создан
             recurring: Повторяющийся план?
         coupons:
           title: Купоны
@@ -477,6 +479,6 @@ ru:
             product: Товар
             plan: План
             status: Статус
-            created_at: Создано
+            created_at: Создан
         ask_refund: Вернуть последний платеж клиента?
         canceled: "Подписка отменена."

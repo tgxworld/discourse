@@ -7,16 +7,8 @@ module DiscourseAi
         return if post.blank?
 
         text = PostDetectionText.get_text(post)
-
-        if text.blank?
-          locale = SiteSetting.default_locale
-        else
-          detected_locale = LanguageDetector.new(text, post:).detect
-          return if detected_locale.blank?
-
-          locale = LocaleNormalizer.normalize_to_i18n(detected_locale)
-        end
-
+        detected_locale = LanguageDetector.new(text, post:).detect
+        locale = LocaleNormalizer.normalize_to_i18n(detected_locale)
         post.update_column(:locale, locale)
         locale
       end

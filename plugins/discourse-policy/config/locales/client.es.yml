@@ -38,7 +38,6 @@ es:
         reminder:
           label: Recordatorio
           description: Con qué frecuencia se debe enviar una notificación de recordatorio para aceptar la política
-          no_reminder: (Sin recordatorio)
         accept:
           label: Aceptar
           description: Texto utilizado en el botón aceptar
@@ -51,9 +50,6 @@ es:
         send-email:
           label: '¿Enviar correo electrónico?'
           description: Notificar a los usuarios la nueva política por correo electrónico
-        add-users-to-group:
-          label: Añadir usuarios al público
-          description: Añade usuarios al siguiente grupo cuando acepten esta política
       preferences:
         title: Políticas
         policy_emails:

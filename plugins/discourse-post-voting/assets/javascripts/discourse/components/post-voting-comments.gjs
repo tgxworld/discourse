@@ -1,17 +1,18 @@
 import Component from "@glimmer/component";
+import { tracked } from "@glimmer/tracking";
 import { action } from "@ember/object";
-import PostVotingComment from "./post-voting-comment.gjs";
-import PostVotingCommentsMenu from "./post-voting-comments-menu.gjs";
+import PostVotingComment from "./post-voting-comment";
+import PostVotingCommentsMenu from "./post-voting-comments-menu";
 
 export default class PostVotingComments extends Component {
-  comments = this.args.post.comments; // post.comments is a tracked array
+  @tracked comments = this.args.post.comments;
 
   get moreCommentCount() {
     return this.args.post.comments_count - this.comments.length;
   }
 
   get lastCommentId() {
-    return this.comments?.at(-1)?.id ?? 0;
+    return this.comments?.[this.comments.length - 1]?.id ?? 0;
   }
 
   get disabled() {
@@ -20,7 +21,7 @@ export default class PostVotingComments extends Component {
 
   @action
   appendComments(comments) {
-    this.comments.push(...comments);
+    this.comments.pushObjects(comments);
   }
 
   @action
@@ -32,7 +33,7 @@ export default class PostVotingComments extends Component {
     if (indexToRemove !== -1) {
       const comment = { ...this.comments[indexToRemove], deleted: true };
 
-      this.comments.splice(indexToRemove, 1, comment);
+      this.comments.replace(indexToRemove, 1, [comment]);
       this.args.post.comments_count--;
     }
   }
@@ -42,7 +43,7 @@ export default class PostVotingComments extends Component {
     const index = this.comments.findIndex(
       (oldComment) => oldComment.id === comment.id
     );
-    this.comments.splice(index, 1, comment);
+    this.comments.replace(index, 1, [comment]);
   }
 
   @action
@@ -57,7 +58,7 @@ export default class PostVotingComments extends Component {
       post_voting_vote_count: comment.post_voting_vote_count + 1,
       user_voted: true,
     };
-    this.comments.splice(index, 1, updatedComment);
+    this.comments.replace(index, 1, [updatedComment]);
   }
 
   @action
@@ -72,7 +73,7 @@ export default class PostVotingComments extends Component {
       post_voting_vote_count: comment.post_voting_vote_count - 1,
       user_voted: false,
     };
-    this.comments.splice(index, 1, updatedComment);
+    this.comments.replace(index, 1, [updatedComment]);
   }
 
   <template>
@@ -80,21 +81,21 @@ export default class PostVotingComments extends Component {
       {{#each this.comments as |comment|}}
         <PostVotingComment
           @comment={{comment}}
-          @disabled={{this.disabled}}
           @removeComment={{this.removeComment}}
-          @removeVote={{this.removeVote}}
           @updateComment={{this.updateComment}}
           @vote={{this.vote}}
+          @removeVote={{this.removeVote}}
+          @disabled={{this.disabled}}
         />
       {{/each}}
 
       {{#if @canCreatePost}}
         <PostVotingCommentsMenu
-          @appendComments={{this.appendComments}}
           @id={{@post.id}}
-          @lastCommentId={{this.lastCommentId}}
-          @moreCommentCount={{this.moreCommentCount}}
           @postNumber={{@post.post_number}}
+          @moreCommentCount={{this.moreCommentCount}}
+          @lastCommentId={{this.lastCommentId}}
+          @appendComments={{this.appendComments}}
         />
       {{/if}}
     </div>

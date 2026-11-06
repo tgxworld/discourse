@@ -4,7 +4,7 @@ RSpec.describe PushNotificationController do
   fab!(:user)
 
   context "when logged out" do
-    it "does not allow subscribing" do
+    it "should not allow subscribe" do
       post "/push_notifications/subscribe.json",
            params: {
              username: "test",
@@ -25,7 +25,7 @@ RSpec.describe PushNotificationController do
   context "when logged in" do
     before { sign_in(user) }
 
-    it "subscribes the user" do
+    it "should subscribe" do
       post "/push_notifications/subscribe.json",
            params: {
              username: user.username,
@@ -43,7 +43,7 @@ RSpec.describe PushNotificationController do
       expect(user.push_subscriptions.count).to eq(1)
     end
 
-    it "repairs duplicate subscriptions" do
+    it "should fix duplicate subscriptions" do
       subscription = { endpoint: "endpoint", keys: { p256dh: "256dh", auth: "auth" } }
       PushSubscription.create user: user, data: subscription.to_json
       post "/push_notifications/subscribe.json",
@@ -57,7 +57,7 @@ RSpec.describe PushNotificationController do
       expect(user.push_subscriptions.count).to eq(1)
     end
 
-    it "does not create duplicate subscriptions" do
+    it "should not create duplicate subscriptions" do
       2.times do
         post "/push_notifications/subscribe.json",
              params: {
@@ -77,30 +77,7 @@ RSpec.describe PushNotificationController do
       expect(user.push_subscriptions.count).to eq(1)
     end
 
-    it "rate limits registering new subscriptions" do
-      RateLimiter.enable
-
-      (PushNotificationPusher::SUBSCRIBE_RATE_LIMIT_PER_HOUR + 1).times do |index|
-        post "/push_notifications/subscribe.json",
-             params: {
-               subscription: {
-                 endpoint: "https://fcm.googleapis.com/fcm/send/#{index}",
-                 keys: {
-                   p256dh: "256dh",
-                   auth: "auth",
-                 },
-               },
-               send_confirmation: false,
-             }
-      end
-
-      expect(response.status).to eq(429)
-      expect(user.push_subscriptions.count).to eq(
-        PushNotificationPusher::SUBSCRIBE_RATE_LIMIT_PER_HOUR,
-      )
-    end
-
-    it "unsubscribes an existing subscription" do
+    it "should unsubscribe with existing subscription" do
       sub = { endpoint: "endpoint", keys: { p256dh: "256dh", auth: "auth" } }
       PushSubscription.create!(user: user, data: sub.to_json)
 
@@ -114,7 +91,7 @@ RSpec.describe PushNotificationController do
       expect(user.push_subscriptions).to eq([])
     end
 
-    it "handles unsubscribing without a subscription" do
+    it "should unsubscribe without subscription" do
       post "/push_notifications/unsubscribe.json",
            params: {
              username: user.username,

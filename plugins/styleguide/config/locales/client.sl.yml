@@ -8,14 +8,6 @@ sl:
   js:
     styleguide:
       sections:
-        context_menu:
-          actions:
-            delete: "Izbriši"
-        reorderable_list:
-          policies_pinned: "Pripeto"
-          policies_required: "Zahtevano"
-          table_type: "Tip"
-          cross_list_primary: "Primarna"
         colors:
           title: "Barve"
         categories:
@@ -28,21 +20,8 @@ sl:
           title: "Opomniki teme"
         post:
           title: "Prispevek"
-        more_topics:
-          title: "Več tem"
-        roving_focus:
-          toolbar:
-            copy: "Kopiraj"
-          adjacent:
-            label: "Filtri"
-            field: "Išči"
-            open: "Odpri"
-            recent: "Nedavno"
-          combobox:
-            daily: "Dnevno"
-            weekly: "Tedensko"
-            monthly: "Mesečno"
-            never: "Nikoli"
+        suggested_topics:
+          title: "Predlagane teme"
         tooltips:
           description: "Opis"
           header: "Glava"

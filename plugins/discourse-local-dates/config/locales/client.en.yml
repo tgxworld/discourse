@@ -13,12 +13,11 @@ en:
         countdown:
           passed: date has passed
       title: Insert date / time
-      edit: Edit date / time
-      edit_date: Edit %{date}
       create:
         form:
           insert: Insert
-          save: Save
+          advanced_mode: Advanced mode
+          simple_mode: Simple mode
           format_description: "Format used to display the date to the user. Use Z to show the offset and zz for the timezone name."
           timezones_title: Timezones to display
           timezones_description: Timezones will be used to display dates in preview and fallback.

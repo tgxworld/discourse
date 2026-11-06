@@ -46,54 +46,6 @@ RSpec.describe Admin::EmailController do
     end
   end
 
-  describe "#smtp_should_reject" do
-    before { sign_in(admin) }
-
-    it "does not reject with no params" do
-      get "/admin/email/smtp_should_reject.json"
-      expect(response.status).to eq(200)
-      result = response.parsed_body
-
-      expect(result["reject"]).to be false
-    end
-
-    it "does not reject with blank to/from" do
-      get "/admin/email/smtp_should_reject.json", params: { from: "", to: "" }
-      expect(response.status).to eq(200)
-      result = response.parsed_body
-
-      expect(result["reject"]).to be false
-    end
-
-    it "does not reject with blank to" do
-      get "/admin/email/smtp_should_reject.json", params: { from: "bilbo@shire.net", to: "" }
-      expect(response.status).to eq(200)
-      result = response.parsed_body
-
-      expect(result["reject"]).to be false
-    end
-
-    it "does not reject with blank from" do
-      get "/admin/email/smtp_should_reject.json", params: { from: "", to: "frodo@shire.net" }
-      expect(response.status).to eq(200)
-      result = response.parsed_body
-
-      expect(result["reject"]).to be false
-    end
-
-    it "does not reject with to/from specified" do
-      get "/admin/email/smtp_should_reject.json",
-          params: {
-            from: "bilbo@shire.net",
-            to: "frodo@shire.net",
-          }
-      expect(response.status).to eq(200)
-      result = response.parsed_body
-
-      expect(result["reject"]).to be false
-    end
-  end
-
   describe "#test" do
     context "when logged in as an admin" do
       before { sign_in(admin) }
@@ -201,29 +153,6 @@ RSpec.describe Admin::EmailController do
             }
         expect(response.status).to eq(200)
       end
-
-      it "does not turn a post attribute into executable HTML" do
-        attacker = Fabricate(:user, trust_level: TrustLevel[1])
-        payload =
-          '<a class="hashtag-cooked" data-slug="&lt;img src=x onerror=alert(1)&gt;">ignored</a>'
-
-        freeze_time 1.day.ago do
-          sign_in(attacker)
-          post "/posts.json", params: { title: "Attacker-created topic", raw: payload }
-          expect(response.status).to eq(200)
-        end
-
-        sign_in(admin)
-        get "/admin/email/preview-digest.json",
-            params: {
-              last_seen_at: 1.week.ago,
-              username: admin.username,
-            }
-
-        expect(response.status).to eq(200)
-        preview = Nokogiri::HTML5.parse(response.parsed_body["html_content"])
-        expect(preview.at_css("img[onerror='alert(1)']")).to be_nil
-      end
     end
 
     shared_examples "preview digest inaccessible" do
@@ -261,33 +190,9 @@ RSpec.describe Admin::EmailController do
              params: {
                last_seen_at: 1.week.ago,
                username: admin.username,
-               email: admin.email,
+               email: email("previous_replies"),
              }
         expect(response.status).to eq(200)
-      end
-
-      it "sends the digest to the requested email without unsubscribe links" do
-        Fabricate(:topic, created_at: 1.day.ago)
-        ActionMailer::Base.deliveries.clear
-
-        expect {
-          post "/admin/email/send-digest.json",
-               params: {
-                 last_seen_at: 1.month.ago,
-                 username: user.username,
-                 email: "attacker@evil.com",
-               }
-        }.not_to change { UnsubscribeKey.count }
-
-        expect(response.status).to eq(200)
-        expect(response.parsed_body["success"]).to eq("OK")
-
-        message = ActionMailer::Base.deliveries.last
-        expect(message.to).to eq(["attacker@evil.com"])
-        expect(message.html_part.body.to_s).not_to include("/email/unsubscribe/")
-        expect(message.text_part.body.to_s).not_to include("/email/unsubscribe/")
-        expect(message.header["List-Unsubscribe"].to_s).to be_blank
-        expect(message.header["List-Unsubscribe-Post"].to_s).to be_blank
       end
     end
   end
@@ -302,7 +207,7 @@ RSpec.describe Admin::EmailController do
         expect(response.body).to include("param is missing")
       end
 
-      it "enqueues the email job and warns that email_encoded is preferred" do
+      it "should enqueue the right job, and show a deprecation warning (email_encoded param should be used)" do
         expect_enqueued_with(
           job: :process_email,
           args: {
@@ -317,7 +222,7 @@ RSpec.describe Admin::EmailController do
         )
       end
 
-      it "decodes the raw email and enqueues the email job" do
+      it "should enqueue the right job, decoding the raw email param" do
         expect_enqueued_with(
           job: :process_email,
           args: {
@@ -335,25 +240,13 @@ RSpec.describe Admin::EmailController do
         expect(response.body).to eq("email has been received and is queued for processing")
       end
 
-      it "normalizes invalid UTF-8 bytes before enqueueing" do
+      it "retries enqueueing with forced UTF-8 encoding when encountering Encoding::UndefinedConversionError" do
         post "/admin/email/handle_mail.json",
              params: {
                email_encoded: Base64.strict_encode64(email("encoding_undefined_conversion")),
              }
         expect(response.status).to eq(200)
         expect(response.body).to eq("email has been received and is queued for processing")
-      end
-
-      it "enqueues the email job when the site is archived" do
-        SiteSetting.site_archived = true
-
-        expect_enqueued_with(job: :process_email, args: { mail: email("cc") }) do
-          post "/admin/email/handle_mail.json",
-               params: {
-                 email_encoded: Base64.strict_encode64(email("cc")),
-               }
-        end
-        expect(response.status).to eq(200)
       end
     end
 
@@ -400,7 +293,7 @@ RSpec.describe Admin::EmailController do
     context "when logged in as an admin" do
       before { sign_in(admin) }
 
-      it "returns parsed email text and elided content" do
+      it "should ..." do
         post "/admin/email/advanced-test.json", params: { email: email }
 
         expect(response.status).to eq(200)

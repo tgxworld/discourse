@@ -3,11 +3,6 @@
 directory "plugins"
 
 desc "install all official plugins (use GIT_WRITE=1 to pull with write access)"
-
-task "plugin:list_official" do
-  Plugin::Metadata::OFFICIAL_PLUGINS.each { |name| STDOUT.puts name }
-end
-
 task "plugin:install_all_official" do
   skip = Set.new(%w[customer-flair poll])
 
@@ -83,7 +78,7 @@ def update_plugin(plugin)
     end
   end
 
-  `git -C '#{plugin_path}' fetch origin --tags --force --prune --quiet`
+  `git -C '#{plugin_path}' fetch origin --tags --force`
 
   upstream_branch =
     `git -C '#{plugin_path}' for-each-ref --format='%(upstream:short)' $(git -C '#{plugin_path}' symbolic-ref -q HEAD)`.strip
@@ -100,7 +95,7 @@ def update_plugin(plugin)
       `git -C '#{plugin_path}' branch -m master main`
     end
 
-    `git -C '#{plugin_path}' branch -q -u origin/main main`
+    `git -C '#{plugin_path}' branch -u origin/main main`
   end
 
   update_status = system("git -C '#{plugin_path}' pull --quiet --no-rebase")
@@ -158,14 +153,14 @@ task "plugin:pull_compatible", :plugin do |t, args|
     end
   end
 
-  checkout = Discourse.find_compatible_git_resource(plugin_path)
+  checkout_version = Discourse.find_compatible_git_resource(plugin_path)
 
   # Checkout value of the version compat
-  if checkout
-    puts "checking out compatible #{plugin} version: #{checkout}"
+  if checkout_version
+    puts "checking out compatible #{plugin} version: #{checkout_version}"
     update_status =
       system(
-        "git -C '#{plugin_path}' cat-file -e #{checkout} || git -C '#{plugin_path}' fetch --depth 1 $(git -C '#{plugin_path}' rev-parse --symbolic-full-name @{upstream} | awk -F '/' '{print $3}') #{checkout}; git -C '#{plugin_path}' reset --hard #{checkout}",
+        "git -C '#{plugin_path}' cat-file -e #{checkout_version} || git -C '#{plugin_path}' fetch --depth 1 $(git -C '#{plugin_path}' rev-parse --symbolic-full-name @{upstream} | awk -F '/' '{print $3}') #{checkout_version}; git -C '#{plugin_path}' reset --hard #{checkout_version}",
       )
     abort("Unable to checkout a compatible plugin version") unless update_status
   else
@@ -196,9 +191,6 @@ def spec(plugin, files, parallel: false, argv: nil)
   params << "--seed #{ENV["RSPEC_SEED"]}" if Integer(ENV["RSPEC_SEED"], exception: false)
   params << argv if argv
 
-  # if plugin contains a comma, it's a list. we need to surround it with brackets
-  plugin = "{#{plugin}}" if plugin.include?(",")
-
   # reject system specs as they are slow and need dedicated setup
   if files.empty?
     files =
@@ -211,13 +203,9 @@ def spec(plugin, files, parallel: false, argv: nil)
     cmd = parallel ? "bin/turbo_rspec" : "bin/rspec"
 
     Rake::FileUtilsExt.verbose(!parallel) do
-      # Avoid `sh -c`: Linux rejects any single exec argument over MAX_ARG_STRLEN (128KB on 4KB-page systems).
-      sh(
-        { "LOAD_PLUGINS" => "1" },
-        cmd,
-        *files,
-        *Shellwords.split(params.join(" ")),
-      ) { |ok, status| fail "Spec command failed with status (#{status.exitstatus})" if !ok }
+      sh("LOAD_PLUGINS=1 #{cmd} #{files.join(" ")} #{params.join(" ")}") do |ok, status|
+        fail "Spec command failed with status (#{status.exitstatus})" if !ok
+      end
     end
   else
     abort "No specs found."
@@ -240,9 +228,23 @@ desc "run plugin qunit tests"
 task "plugin:qunit", :plugin do |t, args|
   args.with_defaults(plugin: "*")
 
-  target = args[:plugin]
-  target = "plugins" if target == "*"
-  exec Rails.root.join("bin/qunit").to_s, "--standalone", "--target", target
+  rake = "#{Rails.root}/bin/rake"
+
+  cmd = "LOAD_PLUGINS=1 "
+
+  if args[:plugin] == "*"
+    plugin_names = Dir.glob("plugins/*/test/**/*-test.js").map { |file| file.split("/")[1] }.uniq
+    puts "Running qunit tests for all plugins: #{plugin_names.join(", ")}"
+    cmd += "PLUGIN_TARGETS='#{plugin_names.join(",")}' "
+  else
+    puts "Running qunit tests for #{args[:plugin]}"
+    cmd += "TARGET='#{args[:plugin]}' "
+  end
+
+  cmd += "#{rake} qunit:test"
+
+  system cmd
+  exit $?.exitstatus
 end
 
 desc "run all migrations of a plugin"

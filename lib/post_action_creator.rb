@@ -200,9 +200,13 @@ class PostActionCreator
                                          likes_count: @post.like_count + 1,
                                          user_id: @created_by.id,
                                        }
-    elsif flagging_post?
+    elsif self.class.notify_types.include?(@post_action_name)
       @post.publish_change_to_clients! :acted
     end
+  end
+
+  def self.notify_types
+    @notify_types ||= PostActionType.notify_flag_types.keys
   end
 
   def enforce_rules
@@ -221,11 +225,7 @@ class PostActionCreator
       true,
       Discourse.system_user,
       message:
-        I18n.t(
-          "temporarily_closed_due_to_flags",
-          count: SiteSetting.num_hours_to_close_topic,
-          locale: SiteSetting.default_locale,
-        ),
+        I18n.t("temporarily_closed_due_to_flags", count: SiteSetting.num_hours_to_close_topic),
     )
 
     topic.set_or_create_timer(
@@ -295,15 +295,8 @@ class PostActionCreator
       created_at: @created_at,
     }
 
-    # Revive a trashed record only if it was never reviewed. A reviewed one would come back
-    # already agreed with (or deferred/disagreed), so it would never count as a new flag.
-    post_action =
-      PostAction
-        .where(where_attrs)
-        .with_deleted
-        .where.not(deleted_at: nil)
-        .where(agreed_at: nil, disagreed_at: nil, deferred_at: nil)
-        .first
+    # First try to revive a trashed record
+    post_action = PostAction.where(where_attrs).with_deleted.where("deleted_at IS NOT NULL").first
 
     if post_action
       post_action.recover!
@@ -374,18 +367,16 @@ class PostActionCreator
       return if handler_values.any? { |value| value == false }
     else
       create_args[:subtype] = TopicSubtype.notify_moderators
-      group_names = Set[Group[:moderators].name]
+      create_args[:target_group_names] = [Group[:moderators].name]
 
       if SiteSetting.enable_category_group_moderation? && @post.topic&.category
-        group_names.merge(
-          Group
+        create_args[:target_group_names].push(
+          *Group
             .joins(:category_moderation_groups)
             .where("category_moderation_groups.category_id": @post.topic.category.id)
             .pluck(:name),
         )
       end
-
-      create_args[:target_group_names] = group_names.to_a
     end
 
     PostCreator.new(@created_by, create_args)

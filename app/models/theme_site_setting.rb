@@ -10,25 +10,6 @@
 class ThemeSiteSetting < ActiveRecord::Base
   belongs_to :theme
 
-  has_many :upload_references, as: :target, dependent: :destroy
-
-  after_save do
-    if saved_change_to_value?
-      if data_type == SiteSettings::TypeSupervisor.types[:upload]
-        UploadReference.ensure_exist!(upload_ids: [value], target: self)
-      elsif data_type == SiteSettings::TypeSupervisor.types[:objects] && value.present?
-        upload_ids =
-          SchemaSettingsObjectValidator.property_values_of_type(
-            schema: SiteSetting.type_supervisor.type_hash(name.to_sym)[:schema],
-            objects: JSON.parse(value),
-            type: "upload",
-          )
-
-        UploadReference.ensure_exist!(upload_ids: upload_ids, target: self) if upload_ids.any?
-      end
-    end
-  end
-
   # Gets a list of themes that have theme site setting records
   # and the associated values for those settings, where the
   # value is different from the default site setting value.
@@ -69,7 +50,7 @@ class ThemeSiteSetting < ActiveRecord::Base
 
   def self.can_access_db?
     !GlobalSetting.skip_redis? && !GlobalSetting.skip_db? &&
-      ActiveRecord::Base.connection.table_exists?(table_name)
+      ActiveRecord::Base.connection.table_exists?(self.table_name)
   end
 
   # Generates a map of theme IDs to their site setting values. When
@@ -125,7 +106,7 @@ class ThemeSiteSetting < ActiveRecord::Base
   end
 
   def setting_rb_value
-    SiteSetting.type_supervisor.to_rb_value(name, value, data_type)
+    SiteSetting.type_supervisor.to_rb_value(self.name, self.value, self.data_type)
   end
 end
 
@@ -134,12 +115,12 @@ end
 # Table name: theme_site_settings
 #
 #  id         :bigint           not null, primary key
-#  data_type  :integer          not null
+#  theme_id   :integer          not null
 #  name       :string           not null
+#  data_type  :integer          not null
 #  value      :text
 #  created_at :datetime         not null
 #  updated_at :datetime         not null
-#  theme_id   :integer          not null
 #
 # Indexes
 #

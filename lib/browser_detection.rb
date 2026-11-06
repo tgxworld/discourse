@@ -7,26 +7,14 @@ module BrowserDetection
       :edge
     when /Opera/i, /OPR/i
       :opera
-    when %r{SamsungBrowser/}i
-      :samsung_browser
-    when %r{(?:UCBrowser|UC Browser)[/ ]}i
-      :uc_browser
-    when %r{(?:MQQBrowser|QQBrowser)/}i
-      :qq_browser
-    when %r{(?:BIDUBrowser|BaiduBrowser)/}i
-      :baidu_browser
-    when %r{KaiOS/}i
-      :kaios_browser
-    when /MSIE|Trident|IEMobile/i
-      :ie
-    when /Firefox/i, /FxiOS/i
+    when /Firefox/i
       :firefox
     when /Chrome/i, /CriOS/i
       :chrome
-    when %r{Android.+Version/[\d.]+.+Safari/}i
-      :android_browser
     when /Safari/i
       :safari
+    when /MSIE/i, /Trident/i
+      :ie
     when /Discourse/i
       :discoursehub
     else

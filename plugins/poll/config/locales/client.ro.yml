@@ -12,8 +12,6 @@ ro:
           poll: "Sondaj Discourse"
   js:
     poll:
-      dynamic:
-        enabled_hint: "Opțiunile pot fi adăugate sau eliminate."
       voters:
         one: "participant"
         few: "participanți"
@@ -48,8 +46,6 @@ ro:
       cast-votes:
         title: "Exprimă-ți votul"
         label: "Votează acum!"
-      keep-vote:
-        label: "Înapoi"
       show-results:
         title: "Afişează rezultatele sondajului"
         label: "Rezultate"
@@ -111,11 +107,11 @@ ro:
           step: Pas
         poll_public:
           label: Arată cine a votat
-        poll_dynamic:
-          label: Permite adăugarea sau eliminarea opțiunilor după publicare
         poll_title:
           label: Titlu (opţional)
         poll_options:
           add: Adaugă opțiune
         automatic_close:
           label: Închide sondaj automat
+        show_advanced: "Afișați opțiunile avansate"
+        hide_advanced: "Ascundeți opțiunile avansate"

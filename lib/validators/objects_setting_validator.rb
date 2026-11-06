@@ -17,7 +17,7 @@ class ObjectsSettingValidator
       @error = nil
       true
     else
-      @error = errors.join(", ")
+      @error = errors.map(&:full_messages).flatten.join(", ")
       false
     end
   rescue StandardError

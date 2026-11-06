@@ -12,7 +12,7 @@
 require "php_serialize"
 require "miro"
 require "mysql2"
-require_relative "base"
+require File.expand_path(File.dirname(__FILE__) + "/base.rb")
 
 class ImportScripts::DiscuzX < ImportScripts::Base
   DISCUZX_DB = "ultrax"
@@ -191,15 +191,17 @@ class ImportScripts::DiscuzX < ImportScripts::Base
           website:
             (user["website"] && user["website"].include?(".")) ?
               user["website"].strip :
-              if user["qq"] && user["qq"].strip == user["qq"].strip.to_i &&
-                   user["qq"].strip.to_i > 10_000
+              if (
+                   user["qq"] && user["qq"].strip == (user["qq"].strip.to_i) &&
+                     user["qq"].strip.to_i > (10_000)
+                 )
                 "http://user.qzone.qq.com/" + user["qq"].strip
               else
                 nil
               end,
           bio_raw:
             first_exists(
-              user["bio"] && CGI.unescapeHTML(user["bio"]),
+              (user["bio"] && CGI.unescapeHTML(user["bio"])),
               user["sightml"],
               user["spacenote"],
             ).strip[
@@ -210,7 +212,7 @@ class ImportScripts::DiscuzX < ImportScripts::Base
             first_exists(
               user["address"],
               (
-                if user["resideprovince"].present?
+                if !user["resideprovince"].blank?
                   [
                     user["resideprovince"],
                     user["residecity"],
@@ -229,7 +231,7 @@ class ImportScripts::DiscuzX < ImportScripts::Base
             ),
           post_create_action:
             lambda do |newmember|
-              if user["avatar_exists"] == 1 && newmember.uploaded_avatar_id.blank?
+              if user["avatar_exists"] == (1) && newmember.uploaded_avatar_id.blank?
                 path, filename = discuzx_avatar_fullpath(user["id"])
                 if path
                   begin
@@ -248,8 +250,7 @@ class ImportScripts::DiscuzX < ImportScripts::Base
                   end
                 end
               end
-              if user["spacecss"].present? &&
-                   newmember.user_profile.profile_background_upload.blank?
+              if !user["spacecss"].blank? && newmember.user_profile.profile_background_upload.blank?
                 # profile background
                 if matched = user["spacecss"].match(/body\s*{[^}]*url\('?(.+?)'?\)/i)
                   body_background = matched[1].split(ORIGINAL_SITE_PREFIX, 2).last
@@ -309,7 +310,7 @@ class ImportScripts::DiscuzX < ImportScripts::Base
               if newmember.email_digests
                 newmember.update(email_digests: user["email_confirmed"] == 1)
               end
-              if newmember.name.present? && newmember.name == newmember.username
+              if !newmember.name.blank? && newmember.name == (newmember.username)
                 newmember.update(name: "")
               end
             end,
@@ -339,9 +340,9 @@ class ImportScripts::DiscuzX < ImportScripts::Base
 
     max_position = Category.all.max_by(&:position).position
     create_categories(results) do |row|
-      next if row["type"] == "group" || row["status"] == 2 # or row['status'].to_i == 3 # 如果不想导入群组，取消注释
-      extra = PHP.unserialize(row["extra"]) if row["extra"].present?
-      color = extra["namecolor"][1, 6] if extra && extra["namecolor"].present?
+      next if row["type"] == ("group") || row["status"] == (2) # or row['status'].to_i == 3 # 如果不想导入群组，取消注释
+      extra = PHP.unserialize(row["extra"]) if !row["extra"].blank?
+      color = extra["namecolor"][1, 6] if extra && !extra["namecolor"].blank?
 
       Category.all.max_by(&:position).position
 
@@ -386,7 +387,7 @@ class ImportScripts::DiscuzX < ImportScripts::Base
               end
             end
 
-            if row["status"] == 0 || row["status"] == 3
+            if row["status"] == (0) || row["status"] == (3)
               SiteSetting.default_categories_muted = [
                 SiteSetting.default_categories_muted,
                 category.id,
@@ -718,7 +719,7 @@ class ImportScripts::DiscuzX < ImportScripts::Base
     )
 
     # convert quote
-    s.gsub!(%r{\[quote\](.*?)\[/quote\]}m) { "\n" + $1.strip.gsub(/^/, "> ") + "\n" }
+    s.gsub!(%r{\[quote\](.*?)\[/quote\]}m) { "\n" + ($1.strip).gsub(/^/, "> ") + "\n" }
 
     # truncate line space, preventing line starting with many blanks to be parsed as code blocks
     s.gsub!(/^ {4,}/, "   ")
@@ -728,11 +729,11 @@ class ImportScripts::DiscuzX < ImportScripts::Base
     s.gsub!(
       %r{\[img[^\]]*\]https?://#{ORIGINAL_SITE_PREFIX}/(.*)\[/img\]}i,
       '[x-attach]\1[/x-attach]',
-    ) # don't convert attachment
+    ) # dont convert attachment
     s.gsub!(
       %r{<img[^>]*src="https?://#{ORIGINAL_SITE_PREFIX}/(.*)".*?>}i,
       '[x-attach]\1[/x-attach]',
-    ) # don't convert attachment
+    ) # dont convert attachment
     s.gsub!(
       %r{\[img[^\]]*\]https?://www\.touhou\.cc/blog/(.*)\[/img\]}i,
       '[x-attach]../blog/\1[/x-attach]',
@@ -810,7 +811,7 @@ class ImportScripts::DiscuzX < ImportScripts::Base
 
     # Discuz can create PM out of a post, which will generates like
     # [url=http://example.com/forum.php?mod=redirect&goto=findpost&pid=111&ptid=11][b]关于您在“主题名称”的帖子[/b][/url]
-    s.gsub!(pm_url_regexp) { |discuzx_link| replace_internal_link(discuzx_link, $1, nil, nil, nil) }
+    s.gsub!(pm_url_regexp) { |discuzx_link| replace_internal_link(discuzx_link, $1) }
 
     # [url][b]text[/b][/url] to **[url]text[/url]**
     s.gsub!(%r{(\[url=[^\[\]]*?\])\[b\](\S*)\[/b\](\[/url\])}, '**\1\2\3**')
@@ -819,26 +820,34 @@ class ImportScripts::DiscuzX < ImportScripts::Base
       s.gsub!(internal_url_regexp) do |discuzx_link|
         replace_internal_link(
           discuzx_link,
-          begin
-            $~[:tid].to_i
-          rescue StandardError
-            nil
-          end,
-          begin
-            $~[:pid].to_i
-          rescue StandardError
-            nil
-          end,
-          begin
-            $~[:fid].to_i
-          rescue StandardError
-            nil
-          end,
-          begin
-            $~[:action]
-          rescue StandardError
-            nil
-          end,
+          (
+            begin
+              $~[:tid].to_i
+            rescue StandardError
+              nil
+            end
+          ),
+          (
+            begin
+              $~[:pid].to_i
+            rescue StandardError
+              nil
+            end
+          ),
+          (
+            begin
+              $~[:fid].to_i
+            rescue StandardError
+              nil
+            end
+          ),
+          (
+            begin
+              $~[:action]
+            rescue StandardError
+              nil
+            end
+          ),
         )
       end
     end
@@ -1147,7 +1156,7 @@ class ImportScripts::DiscuzX < ImportScripts::Base
   end
 
   def first_exists(*items)
-    items.find { |item| item.present? } || ""
+    items.find { |item| !item.blank? } || ""
   end
 
   def mysql_query(sql)

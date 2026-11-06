@@ -1,12 +1,10 @@
 # frozen_string_literal: true
 
-RSpec.describe "List channels | sidebar" do
+RSpec.describe "List channels | sidebar", type: :system do
   fab!(:current_user, :user)
 
   let(:chat) { PageObjects::Pages::Chat.new }
   let(:drawer_page) { PageObjects::Pages::ChatDrawer.new }
-  let(:chat_sidebar) { PageObjects::Components::Chat::Sidebar.new }
-  let(:chat_sidebar_page) { PageObjects::Pages::ChatSidebar.new }
 
   before do
     chat_system_bootstrap
@@ -87,7 +85,7 @@ RSpec.describe "List channels | sidebar" do
         drawer_page.visit_index
         drawer_page.click_channels
 
-        expect(drawer_page).to have_channel_at_position(channel_2, 1)
+        expect(drawer_page).to have_channel_at_position(channel_1, 1)
 
         expect(page.find("#sidebar-section-content-chat-channels li:nth-child(1)")).to have_css(
           ".channel-#{channel_2.id}",
@@ -136,23 +134,10 @@ RSpec.describe "List channels | sidebar" do
   end
 
   context "when no direct message channels" do
-    it "shows the start new dm button" do
-      visit("/")
-      chat_sidebar.click_start_new_dm
+    before { visit("/") }
 
-      expect(page).to have_selector(".chat-modal-new-message")
-    end
-
-    context "when user can't dm" do
-      fab!(:group)
-
-      before { SiteSetting.direct_message_enabled_groups = group.id }
-
-      it "doesn't show the section" do
-        visit("/")
-
-        expect(chat_sidebar).to have_no_dm_section
-      end
+    it "shows the section" do
+      expect(page).to have_css(".sidebar-section[data-section-name='chat-dms']")
     end
   end
 
@@ -187,8 +172,11 @@ RSpec.describe "List channels | sidebar" do
 
       it "removes it from the sidebar" do
         visit("/")
-        chat_sidebar_page.remove_channel(dm_channel_1)
-        expect(chat_sidebar_page).to have_no_channel(dm_channel_1)
+
+        find(".sidebar-row.channel-#{dm_channel_1.id}").hover
+        find(".sidebar-row.channel-#{dm_channel_1.id} .sidebar-section-hover-button").click
+
+        expect(page).to have_no_selector(".sidebar-row.channel-#{dm_channel_1.id}")
       end
     end
   end

@@ -16,11 +16,11 @@ end
 # Table name: category_groups
 #
 #  id              :integer          not null, primary key
-#  permission_type :integer          default(1)
-#  created_at      :datetime         not null
-#  updated_at      :datetime         not null
 #  category_id     :integer          not null
 #  group_id        :integer          not null
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
+#  permission_type :integer          default(1)
 #
 # Indexes
 #

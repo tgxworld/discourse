@@ -8,7 +8,4 @@ te:
   js:
     topic_voting:
       vote_title: "వోటు"
-      vote_count_thousands: "%{count} వేల"
-    discourse_workflows:
-      topic_received_vote:
-        tag_names: "ట్యాగులు"
+      voting_closed_title: "మూసివేయబడినవి"

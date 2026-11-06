@@ -1,1 +1,3 @@
-export default <template>BILLING INDEX</template>
+import RouteTemplate from "ember-route-template";
+
+export default RouteTemplate(<template>BILLING INDEX</template>);

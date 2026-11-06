@@ -252,18 +252,16 @@ describe Jobs::Chat::NotifyMentioned do
 
       PostAlerter.expects(:push_notification).with(
         user_2,
-        has_entries(
-          {
-            notification_type: Notification.types[:chat_mention],
-            username: user_1.username,
-            tag: Chat::Notifier.push_notification_tag(:mention, public_channel.id),
-            excerpt: message.push_notification_excerpt,
-            post_url: "/chat/c/#{public_channel.slug}/#{public_channel.id}/#{message.id}",
-            translated_title: payload_translated_title,
-            channel_id: public_channel.id,
-            is_direct_message_channel: false,
-          },
-        ),
+        {
+          notification_type: Notification.types[:chat_mention],
+          username: user_1.username,
+          tag: Chat::Notifier.push_notification_tag(:mention, public_channel.id),
+          excerpt: message.push_notification_excerpt,
+          post_url: "/chat/c/#{public_channel.slug}/#{public_channel.id}/#{message.id}",
+          translated_title: payload_translated_title,
+          channel_id: public_channel.id,
+          is_direct_message_channel: false,
+        },
       )
 
       job.execute(

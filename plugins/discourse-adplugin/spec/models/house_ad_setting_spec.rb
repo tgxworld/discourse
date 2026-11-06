@@ -32,14 +32,6 @@ describe AdPlugin::HouseAdSetting do
       expect(AdPlugin::HouseAdSetting.all[:topic_list_top]).to eq("Banner|Donate")
     end
 
-    it "can set the above site header override" do
-      AdPlugin::HouseAd.create(name: "Header", html: "<p>Header</p>")
-      expect { AdPlugin::HouseAdSetting.update(:above_site_header, "Header") }.to change {
-        PluginStoreRow.count
-      }.by(1)
-      expect(AdPlugin::HouseAdSetting.all[:above_site_header]).to eq("Header")
-    end
-
     it "can update an existing override" do
       AdPlugin.pstore_set("ad-setting:topic_list_top", "Banner")
       expect { AdPlugin::HouseAdSetting.update(:topic_list_top, "Banner|Donate") }.to_not change {
@@ -77,24 +69,25 @@ describe AdPlugin::HouseAdSetting do
   end
 
   describe ".publish_settings" do
-    fab!(:anon_ad) do
-      Fabricate(
-        :house_ad,
+    let!(:anon_ad) do
+      AdPlugin::HouseAd.create(
         name: "anon-ad",
-        html: '<div id="anon-banner" style="color: red" data-campaign="spring">anon ad</div>',
+        html: "<whatever-anon>",
         visible_to_anons: true,
         visible_to_logged_in_users: false,
+        group_ids: [],
+        category_ids: [],
       )
     end
 
-    fab!(:logged_in_ad) do
-      Fabricate(
-        :house_ad,
+    let!(:logged_in_ad) do
+      AdPlugin::HouseAd.create(
         name: "logged-in-ad",
-        html:
-          '<section id="logged-in-banner" data-track="true"><a href="https://example.com" target="_blank" rel="noopener">logged-in ad</a></section>',
+        html: "<whatever-logged-in>",
         visible_to_anons: false,
         visible_to_logged_in_users: true,
+        group_ids: [],
+        category_ids: [],
       )
     end
 
@@ -107,24 +100,19 @@ describe AdPlugin::HouseAdSetting do
       anon_message = messages.find { |m| m.channel == "/site/house-creatives/anonymous" }
       logged_in_message = messages.find { |m| m.channel == "/site/house-creatives/logged-in" }
 
-      expect(anon_message.data[:creatives]).to match(
+      expect(anon_message.data[:creatives]).to eq(
         "anon-ad" => {
-          html: '<div id="anon-banner" style="color: red" data-campaign="spring">anon ad</div>',
+          html: "<whatever-anon>",
           category_ids: [],
-          id: a_kind_of(Integer),
-          routes: [],
         },
       )
       expect(anon_message.group_ids).to eq(nil)
       expect(anon_message.user_ids).to eq(nil)
 
-      expect(logged_in_message.data[:creatives]).to match(
+      expect(logged_in_message.data[:creatives]).to eq(
         "logged-in-ad" => {
-          html:
-            '<section id="logged-in-banner" data-track="true"><a href="https://example.com" target="_blank" rel="noopener">logged-in ad</a></section>',
+          html: "<whatever-logged-in>",
           category_ids: [],
-          id: a_kind_of(Integer),
-          routes: [],
         },
       )
       expect(logged_in_message.group_ids).to eq([Group::AUTO_GROUPS[:trust_level_0]])

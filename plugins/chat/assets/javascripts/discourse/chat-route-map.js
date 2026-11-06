@@ -1,9 +1,5 @@
-/* eslint-disable ember/routes-segments-snake-case */
 export default function () {
   this.route("chat", function () {
-    this.route("disabled");
-    this.route("search");
-
     this.route("channel", { path: "/c/:channelTitle/:channelId" }, function () {
       this.route("near-message", { path: "/:messageId" });
       this.route("near-message-with-thread", {
@@ -13,12 +9,10 @@ export default function () {
       this.route("thread", { path: "/t/:threadId" }, function () {
         this.route("near-message", { path: "/:messageId" });
       });
-      this.route("pins");
     });
 
     this.route("direct-messages");
     this.route("channels");
-    this.route("starred-channels");
     this.route("threads");
 
     this.route("new-message");

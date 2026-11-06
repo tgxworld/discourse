@@ -2,9 +2,9 @@
 
 RSpec.describe DiscourseAi::Admin::RagDocumentFragmentsController do
   fab!(:admin)
-  fab!(:ai_agent)
+  fab!(:ai_persona)
 
-  fab!(:vector_def, :embedding_definition)
+  fab!(:vector_def) { Fabricate(:embedding_definition) }
 
   before do
     enable_current_plugin
@@ -16,8 +16,8 @@ RSpec.describe DiscourseAi::Admin::RagDocumentFragmentsController do
   after { @cleanup_files&.each(&:unlink) }
 
   describe "GET #indexing_status_check" do
-    it "works for AiAgent" do
-      get "/admin/plugins/discourse-ai/rag-document-fragments/files/status.json?target_type=AiAgent&target_id=#{ai_agent.id}"
+    it "works for AiPersona" do
+      get "/admin/plugins/discourse-ai/rag-document-fragments/files/status.json?target_type=AiPersona&target_id=#{ai_persona.id}"
 
       expect(response.parsed_body).to eq({})
       expect(response.status).to eq(200)
@@ -34,7 +34,7 @@ RSpec.describe DiscourseAi::Admin::RagDocumentFragmentsController do
       tempfile
     end
 
-    it "uploads the document fragment file" do
+    it "works" do
       post "/admin/plugins/discourse-ai/rag-document-fragments/files/upload.json",
            params: {
              file: Rack::Test::UploadedFile.new(file_from_fixtures("spec.txt", "md")),

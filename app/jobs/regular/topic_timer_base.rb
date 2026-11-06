@@ -14,7 +14,7 @@ module Jobs
         return
       end
 
-      TopicTimer.transaction(requires_new: true) { execute_timer_action(topic_timer, topic) }
+      execute_timer_action(topic_timer, topic)
     end
   end
 end

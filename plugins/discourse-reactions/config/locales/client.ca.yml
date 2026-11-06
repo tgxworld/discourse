@@ -7,12 +7,9 @@
 ca:
   js:
     discourse_reactions:
-      users_popup:
-        all: "Tots"
+      state_panel:
+        more_users: "i %{count} més..."
       main_reaction:
         add: "M'agrada aquesta publicació"
-    discourse_workflows:
-      post_reaction_changed:
-        changes_added: "Afegit"
     notifications:
       reaction_2_users: "%{username}, %{username2}"

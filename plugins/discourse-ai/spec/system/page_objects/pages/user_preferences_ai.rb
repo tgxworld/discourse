@@ -4,7 +4,7 @@ module PageObjects
   module Pages
     class UserPreferencesAi < PageObjects::Pages::Base
       def visit(user)
-        page.visit("/u/#{user.username}/preferences/interface")
+        page.visit("/u/#{user.username}/preferences/ai")
         self
       end
 

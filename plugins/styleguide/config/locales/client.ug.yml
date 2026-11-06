@@ -13,9 +13,7 @@ ug:
   js:
     styleguide:
       title: "ئۇسلۇب يېتەكچىسى"
-      example:
-        kind:
-          component: "بۆلەك"
+      welcome: "باشلاش ئۈچۈن سول تەرەپتىكى تىزىملىكتىن بىر بۆلەكنى تاللاڭ."
       categories:
         syntax: گرامماتىكىسى
         atoms: ئاتوم
@@ -32,26 +30,14 @@ ug:
           title: "Datum / tyd insette"
         menus:
           title: "تىزىملىك"
-        context_menu:
-          actions:
-            duplicate: "كۆپەيت"
-            delete: "ئۆچۈر"
         multi_select:
           title: "كۆپ تاللاش"
-        reorderable_list:
-          policies_pinned: "چوققىلاندى"
-          policies_required: "زۆرۈر"
-          table_field: "بۆلەك"
-          table_type: "تىپى"
-          cross_list_primary: "ئاساسىي"
         toasts:
           title: "ئۇچۇر رامكىسى"
         font_scale:
           title: "خەت نۇسخا سىستېمىسى"
         colors:
           title: "رەڭ"
-        dialog:
-          title: "سۆزلەشكۈ"
         icons:
           title: "سىنبەلگە"
           full_list: "Font Awesome سىنبەلگىسىنىڭ تولۇق تىزىمىنى كۆرسىتىدۇ"
@@ -74,7 +60,7 @@ ug:
         categories_list:
           title: "سەھىپە تىزىمى"
         topic_link:
-          title: "تېما ئۇلانمىسى ۋە ھالىتى"
+          title: "تېما ئۇلانمىسى"
         topic_list_item:
           title: "تېما تىزىم تۈرى"
         topic_statuses:
@@ -83,6 +69,8 @@ ug:
           title: "تېما تىزىمى"
         basic_topic_list:
           title: "ئاساسىي تېما تىزىمى"
+        footer_message:
+          title: "بەت ئاستى ئۇچۇرى"
         signup_cta:
           title: "تىزىملىتىش چاقىرىق سۆزى"
         topic_timer_info:
@@ -101,29 +89,10 @@ ug:
           title: "تېما خەرىتىسى"
         site_header:
           title: "بېكەت بېشى"
-        more_topics:
-          title: "تېخىمۇ كۆپ تېما"
+        suggested_topics:
+          title: "تەۋسىيە تېما"
         post_menu:
           title: "يازما تىزىملىكى"
-        roving_focus:
-          toolbar:
-            copy: "كۆچۈر"
-          tags:
-            remove: "%{tag} نى چىقىرىۋەت"
-          adjacent:
-            field: "ئىزدە"
-            open: "ئاچ"
-            recent: "يېقىنقى"
-          listbox:
-            apple: "Apple"
-          combobox:
-            daily: "كۈندىلىك"
-            weekly: "ھەپتىلىك"
-            monthly: "ئايلىق"
-            never: "ھەرگىز"
-          tree:
-            components: "بۆلەك"
-            select: "تاللا"
         modal:
           title: "مودېل كۆزنىكى"
           header: "مودېل كۆزنەك ماۋزۇسى"
@@ -134,8 +103,6 @@ ug:
           title: "ماۋزۇ سىنبەلگە"
         spinners:
           title: "چىغ توپچە"
-        otp:
-          title: "OTP"
         empty_state:
           title: "بوش ھالەت"
         tooltips:

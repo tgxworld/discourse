@@ -13,7 +13,6 @@ module Jobs
       rebuild_topics
       rebuild_posts
       rebuild_users
-      rebuild_registered_search_handlers
 
       clean_topics
       clean_posts
@@ -21,53 +20,56 @@ module Jobs
 
     def rebuild_categories(limit: 500, indexer: SearchIndexer)
       category_ids = load_problem_category_ids(limit)
+
       puts "rebuilding #{category_ids.size} categories" if @verbose
-      reindex_records(Category, category_ids, indexer)
+
+      category_ids.each do |id|
+        category = Category.find_by(id: id)
+        indexer.index(category, force: true) if category
+      end
     end
 
     def rebuild_tags(limit: 1_000, indexer: SearchIndexer)
       tag_ids = load_problem_tag_ids(limit)
+
       puts "rebuilding #{tag_ids.size} tags" if @verbose
-      reindex_records(Tag, tag_ids, indexer)
+
+      tag_ids.each do |id|
+        tag = Tag.find_by(id: id)
+        indexer.index(tag, force: true) if tag
+      end
     end
 
     def rebuild_topics(limit: 10_000, indexer: SearchIndexer)
       topic_ids = load_problem_topic_ids(limit)
+
       puts "rebuilding #{topic_ids.size} topics" if @verbose
-      reindex_records(Topic, topic_ids, indexer)
+
+      topic_ids.each do |id|
+        topic = Topic.find_by(id: id)
+        indexer.index(topic, force: true) if topic
+      end
     end
 
     def rebuild_posts(limit: 20_000, indexer: SearchIndexer)
       post_ids = load_problem_post_ids(limit)
+
       puts "rebuilding #{post_ids.size} posts" if @verbose
-      reindex_records(Post, post_ids, indexer)
+
+      post_ids.each do |id|
+        post = Post.find_by(id: id)
+        indexer.index(post, force: true) if post
+      end
     end
 
     def rebuild_users(limit: 5_000, indexer: SearchIndexer)
       user_ids = load_problem_user_ids(limit)
+
       puts "rebuilding #{user_ids.size} users" if @verbose
-      reindex_records(User, user_ids, indexer)
-    end
 
-    def rebuild_registered_search_handlers(limit: 10_000, indexer: SearchIndexer)
-      DiscoursePluginRegistry.search_handlers.each do |handler|
-        next unless handler[:enabled]&.call
-
-        unindexed_record_ids =
-          handler[:load_unindexed_record_ids].call(limit:, index_version: handler[:index_version])
-
-        if @verbose
-          puts "rebuilding #{unindexed_record_ids.size} records for #{handler[:table_name]}"
-        end
-
-        unindexed_record_ids.each do |id|
-          record = handler[:model_class].find_by(id: id)
-          if record
-            indexer.index(record, force: true)
-          else
-            puts "↪ record #{id} not found" if @verbose
-          end
-        end
+      user_ids.each do |id|
+        user = User.find_by(id: id)
+        indexer.index(user, force: true) if user
       end
     end
 
@@ -174,13 +176,6 @@ module Jobs
         .order("users.id ASC")
         .limit(limit)
         .pluck(:id)
-    end
-
-    private
-
-    def reindex_records(model_class, ids, indexer)
-      return if ids.empty?
-      model_class.where(id: ids).find_each { |record| indexer.index(record, force: true) }
     end
   end
 end

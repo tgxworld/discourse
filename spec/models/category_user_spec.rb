@@ -4,20 +4,12 @@
 RSpec.describe CategoryUser do
   fab!(:user)
 
-  def watching
-    CategoryUser.notification_levels[:watching]
-  end
-
   def tracking
     CategoryUser.notification_levels[:tracking]
   end
 
   def regular
     CategoryUser.notification_levels[:regular]
-  end
-
-  def muted
-    CategoryUser.notification_levels[:muted]
   end
 
   describe "#batch_set" do
@@ -30,13 +22,13 @@ RSpec.describe CategoryUser do
       ).pluck(:category_id)
     end
 
-    it "adds missing category notification records" do
+    it "should add new records where required" do
       CategoryUser.batch_set(user, :watching, [category.id])
 
       expect(category_ids_at_level(:watching)).to eq([category.id])
     end
 
-    it "updates existing category notification records" do
+    it "should change existing records where required" do
       CategoryUser.create!(
         user_id: user.id,
         category_id: category.id,
@@ -49,7 +41,7 @@ RSpec.describe CategoryUser do
       expect(category_ids_at_level(:muted)).to eq([])
     end
 
-    it "deletes extraneous category notification records" do
+    it "should delete extraneous records where required" do
       CategoryUser.create!(
         user_id: user.id,
         category_id: category.id,
@@ -61,18 +53,18 @@ RSpec.describe CategoryUser do
       expect(category_ids_at_level(:watching)).to eq([])
     end
 
-    it "returns true when something changes" do
+    it "should return true when something changed" do
       expect(CategoryUser.batch_set(user, :watching, [category.id])).to eq(true)
     end
 
-    it "returns false when nothing changes" do
+    it "should return false when nothing changed" do
       CategoryUser.batch_set(user, :watching, [category.id])
 
       expect(CategoryUser.batch_set(user, :watching, [category.id])).to eq(false)
     end
   end
 
-  it "automatically tracks topics according to category preferences" do
+  it "should correctly auto_track" do
     tracking_user = Fabricate(:user)
     topic = Fabricate(:post).topic
 
@@ -128,7 +120,7 @@ RSpec.describe CategoryUser do
       NotificationEmailer.enable
     end
 
-    it "applies watched, muted, and tracked category preferences to topics" do
+    it "should operate correctly" do
       watched_category = Fabricate(:category)
       muted_category = Fabricate(:category)
       tracked_category = Fabricate(:category)
@@ -280,48 +272,6 @@ RSpec.describe CategoryUser do
       ).to eq TopicUser.notification_levels[:tracking]
     end
 
-    it "does not override user's manual topic notification level changes when auto_track runs" do
-      tracked_category = Fabricate(:category)
-      other_category = Fabricate(:category)
-
-      CategoryUser.set_notification_level_for_category(user, tracking, tracked_category.id)
-
-      post = create_post(category: tracked_category)
-      TopicUser.change(user.id, post.topic_id, total_msecs_viewed: 10)
-      expect(TopicUser.get(post.topic, user).notification_level).to eq(tracking)
-
-      TopicUser.change(user.id, post.topic_id, notification_level: regular)
-      tu = TopicUser.get(post.topic, user)
-      expect(tu.notification_level).to eq(regular)
-      expect(tu.notifications_reason_id).to eq(TopicUser.notification_reasons[:user_changed])
-
-      # muting another category triggers auto_track/auto_watch for the user
-      CategoryUser.set_notification_level_for_category(user, muted, other_category.id)
-
-      expect(TopicUser.get(post.topic, user).notification_level).to eq(regular)
-    end
-
-    it "does not override user's manual topic notification level changes when auto_watch runs" do
-      watched_category = Fabricate(:category)
-      other_category = Fabricate(:category)
-
-      CategoryUser.set_notification_level_for_category(user, watching, watched_category.id)
-
-      post = create_post(category: watched_category)
-      TopicUser.change(user.id, post.topic_id, total_msecs_viewed: 10)
-      expect(TopicUser.get(post.topic, user).notification_level).to eq(watching)
-
-      TopicUser.change(user.id, post.topic_id, notification_level: tracking)
-      tu = TopicUser.get(post.topic, user)
-      expect(tu.notification_level).to eq(tracking)
-      expect(tu.notifications_reason_id).to eq(TopicUser.notification_reasons[:user_changed])
-
-      # muting another category triggers auto_track/auto_watch for the user
-      CategoryUser.set_notification_level_for_category(user, muted, other_category.id)
-
-      expect(TopicUser.get(post.topic, user).notification_level).to eq(tracking)
-    end
-
     it "is destroyed when a user is deleted" do
       category = Fabricate(:category)
 
@@ -348,7 +298,6 @@ RSpec.describe CategoryUser do
 
     context "for anon" do
       let(:user) { nil }
-
       before do
         SiteSetting.default_categories_watching = category1.id.to_s
         SiteSetting.default_categories_tracking = category2.id.to_s
@@ -356,7 +305,6 @@ RSpec.describe CategoryUser do
         SiteSetting.default_categories_normal = category4.id.to_s
         SiteSetting.default_categories_muted = category5.id.to_s
       end
-
       it "every category from the default_categories_* site settings get overridden to regular, except for muted" do
         levels = CategoryUser.notification_levels_for(user)
         expect(levels[category1.id]).to eq(CategoryUser.notification_levels[:regular])
@@ -395,7 +343,6 @@ RSpec.describe CategoryUser do
           notification_level: CategoryUser.notification_levels[:muted],
         )
       end
-
       it "gets the category_user notification levels for all categories the user is tracking and does not
       include categories the user is not tracking at all" do
         category6 = Fabricate(:category)
@@ -465,7 +412,6 @@ RSpec.describe CategoryUser do
         category2
         category3
       end
-
       it "calculates muted categories based on parent category state" do
         expect(CategoryUser.indirectly_muted_category_ids(user)).to eq([])
 

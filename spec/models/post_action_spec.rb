@@ -95,17 +95,11 @@ RSpec.describe PostAction do
     context "with category group moderators" do
       fab!(:group_user)
       let(:group) { group_user.group }
-      let(:moderators_group) { Group.find(Group::AUTO_GROUPS[:moderators]) }
 
       before do
         SiteSetting.enable_category_group_moderation = true
         group.update!(messageable_level: Group::ALIAS_LEVELS[:nobody])
         Fabricate(:category_moderation_group, category: post.topic.category, group:)
-        Fabricate(
-          :category_moderation_group,
-          category: post.topic.category,
-          group: moderators_group,
-        )
       end
 
       it "notifies via pm" do
@@ -155,7 +149,7 @@ RSpec.describe PostAction do
   describe "when a user likes something" do
     before { PostActionNotifier.enable }
 
-    it "creates and removes notifications" do
+    it "should generate and remove notifications correctly" do
       PostActionCreator.like(codinghorror, post)
 
       expect(Notification.count).to eq(1)
@@ -179,7 +173,7 @@ RSpec.describe PostAction do
       expect(notification.notification_type).to eq(Notification.types[:liked])
     end
 
-    it "does not notify when never is selected" do
+    it "should not notify when never is selected" do
       post.user.user_option.update!(
         like_notification_frequency: UserOption.like_notification_frequency_type[:never],
       )
@@ -269,7 +263,7 @@ RSpec.describe PostAction do
           )
         end
 
-        it "consolidates like notifications at the threshold" do
+        it "should consolidate likes notification when the threshold is reached" do
           SiteSetting.notification_consolidation_threshold = 2
 
           expect do
@@ -325,7 +319,7 @@ RSpec.describe PostAction do
           )
         end
 
-        it "consolidates liked notifications at the threshold" do
+        it "should consolidate liked notifications when threshold is reached" do
           SiteSetting.notification_consolidation_threshold = 2
 
           post = Fabricate(:post, user: likee)
@@ -363,14 +357,14 @@ RSpec.describe PostAction do
       end
     end
 
-    it "does not notify when the liker is muted" do
+    it "should not generate a notification if liker has been muted" do
       mutee = Fabricate(:user)
       MutedUser.create!(user_id: post.user.id, muted_user_id: mutee.id)
 
       expect do PostActionCreator.like(mutee, post) end.to_not change { Notification.count }
     end
 
-    it "does not notify when the liker muted the topic" do
+    it "should not generate a notification if liker has the topic muted" do
       post = Fabricate(:post, user: eviltrout)
 
       TopicUser.create!(
@@ -382,7 +376,7 @@ RSpec.describe PostAction do
       expect do PostActionCreator.like(codinghorror, post) end.to_not change { Notification.count }
     end
 
-    it "notifies when the liker is an admin regardless of \
+    it "should generate a notification if liker is an admin irregardless of \
       muting" do
       MutedUser.create!(user_id: post.user.id, muted_user_id: admin.id)
 
@@ -394,7 +388,7 @@ RSpec.describe PostAction do
       expect(notification.notification_type).to eq(Notification.types[:liked])
     end
 
-    it "does not increase the topic like count for a whisper" do
+    it "should not increase topic like count when liking a whisper" do
       SiteSetting.whispers_allowed_groups = "#{Group::AUTO_GROUPS[:staff]}"
       post.revise(admin, post_type: Post.types[:whisper])
 
@@ -404,7 +398,7 @@ RSpec.describe PostAction do
       expect(post.topic.like_count).to eq(0)
     end
 
-    it "increases like_count and like_score when a user likes a post" do
+    it "should increase the `like_count` and `like_score` when a user likes something" do
       freeze_time Date.today
 
       PostActionCreator.like(codinghorror, post)
@@ -437,14 +431,7 @@ RSpec.describe PostAction do
       expect(post.topic.like_count).to eq(0)
     end
 
-    it "only counts likes in like_score" do
-      PostActionCreator.off_topic(moderator, post)
-      PostActionCreator.like(codinghorror, post)
-
-      expect(post.reload.like_score).to eq(1)
-    end
-
-    it "changes given_likes only when likes are added or removed" do
+    it "shouldn't change given_likes unless likes are given or removed" do
       freeze_time
 
       PostActionCreator.like(codinghorror, post)
@@ -480,7 +467,7 @@ RSpec.describe PostAction do
       expect(PostActionCreator.spam(eviltrout, post)).to be_success
     end
 
-    it "updates counts when flags are cleared" do
+    it "should update counts when you clear flags" do
       reviewable = PostActionCreator.spam(eviltrout, post).reviewable
 
       expect(post.reload.spam_count).to eq(1)
@@ -490,7 +477,7 @@ RSpec.describe PostAction do
       expect(post.reload.spam_count).to eq(0)
     end
 
-    it "does not let regular users automatically hide staff posts" do
+    it "will not allow regular users to auto hide staff posts" do
       mod = Fabricate(:moderator)
       post = Fabricate(:post, user: mod)
 
@@ -522,7 +509,7 @@ RSpec.describe PostAction do
       expect(post.hidden_at).to be_present
     end
 
-    it "does not trigger automatic hiding for likes" do
+    it "will not trigger auto hide on like" do
       mod = Fabricate(:moderator)
       post = Fabricate(:post, user: mod)
 
@@ -535,7 +522,7 @@ RSpec.describe PostAction do
       expect(post.hidden).to eq(false)
     end
 
-    it "follows the automatic hiding workflow" do
+    it "should follow the rules for automatic hiding workflow" do
       post = create_post
       walterwhite = Fabricate(:walter_white, refresh_auto_groups: true)
 
@@ -608,7 +595,6 @@ RSpec.describe PostAction do
       post.reload
       expect(post.hidden).to eq(true)
     end
-
     it "hide tl0 posts that are flagged as spam by a tl3 user" do
       newuser = Fabricate(:newuser, refresh_auto_groups: true)
       post = create_post(user: newuser)
@@ -638,7 +624,7 @@ RSpec.describe PostAction do
       expect(result.reviewable.payload["targets_topic"]).to eq(true)
     end
 
-    it "flags the first post when it is the topic's only post" do
+    it "will flag the first post if you flag a topic but there is only one post in the topic" do
       post = create_post
       result =
         PostActionCreator.new(
@@ -652,7 +638,7 @@ RSpec.describe PostAction do
       expect(result.reviewable.payload["targets_topic"]).to eq(false)
     end
 
-    it "unhides the post when a moderator undoes the handled flag" do
+    it "will unhide the post when a moderator undoes the flag on which s/he took action" do
       Discourse.stubs(:site_contact_user).returns(admin)
 
       post = create_post
@@ -684,7 +670,7 @@ RSpec.describe PostAction do
         SiteSetting.num_hours_to_close_topic = 1
       end
 
-      it "automatically pauses a topic after extensive community flagging" do
+      it "will automatically pause a topic due to large community flagging" do
         freeze_time
 
         # reaching `num_flaggers_to_close_topic` isn't enough
@@ -721,7 +707,7 @@ RSpec.describe PostAction do
         fab!(:staff_user) { Fabricate(:user, moderator: true) }
         fab!(:topic) { Fabricate(:topic, user: staff_user) }
 
-        it "does not close topics opened by staff" do
+        it "will not close topics opened by staff" do
           [flagger1, flagger2].each do |flagger|
             [post1, post2, post3].each { |post| PostActionCreator.inappropriate(flagger, post) }
           end
@@ -730,7 +716,7 @@ RSpec.describe PostAction do
         end
       end
 
-      it "keeps the topic closed until community flags are handled" do
+      it "will keep the topic in closed status until the community flags are handled" do
         freeze_time
 
         SiteSetting.num_flaggers_to_close_topic = 1
@@ -761,7 +747,7 @@ RSpec.describe PostAction do
         expect(topic.reload.closed).to eq(false)
       end
 
-      it "reopens the topic after flags are handled automatically" do
+      it "will reopen topic after the flags are auto handled" do
         freeze_time
         [flagger1, flagger2].each do |flagger|
           [post1, post2, post3].each { |post| PostActionCreator.inappropriate(flagger, post) }
@@ -781,14 +767,12 @@ RSpec.describe PostAction do
   # flags are already being tested
   all_types_except_flags =
     PostActionType.types.except(*PostActionType.flag_types_without_additional_message.keys)
-  # rubocop:disable Discourse/NoIterationOverRSpecDefinitions
   all_types_except_flags.values.each do |action|
-    it "prevents concurrent duplicate #{PostActionType.types.key(action)} actions" do
+    it "prevents user to act twice at the same time" do
       expect(PostActionCreator.new(eviltrout, post, action).perform).to be_success
       expect(PostActionCreator.new(eviltrout, post, action).perform).to be_failed
     end
   end
-  # rubocop:enable Discourse/NoIterationOverRSpecDefinitions
 
   describe "messages" do
     it "does not create a message when there is no message" do
@@ -817,30 +801,18 @@ RSpec.describe PostAction do
       flag_without_message.destroy!
     end
 
-    shared_examples "creating a related flag message" do |action_type:|
-      it "creates the action and its related message" do
+    %i[notify_moderators notify_user spam].each do |post_action_type|
+      it "creates a message for #{post_action_type}" do
         result =
           PostActionCreator.new(
             Discourse.system_user,
             post,
-            PostActionType.types[action_type],
+            PostActionType.types[post_action_type],
             message: "WAT",
           ).perform
         expect(result).to be_success
         expect(result.post_action.related_post_id).to be_present
       end
-    end
-
-    context "with the notify_moderators action" do
-      include_examples "creating a related flag message", action_type: :notify_moderators
-    end
-
-    context "with the notify_user action" do
-      include_examples "creating a related flag message", action_type: :notify_user
-    end
-
-    context "with the spam action" do
-      include_examples "creating a related flag message", action_type: :spam
     end
 
     it "creates a message for custom flags when message is required" do
@@ -862,7 +834,7 @@ RSpec.describe PostAction do
       flag_with_message.destroy!
     end
 
-    it "returns the post-creation errors" do
+    it "should raise the right errors when it fails to create a post" do
       user = Fabricate(:user)
       UserSilencer.new(user, Discourse.system_user).silence
 
@@ -870,7 +842,7 @@ RSpec.describe PostAction do
       expect(result).to be_failed
     end
 
-    it "succeeds with a low maximum title length" do
+    it "should succeed even with low max title length" do
       SiteSetting.max_topic_title_length = 50
       post.topic.title = "This is a test topic " * 2
       post.topic.save!
@@ -892,7 +864,7 @@ RSpec.describe PostAction do
   end
 
   describe "#add_moderator_post_if_needed" do
-    it "does not add a moderator post when disabled" do
+    it "should not add a moderator post when it's disabled" do
       post = create_post
 
       result = PostActionCreator.create(moderator, post, :spam, message: "WAT")
@@ -904,7 +876,7 @@ RSpec.describe PostAction do
       expect(topic.reload.posts.count).to eq(1)
     end
 
-    it "creates a notification in the related topic" do
+    it "should create a notification in the related topic" do
       Jobs.run_immediately!
       user = Fabricate(:user, refresh_auto_groups: true)
       stub_image_size
@@ -920,47 +892,20 @@ RSpec.describe PostAction do
       expect(user_notifications.last.topic).to eq(topic)
     end
 
-    shared_examples "bumping a flag message topic after review" do |disposition:|
-      it "bumps the topic after the disposition is performed" do
-        SiteSetting.auto_respond_to_flag_actions = true
-        user = Fabricate(:user, refresh_auto_groups: true)
-        result = PostActionCreator.create(user, post, :spam, message: "WAT")
-        topic = result.post_action.related_post.topic
-
-        original_bumped_at = topic.reload.bumped_at
-
-        freeze_time 1.hour.from_now
-
-        result.reviewable.perform(admin, disposition)
-
-        expect(topic.reload.bumped_at).to be > original_bumped_at
-      end
-    end
-
-    context "when performing agree_and_keep" do
-      include_examples "bumping a flag message topic after review", disposition: :agree_and_keep
-    end
-
-    context "when performing disagree" do
-      include_examples "bumping a flag message topic after review", disposition: :disagree
-    end
-
-    context "when performing ignore_and_do_nothing" do
-      include_examples "bumping a flag message topic after review",
-                       disposition: :ignore_and_do_nothing
-    end
-
-    it "does not add a moderator post to the notify_user PM topic when an unrelated flag is agreed" do
-      user = Fabricate(:user, refresh_auto_groups: true)
-      notify_result = PostActionCreator.create(user, post, :notify_user, message: "WAT")
-      pm_topic = notify_result.post_action.related_post.topic
-
-      flag_result = PostActionCreator.create(user, post, :spam)
+    skip "should not add a moderator post when post is flagged via private message" do
+      Jobs.run_immediately!
+      user = Fabricate(:user)
+      result = PostActionCreator.create(user, post, :notify_user, message: "WAT")
+      action = result.post_action
+      action.reload.related_post.topic
+      expect(user.notifications.count).to eq(0)
 
       SiteSetting.auto_respond_to_flag_actions = true
-      flag_result.reviewable.perform(admin, :agree_and_keep)
+      result.reviewable.perform(admin, :agree_and_keep)
+      expect(user.reload.user_stat.flags_agreed).to eq(0)
 
-      expect(pm_topic.reload.posts.count).to eq(1)
+      user_notifications = user.notifications
+      expect(user_notifications.count).to eq(0)
     end
   end
 
@@ -972,7 +917,7 @@ RSpec.describe PostAction do
       action.post_action_rate_limiter
     end
 
-    it "scales the like limit by trust level" do
+    it "should scale up likes limits depending on trust level" do
       expect(limiter(0, :like).max).to eq SiteSetting.max_likes_per_day
       expect(limiter(1, :like).max).to eq SiteSetting.max_likes_per_day
       expect(limiter(2, :like).max).to eq (
@@ -995,7 +940,7 @@ RSpec.describe PostAction do
       expect(limiter(2, :like).max).to eq SiteSetting.max_likes_per_day
     end
 
-    it "scales the flag limit by trust level" do
+    it "should scale up flag limits depending on trust level" do
       %i[off_topic inappropriate spam notify_moderators].each do |type|
         SiteSetting.tl2_additional_flags_per_day_multiplier = 1.5
 
@@ -1025,7 +970,7 @@ RSpec.describe PostAction do
 
   describe "#is_flag?" do
     describe "when post action is a flag" do
-      it "returns true" do
+      it "should return true" do
         PostActionType.notify_flag_types.each do |_type, id|
           post_action = PostAction.new(user: codinghorror, post_action_type_id: id)
 
@@ -1035,7 +980,7 @@ RSpec.describe PostAction do
     end
 
     describe "when post action is not a flag" do
-      it "returns false" do
+      it "should return false" do
         post_action = PostAction.new(user: codinghorror, post_action_type_id: 99)
 
         expect(post_action.is_flag?).to eq(false)

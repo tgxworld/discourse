@@ -30,6 +30,7 @@ class UserPasswordValidator < ActiveModel::EachValidator
   private
 
   def is_developer?(value)
-    Developer.configured_email?(value)
+    Rails.configuration.respond_to?(:developer_emails) &&
+      Rails.configuration.developer_emails.include?(value)
   end
 end

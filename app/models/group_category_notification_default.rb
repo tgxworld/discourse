@@ -9,7 +9,7 @@ class GroupCategoryNotificationDefault < ActiveRecord::Base
   end
 
   def self.lookup(group, level)
-    where(group: group, notification_level: notification_levels[level])
+    self.where(group: group, notification_level: notification_levels[level])
   end
 
   def self.batch_set(group, level, category_ids)
@@ -61,9 +61,9 @@ end
 # Table name: group_category_notification_defaults
 #
 #  id                 :bigint           not null, primary key
-#  notification_level :integer          not null
-#  category_id        :integer          not null
 #  group_id           :integer          not null
+#  category_id        :integer          not null
+#  notification_level :integer          not null
 #
 # Indexes
 #

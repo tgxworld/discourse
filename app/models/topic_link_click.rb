@@ -7,7 +7,7 @@ class TopicLinkClick < ActiveRecord::Base
   belongs_to :topic_link, counter_cache: :clicks
   belongs_to :user
 
-  validates :topic_link_id, presence: true
+  validates_presence_of :topic_link_id
 
   ALLOWED_REDIRECT_HOSTNAMES = Set.new(%W[www.youtube.com youtu.be])
 
@@ -103,9 +103,6 @@ class TopicLinkClick < ActiveRecord::Base
       return nil
     end
 
-    guardian = args[:guardian]
-    return nil if guardian && !(guardian.can_see?(link.topic) && guardian.can_see?(link.post))
-
     return url if args[:user_id] && link.user_id == args[:user_id]
 
     # Rate limit the click counts to once in 24 hours
@@ -125,11 +122,11 @@ end
 # Table name: topic_link_clicks
 #
 #  id            :integer          not null, primary key
-#  ip_address    :inet
-#  created_at    :datetime         not null
-#  updated_at    :datetime         not null
 #  topic_link_id :integer          not null
 #  user_id       :integer
+#  created_at    :datetime         not null
+#  updated_at    :datetime         not null
+#  ip_address    :inet
 #
 # Indexes
 #

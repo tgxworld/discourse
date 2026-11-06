@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "Closed channel" do
+RSpec.describe "Closed channel", type: :system do
   fab!(:channel_1, :chat_channel)
 
   let(:chat) { PageObjects::Pages::Chat.new }

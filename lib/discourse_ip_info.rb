@@ -6,8 +6,6 @@ require "resolv"
 class DiscourseIpInfo
   include Singleton
 
-  HOSTNAME_LOOKUP_TIMEOUT_SECONDS = 1
-
   def initialize
     open_db(DiscourseIpInfo.path)
   end
@@ -19,7 +17,7 @@ class DiscourseIpInfo
   end
 
   def self.path
-    @path ||= Rails.root.join("vendor/data").to_s
+    @path ||= File.join(Rails.root, "vendor", "data")
   end
 
   def self.mmdb_path(name)
@@ -71,8 +69,8 @@ class DiscourseIpInfo
 
     dir = "#{Dir.tmpdir}/#{SecureRandom.hex}"
 
-    FileUtils.mkdir_p(dir)
-    FileUtils.cp(gz_file.path, "#{dir}/#{filename}")
+    Discourse::Utils.execute_command("mkdir", "-p", dir)
+    Discourse::Utils.execute_command("cp", gz_file.path, "#{dir}/#{filename}")
     Discourse::Utils.execute_command("tar", "-xzvf", "#{dir}/#{filename}", chdir: dir)
 
     Dir["#{dir}/**/*.mmdb"].each { |f| FileUtils.mv(f, mmdb_path(name)) }
@@ -84,13 +82,15 @@ class DiscourseIpInfo
   end
 
   def mmdb_load(filepath)
-    MaxMindDB.new(filepath, MaxMindDB::LOW_MEMORY_FILE_READER)
-  rescue Errno::ENOENT => e
-    Rails.logger.warn("MaxMindDB (#{filepath}) could not be found: #{e}")
-    nil
-  rescue => e
-    Discourse.warn_exception(e, message: "MaxMindDB (#{filepath}) could not be loaded.")
-    nil
+    begin
+      MaxMindDB.new(filepath, MaxMindDB::LOW_MEMORY_FILE_READER)
+    rescue Errno::ENOENT => e
+      Rails.logger.warn("MaxMindDB (#{filepath}) could not be found: #{e}")
+      nil
+    rescue => e
+      Discourse.warn_exception(e, message: "MaxMindDB (#{filepath}) could not be loaded.")
+      nil
+    end
   end
 
   def lookup(ip, locale: :en, resolve_hostname: false)
@@ -143,14 +143,13 @@ class DiscourseIpInfo
       end
     end
 
+    # this can block for quite a while
+    # only use it explicitly when needed
     if resolve_hostname
       begin
-        dns = Resolv::DNS.new
-        dns.timeouts = HOSTNAME_LOOKUP_TIMEOUT_SECONDS
-
-        result = dns.getname(ip)
+        result = Resolv::DNS.new.getname(ip)
         ret[:hostname] = result&.to_s
-      rescue Resolv::ResolvError, Timeout::Error
+      rescue Resolv::ResolvError
       end
     end
 

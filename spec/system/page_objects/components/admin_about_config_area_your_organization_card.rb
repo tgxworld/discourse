@@ -7,10 +7,6 @@ module PageObjects
         form.field("companyName")
       end
 
-      def company_url_input
-        form.field("companyURL")
-      end
-
       def governing_law_input
         form.field("governingLaw")
       end

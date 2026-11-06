@@ -10,7 +10,7 @@
 
 .staff-actions {
   width: 100%;
-  overflow-wrap: break-word;
+  word-wrap: break-word;
 
   @media screen and (width >= 550px) and (width <= 767px) {
     table.staff-logs tr {
@@ -36,7 +36,7 @@
         display: flex;
 
         a {
-          overflow-wrap: break-word;
+          word-wrap: break-word;
           min-width: 25px;
         }
       }
@@ -132,18 +132,7 @@
   }
 
   td.context {
-    max-width: 20vw;
-  }
-}
-
-.staff-user__filter {
-  min-width: 0;
-  max-width: 20ch;
-  text-align: start;
-
-  .d-button-label {
-    @include ellipsis;
-    display: block;
+    word-break: break-all;
   }
 }
 
@@ -153,8 +142,11 @@
   gap: 0.5em;
   justify-content: space-between;
   margin: 0 0 1em 0;
-  min-width: 0;
-  flex-wrap: wrap;
+
+  // for too small screen, we want it to also wrap
+  @media (width <= 400px) {
+    flex-wrap: wrap;
+  }
 
   .staff-action-logs-controls__left {
     flex: 1 1 auto;
@@ -163,7 +155,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.5em;
-    min-width: 0;
 
     // we want to put it in one line
     .date-filter-container .d-date-time-input-range {
@@ -189,26 +180,15 @@
     gap: 0.5em;
     align-items: center;
   }
-}
 
-.staff-action-logs-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  max-width: 100%;
+  a.filter {
+    .label {
+      font-weight: bold;
+    }
 
-  .btn {
-    gap: var(--space-2);
-    max-width: 100%;
-    overflow-wrap: anywhere;
-    text-align: start;
-    white-space: normal;
-  }
-
-  .staff-action-logs-filters__staff-user .d-button-label {
-    @include ellipsis;
-    max-width: 24ch;
-    min-width: 0;
+    .d-icon {
+      margin-left: 0.5em;
+    }
   }
 }
 
@@ -238,7 +218,7 @@
 table.screened-ip-addresses {
   td.ip_address {
     min-width: 150px;
-    overflow-wrap: break-word;
+    word-wrap: break-word;
 
     input {
       width: 80%;
@@ -292,7 +272,7 @@ table.screened-ip-addresses {
     td.domain {
       grid-column-start: 1;
       grid-column-end: 3;
-      overflow-wrap: break-word;
+      word-wrap: break-word;
     }
   }
 }
@@ -300,7 +280,7 @@ table.screened-ip-addresses {
 // Screened emails
 .screened-emails {
   td.ip_address {
-    overflow-wrap: break-word;
+    word-wrap: break-word;
 
     @include viewport.from(md) {
       max-width: 20vw;
@@ -311,7 +291,7 @@ table.screened-ip-addresses {
     td.email {
       grid-column-start: 1;
       grid-column-end: 3;
-      overflow-wrap: break-word;
+      word-wrap: break-word;
     }
 
     td.ip_address {
@@ -327,13 +307,6 @@ table.screened-ip-addresses {
 }
 
 // Watched words
-.watched-word-regex-errors {
-  max-height: 200px;
-  overflow-y: auto;
-  list-style-type: disc;
-  padding-left: 20px;
-}
-
 .watched-word-box {
   display: inline-block;
   width: 250px;
@@ -446,7 +419,7 @@ table.screened-ip-addresses {
 table.search-logs-list {
   td.term {
     width: 60%;
-    overflow-wrap: break-word;
+    word-wrap: break-word;
 
     @media screen and (width <= 767px) {
       width: 100%;

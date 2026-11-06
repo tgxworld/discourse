@@ -4,7 +4,7 @@ class Admin::ReportsController < Admin::StaffController
   REPORTS_LIMIT = 50
 
   def index
-    render_json_dump(reports: Reports::ListQuery.call(guardian: guardian))
+    render_json_dump(reports: Reports::ListQuery.call)
   end
 
   def bulk
@@ -12,17 +12,21 @@ class Admin::ReportsController < Admin::StaffController
 
     hijack do
       params[:reports].each do |report_type, report_params|
-        raise Discourse::NotFound unless report_type =~ /\A[a-z0-9\_]+\z/
-
         args = parse_params(report_params)
-        args[:guardian] = guardian
 
         report = nil
-        report = Report.find_cached(report_type, args) if report_params[:cache]
+        report = Report.find_cached(report_type, args) if (report_params[:cache])
 
-        if Report.hidden?(report_type, guardian: guardian)
-          report = Report._get(report_type, args)
-          report.error = :not_found
+        if SiteSetting.use_legacy_pageviews
+          if Report::HIDDEN_PAGEVIEW_REPORTS.include?(report_type)
+            report = Report._get(report_type, args)
+            report.error = :not_found
+          end
+        else
+          if Report::HIDDEN_LEGACY_PAGEVIEW_REPORTS.include?(report_type)
+            report = Report._get(report_type, args)
+            report.error = :not_found
+          end
         end
 
         if report
@@ -30,7 +34,7 @@ class Admin::ReportsController < Admin::StaffController
         else
           report = Report.find(report_type, args)
 
-          Report.cache(report) if report_params[:cache] && report
+          Report.cache(report) if (report_params[:cache]) && report
 
           if report.blank?
             report = Report._get(report_type, args)
@@ -49,13 +53,17 @@ class Admin::ReportsController < Admin::StaffController
     report_type = params[:type]
 
     raise Discourse::NotFound unless report_type =~ /\A[a-z0-9\_]+\z/
-    raise Discourse::NotFound if Report.hidden?(report_type, guardian: guardian)
+
+    if SiteSetting.use_legacy_pageviews
+      raise Discourse::NotFound if Report::HIDDEN_PAGEVIEW_REPORTS.include?(report_type)
+    else
+      raise Discourse::NotFound if Report::HIDDEN_LEGACY_PAGEVIEW_REPORTS.include?(report_type)
+    end
 
     args = parse_params(params)
-    args[:guardian] = guardian
 
     report = nil
-    report = Report.find_cached(report_type, args) if params[:cache]
+    report = Report.find_cached(report_type, args) if (params[:cache])
 
     return render_json_dump(report: report) if report
 
@@ -64,7 +72,7 @@ class Admin::ReportsController < Admin::StaffController
 
       raise Discourse::NotFound if report.blank?
 
-      Report.cache(report) if params[:cache]
+      Report.cache(report) if (params[:cache])
 
       render_json_dump(report: report)
     end
@@ -79,7 +87,7 @@ class Admin::ReportsController < Admin::StaffController
           if report_params[:start_date].present?
             Time.parse(report_params[:start_date]).to_date
           else
-            1.day.ago
+            1.days.ago
           end
         ).beginning_of_day
       end_date =
@@ -102,16 +110,6 @@ class Admin::ReportsController < Admin::StaffController
     filters = nil
     filters = report_params[:filters] if report_params.has_key?(:filters)
 
-    include_related_items =
-      ActiveModel::Type::Boolean.new.cast(report_params[:include_related_items])
-
-    {
-      start_date: start_date,
-      end_date: end_date,
-      filters: filters,
-      facets: facets,
-      limit: limit,
-      include_related_items: include_related_items,
-    }
+    { start_date: start_date, end_date: end_date, filters: filters, facets: facets, limit: limit }
   end
 end

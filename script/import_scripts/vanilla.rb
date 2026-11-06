@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "csv"
-require_relative "base"
+require File.expand_path(File.dirname(__FILE__) + "/base.rb")
 
 # NOTE: this importer expects a text file obtained through Vanilla Porter
 # user documentation: https://meta.discourse.org/t/how-to-migrate-import-from-vanilla-to-discourse/27273
@@ -74,7 +74,7 @@ class ImportScripts::Vanilla < ImportScripts::Base
           CSV
             .parse(data.join("\n"), headers: true, header_converters: :symbol)
             .map { |row| row.to_hash }
-        instance_variable_set(:"@#{table}", parsed_data)
+        instance_variable_set("@#{table}".to_sym, parsed_data)
       end
     end
   end

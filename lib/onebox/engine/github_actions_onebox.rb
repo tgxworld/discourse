@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../mixins/github_body"
-require_relative "../mixins/github_api"
+require_relative "../mixins/github_auth_header"
 
 module Onebox
   module Engine
@@ -9,7 +9,7 @@ module Onebox
       include Engine
       include LayoutSupport
       include JSON
-      include Onebox::Mixins::GithubApi
+      include Onebox::Mixins::GithubAuthHeader
 
       matches_regexp(
         %r{^https?://(?:www\.)?(?:(?:\w)+\.)?github\.com/(?<org>.+)/(?<repo>.+)/(actions/runs/[[:digit:]]+|pull/[[:digit:]]*/checks\?check_run_id=[[:digit:]]+)},
@@ -65,7 +65,7 @@ module Onebox
       end
 
       def data
-        result = raw.clone
+        result = raw(github_auth_header(match[:org])).clone
 
         status = "unknown"
         if result["status"] == "completed"
@@ -84,22 +84,11 @@ module Onebox
           elsif type == :pr_run
             pr_url =
               "https://api.github.com/repos/#{match[:org]}/#{match[:repo]}/pulls/#{match[:pr_id]}"
-            load_json(pr_url)["title"]
+            ::MultiJson.load(URI.parse(pr_url).open(read_timeout: timeout))["title"]
           end
 
         {
           :link => @url,
-          :layout_class => "github-onebox --github-#{status}",
-          :repository => "#{match[:org]}/#{match[:repo]}",
-          :i18n => {
-            header: {
-              success: I18n.t("onebox.github.header.success"),
-              failure: I18n.t("onebox.github.header.failure"),
-              pending: I18n.t("onebox.github.header.pending"),
-              unknown: I18n.t("onebox.github.header.unknown"),
-              check_run: I18n.t("onebox.github.header.check_run"),
-            },
-          },
           :title => title,
           :name => result["name"],
           :run_number => result["run_number"],

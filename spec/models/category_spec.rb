@@ -31,89 +31,11 @@ RSpec.describe Category do
     expect(category.errors.to_hash.keys).to contain_exactly(:search_priority)
   end
 
-  describe "#default_top_period" do
-    it "keeps a supported period" do
-      category = Fabricate(:category, user: user, default_top_period: "weekly")
-
-      expect(category.reload.default_top_period).to eq("weekly")
-    end
-
-    it "is nil for an unsupported period" do
-      category = Fabricate(:category, user: user, default_top_period: "hourly")
-
-      expect(category.reload.default_top_period).to be_nil
-    end
-
-    it "is nil for a blank period" do
-      category = Fabricate(:category, user: user, default_top_period: "")
-
-      expect(category.reload.default_top_period).to be_nil
-    end
-  end
-
-  describe "#minimum_required_tags" do
-    it "is zero when blank" do
-      category = Fabricate.build(:category, user: user, minimum_required_tags: nil)
-      category.validate
-
-      expect(category.minimum_required_tags).to eq(0)
-    end
-
-    it "keeps a set value" do
-      category = Fabricate.build(:category, user: user, minimum_required_tags: 3)
-      category.validate
-
-      expect(category.minimum_required_tags).to eq(3)
-    end
-  end
-
-  describe "#subcategory_list_includes_topics?" do
-    def includes_topics?(style)
-      Category.new(subcategory_list_style: style).subcategory_list_includes_topics?
-    end
-
-    it "is true only for the styles that feature topics" do
-      expect(includes_topics?("rows_with_featured_topics")).to eq(true)
-      expect(includes_topics?("boxes_with_featured_topics")).to eq(true)
-      expect(includes_topics?("rows")).to eq(false)
-      expect(includes_topics?("boxes")).to eq(false)
-      expect(includes_topics?(nil)).to eq(false)
-    end
-  end
-
   it "validates uniqueness in case insensitive way" do
     Fabricate(:category_with_definition, name: "Cats")
     cats = Fabricate.build(:category, name: "cats")
     expect(cats).to_not be_valid
     expect(cats.errors[:name]).to be_present
-  end
-
-  it "validates format of color" do
-    expect(Fabricate.build(:category, color: "fff", user:)).to be_valid
-    expect(Fabricate.build(:category, color: "1ac", user:)).to be_valid
-    expect(Fabricate.build(:category, color: "fffeee", user:)).to be_valid
-    expect(Fabricate.build(:category, color: "FF11CC", user:)).to be_valid
-    expect(Fabricate.build(:category, color: "ABC", user:)).to be_valid
-
-    expect(Fabricate.build(:category, color: "ffq1e1", user:)).to_not be_valid
-    expect(Fabricate.build(:category, color: "", user:)).to_not be_valid
-    expect(Fabricate.build(:category, color: "f", user:)).to_not be_valid
-    expect(Fabricate.build(:category, color: "21", user:)).to_not be_valid
-    expect(Fabricate.build(:category, color: "XCA", user:)).to_not be_valid
-  end
-
-  it "validates format of text_color" do
-    expect(Fabricate.build(:category, text_color: "fff", user:)).to be_valid
-    expect(Fabricate.build(:category, text_color: "1ac", user:)).to be_valid
-    expect(Fabricate.build(:category, text_color: "fffeee", user:)).to be_valid
-    expect(Fabricate.build(:category, text_color: "FF11CC", user:)).to be_valid
-    expect(Fabricate.build(:category, text_color: "ABC", user:)).to be_valid
-
-    expect(Fabricate.build(:category, text_color: "ffq1e1", user:)).to_not be_valid
-    expect(Fabricate.build(:category, text_color: "", user:)).to_not be_valid
-    expect(Fabricate.build(:category, text_color: "f", user:)).to_not be_valid
-    expect(Fabricate.build(:category, text_color: "21", user:)).to_not be_valid
-    expect(Fabricate.build(:category, text_color: "XCA", user:)).to_not be_valid
   end
 
   describe "Associations" do
@@ -123,7 +45,7 @@ RSpec.describe Category do
       expect { Fabricate(:category) }.to change { CategorySetting.count }.by(1)
     end
 
-    it "deletes associated sidebar_section_links when the category is destroyed" do
+    it "should delete associated sidebar_section_links when category is destroyed" do
       category_sidebar_section_link = Fabricate(:category_sidebar_section_link)
       category_sidebar_section_link_2 =
         Fabricate(:category_sidebar_section_link, linkable: category_sidebar_section_link.linkable)
@@ -137,146 +59,6 @@ RSpec.describe Category do
         ).count,
       ).to eq(0)
     end
-
-    it "destroys category_posting_review_groups when category is destroyed" do
-      category = Fabricate(:category)
-      category.update!(
-        topic_posting_review_mode: :everyone_except,
-        topic_posting_review_group_ids: [Group::AUTO_GROUPS[:everyone]],
-      )
-
-      expect { category.destroy! }.to change { CategoryPostingReviewGroup.count }.by(-1)
-    end
-  end
-
-  describe ".matching_name_or_slug_ref" do
-    fab!(:guides_category) { Fabricate(:category, name: "Alpha Guides", slug: "alpha-guides") }
-    fab!(:support_category) { Fabricate(:category, name: "Support", slug: "support") }
-    fab!(:bugs_subcategory) do
-      Fabricate(:category, name: "Bug reports", slug: "bugs", parent_category: support_category)
-    end
-
-    it "matches category names, slugs, and parent slug refs" do
-      expect(Category.matching_name_or_slug_ref("alpha")).to contain_exactly(guides_category)
-      expect(Category.matching_name_or_slug_ref("#alpha-guides")).to contain_exactly(
-        guides_category,
-      )
-      expect(Category.matching_name_or_slug_ref("support/bugs")).to contain_exactly(
-        bugs_subcategory,
-      )
-    end
-
-    it "returns the current relation when the filter is blank" do
-      expect(
-        Category.where(id: guides_category.id).matching_name_or_slug_ref(" "),
-      ).to contain_exactly(guides_category)
-    end
-  end
-
-  describe "#topic_posting_review_mode" do
-    fab!(:category)
-    fab!(:group)
-
-    it "sets mode to everyone" do
-      category.update!(topic_posting_review_mode: :everyone)
-      expect(category.reload.topic_posting_review_mode).to eq("everyone")
-    end
-
-    it "saves group associations for everyone_except mode" do
-      category.update!(
-        topic_posting_review_mode: :everyone_except,
-        topic_posting_review_group_ids: [group.id],
-      )
-
-      expect(category.topic_posting_review_group_ids).to contain_exactly(group.id)
-    end
-
-    it "saves group associations for no_one_except mode" do
-      category.update!(
-        topic_posting_review_mode: :no_one_except,
-        topic_posting_review_group_ids: [group.id],
-      )
-
-      expect(category.topic_posting_review_group_ids).to contain_exactly(group.id)
-    end
-
-    it "replaces existing groups when updated with new group_ids" do
-      other_group = Fabricate(:group)
-      category.update!(
-        topic_posting_review_mode: :everyone_except,
-        topic_posting_review_group_ids: [group.id],
-      )
-      category.update!(
-        topic_posting_review_mode: :everyone_except,
-        topic_posting_review_group_ids: [other_group.id],
-      )
-
-      expect(category.topic_posting_review_group_ids).to contain_exactly(other_group.id)
-    end
-
-    it "clears groups when changing from everyone_except to everyone" do
-      category.update!(
-        topic_posting_review_mode: :everyone_except,
-        topic_posting_review_group_ids: [group.id],
-      )
-      category.update!(topic_posting_review_mode: :everyone)
-
-      expect(category.topic_posting_review_group_ids).to be_empty
-    end
-
-    it "ignores group_ids for non-group-based modes" do
-      category.update!(
-        topic_posting_review_mode: :everyone,
-        topic_posting_review_group_ids: [group.id],
-      )
-
-      expect(category.reload.topic_posting_review_mode).to eq("everyone")
-      expect(category.topic_posting_review_group_ids).to be_empty
-    end
-
-    it "validates group_ids are present for everyone_except mode" do
-      category.topic_posting_review_mode = :everyone_except
-      expect(category).not_to be_valid
-    end
-
-    it "validates group_ids are present for no_one_except mode" do
-      category.topic_posting_review_mode = :no_one_except
-      expect(category).not_to be_valid
-    end
-  end
-
-  describe "#reply_posting_review_mode" do
-    fab!(:category)
-    fab!(:group)
-
-    it "sets mode to everyone" do
-      category.update!(reply_posting_review_mode: :everyone)
-      expect(category.reload.reply_posting_review_mode).to eq("everyone")
-    end
-
-    it "saves group associations for everyone_except mode" do
-      category.update!(
-        reply_posting_review_mode: :everyone_except,
-        reply_posting_review_group_ids: [group.id],
-      )
-
-      expect(category.reply_posting_review_group_ids).to contain_exactly(group.id)
-    end
-
-    it "clears groups when changing from everyone_except to everyone" do
-      category.update!(
-        reply_posting_review_mode: :everyone_except,
-        reply_posting_review_group_ids: [group.id],
-      )
-      category.update!(reply_posting_review_mode: :everyone)
-
-      expect(category.reply_posting_review_group_ids).to be_empty
-    end
-
-    it "validates group_ids are present for everyone_except mode" do
-      category.reply_posting_review_mode = :everyone_except
-      expect(category).not_to be_valid
-    end
   end
 
   describe "slug" do
@@ -287,124 +69,11 @@ RSpec.describe Category do
   end
 
   describe "resolve_permissions" do
-    shared_examples "resolving logged in category restrictions" do |granular_permissions_enabled:|
-      it "keeps logged in access restricted and resolves its grant" do
-        SiteSetting.granular_anonymous_and_logged_in_groups_permissions =
-          granular_permissions_enabled
-
-        read_restricted, resolved = Category.resolve_permissions(logged_in_users: :full)
-
-        expect(read_restricted).to eq(true)
-        expect(resolved).to eq(
-          [[Group::AUTO_GROUPS[:logged_in_users], CategoryGroup.permission_types[:full]]],
-        )
-      end
-    end
-
-    context "when granular permissions are disabled" do
-      include_examples "resolving logged in category restrictions",
-                       granular_permissions_enabled: false
-    end
-
-    context "when granular permissions are enabled" do
-      include_examples "resolving logged in category restrictions",
-                       granular_permissions_enabled: true
-    end
-
     it "can determine read_restricted" do
       read_restricted, resolved = Category.resolve_permissions(everyone: :full)
 
       expect(read_restricted).to be false
       expect(resolved).to be_blank
-    end
-  end
-
-  describe "pseudogroup permission validation" do
-    fab!(:category)
-
-    shared_examples "rejecting anonymous category grants" do |enabled:|
-      it "rejects anonymous grants on creation and updates with granular permissions #{enabled}" do
-        SiteSetting.granular_anonymous_and_logged_in_groups_permissions = enabled
-        permissions = { anonymous_users: :readonly, logged_in_users: :full }
-        new_category = Fabricate.build(:category, permissions: permissions)
-
-        expect(new_category.save).to eq(false)
-        expect(new_category.errors[:base]).to include(
-          I18n.t("category.errors.anonymous_permissions_not_supported"),
-        )
-        expect(category.update(permissions: permissions)).to eq(false)
-        expect(category.errors[:base]).to include(
-          I18n.t("category.errors.anonymous_permissions_not_supported"),
-        )
-        expect(category.reload.category_groups).to be_empty
-      end
-    end
-
-    context "when granular permissions are disabled" do
-      include_examples "rejecting anonymous category grants", enabled: false
-    end
-
-    context "when granular permissions are enabled" do
-      include_examples "rejecting anonymous category grants", enabled: true
-    end
-  end
-
-  describe "logged-in parent permission compatibility" do
-    fab!(:group)
-    fab!(:parent) { Fabricate(:category, permissions: { logged_in_users: :readonly }) }
-
-    it "allows a child restricted to a custom group" do
-      child = Fabricate(:category, parent_category: parent, permissions: { group.name => :full })
-
-      expect(child).to be_persisted
-    end
-
-    it "allows an existing public parent to become logged-in-only with a private child" do
-      parent.update!(permissions: { everyone: :readonly })
-      Fabricate(:category, parent_category: parent, permissions: { group.name => :full })
-
-      expect(parent.update(permissions: { logged_in_users: :readonly })).to eq(true)
-    end
-
-    it "rejects a public child beneath a logged-in-only parent" do
-      child =
-        Fabricate.build(:category, parent_category: parent, permissions: { everyone: :readonly })
-
-      expect(child.save).to eq(false)
-      expect(child.errors[:base]).to include(
-        I18n.t("category.errors.permission_conflict", group_names: Group[:everyone].name),
-      )
-    end
-  end
-
-  describe "logged-in pseudogroup posting permissions" do
-    fab!(:user)
-    fab!(:category)
-
-    shared_examples "enforcing logged in posting permissions" do |enabled:|
-      it "honors permission levels with granular permissions #{enabled}" do
-        SiteSetting.granular_anonymous_and_logged_in_groups_permissions = enabled
-
-        %i[readonly create_post full].each do |permission|
-          category.update!(permissions: { logged_in_users: permission })
-
-          expect(Category.topic_create_allowed(user.guardian).exists?(id: category.id)).to eq(
-            permission == :full,
-          )
-          expect(Category.post_create_allowed(user.guardian).exists?(id: category.id)).to eq(
-            permission != :readonly,
-          )
-          expect(Category.post_create_allowed(Guardian.new).exists?(id: category.id)).to eq(false)
-        end
-      end
-    end
-
-    context "when granular permissions are disabled" do
-      include_examples "enforcing logged in posting permissions", enabled: false
-    end
-
-    context "when granular permissions are enabled" do
-      include_examples "enforcing logged in posting permissions", enabled: true
     end
   end
 
@@ -712,36 +381,6 @@ RSpec.describe Category do
     end
   end
 
-  describe "description sanitization" do
-    fab!(:admin)
-
-    it "sanitizes description to prevent XSS on create" do
-      category =
-        Category.create!(
-          name: "XSS Test Category",
-          user: admin,
-          description:
-            "This has <script>alert('xss')</script> and <img src=x onerror=alert('xss')>",
-        )
-
-      expect(category.description).not_to include("<script>")
-      expect(category.description).not_to include("&lt;script&gt;")
-      expect(category.description).to include("&lt;img")
-    end
-
-    it "sanitizes description to prevent XSS on update" do
-      category = Fabricate(:category_with_definition, user: admin)
-      category.update(
-        description: "This has <script>alert('xss')</script> and <img src=x onerror=alert('xss')>",
-      )
-
-      category.reload
-      expect(category.description).not_to include("<script>")
-      expect(category.description).not_to include("&lt;script&gt;")
-      expect(category.description).to include("&lt;img")
-    end
-  end
-
   describe "after create" do
     fab!(:category) { Fabricate(:category_with_definition, name: "Amazing Category") }
     let(:topic) { category.topic }
@@ -843,13 +482,13 @@ RSpec.describe Category do
       expect(permalink.url).to eq(old_url[1..-1])
     end
 
-    it "does not set its description topic to auto-close" do
+    it "should not set its description topic to auto-close" do
       category = Fabricate(:category_with_definition, name: "Closing Topics", auto_close_hours: 1)
       expect(category.topic.public_topic_timer).to eq(nil)
     end
 
     describe "creating a new category with the same slug" do
-      it "has a blank slug at the same level" do
+      it "should have a blank slug if at the same level" do
         category = Fabricate(:category_with_definition, name: "Amazing Categóry")
         expect(category.slug).to be_blank
         expect(category.slug_for_url).to eq("#{category.id}-category")
@@ -872,7 +511,6 @@ RSpec.describe Category do
       let(:new_category) do
         Fabricate(:category_with_definition, name: "2nd Category", user: category.user)
       end
-
       before do
         topic.change_category_to_id(new_category.id)
         topic.reload
@@ -899,7 +537,7 @@ RSpec.describe Category do
   end
 
   describe "update" do
-    it "enforces slug uniqueness" do
+    it "should enforce uniqueness of slug" do
       Fabricate(:category_with_definition, slug: "the-slug")
       c2 = Fabricate(:category_with_definition, slug: "different-slug")
       c2.slug = "the-slug"
@@ -916,13 +554,9 @@ RSpec.describe Category do
     before { SiteSetting.shared_drafts_category = category.id.to_s }
 
     it "is deleted correctly" do
-      Fabricate(:post, topic: category.topic)
       category.destroy
       expect(Category.exists?(id: category_id)).to be false
-      topic = Topic.with_deleted.find(topic_id)
-      expect(topic).to be_trashed
-      expect(Post.only_deleted.where(topic_id:)).to contain_exactly(topic.first_post_with_deleted)
-      expect(topic.posts_count).to eq(1)
+      expect(Topic.with_deleted.where.not(deleted_at: nil).exists?(id: topic_id)).to be true
       expect(SiteSetting.shared_drafts_category).to be_blank
     end
 
@@ -941,7 +575,7 @@ RSpec.describe Category do
   end
 
   describe "latest" do
-    it "updates correctly" do
+    it "should be updated correctly" do
       category = freeze_time(1.minute.ago) { Fabricate(:category_with_definition) }
       post = create_post(category: category.id, created_at: 15.seconds.ago)
 
@@ -1134,14 +768,14 @@ RSpec.describe Category do
     end
 
     describe ".query_parent_category" do
-      it "returns the parent category ID for a parent slug" do
+      it "should return the parent category id given a parent slug" do
         parent_category.name = "Amazing Category"
         expect(parent_category.id).to eq(Category.query_parent_category(parent_category.slug))
       end
     end
 
     describe ".query_category" do
-      it "returns the category" do
+      it "should return the category" do
         category =
           Fabricate(
             :category_with_definition,
@@ -1241,8 +875,26 @@ RSpec.describe Category do
     end
   end
 
+  describe "require topic/post approval" do
+    fab!(:category, :category_with_definition)
+
+    it "delegates methods to category settings" do
+      expect(category).to delegate_method(:require_reply_approval).to(:category_setting)
+      expect(category).to delegate_method(:require_reply_approval=).with_arguments(true).to(
+        :category_setting,
+      )
+      expect(category).to delegate_method(:require_reply_approval?).to(:category_setting)
+
+      expect(category).to delegate_method(:require_topic_approval).to(:category_setting)
+      expect(category).to delegate_method(:require_topic_approval=).with_arguments(true).to(
+        :category_setting,
+      )
+      expect(category).to delegate_method(:require_topic_approval?).to(:category_setting)
+    end
+  end
+
   describe "auto bump" do
-    it "automatically bumps topics correctly" do
+    it "should correctly automatically bump topics" do
       freeze_time
       category = Fabricate(:category_with_definition, created_at: 1.minute.ago)
       category.clear_auto_bump_cache!
@@ -1264,7 +916,8 @@ RSpec.describe Category do
 
       expect(category.auto_bump_topic!).to eq(true)
       expect(Topic.where(bumped_at: time).count).to eq(1)
-      expect(post1.topic.reload.posts_count).to eq(1)
+      # our extra bump message
+      expect(post1.topic.reload.posts_count).to eq(2)
 
       time = freeze_time 13.hours.from_now
 
@@ -1286,7 +939,7 @@ RSpec.describe Category do
       expect(Category.auto_bump_topic!).to eq(false)
     end
 
-    it "does not auto-bump the same topic during the cooldown" do
+    it "should not auto-bump the same topic within the cooldown" do
       freeze_time
       category =
         Fabricate(
@@ -1320,7 +973,7 @@ RSpec.describe Category do
       expect(Topic.where(bumped_at: time).count).to eq(1)
     end
 
-    it "does not auto-bump topics with a scheduled bump" do
+    it "should not automatically bump topics with a bump scheduled" do
       freeze_time
       category = Fabricate(:category_with_definition, created_at: 1.second.ago)
       category.clear_auto_bump_cache!
@@ -1367,54 +1020,8 @@ RSpec.describe Category do
       Fabricate(:category_with_definition, name: "child1", parent_category_id: parent_category.id)
     end
 
-    it "preserves compatible persisted permissions when moving a private category" do
-      private_parent = Fabricate(:private_category, group:)
-      child = Fabricate(:private_category, group:)
-      permissions = child.category_groups.pluck(:group_id, :permission_type)
-
-      expect(child.update(parent_category_id: private_parent.id)).to eq(true)
-      expect(child.reload.category_groups.pluck(:group_id, :permission_type)).to eq(permissions)
-      expect(Guardian.new.can_see?(child)).to eq(false)
-    end
-
-    it "validates permissions built with a new private subcategory" do
-      private_parent = Fabricate(:private_category, group:)
-      child = Fabricate(:private_category, parent_category: private_parent, group:)
-
-      expect(child).to be_persisted
-      expect(child.category_groups.pluck(:group_id)).to contain_exactly(group.id)
-      expect(Guardian.new.can_see?(child)).to eq(false)
-    end
-
-    it "rejects moving a private category with a different audience" do
-      private_parent = Fabricate(:private_category, group:)
-      child = Fabricate(:private_category, group: group2)
-
-      expect(child.update(parent_category_id: private_parent.id)).to eq(false)
-      expect(child.errors.full_messages).to include(
-        I18n.t("category.errors.permission_conflict", group_names: group2.name),
-      )
-      expect(child.reload.parent_category_id).to be_nil
-    end
-
-    it "allows compatible permissions supplied when creating a private subcategory" do
-      private_parent = Fabricate(:private_category, group:)
-      child =
-        Category.new(
-          name: "Private child",
-          user: admin,
-          parent_category_id: private_parent.id,
-          permissions: {
-            group.name => :full,
-          },
-        )
-
-      expect(child.save).to eq(true)
-      expect(Guardian.new.can_see?(child.reload)).to eq(false)
-    end
-
     context "when changing subcategory permissions" do
-      it "is invalid when permissions are less restrictive" do
+      it "it is not valid if permissions are less restrictive" do
         subcategory.set_permissions(group => :readonly)
         subcategory.save!
 
@@ -1497,43 +1104,6 @@ RSpec.describe Category do
     end
   end
 
-  describe "validate special category permissions" do
-    fab!(:group)
-    fab!(:staff_category) do
-      Fabricate(:category).tap do |category|
-        category.set_permissions(staff: :full)
-        category.save!
-      end
-    end
-
-    before { SiteSetting.staff_category_id = staff_category.id }
-
-    it "is invalid when a special category's permissions change" do
-      staff_category.set_permissions(everyone: :full)
-
-      expect(staff_category.valid?).to eq(false)
-      expect(staff_category.errors.full_messages).to contain_exactly(
-        I18n.t("category.errors.special_category_permissions"),
-      )
-    end
-
-    it "is valid when a special category's current permissions are resubmitted" do
-      staff_category.set_permissions(staff: :full)
-      uncategorized = Category.find(SiteSetting.uncategorized_category_id)
-      uncategorized.set_permissions(everyone: :full)
-
-      expect(staff_category.valid?).to eq(true)
-      expect(uncategorized.valid?).to eq(true)
-    end
-
-    it "is valid when a regular category's permissions change" do
-      category = Fabricate(:category)
-      category.set_permissions(group => :full)
-
-      expect(category.valid?).to eq(true)
-    end
-  end
-
   describe "tree metrics" do
     fab!(:category) { Category.create!(user: user, name: "foo") }
 
@@ -1547,13 +1117,13 @@ RSpec.describe Category do
         SQL
 
       describe "#depth_of_descendants" do
-        it "produces max_depth" do
+        it "should produce max_depth" do
           expect(category.depth_of_descendants(3)).to eq(3)
         end
       end
 
       describe "#height_of_ancestors" do
-        it "produces max_height" do
+        it "should produce max_height" do
           expect(category.height_of_ancestors(3)).to eq(3)
         end
       end
@@ -1563,13 +1133,13 @@ RSpec.describe Category do
       before { category.parent_category_id = category.id }
 
       describe "#depth_of_descendants" do
-        it "produces max_depth" do
+        it "should produce max_depth" do
           expect(category.depth_of_descendants(3)).to eq(3)
         end
       end
 
       describe "#height_of_ancestors" do
-        it "produces max_height" do
+        it "should produce max_height" do
           expect(category.height_of_ancestors(3)).to eq(3)
         end
       end
@@ -1579,34 +1149,34 @@ RSpec.describe Category do
       before { category.parent_category_id = subcategory.id }
 
       describe "#depth_of_descendants" do
-        it "produces max_depth" do
+        it "should produce max_depth" do
           expect(category.depth_of_descendants(3)).to eq(3)
         end
       end
 
       describe "#height_of_ancestors" do
-        it "produces max_height" do
+        it "should produce max_height" do
           expect(category.height_of_ancestors(3)).to eq(3)
         end
       end
     end
 
     describe "#depth_of_descendants" do
-      it "is 0 when the category has no descendants" do
+      it "should be 0 when the category has no descendants" do
         expect(subcategory.depth_of_descendants).to eq(0)
       end
 
-      it "is 1 when the category has a descendant" do
+      it "should be 1 when the category has a descendant" do
         expect(category.depth_of_descendants).to eq(1)
       end
     end
 
     describe "#height_of_ancestors" do
-      it "is 0 when the category has no ancestors" do
+      it "should be 0 when the category has no ancestors" do
         expect(category.height_of_ancestors).to eq(0)
       end
 
-      it "is 1 when the category has an ancestor" do
+      it "should be 1 when the category has an ancestor" do
         expect(subcategory.height_of_ancestors).to eq(1)
       end
     end
@@ -1658,16 +1228,6 @@ RSpec.describe Category do
       expect(category_destroyed.reload.topic).to_not eq(nil)
       expect(category_trashed.reload.topic).to_not eq(nil)
     end
-
-    it "does not create a category topic for a category exempted from definition topics" do
-      category = Fabricate(:category_with_definition)
-      category.topic.destroy!
-      category.upsert_custom_fields(Category::SKIP_DEFINITION_CUSTOM_FIELD => true)
-
-      Category.ensure_consistency!
-
-      expect(category.reload.topic_id).to eq(nil)
-    end
   end
 
   describe "#find_by_slug_path" do
@@ -1708,11 +1268,10 @@ RSpec.describe Category do
   describe "#cannot_delete_reason" do
     fab!(:admin)
     let(:guardian) { Guardian.new(admin) }
-
     fab!(:category)
 
     describe "when category is uncategorized" do
-      it "returns the reason" do
+      it "should return the reason" do
         category = Category.find(SiteSetting.uncategorized_category_id)
 
         expect(category.cannot_delete_reason).to eq(I18n.t("category.cannot_delete.uncategorized"))
@@ -1720,7 +1279,7 @@ RSpec.describe Category do
     end
 
     describe "when category has subcategories" do
-      it "returns the expected reason" do
+      it "should return the right reason" do
         category.subcategories << Fabricate(:category)
 
         expect(category.cannot_delete_reason).to eq(
@@ -1730,7 +1289,7 @@ RSpec.describe Category do
     end
 
     describe "when category has topics" do
-      it "returns the expected reason" do
+      it "should return the right reason" do
         topic =
           Fabricate(
             :topic,
@@ -1755,7 +1314,7 @@ RSpec.describe Category do
   describe "#deleting the general category" do
     fab!(:category)
 
-    it "clears the general_category_id site setting" do
+    it "should empty out the general_category_id site_setting" do
       SiteSetting.general_category_id = category.id
       category.destroy
 
@@ -1839,7 +1398,6 @@ RSpec.describe Category do
 
   describe "allowed_tags=" do
     let(:category) { Fabricate(:category) }
-
     fab!(:tag)
     fab!(:tag2, :tag)
 
@@ -1923,80 +1481,6 @@ RSpec.describe Category do
     end
   end
 
-  describe "upload security updates" do
-    it "enqueues an update whenever read restrictions change" do
-      category = Fabricate(:category)
-
-      expect_enqueued_with(
-        job: :update_category_upload_security,
-        args: {
-          category_id: category.id,
-        },
-      ) { category.update!(permissions: { admins: :full }) }
-
-      expect_enqueued_with(
-        job: :update_category_upload_security,
-        args: {
-          category_id: category.id,
-        },
-      ) { category.update!(permissions: { everyone: :full }) }
-    end
-
-    it "does not enqueue an update when read restrictions stay unchanged" do
-      category = Fabricate(:category)
-
-      expect_not_enqueued_with(job: :update_category_upload_security) do
-        category.update!(permissions: { everyone: :readonly })
-      end
-    end
-  end
-
-  describe "category hashtag remapping" do
-    it "enqueues a remap job when the slug changes" do
-      category = Fabricate(:category, slug: "support")
-
-      expect_enqueued_with(
-        job: :remap_hashtag,
-        args: {
-          remaps: [{ type: "category", id: category.id, old_ref: "support" }],
-        },
-      ) { category.update!(slug: "help") }
-    end
-
-    it "enqueues a remap job when the parent changes" do
-      category = Fabricate(:category, slug: "bucks")
-      parent_category = Fabricate(:category, slug: "support")
-
-      expect_enqueued_with(
-        job: :remap_hashtag,
-        args: {
-          remaps: [{ type: "category", id: category.id, old_ref: "bucks" }],
-        },
-      ) { category.update!(parent_category: parent_category) }
-    end
-
-    it "enqueues subcategories in the same job when the slug changes" do
-      parent_category = Fabricate(:category, slug: "support")
-      category = Fabricate(:category, slug: "bucks", parent_category: parent_category)
-
-      expect_enqueued_with(
-        job: :remap_hashtag,
-        args: {
-          remaps: [
-            { type: "category", id: parent_category.id, old_ref: "support" },
-            { type: "category", id: category.id, old_ref: "support:bucks" },
-          ],
-        },
-      ) { parent_category.update!(slug: "help") }
-    end
-
-    it "does not enqueue a remap job for unrelated changes" do
-      category = Fabricate(:category, slug: "support")
-
-      expect_not_enqueued_with(job: :remap_hashtag) { category.update!(color: "ABCDEF") }
-    end
-  end
-
   describe ".ancestors_of" do
     fab!(:category)
     fab!(:subcategory) { Fabricate(:category, parent_category: category) }
@@ -2024,66 +1508,18 @@ RSpec.describe Category do
     end
   end
 
-  describe ".set_permission!" do
-    fab!(:category)
-    fab!(:group)
-    fab!(:user)
+  describe ".limited_categories_matching" do
+    before_all { SiteSetting.max_category_nesting = 3 }
 
-    it "sets full permission for admin users" do
-      admin = Fabricate(:admin)
-      guardian = Guardian.new(admin)
+    fab!(:foo) { Fabricate(:category, name: "foo") }
+    fab!(:bar) { Fabricate(:category, name: "bar", parent_category: foo) }
+    fab!(:baz) { Fabricate(:category, name: "baz", parent_category: bar) }
 
-      result = Category.set_permission!(guardian, category)
-
-      expect(result).to eq(category)
-      expect(category.permission).to eq(CategoryGroup.permission_types[:full])
-    end
-
-    it "sets full permission for users who can create topics" do
-      category.set_permissions(group => :full)
-      category.save!
-      group.add(user)
-      guardian = Guardian.new(user)
-
-      result = Category.set_permission!(guardian, category)
-
-      expect(result).to eq(category)
-      expect(category.permission).to eq(CategoryGroup.permission_types[:full])
-    end
-
-    it "sets create_post permission for users who can post but not create topics" do
-      category.set_permissions(group => :create_post)
-      category.save!
-      group.add(user)
-      guardian = Guardian.new(user)
-
-      result = Category.set_permission!(guardian, category)
-
-      expect(result).to eq(category)
-      expect(category.permission).to eq(CategoryGroup.permission_types[:create_post])
-    end
-
-    it "sets readonly permission for users who can see but not post" do
-      category.set_permissions(group => :readonly)
-      category.save!
-      group.add(user)
-      guardian = Guardian.new(user)
-
-      result = Category.set_permission!(guardian, category)
-
-      expect(result).to eq(category)
-      expect(category.permission).to eq(CategoryGroup.permission_types[:readonly])
-    end
-
-    it "sets no permission for users who cannot see the category" do
-      category.set_permissions(group => :full)
-      category.save!
-      guardian = Guardian.new(user)
-
-      result = Category.set_permission!(guardian, category)
-
-      expect(result).to eq(category)
-      expect(category.permission).to be_nil
+    it "produces results in depth-first pre-order" do
+      SiteSetting.max_category_nesting = 3
+      expect(Category.limited_categories_matching(nil, nil, nil, "baz").pluck(:name)).to eq(
+        %w[foo bar baz],
+      )
     end
   end
 end

@@ -32,8 +32,6 @@ he:
         cta: "יצירת לוח התוצאות הראשון שלך"
         none: "לא נוצרו עדיין לוחות תוצאות."
         confirm_destroy: "למחוק את לוח התוצאות הזה?"
-        section:
-          groups: "קבוצות"
         date:
           range: "טווח תאריך מ/עד"
           from: "מתאריך"
@@ -48,9 +46,6 @@ he:
         default_period: "פרק זמן כברירת מחדל"
         default_period_help: "להגדיר את פרק הזמן כברירת המחדל כדי להציג ללוח התוצאות הזה."
         period_filter_disabled: "השבתת מסנן פרק זמן"
-        weight:
-          post_created: "פוסט נוצר"
-          solution: "פתרון"
         period:
           all_time: "מאז ומתמיד"
           yearly: "שנתי"
@@ -64,7 +59,9 @@ he:
       close: "סגירה"
       delete: "מחיקה"
       edit: "עריכה"
+      back: "חזרה"
       save: "שמירה"
+      apply: "החלה"
       recalculate: "חישוב ניקוד מחדש"
       recalculating: "הניקוד מחושב מחדש…"
       completed: "סיימנו! הניקוד חושב מחדש בהצלחה."
@@ -80,11 +77,4 @@ he:
       admin:
         title: "משחוק"
         name: "שם"
-        created_by: "נוצר על ידי"
         period: "פרק זמן"
-    discourse_workflows:
-      gamification_score:
-        username: "משתמש"
-        date: "תאריך"
-        description: "תיאור"
-        category_id: "קטגוריה"

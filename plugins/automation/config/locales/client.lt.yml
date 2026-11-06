@@ -27,12 +27,6 @@ lt:
         text:
           label: Tekstas
       triggerables:
-        post_flag_created:
-          fields:
-            categories:
-              label: Kategorijos
-            tags:
-              label: Žymos
         user_badge_granted:
           fields:
             badge:
@@ -138,8 +132,6 @@ lt:
               label: Temos ID
             user:
               label: Narys
-        set_topic_timer:
-          title: Nustatyti temos laikmatį
       models:
         trigger:
           name:
@@ -153,5 +145,7 @@ lt:
             label: Versija
           status:
             label: Statusas
+          enabled:
+            label: Galimas
           disabled:
             label: Uždrausta

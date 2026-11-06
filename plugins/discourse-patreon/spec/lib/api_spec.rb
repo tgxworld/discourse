@@ -1,84 +1,39 @@
 # frozen_string_literal: true
 
-RSpec.describe Patreon::Api do
-  def stub_url(status, url)
+RSpec.describe ::Patreon::Api do
+  let(:url) do
+    "https://api.patreon.com/oauth2/api/current_user/campaigns?include=rewards,creator,goals,pledges&page%5Bcount%5D=100"
+  end
+
+  def stub(status)
     content = { status: status, headers: { "Content-Type" => "application/json" }, body: "{}" }
+
     stub_request(:get, url).to_return(content)
   end
 
   before { SiteSetting.stubs(patreon_enabled: true) }
 
-  context "with API v1" do
-    let(:url) do
-      "https://api.patreon.com/oauth2/api/current_user/campaigns?include=rewards,creator,goals,pledges&page%5Bcount%5D=100"
-    end
+  it "should add admin warning message for invalid api response" do
+    stub(401)
 
-    before { SiteSetting.patreon_api_version = "1" }
+    described_class.get(url)
 
-    it "adds an admin warning for an invalid API response" do
-      stub_url(401, url)
-      described_class.campaign_data
-      expect(ProblemCheckTracker[:access_token_invalid].blips).to eq(1)
-    end
-
-    it "logs a warning" do
-      stub_url(500, url)
-      Discourse.expects(:warn_exception).once
-      described_class.campaign_data
-    end
-
-    it "does not double the base URL when uri is already absolute" do
-      absolute_url =
-        "https://api.patreon.com/api/oauth2/api/campaigns/123/pledges?page%5Bcount%5D=100&sort=created"
-      stub_url(200, absolute_url)
-
-      result = described_class.get(absolute_url)
-      expect(result).to eq({})
-      expect(WebMock).to have_requested(:get, absolute_url)
-    end
+    expect(ProblemCheckTracker[:access_token_invalid].blips).to eq(1)
+    expect(AdminNotice.find_by(identifier: :access_token_invalid).message).to eq(
+      I18n.t("dashboard.problem.access_token_invalid", base_path: Discourse.base_path),
+    )
   end
 
-  context "with API v2" do
-    let(:url) do
-      "https://www.patreon.com/api/oauth2/v2/campaigns?include=tiers,creator&fields%5Bcampaign%5D=created_at,name,patron_count&fields%5Btier%5D=title,amount_cents,created_at"
-    end
+  it "should not add admin warning message for valid api response" do
+    stub(200)
 
-    before { SiteSetting.patreon_api_version = "2" }
+    expect(ProblemCheckTracker[:access_token_invalid].blips).to eq(0)
+  end
 
-    it "adds an admin warning for an invalid API response" do
-      stub_url(401, url)
-      described_class.campaign_data
-      expect(ProblemCheckTracker[:access_token_invalid].blips).to eq(1)
-      expect(AdminNotice.find_by(identifier: :access_token_invalid).message).to include(
-        "www.patreon.com/platform/documentation/clients",
-      )
-    end
+  it "should add warning log" do
+    stub(500)
 
-    it "does not add an admin warning for a valid API response" do
-      stub_url(200, url)
-      described_class.campaign_data
-
-      expect(ProblemCheckTracker[:access_token_invalid].blips).to eq(0)
-      expect(AdminNotice.find_by(identifier: :access_token_invalid)).to eq(nil)
-    end
-
-    it "clears the admin warning when the API responds again" do
-      stub_url(401, url)
-      described_class.campaign_data
-      expect(AdminNotice.find_by(identifier: :access_token_invalid)).to be_present
-
-      stub_url(200, url)
-      described_class.campaign_data
-
-      expect(ProblemCheckTracker[:access_token_invalid].blips).to eq(0)
-      expect(ProblemCheckTracker[:access_token_invalid]).to be_passing
-      expect(AdminNotice.find_by(identifier: :access_token_invalid)).to eq(nil)
-    end
-
-    it "logs a warning" do
-      stub_url(500, url)
-      Discourse.expects(:warn_exception).once
-      expect(described_class.campaign_data).to eq(error: I18n.t(described_class::INVALID_RESPONSE))
-    end
+    Discourse.expects(:warn_exception).once
+    expect(described_class.get(url)).to eq(error: I18n.t(described_class::INVALID_RESPONSE))
   end
 end

@@ -8,16 +8,7 @@ Fabricator(:topic) do
   end
 end
 
-Fabricator(:topic_with_op, from: :topic) do
-  transient :raw
-  after_create do |topic, transient|
-    if transient[:raw].present?
-      Fabricate(:post, topic: topic, raw: transient[:raw])
-    else
-      Fabricate(:post, topic: topic)
-    end
-  end
-end
+Fabricator(:topic_with_op, from: :topic) { after_create { |topic| Fabricate(:post, topic: topic) } }
 
 Fabricator(:deleted_topic, from: :topic) { deleted_at { 1.minute.ago } }
 
@@ -36,10 +27,6 @@ Fabricator(:private_message_topic, from: :topic) do
       Fabricate.build(:topic_allowed_user, user: t[:recipient] || Fabricate(:user)),
     ]
   end
-end
-
-Fabricator(:system_message_topic, from: :private_message_topic) do
-  subtype TopicSubtype.system_message
 end
 
 Fabricator(:group_private_message_topic, from: :topic) do

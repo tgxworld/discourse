@@ -1,11 +1,7 @@
 {
   // Enable gjs support for eslint
   "eslint.validate": [
-    "javascript",
-    "typescript",
-    "html",
     "glimmer-js",
-    "glimmer-ts"
   ],
 
   // Formatter configuration:
@@ -45,10 +41,5 @@
   // disable other stylesheet linters
   "css.validate": false,
   "less.validate": false,
-  "scss.validate": false,
-
-  // Devcontainer: Allow QUnit Chromium in Docker
-  "terminal.integrated.env.linux": {
-    "DISCOURSE_DISABLE_BROWSER_SANDBOX": "1"
-  }
+  "scss.validate": false
 }

@@ -35,13 +35,23 @@ module IntegrationHelpers
     delete "/session"
   end
 
-  def server_session
-    @server_session ||=
+  def read_secure_session
+    id =
       begin
-        # This route will init the server_session for us
-        get "/session/hp.json" unless request&.session.try(:[], :server_session_id)
-
-        ServerSession.new(session[:server_session_id])
+        session[:secure_session_id]
+      rescue NoMethodError
+        nil
       end
+
+    # This route will init the secure_session for us
+    get "/session/hp.json" if id.nil?
+
+    SecureSession.new(session[:secure_session_id])
+  end
+
+  def write_secure_session(key, value)
+    secure_session = read_secure_session
+    secure_session[key] = value
+    secure_session
   end
 end

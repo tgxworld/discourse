@@ -35,7 +35,7 @@ class RateLimiter
       def rate_limit(limiter_method = nil)
         limiter_method = limiter_method || :default_rate_limiter
 
-        after_create do |*args|
+        self.after_create do |*args|
           next if @rate_limits_disabled
 
           if rate_limiter = public_send(limiter_method)
@@ -45,14 +45,14 @@ class RateLimiter
           end
         end
 
-        after_destroy do
+        self.after_destroy do
           next if @rate_limits_disabled
           if rate_limiter = public_send(limiter_method)
             rate_limiter.rollback!
           end
         end
 
-        after_rollback do
+        self.after_rollback do
           next if @rate_limits_disabled
           if rate_limiter = public_send(limiter_method)
             if @performed.present? && @performed[limiter_method]

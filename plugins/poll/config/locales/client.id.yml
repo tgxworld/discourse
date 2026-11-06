@@ -33,8 +33,6 @@ id:
       cast-votes:
         title: "Gunakan suaramu"
         label: "Pilih sekarang!"
-      keep-vote:
-        label: "Kembali"
       show-results:
         title: "Lihat hasil polling"
         label: "Hasil"
@@ -96,3 +94,5 @@ id:
           add: Tambahkan opsi
         automatic_close:
           label: Tutup poll secara otomatis
+        show_advanced: "Tampilkan Opsi Lanjutan"
+        hide_advanced: "Sembunyikan Opsi Lanjutan"

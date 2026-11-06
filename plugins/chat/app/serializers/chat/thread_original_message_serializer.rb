@@ -13,14 +13,16 @@ module Chat
                :user
 
     def excerpt
-      object.excerpt_for_display
+      object.excerpt || object.build_excerpt
     end
 
     def mentioned_users
       object
         .user_mentions
-        .first(SiteSetting.max_mentions_per_chat_message)
-        .filter_map(&:user)
+        .includes(user: :user_option)
+        .limit(SiteSetting.max_mentions_per_chat_message)
+        .map(&:user)
+        .compact
         .sort_by(&:id)
         .map { |user| BasicUserSerializer.new(user, root: false, include_status: true) }
         .as_json
