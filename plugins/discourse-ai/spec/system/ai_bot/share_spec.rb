@@ -1,8 +1,9 @@
 # frozen_string_literal: true
-RSpec.describe "Share conversation", type: :system do
+RSpec.describe "Share conversation" do
   fab!(:admin) { Fabricate(:admin, username: "ai_sharer") }
   fab!(:gpt_4) { Fabricate(:llm_model, name: "gpt-4") }
-  let(:bot_user) { DiscourseAi::AiBot::EntryPoint.find_user_from_model("gpt-4") }
+  fab!(:agent) { Fabricate(:ai_agent, name: "Share Agent", default_llm: gpt_4).tap(&:ensure_user!) }
+  let(:bot_user) { agent.user }
 
   let(:pm) do
     Fabricate(
@@ -36,33 +37,29 @@ RSpec.describe "Share conversation", type: :system do
     toggle_enabled_bots(bots: [gpt_4])
     sign_in(admin)
 
-    bot_user.update!(username: "gpt-4")
-
     Group.refresh_automatic_groups!
 
     cdp.allow_clipboard
     page.execute_script("window.navigator.clipboard.writeText('')")
   end
 
-  it "can share a conversation with a persona user" do
+  it "can share a conversation with a agent user" do
     clip_text = nil
 
-    persona = Fabricate(:ai_persona, name: "Tester")
-    persona.create_user!
+    agent = Fabricate(:ai_agent, name: "Tester")
+    agent.create_user!
 
     Fabricate(:post, topic: pm, user: admin, raw: "How do I do stuff?")
-    Fabricate(:post, topic: pm, user: persona.user, raw: "No idea")
+    Fabricate(:post, topic: pm, user: agent.user, raw: "No idea")
 
     visit(pm.url)
 
     find("#post_2 .post-action-menu__share-ai").click
 
-    try_until_success do
-      clip_text = cdp.read_clipboard
-      expect(clip_text).not_to eq("")
-    end
+    clip_text = cdp.read_clipboard
+    expect(clip_text).not_to eq("")
 
-    conversation = (<<~TEXT).strip
+    conversation = <<~TEXT.strip
       <details class='ai-quote'>
       <summary>
       <span>This is my special PM</span>
@@ -92,12 +89,10 @@ RSpec.describe "Share conversation", type: :system do
 
     find("#post_2 .post-action-menu__share-ai").click
 
-    try_until_success do
-      clip_text = cdp.read_clipboard
-      expect(clip_text).not_to eq("")
-    end
+    clip_text = cdp.read_clipboard
+    expect(clip_text).not_to eq("")
 
-    conversation = (<<~TEXT).strip
+    conversation = <<~TEXT.strip
       <details class='ai-quote'>
       <summary>
       <span>This is my special PM</span>
@@ -108,7 +103,7 @@ RSpec.describe "Share conversation", type: :system do
 
       test test test user reply 1
 
-      **gpt-4:**
+      **#{bot_user.username}:**
 
       test test test bot reply 1
       </details>
@@ -122,12 +117,10 @@ RSpec.describe "Share conversation", type: :system do
     find(".ai-share-modal__slider input").set("2")
     find(".ai-share-modal button.btn-primary").click
 
-    try_until_success do
-      clip_text = cdp.read_clipboard
-      expect(clip_text).not_to eq("")
-    end
+    clip_text = cdp.read_clipboard
+    expect(clip_text).not_to eq("")
 
-    conversation = (<<~TEXT).strip
+    conversation = <<~TEXT.strip
       <details class='ai-quote'>
       <summary>
       <span>This is my special PM</span>
@@ -138,7 +131,7 @@ RSpec.describe "Share conversation", type: :system do
 
       test test test user reply 2
 
-      **gpt-4:**
+      **#{bot_user.username}:**
 
       test test test bot reply 2
 
@@ -146,7 +139,7 @@ RSpec.describe "Share conversation", type: :system do
 
       test test test user reply 3
 
-      **gpt-4:**
+      **#{bot_user.username}:**
 
       test test test bot reply 3
       </details>

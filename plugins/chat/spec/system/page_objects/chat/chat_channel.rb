@@ -11,6 +11,10 @@ module PageObjects
         @messages ||= PageObjects::Components::Chat::Messages.new(".chat-channel")
       end
 
+      def filter
+        @filter ||= PageObjects::Components::Chat::Filter.new
+      end
+
       def selection_management
         @selection_management ||=
           PageObjects::Components::Chat::SelectionManagement.new(".chat-channel")
@@ -44,6 +48,17 @@ module PageObjects
         find(".chat-composer.is-send-enabled .chat-composer-button.-send").click
       end
 
+      def join_channel
+        find(".toggle-channel-membership-button.-join").click
+      end
+
+      def click_preview_card_login
+        find(
+          ".chat-channel-preview-card .btn",
+          text: I18n.t("js.chat.channel.preview_card.log_in"),
+        ).click
+      end
+
       def message_by_id_selector(id)
         ".chat-channel .chat-messages-container .chat-message-container[data-id=\"#{id}\"]"
       end
@@ -64,6 +79,18 @@ module PageObjects
 
       def has_no_loading_skeleton?
         has_no_css?(".chat-skeleton")
+      end
+
+      # Scrolls to the top to load the previous page of messages.
+      def scroll_to_top
+        3.times do
+          page.execute_script(<<~JS)
+            const scroller = document.querySelector("#{PageObjects::Components::Chat::Messages::SELECTOR}");
+            scroller.scrollTop = -scroller.scrollHeight;
+            scroller.dispatchEvent(new Event("scroll"));
+          JS
+          sleep 0.1
+        end
       end
 
       def has_selection_management?
@@ -97,7 +124,7 @@ module PageObjects
         if emoji_name
           message.find(".chat-message-actions [data-emoji-name=\"#{emoji_name}\"]").click
         else
-          message.find(".react-btn").click
+          message.find(".chat-message-react-btn").click
         end
       end
 
@@ -117,7 +144,7 @@ module PageObjects
       def send_message(text = nil)
         text ||= fake_chat_message
         text = text.chomp if text.present? # having \n on the end of the string counts as an Enter keypress
-        composer.fill_in(with: text)
+        fill_composer(text)
         click_send_message
         expect(page).to have_no_css(".chat-message.-not-processed")
         text
@@ -140,6 +167,16 @@ module PageObjects
 
       def find_reaction(message, emoji)
         within(message_reactions_list(message)) { return find("[data-emoji-name=\"#{emoji}\"]") }
+      end
+
+      def click_quick_reaction(message, emoji_name)
+        hover_message(message)
+        find(".chat-message-actions [data-emoji-name=\"#{emoji_name}\"]").click
+      end
+
+      def open_emoji_picker(message)
+        hover_message(message)
+        find(".chat-message-react-btn").click
       end
 
       def find_quick_reaction(emoji_name)
@@ -190,7 +227,7 @@ module PageObjects
 
       def open_thread_list
         find(thread_list_button_selector).click
-        PageObjects::Components::Chat::ThreadList.new.has_loaded?
+        expect(PageObjects::Components::Chat::ThreadList.new).to have_loaded
       end
 
       def has_unread_thread_indicator?(count:)
@@ -203,6 +240,55 @@ module PageObjects
 
       def has_no_unread_thread_indicator?
         has_no_css?("#{thread_list_button_selector}.has-unreads")
+      end
+
+      def has_join_channel_button?
+        has_css?(".toggle-channel-membership-button.-join")
+      end
+
+      def has_anonymous_preview_card?
+        has_css?(".chat-channel-preview-card.--anon")
+      end
+
+      def has_no_composer?
+        has_no_css?(".chat-composer")
+      end
+
+      def has_no_search_button?
+        has_no_css?(".c-navbar__filter")
+      end
+
+      def has_no_star_button?
+        has_no_css?(".c-navbar__star-channel-button")
+      end
+
+      def has_onboarding_banner_below_header?
+        has_css?(".c-routes.--channel .chat-channel__overlays .admin-onboarding-banner") &&
+          has_css?(".admin-onboarding-banner", count: 1)
+      end
+
+      def has_onboarding_banner_below_pinned_bar?
+        has_css?(".chat-pinned-bar") &&
+          has_css?(".chat-channel__overlays .admin-onboarding-banner") &&
+          page.evaluate_script(<<~JS)
+            document.querySelector(".chat-channel__overlays .admin-onboarding-banner").getBoundingClientRect().top >=
+              document.querySelector(".chat-pinned-bar").getBoundingClientRect().bottom
+          JS
+      end
+
+      def has_elevated_overlays?
+        has_css?(".chat-channel__overlays.--over-content")
+      end
+
+      def has_no_elevated_overlays?
+        has_no_css?(".chat-channel__overlays.--over-content")
+      end
+
+      def has_notices_below_onboarding_banner?
+        has_css?(".chat-notices .chat-retention-reminder") && page.evaluate_script(<<~JS)
+            document.querySelector(".chat-notices").getBoundingClientRect().top >=
+              document.querySelector(".chat-channel__overlays .admin-onboarding-banner").getBoundingClientRect().bottom
+          JS
       end
 
       def thread_list_button_selector

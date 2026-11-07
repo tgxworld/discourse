@@ -37,6 +37,11 @@ RSpec.describe TagHashtagDataSource do
       expect(described_class.search(guardian, "fact", 5).map(&:slug)).not_to include("fact")
     end
 
+    it "includes tags only used in personal messages for users who cannot tag PMs" do
+      tag1.update!(pm_topic_count: 1)
+      expect(described_class.search(guardian, "fact", 5).map(&:slug)).to include("fact")
+    end
+
     it "returns an array of HashtagAutocompleteService::HashtagItem" do
       expect(described_class.search(guardian, "fact", 1).first).to be_a(
         HashtagAutocompleteService::HashtagItem,
@@ -73,6 +78,48 @@ RSpec.describe TagHashtagDataSource do
     it "does not return tags the user has muted" do
       TagUser.create(user: user, tag: tag2, notification_level: TagUser.notification_levels[:muted])
       expect(described_class.search_without_term(guardian, 5).map(&:slug)).not_to include("factor")
+    end
+
+    it "includes tags only used in personal messages for users who cannot tag PMs" do
+      tag1.update!(pm_topic_count: 1)
+      expect(described_class.search_without_term(guardian, 5).map(&:slug)).to include("fact")
+    end
+  end
+
+  context "with content_localization_enabled" do
+    before { SiteSetting.content_localization_enabled = true }
+
+    fab!(:ja_user) { Fabricate(:user, locale: "ja") }
+    let(:ja_guardian) { Guardian.new(ja_user) }
+
+    describe "#search" do
+      it "returns localized tag names" do
+        tag2.update!(locale: "en")
+        Fabricate(:tag_localization, tag: tag2, locale: "ja", name: "要因")
+
+        I18n.with_locale(:ja) do
+          results = described_class.search(ja_guardian, "fact", 5)
+          factor_result = results.find { |r| r.id == tag2.id }
+
+          expect(factor_result).to be_present
+          expect(factor_result.text).to eq("要因")
+        end
+      end
+    end
+
+    describe "#search_without_term" do
+      it "returns localized tag names" do
+        tag2.update!(locale: "en")
+        Fabricate(:tag_localization, tag: tag2, locale: "ja", name: "要因")
+
+        I18n.with_locale(:ja) do
+          results = described_class.search_without_term(ja_guardian, 5)
+          factor_result = results.find { |r| r.id == tag2.id }
+
+          expect(factor_result).to be_present
+          expect(factor_result.text).to eq("要因")
+        end
+      end
     end
   end
 end

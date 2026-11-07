@@ -57,7 +57,61 @@ RSpec.describe FinalDestination do
         ignore_redirects: %w[http://google.com youtube.com https://meta.discourse.org ://bing.com],
       )
 
-    expect(fd.ignored).to eq(%w[test.localhost google.com meta.discourse.org])
+    expect(fd.ignored).to eq(
+      [
+        { hostname: "test.localhost", path: "" },
+        { hostname: "google.com", path: "" },
+        { hostname: "meta.discourse.org", path: "" },
+      ],
+    )
+  end
+
+  it "does not ignore URLs on the same domain but outside subfolder path" do
+    set_subfolder "/forum"
+
+    fd =
+      FinalDestination.new(
+        "https://test.localhost/blog/article",
+        ignore_redirects: ["https://test.localhost/forum"],
+      )
+
+    expect(fd.ignored).to include({ hostname: "test.localhost", path: "/forum" })
+
+    fd_stub_request(:head, "https://test.localhost/blog/article").to_return(
+      status: 200,
+      headers: {
+        "Content-Type" => "text/html",
+      },
+    )
+
+    result = fd.resolve
+    expect(result.to_s).to eq("https://test.localhost/blog/article")
+    expect(fd.status).to eq(:resolved)
+  end
+
+  it "still performs SSRF checks for URLs on same domain but outside subfolder" do
+    set_subfolder "/forum"
+
+    FinalDestination::SSRFDetector
+      .stubs(:lookup_and_filter_ips)
+      .with("test.localhost")
+      .raises(FinalDestination::SSRFDetector::DisallowedIpError)
+
+    fd =
+      FinalDestination.new(
+        "https://test.localhost/blog/article",
+        ignore_redirects: ["https://test.localhost/forum"],
+      )
+
+    result = fd.resolve
+    expect(result).to be_nil
+    expect(fd.status).to eq(:invalid_address)
+  end
+
+  it "includes the base_url in ignored hostnames by default" do
+    fd = FinalDestination.new("https://meta.discourse.org")
+    uri = URI.parse(Discourse.base_url)
+    expect(fd.ignored).to eq([{ hostname: uri.hostname, path: uri.path }])
   end
 
   it "raises an error when URL is too long to encode" do
@@ -106,6 +160,39 @@ RSpec.describe FinalDestination do
     it "ignores redirects" do
       final = FinalDestination.new("https://ignore-me.com/some-url", opts)
       expect(final.resolve.to_s).to eq("https://ignore-me.com/some-url")
+      expect(final.redirected?).to eq(false)
+      expect(final.status).to eq(:resolved)
+    end
+
+    it "does not ignore redirects when hostname does not properly match forum hostname" do
+      invalid_ignore_url = Discourse.base_url_no_prefix + ".baddude.com.au/some-url"
+      fd_stub_request(:head, invalid_ignore_url).to_return(doc_response)
+      FinalDestination::SSRFDetector.expects(:lookup_and_filter_ips).once.returns(["1.2.3.4"])
+      final = FinalDestination.new(invalid_ignore_url, opts)
+      expect(final.resolve.to_s).to eq(invalid_ignore_url)
+      expect(final.redirected?).to eq(false)
+      expect(final.status).to eq(:resolved)
+    end
+
+    it "does not ignore redirects when hostname contains forum hostname as prefix" do
+      base_hostname = URI.parse(Discourse.base_url_no_prefix).hostname
+      invalid_ignore_url = "https://attacker-#{base_hostname}/some-url"
+      fd_stub_request(:head, invalid_ignore_url).to_return(doc_response)
+      FinalDestination::SSRFDetector.expects(:lookup_and_filter_ips).once.returns(["1.2.3.4"])
+      final = FinalDestination.new(invalid_ignore_url, opts)
+      expect(final.resolve.to_s).to eq(invalid_ignore_url)
+      expect(final.redirected?).to eq(false)
+      expect(final.status).to eq(:resolved)
+    end
+
+    it "does not ignore redirects when dots in hostname are replaced with other characters" do
+      base_hostname = URI.parse(Discourse.base_url_no_prefix).hostname
+      mangled_hostname = base_hostname.gsub(".", "-")
+      invalid_ignore_url = "https://#{mangled_hostname}.attacker.com/some-url"
+      fd_stub_request(:head, invalid_ignore_url).to_return(doc_response)
+      FinalDestination::SSRFDetector.expects(:lookup_and_filter_ips).once.returns(["1.2.3.4"])
+      final = FinalDestination.new(invalid_ignore_url, opts)
+      expect(final.resolve.to_s).to eq(invalid_ignore_url)
       expect(final.redirected?).to eq(false)
       expect(final.status).to eq(:resolved)
     end
@@ -269,7 +356,7 @@ RSpec.describe FinalDestination do
     end
 
     context "when forcing GET" do
-      it "will do a GET when forced" do
+      it "uses GET when forced" do
         url = "https://force.get.com/posts?page=4"
         get_stub = fd_stub_request(:get, url)
         head_stub = fd_stub_request(:head, url)
@@ -281,7 +368,7 @@ RSpec.describe FinalDestination do
         expect(head_stub).to_not have_been_requested
       end
 
-      it "will do a HEAD if not forced" do
+      it "uses HEAD when GET is not forced" do
         url = "https://eviltrout.com/posts?page=2"
         get_stub = fd_stub_request(:get, url)
         head_stub = fd_stub_request(:head, url)
@@ -293,7 +380,7 @@ RSpec.describe FinalDestination do
         expect(head_stub).to have_been_requested
       end
 
-      it "will do a GET when forced on a wildcard subdomain" do
+      it "uses GET for a matching wildcard subdomain" do
         url = "https://any-subdomain.ihaveawildcard.com/some/other/content"
         get_stub = fd_stub_request(:get, url)
         head_stub = fd_stub_request(:head, url)
@@ -305,7 +392,7 @@ RSpec.describe FinalDestination do
         expect(head_stub).to_not have_been_requested
       end
 
-      it "will do a HEAD if on a subdomain of a forced get domain without a wildcard" do
+      it "uses HEAD for subdomains when the forced GET domain has no wildcard" do
         url = "https://particularly.eviltrout.com/has/a/secret/plan"
         get_stub = fd_stub_request(:get, url)
         head_stub = fd_stub_request(:head, url)
@@ -333,7 +420,7 @@ RSpec.describe FinalDestination do
       context "when the status code is 405" do
         before { fd_stub_request(:head, "https://eviltrout.com").to_return(status: 405) }
 
-        it "will try a GET" do
+        it "tries a GET" do
           final = FinalDestination.new("https://eviltrout.com", opts)
           expect(final.resolve.to_s).to eq("https://discourse.org")
           expect(final.status).to eq(:resolved)
@@ -344,7 +431,7 @@ RSpec.describe FinalDestination do
       context "when the status code is 501" do
         before { fd_stub_request(:head, "https://eviltrout.com").to_return(status: 501) }
 
-        it "will try a GET" do
+        it "tries a GET" do
           final = FinalDestination.new("https://eviltrout.com", opts)
           expect(final.resolve.to_s).to eq("https://discourse.org")
           expect(final.status).to eq(:resolved)
@@ -381,7 +468,7 @@ RSpec.describe FinalDestination do
       end
     end
 
-    it "should use the correct format for cookies when there is only one cookie" do
+    it "formats a single cookie correctly" do
       fd_stub_request(:head, "https://eviltrout.com").to_return(
         status: 302,
         headers: {
@@ -403,7 +490,7 @@ RSpec.describe FinalDestination do
       expect(final.cookie).to eq("foo=219ffwef9w0f")
     end
 
-    it "should use the correct format for cookies when there are multiple cookies" do
+    it "formats multiple cookies correctly" do
       fd_stub_request(:head, "https://eviltrout.com").to_return(
         status: 302,
         headers: {
@@ -450,6 +537,48 @@ RSpec.describe FinalDestination do
         expect(final.resolve.to_s).to eq("https://eviltrout.com/this/is/an/image")
         expect(final.content_type).to eq("image/jpeg")
         expect(final.status).to eq(:resolved)
+      end
+    end
+
+    context "when the response is a bot verification challenge" do
+      it "detects a WAF challenge header" do
+        fd_stub_request(:head, "https://eviltrout.com").to_return(
+          status: 202,
+          headers: {
+            "x-amzn-waf-action" => "challenge",
+          },
+        )
+
+        final = FinalDestination.new("https://eviltrout.com", opts)
+        expect(final.resolve).to be_nil
+        expect(final.status).to eq(:failure)
+        expect(final.status_code).to eq(202)
+        expect(final.bot_challenge?).to eq(true)
+      end
+
+      it "detects a CDN challenge header" do
+        fd_stub_request(:head, "https://eviltrout.com").to_return(
+          status: 403,
+          headers: {
+            "cf-mitigated" => "challenge",
+          },
+        )
+
+        final = FinalDestination.new("https://eviltrout.com", opts)
+        expect(final.resolve).to be_nil
+        expect(final.status).to eq(:failure)
+        expect(final.status_code).to eq(403)
+        expect(final.bot_challenge?).to eq(true)
+      end
+
+      it "does not report a challenge for a plain error response" do
+        fd_stub_request(:head, "https://eviltrout.com").to_return(status: 403)
+
+        final = FinalDestination.new("https://eviltrout.com", opts)
+        expect(final.resolve).to be_nil
+        expect(final.status).to eq(:failure)
+        expect(final.status_code).to eq(403)
+        expect(final.bot_challenge?).to eq(false)
       end
     end
   end
@@ -599,7 +728,7 @@ RSpec.describe FinalDestination do
   end
 
   describe "https cache" do
-    it "will cache https lookups" do
+    it "caches HTTPS lookups" do
       FinalDestination.clear_https_cache!("wikipedia.com")
 
       fd_stub_request(:head, "http://wikipedia.com/image.png").to_return(

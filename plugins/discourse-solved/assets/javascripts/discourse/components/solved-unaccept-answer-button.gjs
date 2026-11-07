@@ -2,15 +2,15 @@ import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
-import { htmlSafe } from "@ember/template";
-import { and } from "truth-helpers";
-import DButton from "discourse/components/d-button";
-import icon from "discourse/helpers/d-icon";
+import DTooltip from "discourse/float-kit/components/d-tooltip";
 import { ajax } from "discourse/lib/ajax";
 import { popupAjaxError } from "discourse/lib/ajax-error";
-import { formatUsername } from "discourse/lib/utilities";
+import DButton from "discourse/ui-kit/d-button";
+import DInterpolatedTranslation from "discourse/ui-kit/d-interpolated-translation";
+import DUserLink from "discourse/ui-kit/d-user-link";
+import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { i18n } from "discourse-i18n";
-import DTooltip from "float-kit/components/d-tooltip";
+import setAcceptedSolutions from "../lib/set-accepted-solutions.js";
 
 export default class SolvedUnacceptAnswerButton extends Component {
   @service appEvents;
@@ -18,23 +18,27 @@ export default class SolvedUnacceptAnswerButton extends Component {
 
   @tracked saving = false;
 
-  get solvedBy() {
-    if (!this.siteSettings.show_who_marked_solved) {
-      return;
-    }
+  get answerInfo() {
+    return this.args.post.topic.accepted_answers?.find(
+      (a) => a.post_number === this.args.post.post_number
+    );
+  }
 
-    const username = this.args.post.topic.accepted_answer.accepter_username;
-    const name = this.args.post.topic.accepted_answer.accepter_name;
-    const displayedName =
-      this.siteSettings.display_name_on_posts && name
-        ? name
-        : formatUsername(username);
-    if (this.args.post.topic.accepted_answer.accepter_username) {
-      return i18n("solved.marked_solved_by", {
-        username: displayedName,
-        username_lower: username,
-      });
-    }
+  get showAcceptedBy() {
+    return !(
+      !this.siteSettings.show_who_marked_solved ||
+      !this.answerInfo?.accepter_username
+    );
+  }
+
+  get acceptedByUsername() {
+    return this.answerInfo?.accepter_username;
+  }
+
+  get acceptedByDisplayName() {
+    const username = this.answerInfo?.accepter_username;
+    const name = this.answerInfo?.accepter_name;
+    return this.siteSettings.display_name_on_posts && name ? name : username;
   }
 
   @action
@@ -46,11 +50,6 @@ export default class SolvedUnacceptAnswerButton extends Component {
       await unacceptPost(post);
 
       this.appEvents.trigger("discourse-solved:solution-toggled", post);
-
-      // TODO (glimmer-post-stream) the Glimmer Post Stream does not listen to this event
-      post.get("topic.postStream.posts").forEach((p) => {
-        this.appEvents.trigger("post-stream:refresh", { id: p.id });
-      });
     } catch (e) {
       popupAjaxError(e);
     } finally {
@@ -61,7 +60,7 @@ export default class SolvedUnacceptAnswerButton extends Component {
   <template>
     <span class="extra-buttons">
       {{#if (and @post.can_accept_answer @post.accepted_answer)}}
-        {{#if this.solvedBy}}
+        {{#if this.showAcceptedBy}}
           <DTooltip @identifier="post-action-menu__solved-accepted-tooltip">
             <:trigger>
               <DButton
@@ -74,7 +73,16 @@ export default class SolvedUnacceptAnswerButton extends Component {
               />
             </:trigger>
             <:content>
-              {{htmlSafe this.solvedBy}}
+              <DInterpolatedTranslation
+                @key="solved.marked_solved_by"
+                as |Placeholder|
+              >
+                <Placeholder @name="user">
+                  <DUserLink @username={{this.acceptedByUsername}}>
+                    {{this.acceptedByDisplayName}}
+                  </DUserLink>
+                </Placeholder>
+              </DInterpolatedTranslation>
             </:content>
           </DTooltip>
         {{else}}
@@ -93,7 +101,7 @@ export default class SolvedUnacceptAnswerButton extends Component {
           class="accepted-text"
           title={{i18n "solved.accepted_description"}}
         >
-          <span>{{icon "check"}}</span>
+          <span>{{dIcon "check"}}</span>
           <span class="accepted-label">
             {{i18n "solved.solution"}}
           </span>
@@ -111,12 +119,12 @@ async function unacceptPost(post) {
   const topic = post.topic;
 
   try {
-    await ajax("/solution/unaccept", {
+    const remainingAcceptedAnswers = await ajax("/solution/unaccept", {
       type: "POST",
       data: { id: post.id },
     });
 
-    topic.setAcceptedSolution(undefined);
+    setAcceptedSolutions(topic, remainingAcceptedAnswers);
   } catch (e) {
     popupAjaxError(e);
   }

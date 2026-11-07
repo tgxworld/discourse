@@ -1,3 +1,5 @@
+@use "lib/viewport";
+
 .ProseMirror-container {
   margin: 0;
   overscroll-behavior: contain;
@@ -15,7 +17,7 @@
 
   > div:first-child,
   > details:first-child {
-    margin-top: 0.5rem;
+    margin-top: var(--space-4);
 
     // This is hacky, but helps having the leading gapcursor at the right position
     &.ProseMirror-gapcursor {
@@ -49,21 +51,81 @@
     font-size: var(--font-up-1-rem);
   }
 
-  img[data-placeholder="true"] {
-    animation: placeholder 1.5s infinite;
+  .upload-placeholder {
+    &.--image {
+      position: relative;
+      display: inline-block;
+      vertical-align: bottom;
 
-    @keyframes placeholder {
-      0% {
-        opacity: 0.6;
-      }
+      img {
+        max-width: 350px;
 
-      50% {
-        opacity: 0.4;
+        @include viewport.until(sm) {
+          max-width: 100%;
+        }
+        height: auto;
+        border-radius: var(--d-border-radius);
+        display: block;
+        animation: placeholder 1.5s infinite;
       }
+    }
 
-      100% {
-        opacity: 0.6;
+    &.--file {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: 0 var(--space-1) 0 0.65em;
+      border: 1px solid var(--primary-low-mid);
+      border-radius: var(--d-border-radius);
+      color: var(--primary-high);
+      font-size: var(--font-down-1-rem);
+
+      .d-icon {
+        fill: currentcolor;
       }
+    }
+
+    &__overlay {
+      position: absolute;
+      bottom: var(--space-2);
+      right: var(--space-2);
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: 0 var(--space-1) 0 0.65em;
+      background: var(--primary-very-low);
+      border: 1px solid var(--primary-low-mid);
+      border-radius: var(--d-border-radius);
+      color: var(--primary-high);
+      font-size: var(--font-down-1-rem);
+    }
+
+    &__progress {
+      color: var(--tertiary);
+      font-weight: bold;
+    }
+
+    &__filename,
+    &__icon {
+      animation: placeholder 1.5s infinite;
+    }
+
+    &__cancel {
+      padding: 0.5em 0.65em;
+    }
+  }
+
+  @keyframes placeholder {
+    0% {
+      opacity: 0.6;
+    }
+
+    50% {
+      opacity: 0.4;
+    }
+
+    100% {
+      opacity: 0.6;
     }
   }
 
@@ -152,7 +214,13 @@
   }
 
   .html-block {
-    border: 1px dashed var(--primary-low-mid);
+    border: 2px dashed var(--primary-low-mid);
+    border-radius: var(--d-border-radius);
+
+    &.ProseMirror-selectednode {
+      outline-offset: -2px;
+      border-radius: calc(var(--d-border-radius) + 2px);
+    }
 
     &::after {
       position: absolute;
@@ -160,8 +228,194 @@
       top: 0;
       content: "HTML";
       font-size: var(--font-down-2-rem);
-      color: var(--primary-low-mid);
+      color: var(--primary-medium);
       z-index: 1;
+      background: var(--secondary-very-high);
+      padding: 0 var(--space-1);
+      border-bottom-left-radius: var(--d-border-radius);
+      border-top-right-radius: var(--d-border-radius);
+    }
+  }
+
+  .composer-image-grid {
+    position: relative;
+
+    // Portal whitespace should not create anonymous line boxes in the grid.
+    display: flex;
+    flex-direction: column;
+    min-block-size: var(--composer-image-grid-controls-min-block-size, 0);
+    border: 2px dashed var(--primary-low-mid);
+    border-radius: var(--d-border-radius);
+    padding: var(--space-half) var(--space-2) 0 var(--space-2);
+    margin-block: var(--space-4);
+
+    &__content {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      padding-block: var(--space-2);
+
+      p {
+        margin: 0;
+      }
+    }
+
+    &__remove-btn {
+      color: var(--primary-medium);
+      padding: var(--space-1) var(--space-2);
+      background: var(--secondary);
+      border: 0;
+      border-radius: var(--d-border-radius);
+      font-size: var(--font-down-1-rem);
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+      cursor: pointer;
+
+      @include viewport.until(sm) {
+        padding: var(--space-2) var(--space-4);
+      }
+
+      html.discourse-no-touch &:hover:not(:disabled) {
+        color: var(--primary);
+        background: var(--d-hover);
+      }
+
+      &:active:not(:disabled) {
+        background: var(--secondary);
+      }
+
+      &:focus-visible {
+        @include default-focus;
+      }
+    }
+
+    img:not(.ProseMirror-separator) {
+      @include viewport.until(md) {
+        width: 150px !important;
+        height: 150px !important;
+      }
+
+      @include viewport.from(md) {
+        width: 200px !important;
+        height: 200px !important;
+      }
+      object-fit: cover;
+    }
+
+    &.ProseMirror-selectednode {
+      outline-offset: -2px;
+      border-radius: calc(var(--d-border-radius) + 2px);
+    }
+  }
+
+  .composer-html-inline-node {
+    outline: 1px dashed var(--primary-low-mid);
+    padding-inline: 1px;
+    border-radius: 2px;
+  }
+
+  .composer-wrap-node {
+    position: relative;
+    white-space: normal;
+    border: 2px dashed var(--primary-low-mid);
+    border-radius: var(--d-border-radius);
+    padding-inline: var(--space-2);
+    margin-block: var(--space-4);
+
+    &.ProseMirror-selectednode {
+      outline-offset: -2px;
+      border-radius: calc(var(--d-border-radius) + 2px);
+    }
+
+    .d-wrap-indicator {
+      color: var(--primary-medium);
+      background-color: var(--secondary);
+      border: none;
+      cursor: pointer;
+
+      &:hover {
+        color: var(--primary);
+      }
+
+      &.--inline {
+        font-size: var(--font-down-2);
+        padding: var(--space-half) 0;
+        margin-left: calc(-1 * var(--space-1));
+        margin-right: var(--space-2);
+        vertical-align: text-top;
+        display: inline-block;
+      }
+
+      &.--block {
+        position: absolute;
+        z-index: 1;
+        font-size: var(--font-down-1);
+        left: var(--space-2);
+        top: calc(-1 * var(--space-3) + 1px);
+        padding: 0 var(--space-1);
+      }
+    }
+  }
+
+  // both faces share one grid cell, so swapping them does not move the document
+  .composer-preview-node {
+    position: relative;
+    display: grid;
+    border: 1px solid var(--primary-low);
+    border-radius: var(--d-border-radius);
+    margin-block: var(--space-4);
+    overflow: hidden;
+
+    > * {
+      grid-area: 1 / 1;
+
+      // a face fits the block and scrolls its own overflow, rather than
+      // sizing the shared cell to fit its content
+      min-width: 0;
+      min-height: 0;
+    }
+
+    &.ProseMirror-selectednode {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+
+    // hidden, but still holding its space. `&` is a complex selector here, so
+    // the hidden face is named in full rather than suffixed onto a second `&`
+    &:not(.--source) .composer-preview-node__source,
+    &.--source .composer-preview-node__preview {
+      visibility: hidden;
+    }
+
+    // a long source scrolls within a bounded face instead of growing the block.
+    // A preview that frames itself overrides the bound to match that frame.
+    &__source {
+      max-height: var(--composer-preview-node-source-max-height, 14lh);
+    }
+
+    &__source pre {
+      margin: 0;
+      height: 100%;
+      overflow: auto;
+
+      // the code element paints the backdrop, so it must fill the taller face's row
+      code {
+        box-sizing: border-box;
+        min-height: 100%;
+        max-height: none;
+      }
+    }
+
+    &__preview {
+      user-select: none;
+      cursor: pointer;
+
+      // the editor's display rules would otherwise override a renderer's [hidden]
+      [hidden] {
+        display: none;
+      }
     }
   }
 
@@ -191,10 +445,13 @@
 
 .fk-d-menu[data-identifier="composer-link-toolbar"],
 .fk-d-menu[data-identifier="composer-image-toolbar"],
-.fk-d-menu[data-identifier="composer-image-alt-text"] {
+.fk-d-menu[data-identifier="composer-image-alt-text"],
+.fk-d-menu[data-identifier^="composer-image-grid-mode-"],
+.fk-d-menu[data-identifier^="composer-image-grid-remove-"],
+.fk-d-menu[data-identifier="composer-preview-toolbar"],
+.fk-d-menu[data-identifier="composer-onebox-toolbar"] {
   user-select: none;
   z-index: z("composer", "dropdown");
-  animation: fade-in ease 0.25s 1 forwards !important;
 
   .fk-d-menu__inner-content {
     overflow: visible;
@@ -227,6 +484,7 @@
 
     &.--active {
       background: var(--d-selected);
+      color: var(--d-selected-text-color);
     }
   }
 
@@ -318,6 +576,85 @@
 
     &.ProseMirror-selectednode {
       user-select: none;
+      cursor: zoom-in;
+    }
+  }
+
+  &:has(.image-alt-text-input:focus-within) img.ProseMirror-selectednode {
+    cursor: default;
+  }
+}
+
+.composer-video-node {
+  aspect-ratio: 16 / 9;
+  background-color: rgb(var(--always-black-rgb));
+  border-radius: var(--d-border-radius);
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  position: relative;
+  width: 100%;
+
+  &__error {
+    background-color: var(--danger-low);
+    color: var(--primary);
+    inset-block-start: 0;
+    inset-inline: 0;
+    padding: var(--space-2);
+    position: absolute;
+    z-index: 1;
+  }
+
+  &__play.btn-flat {
+    --d-button-flat-bg-color: color-mix(
+      in srgb,
+      var(--primary) 75%,
+      transparent
+    );
+    --d-button-flat-bg-color--focus: color-mix(
+      in srgb,
+      var(--primary) 85%,
+      transparent
+    );
+    --d-button-flat-bg-color--hover: color-mix(
+      in srgb,
+      var(--primary) 85%,
+      transparent
+    );
+    --d-button-flat-icon-color: var(--secondary);
+    --d-button-flat-icon-color--hover: var(--secondary);
+    padding: 1rem;
+    z-index: 2;
+
+    .d-icon {
+      filter: drop-shadow(3px 3px 2px rgb(var(--always-black-rgb), 0.25));
+      height: 2.3rem;
+      transition: transform 0.15s;
+      width: 2.3rem;
+
+      @media (prefers-reduced-motion) {
+        transition: transform 0s;
+      }
+    }
+
+    @include hover {
+      .d-icon {
+        transform: scale(1.2);
+      }
+    }
+  }
+
+  &__video {
+    display: block;
+    height: 100%;
+    border-radius: var(--d-border-radius);
+    inset: 0;
+    object-fit: contain;
+    position: absolute;
+    width: 100%;
+
+    &.is-inactive {
+      pointer-events: none;
     }
   }
 }
@@ -375,8 +712,12 @@
 
 // stylelint-disable-next-line no-duplicate-selectors
 .ProseMirror {
-  word-wrap: break-word;
+  overflow-wrap: break-word;
   white-space: break-spaces;
+
+  // Any children with position fixed will be relative to this element (eg. footnotes)
+  // see https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Display/Containing_block#identifying_the_containing_block
+  contain: layout;
 }
 
 // stylelint-disable-next-line no-duplicate-selectors
@@ -418,7 +759,8 @@ li.ProseMirror-selectednode::after {
   right: -2px;
   top: -2px;
   bottom: -2px;
-  border: 2px solid #8cf;
+  border: 2px solid var(--tertiary-high);
+  border-radius: var(--d-border-radius);
   pointer-events: none;
 }
 

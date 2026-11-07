@@ -28,6 +28,8 @@ bg:
       cast-votes:
         title: "Изчислете вашите гласове"
         label: "Гласувай сега!"
+      keep-vote:
+        label: "Назад"
       show-results:
         title: "Покажи резултатите от гласуването"
         label: "Резултати"
@@ -67,7 +69,6 @@ bg:
       error_while_fetching_voters: "Получи се грешка при показването на гласовете."
       error_while_exporting_results: "Съжаляваме, възникна грешка при експортирането на резултатите от анкетата."
       ui_builder:
-        title: Създаване на анкета
         insert: Вмъкване на анкета
         help:
           options_min_count: Въведете поне 1 опция.
@@ -106,5 +107,3 @@ bg:
           add: Добавяне на опция
         automatic_close:
           label: Автоматично затваряне на анкетата
-        show_advanced: "Покажи разширените опции"
-        hide_advanced: "Скрий разширените опции"

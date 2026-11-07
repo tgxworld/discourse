@@ -16,11 +16,15 @@ class CategoryHashtagDataSource
     "category"
   end
 
+  def self.ref_for(category_id)
+    Category.find_by(id: category_id)&.slug_ref
+  end
+
   def self.category_to_hashtag_item(category)
     HashtagAutocompleteService::HashtagItem.new.tap do |item|
       item.text =
         (
-          if category.parent_category
+          if category.parent_category && !SiteSetting.enable_category_hashtag_cards
             "#{category.parent_category.name} > #{category.name}"
           else
             category.name
@@ -79,12 +83,16 @@ class CategoryHashtagDataSource
         .includes(:parent_category)
 
     if condition == HashtagAutocompleteService.search_conditions[:starts_with]
-      base_search = base_search.where("starts_with(LOWER(slug), LOWER(:term))", term: term)
+      base_search =
+        base_search.where(
+          "starts_with(#{Category.normalize_sql("slug")}, #{Category.normalize_sql(":term")})",
+          term:,
+        )
     elsif condition == HashtagAutocompleteService.search_conditions[:contains]
       base_search =
         base_search.where(
-          "position(LOWER(:term) IN LOWER(name)) <> 0 OR position(LOWER(:term) IN LOWER(slug)) <> 0",
-          term: term,
+          "position(#{Category.normalize_sql(":term")} IN #{Category.normalize_sql("name")}) <> 0 OR position(#{Category.normalize_sql(":term")} IN #{Category.normalize_sql("slug")}) <> 0",
+          term:,
         )
     else
       raise Discourse::InvalidParameters.new("Unknown search condition: #{condition}")

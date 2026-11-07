@@ -6,14 +6,16 @@
 
 et:
   js:
+    discourse_ai:
+      features:
+        data_explorer:
+          name: "Andmete eksportija"
     explorer:
       or: "või"
       title: "Andmete eksportija"
-      create: "Loo uus"
       create_placeholder: "Päringu nimi..."
-      import:
-        label: "Impordi"
-        modal: "Impordi päring"
+      ai:
+        generate: "Genereeri"
       help:
         label: "Abi"
       schema:
@@ -24,17 +26,15 @@ et:
           yes: "Jah"
           no: "Ei"
           null_: "Nulli"
-      export: "Ekspordi"
-      save: "Salvesta muudatused"
-      saverun: "Salvesta muudatused ja käivita"
       run: "Käivita"
-      undo: "Loobu muudatustest"
-      edit: "Muuda"
       delete: "Kustuta"
-      download_json: "JSON"
-      download_csv: "CSV"
+      name: "Nimi"
       query_groups: "Rühmad"
+      query_tags: "Sildid"
       query_description: "Kirjeldus"
-      save_params: "Määra vaikeväärtused"
       reset_params: "Nulli"
-      search_placeholder: "Otsi..."
+    discourse_workflows:
+      nodes:
+        "action:sql": "Andmete eksportija"
+      sql:
+        param_value: "Väärtus"

@@ -1,7 +1,8 @@
 import { tracked } from "@glimmer/tracking";
 import { ajax } from "discourse/lib/ajax";
-import { shortDateNoYear } from "discourse/lib/formatter";
+import { smartShortDate } from "discourse/lib/formatter";
 import { cook } from "discourse/lib/text";
+import { isAiCreditLimitError, popupAiCreditLimitError } from "./ai-errors.js";
 
 export default class AiTopicSummary {
   @tracked text = "";
@@ -26,7 +27,9 @@ export default class AiTopicSummary {
       })
       .then(() => {
         if (update.done) {
-          this.summarizedOn = shortDateNoYear(topicSummary.summarized_on);
+          this.summarizedOn = smartShortDate(
+            new Date(topicSummary.summarized_on)
+          );
           this.summarizedBy = topicSummary.algorithm;
           this.newPostsSinceSummary = topicSummary.new_posts_since_summary;
           this.outdated = topicSummary.outdated;
@@ -50,23 +53,34 @@ export default class AiTopicSummary {
       return;
     }
 
-    let fetchURL = `/discourse-ai/summarization/t/${topicId}?`;
+    let fetchURL = `/discourse-ai/summarization/t/${topicId}`;
+    let ajaxOpts = {};
 
     if (currentUser) {
-      fetchURL += `stream=true`;
+      ajaxOpts.type = "POST";
+      ajaxOpts.data = { stream: true };
 
       if (this.canRegenerate) {
-        fetchURL += "&skip_age_check=true";
+        ajaxOpts.data.skip_age_check = true;
       }
     }
 
     this.loading = true;
 
-    return ajax(fetchURL).then((data) => {
-      if (!currentUser) {
-        data.done = true;
-        this.processUpdate(data);
-      }
-    });
+    return ajax(fetchURL, ajaxOpts)
+      .then((data) => {
+        if (!currentUser) {
+          data.done = true;
+          this.processUpdate(data);
+        }
+      })
+      .catch((error) => {
+        this.loading = false;
+        if (isAiCreditLimitError(error)) {
+          popupAiCreditLimitError(error);
+        } else {
+          throw error;
+        }
+      });
   }
 }

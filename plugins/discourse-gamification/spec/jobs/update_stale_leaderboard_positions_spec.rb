@@ -1,11 +1,17 @@
 # frozen_string_literal: true
 
 describe Jobs::UpdateStaleLeaderboardPositions do
-  fab!(:leaderboard) { Fabricate(:gamification_leaderboard) }
-  fab!(:score) { Fabricate(:gamification_score, user_id: leaderboard.created_by_id) }
+  fab!(:leaderboard, :gamification_leaderboard)
+  fab!(:score) do
+    Fabricate(
+      :gamification_leaderboard_score,
+      leaderboard_id: leaderboard.id,
+      user_id: leaderboard.created_by_id,
+    )
+  end
   let(:leaderboard_positions) { DiscourseGamification::LeaderboardCachedView.new(leaderboard) }
 
-  it "it updates all stale leaderboard positions" do
+  it "updates all stale leaderboard positions" do
     DiscourseGamification::LeaderboardCachedView.new(leaderboard).create
 
     expect(leaderboard_positions.scores.length).to eq(1)

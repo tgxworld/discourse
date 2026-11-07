@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "Composer Form Templates", type: :system do
+describe "Composer Form Templates" do
   fab!(:user) { Fabricate(:user, refresh_auto_groups: true) }
   fab!(:form_template_1) do
     Fabricate(
@@ -126,6 +126,11 @@ describe "Composer Form Templates", type: :system do
           attributes:
             none_label: "Select an item"
             label: "multi-select"
+        - type: composer
+          id: 7
+          attributes:
+            label: "composer"
+            placeholder: "Enter rich text here"
           ),
     )
   end
@@ -210,9 +215,10 @@ describe "Composer Form Templates", type: :system do
   let(:composer) { PageObjects::Components::Composer.new }
   let(:form_template_chooser) { PageObjects::Components::SelectKit.new(".form-template-chooser") }
   let(:topic_page) { PageObjects::Pages::Topic.new }
+  let(:cdp) { PageObjects::CDP.new }
 
   before do
-    SiteSetting.experimental_form_templates = true
+    SiteSetting.enable_form_templates = true
     SiteSetting.authorized_extensions = "*"
     sign_in user
   end
@@ -221,7 +227,7 @@ describe "Composer Form Templates", type: :system do
     it "does not show the modal if there is no draft on a topic without a template" do
       category_page.visit(category_no_template)
       category_page.new_topic_button.click
-      composer.close
+      composer.discard
       expect(composer).to be_closed
     end
 
@@ -229,7 +235,7 @@ describe "Composer Form Templates", type: :system do
       category_page.visit(category_no_template)
       category_page.new_topic_button.click
       composer.fill_content("abc")
-      composer.close
+      composer.discard
       expect(composer).to be_opened
       expect(composer).to have_discard_draft_modal
     end
@@ -237,7 +243,7 @@ describe "Composer Form Templates", type: :system do
     it "does not show the modal if there is no draft on a topic with a topic template" do
       category_page.visit(category_topic_template)
       category_page.new_topic_button.click
-      composer.close
+      composer.discard
       expect(composer).to be_closed
     end
 
@@ -245,7 +251,7 @@ describe "Composer Form Templates", type: :system do
       category_page.visit(category_topic_template)
       category_page.new_topic_button.click
       composer.append_content(" some more content")
-      composer.close
+      composer.discard
       expect(composer).to be_opened
       expect(composer).to have_discard_draft_modal
     end
@@ -253,27 +259,22 @@ describe "Composer Form Templates", type: :system do
     it "does not show the modal if on a topic with a form template" do
       category_page.visit(category_with_template_1)
       category_page.new_topic_button.click
-      composer.close
+      composer.discard
       expect(composer).to be_closed
     end
 
-    context "when the default template has a topic template" do
-      SiteSetting.default_composer_category =
-        (
-          if SiteSetting.general_category_id != -1
-            SiteSetting.general_category_id
-          else
-            SiteSetting.uncategorized_category_id
-          end
-        )
-      let(:default_category) { Category.find(SiteSetting.default_composer_category) }
+    context "when the default category has a topic template" do
+      let(:default_category) { Fabricate(:category) }
 
-      before { default_category.update!(topic_template: "Testing") }
+      before do
+        default_category.update!(topic_template: "Testing")
+        SiteSetting.default_composer_category = default_category.id
+      end
 
       it "does not show the modal if there is no draft" do
         category_page.visit(default_category)
         category_page.new_topic_button.click
-        composer.close
+        composer.discard
         expect(composer).to be_closed
       end
 
@@ -281,7 +282,7 @@ describe "Composer Form Templates", type: :system do
         category_page.visit(default_category)
         category_page.new_topic_button.click
         composer.append_content(" some more content")
-        composer.close
+        composer.discard
         expect(composer).to be_opened
         expect(composer).to have_discard_draft_modal
       end
@@ -391,6 +392,24 @@ describe "Composer Form Templates", type: :system do
     expect(form_template_chooser).to have_selected_name(form_template_2.name)
   end
 
+  it "allows uploading from paste after switching from a template category to a non-template category" do
+    category_page.visit(category_with_template_1)
+    category_page.new_topic_button.click
+    expect(composer).to have_no_composer_input
+    expect(composer).to have_form_template
+
+    composer.switch_category(category_no_template.name)
+    expect(composer).to have_composer_input
+
+    composer.focus
+    cdp.allow_clipboard
+    cdp.copy_test_image
+    cdp.paste
+
+    expect(composer).to have_no_in_progress_uploads
+    expect(composer.preview).to have_css(".image-wrapper")
+  end
+
   it "forms a post when template fields are filled in" do
     topic_title = "A topic about Batman"
 
@@ -401,11 +420,15 @@ describe "Composer Form Templates", type: :system do
     composer.create
 
     expect(topic_page).to have_topic_title(topic_title)
-    expect(find("#{topic_page.post_by_number_selector(1)} .cooked p")).to have_content(
-      "Bruce Wayne",
+
+    expect(page).to have_css(
+      "#{topic_page.post_by_number_selector(1)} .cooked p",
+      text: "Bruce Wayne",
     )
-    expect(find("#{topic_page.post_by_number_selector(1)} .cooked h3")).to have_content(
-      "What is your full name?",
+
+    expect(page).to have_css(
+      "#{topic_page.post_by_number_selector(1)} .cooked h3",
+      text: "What is your full name?",
     )
   end
 
@@ -415,26 +438,31 @@ describe "Composer Form Templates", type: :system do
     category_page.visit(category_with_upload_template)
     category_page.new_topic_button.click
     attach_file "prescription-uploader",
-                "#{Rails.root}/spec/fixtures/images/logo.png",
+                "#{Rails.root.join("spec/fixtures/images/logo.png")}",
                 make_visible: true
+
+    expect(page).to have_css(".d-editor-preview img[alt='logo.png']")
+
     composer.fill_title(topic_title)
     composer.fill_form_template_field("input", "Bruce Wayne")
     composer.create
 
-    expect(find("#{topic_page.post_by_number_selector(1)} .cooked")).to have_css(
-      "img[alt='logo.png']",
-    )
+    expect(page).to have_css("#{topic_page.post_by_number_selector(1)} .cooked img[alt='logo.png']")
   end
 
   it "doesn't allow uploading an invalid file type" do
     category_page.visit(category_with_upload_template)
     category_page.new_topic_button.click
     attach_file "prescription-uploader",
-                "#{Rails.root}/spec/fixtures/images/animated.gif",
+                "#{Rails.root.join("spec/fixtures/images/animated.gif")}",
                 make_visible: true
-    expect(find("#dialog-holder .dialog-body p", visible: :all)).to have_content(
-      I18n.t("js.pick_files_button.unsupported_file_picked", { types: ".jpg, .png" }),
+
+    expect(page).to have_css(
+      "#dialog-holder .dialog-body p",
+      text: I18n.t("js.pick_files_button.unsupported_file_picked", { types: ".jpg, .png" }),
+      visible: :all,
     )
+
     expect(page).to have_no_css(".form-template-field__uploaded-files")
   end
 
@@ -444,26 +472,24 @@ describe "Composer Form Templates", type: :system do
     category_page.visit(category_with_upload_template)
     category_page.new_topic_button.click
     attach_file "prescription-uploader",
-                "#{Rails.root}/spec/fixtures/images/logo.png",
+                "#{Rails.root.join("spec/fixtures/images/logo.png")}",
                 make_visible: true
     attach_file "additional-docs-uploader",
                 [
-                  "#{Rails.root}/spec/fixtures/media/small.mp3",
-                  "#{Rails.root}/spec/fixtures/media/small.mp4",
-                  "#{Rails.root}/spec/fixtures/pdf/small.pdf",
+                  "#{Rails.root.join("spec/fixtures/media/small.mp3")}",
+                  "#{Rails.root.join("spec/fixtures/media/small.mp4")}",
+                  "#{Rails.root.join("spec/fixtures/pdf/small.pdf")}",
                 ],
                 make_visible: true
     composer.fill_title(topic_title)
     composer.fill_form_template_field("input", "Peter Parker}")
     composer.create
 
-    expect(find("#{topic_page.post_by_number_selector(1)} .cooked")).to have_css(
-      "img[alt='logo.png']",
-    )
-    expect(find("#{topic_page.post_by_number_selector(1)} .cooked")).to have_css("a.attachment")
-    expect(find("#{topic_page.post_by_number_selector(1)} .cooked")).to have_css("audio")
-    expect(find("#{topic_page.post_by_number_selector(1)} .cooked")).to have_css(
-      ".video-placeholder-container",
+    expect(page).to have_css("#{topic_page.post_by_number_selector(1)} .cooked img[alt='logo.png']")
+    expect(page).to have_css("#{topic_page.post_by_number_selector(1)} .cooked a.attachment")
+    expect(page).to have_css("#{topic_page.post_by_number_selector(1)} .cooked audio")
+    expect(page).to have_css(
+      "#{topic_page.post_by_number_selector(1)} .cooked .video-placeholder-container",
     )
   end
 
@@ -473,14 +499,14 @@ describe "Composer Form Templates", type: :system do
     category_page.visit(category_with_upload_template)
     category_page.new_topic_button.click
     attach_file "prescription-uploader",
-                "#{Rails.root}/spec/fixtures/images/logo.png",
+                "#{Rails.root.join("spec/fixtures/images/logo.png")}",
                 make_visible: true
     composer.fill_title(topic_title)
     attach_file "prescription-uploader",
-                "#{Rails.root}/spec/fixtures/images/fake.jpg",
+                "#{Rails.root.join("spec/fixtures/images/fake.jpg")}",
                 make_visible: true
 
-    expect(find(".form-template-field__uploaded-files")).to have_css("li", count: 1)
+    expect(page).to have_css(".form-template-field__uploaded-files li", count: 1)
   end
 
   it "shows labels and descriptions when a form template is assigned to the category" do
@@ -505,24 +531,33 @@ describe "Composer Form Templates", type: :system do
     composer.fill_title(topic_title)
     composer.fill_form_template_field("input", "Peter Parker")
 
-    expect(find(".d-editor-preview")).to have_content("Peter Parker")
+    expect(page).to have_css(".d-editor-preview", text: "Peter Parker")
 
     find(:select, "4").find(:option, "Option 2").select_option
     find(:select, "4").find(:option, "Option 1").select_option
 
-    expect(find(".d-editor-preview")).to have_content("Option 1")
+    expect(page).to have_css(".d-editor-preview", text: "Option 1")
 
     find(:select, "6").find(:option, "Option 4").select_option
 
-    expect(find(".d-editor-preview")).to have_content("Option 4")
+    expect(page).to have_css(".d-editor-preview", text: "Option 4")
 
     message = "This is a test message!"
-    find("textarea").fill_in(with: message)
+    composer.fill_form_template_field("textarea", message)
 
-    expect(find(".d-editor-preview")).to have_content(message)
+    expect(page).to have_css(".d-editor-preview", text: message)
 
-    attach_file("5-uploader", "#{Rails.root}/spec/fixtures/images/logo.png", make_visible: true)
-    expect(find(".d-editor-preview")).to have_css("img")
+    attach_file(
+      "5-uploader",
+      "#{Rails.root.join("spec/fixtures/images/logo.png")}",
+      make_visible: true,
+    )
+    expect(page).to have_css(".d-editor-preview img")
+
+    composer_message = "This is **bold** composer content"
+    composer.fill_form_template_field("composer", composer_message)
+
+    expect(page).to have_css(".d-editor-preview", text: "This is bold composer content")
   end
 
   context "when using tagchooser" do
@@ -576,8 +611,8 @@ describe "Composer Form Templates", type: :system do
       category_page.visit(category_with_tagchooser_template)
       category_page.new_topic_button.click
 
-      expect(find("[name='1']")).to have_content("#{tag3.name.upcase}")
-      expect(find("[name='2']")).to have_content("#{tag4.name.upcase}")
+      expect(page).to have_css("[name='1']", text: tag3.name.upcase)
+      expect(page).to have_css("[name='2']", text: tag4.name.upcase)
 
       find(:select, "1").find(:option, tag1.description).select_option
       find(:select, "2").find(:option, tag2.description).select_option
@@ -600,6 +635,28 @@ describe "Composer Form Templates", type: :system do
       mini_tag_chooser.unselect_by_name(tag1.name)
 
       expect(mini_tag_chooser).to have_no_selection
+    end
+  end
+
+  context "when a category has a topic title placeholder" do
+    fab!(:category_with_title_placeholder) do
+      Fabricate(:category, topic_title_placeholder: "Describe your issue briefly")
+    end
+
+    it "shows custom topic title placeholder in the composer" do
+      category_page.visit(category_with_title_placeholder)
+      category_page.new_topic_button.click
+
+      expect(page).to have_field("reply-title", placeholder: "Describe your issue briefly")
+    end
+
+    it "falls back to default placeholder if category topic title placeholder is nil" do
+      SiteSetting.topic_featured_link_enabled = false
+      category_with_title_placeholder.update!(topic_title_placeholder: nil)
+      category_page.visit(category_with_title_placeholder)
+      category_page.new_topic_button.click
+
+      expect(find("#reply-title")[:placeholder]).to eq(I18n.t("js.composer.title_placeholder"))
     end
   end
 end

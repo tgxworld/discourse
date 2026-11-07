@@ -26,8 +26,10 @@ module Chat
       validates :title, length: { maximum: Chat::Thread::MAX_TITLE_LENGTH }
     end
 
+    policy :no_silenced_user
     model :channel
     policy :can_view_channel
+    policy :can_create_thread_in_channel
     policy :threading_enabled_for_channel
     model :original_message
 
@@ -41,12 +43,24 @@ module Chat
 
     private
 
+    def no_silenced_user(guardian:)
+      !guardian.is_silenced?
+    end
+
     def fetch_channel(params:)
       ::Chat::Channel.find_by(id: params.channel_id)
     end
 
     def can_view_channel(guardian:, channel:)
       guardian.can_preview_chat_channel?(channel)
+    end
+
+    def can_create_thread_in_channel(guardian:, channel:)
+      if channel.direct_message_channel?
+        return Chat::Channel::Policy::MessageCreation.new(context).call
+      end
+
+      guardian.can_join_chat_channel?(channel) && guardian.can_create_channel_message?(channel)
     end
 
     def threading_enabled_for_channel(channel:)

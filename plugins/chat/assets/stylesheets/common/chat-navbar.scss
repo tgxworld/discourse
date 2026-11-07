@@ -15,7 +15,6 @@
   display: flex;
   align-items: flex-start;
   width: 100%;
-  gap: 0.25rem;
   position: relative;
   container-type: inline-size;
 
@@ -25,22 +24,20 @@
     }
 
     &__toggle-drawer-button {
-      &::after {
-        @container (inline-size) {
-          content: "";
-          position: absolute;
-          height: 100%;
-          left: -1rem;
-          width: calc(100cqw - 2.3em + 1rem);
-        }
+      // only shown for keyboard nav
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
 
-        &:hover {
-          color: var(--tertiary-hover);
-
-          .d-icon {
-            color: inherit;
-          }
-        }
+      &:focus-visible {
+        position: static;
+        width: auto;
+        height: auto;
+        overflow: visible;
+        clip-path: none;
       }
     }
   }
@@ -61,6 +58,35 @@
   height: var(--chat-header-offset);
   display: flex;
   align-items: center;
+
+  .chat-channel-title.is-dm .user-status-message {
+    display: inline-flex;
+  }
+
+  .chat-channel-title.is-dm .chat-channel-name__label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+}
+
+.c-navbar__star-channel-button {
+  height: var(--chat-header-offset);
+  color: var(--primary-medium);
+
+  &:hover,
+  &:focus {
+    color: var(--primary);
+  }
+
+  &.--starred {
+    color: var(--tertiary);
+
+    &:hover,
+    &:focus {
+      color: var(--tertiary-hover);
+    }
+  }
 }
 
 .c-navbar__title {
@@ -110,8 +136,12 @@
   align-items: center;
   height: var(--chat-header-offset);
 
-  .d-icon {
-    color: var(--primary-low-mid);
+  .c-navbar__filter {
+    &.active {
+      .d-icon {
+        color: var(--d-button-transparent-text-color--hover);
+      }
+    }
   }
 }
 

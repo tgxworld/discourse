@@ -84,11 +84,16 @@ module PageObjects
       end
 
       def has_tag_chooser_tag?(tag)
-        find("option[value=#{tag.name} i]", visible: :all).present?
+        display_value = tag.name.tr("-", " ").upcase
+        find("option[value='#{display_value}']", visible: :all).present?
       end
 
       def has_preview_modal?
         find(".form-template-form-preview-modal").present?
+      end
+
+      def has_no_preview_modal?
+        has_no_css?(".form-template-form-preview-modal")
       end
 
       def has_validations_modal?

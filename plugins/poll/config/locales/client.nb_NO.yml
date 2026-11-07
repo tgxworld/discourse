@@ -28,6 +28,8 @@ nb_NO:
       cast-votes:
         title: "Stem nå"
         label: "Stem!"
+      keep-vote:
+        label: "Forrige"
       show-results:
         title: "Vis resultat"
         label: "Resultater"
@@ -65,7 +67,6 @@ nb_NO:
       error_while_fetching_voters: "Beklager, det oppstod en feil når stemmegivere skulle vises."
       error_while_exporting_results: "Beklager, det oppstod en feil under eksport av avstemningsresultat."
       ui_builder:
-        title: Lag avstemning.
         insert: Sett inn avstemning
         help:
           options_min_count: Angi minst 1 alternativ.
@@ -104,5 +105,3 @@ nb_NO:
           add: Legg til alternativ
         automatic_close:
           label: Steng avstemningen automatisk
-        show_advanced: "Vis avanserte innstillinger"
-        hide_advanced: "Skjul avanserte alternativer"

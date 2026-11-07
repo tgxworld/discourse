@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "Visit channel", type: :system do
+RSpec.describe "Visit channel" do
   fab!(:category)
   fab!(:topic)
   fab!(:post) { Fabricate(:post, topic: topic) }
@@ -11,7 +11,7 @@ RSpec.describe "Visit channel", type: :system do
   fab!(:inaccessible_dm_channel_1, :direct_message_channel)
 
   let(:chat) { PageObjects::Pages::Chat.new }
-  let(:sidebar_page) { PageObjects::Pages::Sidebar.new }
+  let(:sidebar_page) { PageObjects::Pages::ChatSidebar.new }
   let(:channel_page) { PageObjects::Pages::ChatChannel.new }
   let(:dialog) { PageObjects::Components::Dialog.new }
 
@@ -41,16 +41,6 @@ RSpec.describe "Visit channel", type: :system do
 
     context "when regular user" do
       before { sign_in(current_user) }
-
-      context "when chat is disabled" do
-        before { current_user.user_option.update!(chat_enabled: false) }
-
-        it "redirects to homepage" do
-          visit("/chat/c/-/#{category_channel_1.id}")
-
-          expect(page).to have_current_path("/latest")
-        end
-      end
 
       context "when current user is not allowed to chat" do
         before { SiteSetting.chat_allowed_groups = Group::AUTO_GROUPS[:staff] }
@@ -127,7 +117,7 @@ RSpec.describe "Visit channel", type: :system do
           it "allows to join it" do
             chat.visit_channel(category_channel_1)
 
-            expect(page).to have_content(I18n.t("js.chat.channel_settings.join_channel"))
+            expect(page).to have_content(I18n.t("js.chat.channel_settings.join"))
           end
 
           it "shows a preview of the channel" do
@@ -152,10 +142,7 @@ RSpec.describe "Visit channel", type: :system do
             it "allows to join it" do
               chat.visit_thread(thread)
 
-              expect(page).to have_content(
-                I18n.t("js.chat.channel_settings.join_channel"),
-                count: 2,
-              )
+              expect(page).to have_css(".toggle-channel-membership-button.-join", count: 1)
             end
           end
         end
@@ -230,7 +217,7 @@ RSpec.describe "Visit channel", type: :system do
             Fabricate(:chat_message, chat_channel: dm_channel_1, user: current_user)
           end
 
-          it "doesn’t ask to join it" do
+          it "doesn't ask to join it" do
             chat.visit_channel(dm_channel_1)
 
             expect(page).to have_no_content(I18n.t("js.chat.channel_settings.join_channel"))
@@ -242,7 +229,7 @@ RSpec.describe "Visit channel", type: :system do
             expect(channel_page.messages).to have_message(id: message_1.id)
           end
 
-          context "when URL doesn’t contain slug" do
+          context "when URL doesn't contain slug" do
             it "redirects to correct URL" do
               visit("/chat/c/-/#{dm_channel_1.id}")
 
@@ -250,6 +237,22 @@ RSpec.describe "Visit channel", type: :system do
                 "/chat/c/#{Slug.for(dm_channel_1.title(current_user))}/#{dm_channel_1.id}",
               )
             end
+          end
+        end
+
+        context "when group direct message channel has an emoji in the title" do
+          fab!(:other_user, :user)
+          fab!(:group_dm_channel) do
+            Fabricate(:direct_message_channel, users: [current_user, other_user])
+          end
+
+          before { group_dm_channel.update!(name: "test :heart:") }
+
+          it "converts the emoji in the header" do
+            chat.visit_channel(group_dm_channel)
+
+            expect(page.find(".c-navbar__channel-title")).to have_content("test")
+            expect(page.find(".c-navbar__channel-title")).to have_no_content(":heart:")
           end
         end
       end

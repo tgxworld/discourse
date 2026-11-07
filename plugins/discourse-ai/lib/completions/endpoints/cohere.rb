@@ -4,8 +4,8 @@ module DiscourseAi
   module Completions
     module Endpoints
       class Cohere < Base
-        def self.can_contact?(model_provider)
-          model_provider == "cohere"
+        def self.can_contact?(llm_model)
+          llm_model.provider == "cohere"
         end
 
         def normalize_model_params(model_params)
@@ -20,6 +20,16 @@ module DiscourseAi
 
         def provider_id
           AiApiAuditLog::Provider::Cohere
+        end
+
+        protected
+
+        def reset_attempt_state!
+          super
+          @tool_idx = nil
+          @has_tool = nil
+          @input_tokens = nil
+          @output_tokens = nil
         end
 
         private

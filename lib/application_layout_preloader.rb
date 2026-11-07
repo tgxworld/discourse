@@ -25,6 +25,8 @@ class ApplicationLayoutPreloader
   def preloaded_data
     preload_anonymous_data
 
+    preload_upcoming_change_data(@guardian.user)
+
     if @guardian.authenticated?
       @guardian.user.sync_notification_channel_position
       preload_current_user_data
@@ -39,9 +41,9 @@ class ApplicationLayoutPreloader
     self
       .class
       .banner_json_cache
-      .defer_get_set("json") do
+      .defer_get_set("json_#{I18n.locale}") do
         topic = Topic.where(archetype: Archetype.banner).first
-        banner = topic.present? ? topic.banner(@guardian) : {}
+        banner = topic.present? && !topic.category&.read_restricted? ? topic.banner(@guardian) : {}
         MultiJson.dump(banner)
       end
   end
@@ -66,6 +68,11 @@ class ApplicationLayoutPreloader
     end
 
     MultiJson.dump(data)
+  end
+
+  def custom_emoji
+    serializer = ActiveModel::ArraySerializer.new(Emoji.custom, each_serializer: EmojiSerializer)
+    MultiJson.dump(serializer)
   end
 
   private
@@ -121,11 +128,27 @@ class ApplicationLayoutPreloader
     @preloaded["activatedThemes"] = activated_themes_json
   end
 
+  def preload_upcoming_change_data(user)
+    @preloaded["upcomingChanges"] = SiteSetting
+      .upcoming_change_site_settings
+      .each_with_object({}) do |upcoming_change, hash|
+        hash[upcoming_change] = UpcomingChanges.enabled_for_user?(upcoming_change, user)
+      end
+      .to_json
+  end
+
   def activated_themes_json
     id = @theme_id
     return "{}" if id.blank?
     ids = Theme.transform_ids(id)
-    Theme.where(id: ids).pluck(:id, :name).to_h.to_json
+    Theme
+      .where(id: ids)
+      .each_with_object({}) do |theme, hash|
+        settings = theme.cached_settings
+        settings = theme.resolve_group_settings_for_user(settings, @guardian)
+        hash[theme.id] = { name: theme.name, settings: settings.except("theme_setting_type_info") }
+      end
+      .to_json
   end
 
   def load_font_map
@@ -140,10 +163,5 @@ class ApplicationLayoutPreloader
           }
         end
       end
-  end
-
-  def custom_emoji
-    serializer = ActiveModel::ArraySerializer.new(Emoji.custom, each_serializer: EmojiSerializer)
-    MultiJson.dump(serializer)
   end
 end

@@ -3,8 +3,8 @@
 require Rails.root.join("db/migrate/20250714010001_backfill_themeable_site_settings.rb")
 
 RSpec.describe BackfillThemeableSiteSettings do
-  fab!(:theme_1) { Fabricate(:theme) }
-  fab!(:theme_2) { Fabricate(:theme) }
+  fab!(:theme_1, :theme)
+  fab!(:theme_2, :theme)
   fab!(:theme_3) { Fabricate(:theme, component: true) }
 
   before do
@@ -14,7 +14,7 @@ RSpec.describe BackfillThemeableSiteSettings do
 
   after { ActiveRecord::Migration.verbose = @original_verbose }
 
-  it "works" do
+  it "backfills themeable site settings" do
     DB.exec(
       "INSERT INTO site_settings (name, data_type, value, created_at, updated_at)
       VALUES ('enable_welcome_banner', :data_type, :value, NOW(), NOW())",

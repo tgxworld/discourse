@@ -2,8 +2,9 @@
 
 module DiscourseChatIntegration::Provider::PowerAutomateProvider
   PROVIDER_NAME = "powerautomate"
+  POPULARITY_SCORE = 80
   PROVIDER_ENABLED_SETTING = :chat_integration_powerautomate_enabled
-  CHANNEL_IDENTIFIER_KEY = "name".freeze
+  CHANNEL_IDENTIFIER_KEY = "name"
   CHANNEL_PARAMETERS = [
     { key: "name", regex: '^\S+$', unique: true },
     { key: "webhook_url", regex: '^https:\/\/\S+$', unique: true, hidden: true },
@@ -26,12 +27,12 @@ module DiscourseChatIntegration::Provider::PowerAutomateProvider
       else
         error_key = nil
       end
-      raise ::DiscourseChatIntegration::ProviderError.new info: {
-                                                            error_key: error_key,
-                                                            request: req.body,
-                                                            response_code: response.code,
-                                                            response_body: response.body,
-                                                          }
+      raise DiscourseChatIntegration::ProviderError.new info: {
+                                                          error_key: error_key,
+                                                          request: req.body,
+                                                          response_code: response.code,
+                                                          response_body: response.body,
+                                                        }
     end
   end
 
@@ -52,7 +53,7 @@ module DiscourseChatIntegration::Provider::PowerAutomateProvider
     elsif topic.category
       category =
         (
-          if (topic.category.parent_category)
+          if topic.category.parent_category
             "[#{topic.category.parent_category.name}/#{topic.category.name}]"
           else
             "[#{topic.category.name}]"
@@ -74,7 +75,7 @@ module DiscourseChatIntegration::Provider::PowerAutomateProvider
                 size: "Large",
                 weight: "Bolder",
                 text:
-                  "[#{topic.title} #{category} #{topic.tags.present? ? topic.tags.map(&:name).join(", ") : ""}](#{post.full_url})",
+                  "[#{topic.title} #{category} #{DiscourseChatIntegration::Provider.display_tag_names(topic)}](#{post.full_url})",
                 wrap: true,
                 spacing: "None",
               },

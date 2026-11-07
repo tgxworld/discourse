@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-require_relative "./socialcast_message.rb"
-require_relative "./socialcast_user.rb"
-require File.expand_path(File.dirname(__FILE__) + "/../base.rb")
+require_relative "socialcast_message"
+require_relative "socialcast_user"
+require_relative "../base"
 
 MESSAGES_DIR = "output/messages"
 
@@ -10,7 +10,7 @@ def titles
   topics = 0
   total = count_files(MESSAGES_DIR)
   Dir.foreach(MESSAGES_DIR) do |filename|
-    next if filename == (".") || filename == ("..")
+    next if filename == "." || filename == ".."
     message_json = File.read MESSAGES_DIR + "/" + filename
     message = SocialcastMessage.new(message_json)
     next unless message.title

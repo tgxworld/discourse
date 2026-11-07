@@ -1,285 +1,159 @@
-import { array, fn, hash } from "@ember/helper";
-import Form from "discourse/components/form";
 import StyleguideExample from "discourse/plugins/styleguide/discourse/components/styleguide-example";
+import AlertExample from "../../examples/atoms/forms/alert.gjs";
+import alertSource from "../../examples/atoms/forms/alert?source=file";
+import CheckboxGroupExample from "../../examples/atoms/forms/checkbox-group.gjs";
+import checkboxGroupSource from "../../examples/atoms/forms/checkbox-group?source=file";
+import CodeExample from "../../examples/atoms/forms/code.gjs";
+import codeSource from "../../examples/atoms/forms/code?source=file";
+import CollectionExample from "../../examples/atoms/forms/collection.gjs";
+import collectionSource from "../../examples/atoms/forms/collection?source=file";
+import ColorExample from "../../examples/atoms/forms/color.gjs";
+import colorSource from "../../examples/atoms/forms/color?source=file";
+import ColorNamedExample from "../../examples/atoms/forms/color-named.gjs";
+import colorNamedSource from "../../examples/atoms/forms/color-named?source=file";
+import ColorPrefixHexExample from "../../examples/atoms/forms/color-prefix-hex.gjs";
+import colorPrefixHexSource from "../../examples/atoms/forms/color-prefix-hex?source=file";
+import ColorSwatchesExample from "../../examples/atoms/forms/color-swatches.gjs";
+import colorSwatchesSource from "../../examples/atoms/forms/color-swatches?source=file";
+import ComposerExample from "../../examples/atoms/forms/composer.gjs";
+import composerSource from "../../examples/atoms/forms/composer?source=file";
+import IconExample from "../../examples/atoms/forms/icon.gjs";
+import iconSource from "../../examples/atoms/forms/icon?source=file";
+import ImageExample from "../../examples/atoms/forms/image.gjs";
+import imageSource from "../../examples/atoms/forms/image?source=file";
+import InputExample from "../../examples/atoms/forms/input.gjs";
+import inputSource from "../../examples/atoms/forms/input?source=file";
+import InputGroupExample from "../../examples/atoms/forms/input-group.gjs";
+import inputGroupSource from "../../examples/atoms/forms/input-group?source=file";
+import MenuExample from "../../examples/atoms/forms/menu.gjs";
+import menuSource from "../../examples/atoms/forms/menu?source=file";
+import MultilineExample from "../../examples/atoms/forms/multiline.gjs";
+import multilineSource from "../../examples/atoms/forms/multiline?source=file";
+import QuestionExample from "../../examples/atoms/forms/question.gjs";
+import questionSource from "../../examples/atoms/forms/question?source=file";
+import RadioGroupExample from "../../examples/atoms/forms/radio-group.gjs";
+import radioGroupSource from "../../examples/atoms/forms/radio-group?source=file";
+import RowColExample from "../../examples/atoms/forms/row-col.gjs";
+import rowColSource from "../../examples/atoms/forms/row-col?source=file";
+import SectionExample from "../../examples/atoms/forms/section.gjs";
+import sectionSource from "../../examples/atoms/forms/section?source=file";
+import SelectExample from "../../examples/atoms/forms/select.gjs";
+import selectSource from "../../examples/atoms/forms/select?source=file";
+import TagChooserExample from "../../examples/atoms/forms/tag-chooser.gjs";
+import tagChooserSource from "../../examples/atoms/forms/tag-chooser?source=file";
+import TextareaExample from "../../examples/atoms/forms/textarea.gjs";
+import textareaSource from "../../examples/atoms/forms/textarea?source=file";
+import ToggleExample from "../../examples/atoms/forms/toggle.gjs";
+import toggleSource from "../../examples/atoms/forms/toggle?source=file";
+import ValidationExample from "../../examples/atoms/forms/validation.gjs";
+import validationSource from "../../examples/atoms/forms/validation?source=file";
 
-const Forms = <template>
+export default <template>
   <h2>Controls</h2>
-  <StyleguideExample @title="Input">
-    <Form as |form|>
-      <form.Field @title="Username" @name="username" as |field|>
-        <field.Input placeholder="Username" />
-      </form.Field>
-      <form.Field @title="Age" @name="age" as |field|>
-        <field.Input placeholder="Age" @type="number" @format="small" />
-      </form.Field>
-      <form.Field @title="Website" @name="website" as |field|>
-        <field.Input @before="https://" @after=".com" @format="large" />
-      </form.Field>
-      <form.Field @title="After" @name="after" as |field|>
-        <field.Input @after=".com" />
-      </form.Field>
-      <form.Field @title="Before" @name="before" as |field|>
-        <field.Input @before="https://" />
-      </form.Field>
-      <form.Field
-        @title="Secret"
-        @name="secret"
-        @description="An important password"
-        as |field|
-      >
-        <field.Password />
-      </form.Field>
-    </Form>
+
+  <StyleguideExample @code={{inputSource}} @title="Input">
+    <InputExample />
   </StyleguideExample>
 
-  <StyleguideExample @title="Question">
-    <Form as |form|>
-      <form.Field @title="Enabled" @name="enabled" as |field|>
-        <field.Question />
-      </form.Field>
-    </Form>
+  <StyleguideExample @code={{questionSource}} @title="Question">
+    <QuestionExample />
   </StyleguideExample>
 
-  <StyleguideExample @title="Toggle">
-    <Form as |form|>
-      <form.Field @title="Enabled" @name="enabled" as |field|>
-        <field.Toggle />
-      </form.Field>
-    </Form>
+  <StyleguideExample @code={{toggleSource}} @title="Toggle">
+    <ToggleExample />
   </StyleguideExample>
 
-  <StyleguideExample @title="Composer">
-    <Form as |form|>
-      <form.Field @title="Query" @name="query" as |field|>
-        <field.Composer />
-      </form.Field>
-    </Form>
+  <StyleguideExample @code={{composerSource}} @title="Composer">
+    <ComposerExample />
   </StyleguideExample>
 
-  <StyleguideExample @title="Code">
-    <Form as |form|>
-      <form.Field @title="Query" @name="query" as |field|>
-        <field.Code />
-      </form.Field>
-    </Form>
+  <StyleguideExample @code={{codeSource}} @title="Code">
+    <CodeExample />
   </StyleguideExample>
 
-  <StyleguideExample @title="Textarea">
-    <Form as |form|>
-      <form.Field @title="Query" @name="query" as |field|>
-        <field.Textarea />
-      </form.Field>
-    </Form>
+  <StyleguideExample @code={{textareaSource}} @title="Textarea">
+    <TextareaExample />
   </StyleguideExample>
 
-  <StyleguideExample @title="Select">
-    <Form as |form|>
-      <form.Field @title="Enabled" @name="enabled" as |field|>
-        <field.Select as |select|>
-          <select.Option @value="true">Yes</select.Option>
-          <select.Option @value="false">No</select.Option>
-        </field.Select>
-      </form.Field>
-    </Form>
+  <StyleguideExample @code={{selectSource}} @title="Select">
+    <SelectExample />
   </StyleguideExample>
 
-  <StyleguideExample @title="CheckboxGroup">
-    <Form as |form|>
-      <form.CheckboxGroup
-        @title="I give explicit permission"
-        as |checkboxGroup|
-      >
-        <checkboxGroup.Field
-          @title="Use my email for any purpose."
-          @name="contract"
-          as |field|
-        >
-          <field.Checkbox>Including signing up for services I can't unsubscribe
-            to.</field.Checkbox>
-        </checkboxGroup.Field>
-        <checkboxGroup.Field
-          @title="Sign my soul away."
-          @name="contract2"
-          as |field|
-        >
-          <field.Checkbox>Will severly impact the afterlife experience.</field.Checkbox>
-        </checkboxGroup.Field>
-      </form.CheckboxGroup>
-    </Form>
+  <StyleguideExample @code={{checkboxGroupSource}} @title="CheckboxGroup">
+    <CheckboxGroupExample />
   </StyleguideExample>
 
-  <StyleguideExample @title="Image">
-    <Form as |form|>
-      <form.Field @title="Image" @name="image" as |field|>
-        <field.Image @type="avatar" />
-      </form.Field>
-    </Form>
+  <StyleguideExample @code={{imageSource}} @title="Image">
+    <ImageExample />
   </StyleguideExample>
 
-  <StyleguideExample @title="Icon">
-    <Form as |form|>
-      <form.Field @title="Icon" @name="icon" as |field|>
-        <field.Icon />
-      </form.Field>
-    </Form>
+  <StyleguideExample @code={{iconSource}} @title="Icon">
+    <IconExample />
   </StyleguideExample>
 
-  <StyleguideExample @title="Menu">
-    <Form as |form data|>
-      <form.Field @title="Enabled" @name="enabled" as |field|>
-        <field.Menu @selection={{data.enabled}} as |menu|>
-          <menu.Item @value="true">Yes</menu.Item>
-          <menu.Divider />
-          <menu.Item @value="false">No</menu.Item>
-        </field.Menu>
-      </form.Field>
-    </Form>
+  <StyleguideExample @code={{tagChooserSource}} @title="TagChooser">
+    <TagChooserExample />
   </StyleguideExample>
 
-  <StyleguideExample @title="RadioGroup">
-    <Form as |form|>
-      <form.Field @title="Enabled" @name="enabled" @format="full" as |field|>
-        <field.RadioGroup as |radioGroup|>
-          <radioGroup.Radio @value="true">Yes</radioGroup.Radio>
-          <radioGroup.Radio @value="false" as |radio|>
-            <radio.Title>No</radio.Title>
-            <radio.Description>
-              Choosing no, will make you inelligible for the contest.
-            </radio.Description>
-          </radioGroup.Radio>
-        </field.RadioGroup>
-      </form.Field>
-    </Form>
+  <StyleguideExample @code={{menuSource}} @title="Menu">
+    <MenuExample />
+  </StyleguideExample>
+
+  <StyleguideExample @code={{radioGroupSource}} @title="RadioGroup">
+    <RadioGroupExample />
+  </StyleguideExample>
+
+  <StyleguideExample @code={{colorSource}} @title="Color">
+    <ColorExample />
+  </StyleguideExample>
+
+  <StyleguideExample @code={{colorSwatchesSource}} @title="Color with swatches">
+    <ColorSwatchesExample />
+  </StyleguideExample>
+
+  <StyleguideExample
+    @code={{colorNamedSource}}
+    @title="Color with named colors"
+  >
+    <ColorNamedExample />
+  </StyleguideExample>
+
+  <StyleguideExample
+    @code={{colorPrefixHexSource}}
+    @title="Color with # prefix in value"
+  >
+    <ColorPrefixHexExample />
   </StyleguideExample>
 
   <h2>Layout</h2>
 
-  <StyleguideExample @title="Section">
-    <Form as |form|>
-      <form.Section @title="Section title">
-        Content
-      </form.Section>
-    </Form>
+  <StyleguideExample @code={{sectionSource}} @title="Section">
+    <SectionExample />
   </StyleguideExample>
 
-  <StyleguideExample @title="Alert">
-    <Form as |form|>
-      <form.Alert @icon="pencil">
-        You can edit this form.
-      </form.Alert>
-    </Form>
+  <StyleguideExample @code={{alertSource}} @title="Alert">
+    <AlertExample />
   </StyleguideExample>
 
-  <StyleguideExample @title="InputGroup">
-    <Form as |form|>
-      <form.InputGroup as |inputGroup|>
-        <inputGroup.Field @title="Username" @name="username" as |field|>
-          <field.Input />
-        </inputGroup.Field>
-        <inputGroup.Field @title="Email" @name="email" as |field|>
-          <field.Input />
-        </inputGroup.Field>
-      </form.InputGroup>
-    </Form>
+  <StyleguideExample @code={{inputGroupSource}} @title="InputGroup">
+    <InputGroupExample />
   </StyleguideExample>
 
-  <StyleguideExample @title="Collection">
-    <Form
-      @data={{hash foo=(array (hash bar=1 baz=2) (hash bar=3 baz=4))}}
-      as |form|
-    >
-      <form.Button @action={{fn form.addItemToCollection "foo"}} @icon="plus" />
-
-      <form.Collection @name="foo" as |collection index|>
-        <form.Row as |row|>
-          <row.Col @size={{6}}>
-            <collection.Field @title="Bar" @name="bar" as |field|>
-              <field.Input />
-            </collection.Field>
-          </row.Col>
-
-          <row.Col @size={{4}}>
-            <collection.Field @title="Baz" @name="baz" as |field|>
-              <field.Input />
-            </collection.Field>
-          </row.Col>
-
-          <row.Col @size={{2}}>
-            <form.Button @action={{fn collection.remove index}} @icon="minus" />
-          </row.Col>
-        </form.Row>
-      </form.Collection>
-
-    </Form>
+  <StyleguideExample @code={{collectionSource}} @title="Collection">
+    <CollectionExample />
   </StyleguideExample>
 
-  <StyleguideExample @title="Row/Col">
-    <Form as |form|>
-      <form.Row as |row|>
-        <row.Col @size={{6}}>
-          <form.Field
-            @title="Username"
-            @name="username"
-            @validation="required"
-            as |field|
-          >
-            <field.Input />
-          </form.Field>
-        </row.Col>
-        <row.Col @size={{4}}>
-          <form.Field @title="Email" @name="email" as |field|>
-            <field.Input />
-          </form.Field>
-        </row.Col>
-        <row.Col @size={{2}}>
-          <form.Submit />
-        </row.Col>
-      </form.Row>
-    </Form>
+  <StyleguideExample @code={{rowColSource}} @title="Row/Col">
+    <RowColExample />
   </StyleguideExample>
 
-  <StyleguideExample @title="Multiline">
-    <Form as |form|>
-      <form.Row as |row|>
-        <row.Col @size={{6}}>
-          <form.Field
-            @title="Username"
-            @name="username"
-            @validation="required"
-            as |field|
-          >
-            <field.Input />
-          </form.Field>
-        </row.Col>
-        <row.Col @size={{6}}>
-          <form.Field @title="Email" @name="email" as |field|>
-            <field.Input />
-          </form.Field>
-        </row.Col>
-
-        <row.Col @size={{12}}>
-          <form.Field @title="Adress" @name="adress" as |field|>
-            <field.Input />
-          </form.Field>
-        </row.Col>
-      </form.Row>
-    </Form>
+  <StyleguideExample @code={{multilineSource}} @title="Multiline">
+    <MultilineExample />
   </StyleguideExample>
 
   <h2>Validation</h2>
 
-  <StyleguideExample @title="Input">
-    <Form @validateOn="change" as |form|>
-      <form.Field
-        @title="Username"
-        @name="username"
-        @validation="required"
-        as |field|
-      >
-        <field.Input />
-      </form.Field>
-    </Form>
+  <StyleguideExample @code={{validationSource}} @title="Input">
+    <ValidationExample />
   </StyleguideExample>
-</template>;
-
-export default Forms;
+</template>

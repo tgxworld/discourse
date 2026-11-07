@@ -10,7 +10,7 @@ module Jobs
         Post
           .includes(:user, :topic)
           .where(id: args[:post_ids])
-          .where("user_id <> ?", args[:moved_by_id])
+          .where.not(user_id: args[:moved_by_id])
           .order(post_number: :asc)
       return if posts.blank?
 
@@ -20,6 +20,7 @@ module Jobs
       users_notified = Set.new
       posts.each do |p|
         next if users_notified.include?(p.user_id)
+        next if !p.user.guardian.can_see?(p.topic)
 
         p.user.notifications.create(
           notification_type: Notification.types[:moved_post],

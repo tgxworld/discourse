@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 require "mysql2"
-require File.expand_path(File.dirname(__FILE__) + "/base.rb")
+require_relative "base"
 
 require "htmlentities"
 require "tsort"
@@ -260,14 +260,12 @@ class ImportScripts::Smf2 < ImportScripts::Base
         ORDER BY id_attach ASC
       SQL
       attachments.map! do |a|
-        begin
-          import_attachment(post, a)
-        rescue StandardError
-          (
-            puts $!
-            nil
-          )
-        end
+        import_attachment(post, a)
+      rescue StandardError
+        (
+          puts $!
+          nil
+        )
       end
       begin
         post[:raw] = convert_message_body(message[:body], attachments, ignore_quotes: ignore_quotes)
@@ -306,7 +304,7 @@ class ImportScripts::Smf2 < ImportScripts::Base
     last_post_id = -1
     total =
       query(
-        "SELECT COUNT(*) count FROM smf_personal_messages WHERE deleted_by_sender = 0",
+        "SELECT COUNT(*) count FROM {prefix}personal_messages WHERE deleted_by_sender = 0",
         as: :single,
       )
 
@@ -317,8 +315,8 @@ class ImportScripts::Smf2 < ImportScripts::Base
              , msgtime
              , subject
              , body
-             , (SELECT GROUP_CONCAT(id_member) FROM smf_pm_recipients r WHERE r.id_pm = pm.id_pm) recipients
-          FROM smf_personal_messages pm
+             , (SELECT GROUP_CONCAT(id_member) FROM {prefix}pm_recipients r WHERE r.id_pm = pm.id_pm) recipients
+          FROM {prefix}personal_messages pm
          WHERE deleted_by_sender = 0
            AND id_pm > #{last_post_id}
          ORDER BY id_pm
@@ -504,7 +502,7 @@ class ImportScripts::Smf2 < ImportScripts::Base
       if use_count.keys.length < attachments.select(&:present?).length
         body = "#{body}\n\n---"
         attachments.each_with_index do |upload, num|
-          "#{body}\n\n#{get_upload_markdown(upload)}" if upload.present? && use_count[num] == (0)
+          "#{body}\n\n#{get_upload_markdown(upload)}" if upload.present? && use_count[num] == 0
         end
       end
     end
@@ -716,7 +714,7 @@ class ImportScripts::Smf2 < ImportScripts::Base
       end
       raise Error, "too many arguments" if args.length > 1
       self.smfroot = args.first
-      read_smf_settings if self.smfroot
+      read_smf_settings if smfroot
 
       self.host ||= "localhost"
       self.username ||= Etc.getlogin
@@ -749,7 +747,7 @@ class ImportScripts::Smf2 < ImportScripts::Base
     end
 
     def read_smf_settings
-      settings = File.join(self.smfroot, "Settings.php")
+      settings = File.join(smfroot, "Settings.php")
       File
         .readlines(settings)
         .each do |line|
@@ -768,7 +766,7 @@ class ImportScripts::Smf2 < ImportScripts::Base
           end
         end
     rescue => err
-      raise SettingsError, err.message unless self.database
+      raise SettingsError, err.message unless database
     end
 
     def parser
@@ -776,21 +774,15 @@ class ImportScripts::Smf2 < ImportScripts::Base
         OptionParser.new(nil, 12) do |o|
           o.banner = "Usage:\t#{File.basename($0)} <SMFROOT> [options]\n"
           o.banner = "${o.banner}\t#{File.basename($0)} -d <DATABASE> [options]"
-          o.on("-h HOST", :REQUIRED, "MySQL server hostname [\"#{self.host}\"]") do |s|
-            self.host = s
-          end
-          o.on("-u USER", :REQUIRED, "MySQL username [\"#{self.username}\"]") do |s|
-            self.username = s
-          end
+          o.on("-h HOST", :REQUIRED, "MySQL server hostname [\"#{host}\"]") { |s| self.host = s }
+          o.on("-u USER", :REQUIRED, "MySQL username [\"#{username}\"]") { |s| self.username = s }
           o.on(
             "-p [PASS]",
             :OPTIONAL,
             "MySQL password. Without argument, reads password from STDIN.",
           ) { |s| self.password = s || :ask }
           o.on("-d DBNAME", :REQUIRED, "Name of SMF database") { |s| self.database = s }
-          o.on("-f PREFIX", :REQUIRED, "Table names prefix [\"#{self.prefix}\"]") do |s|
-            self.prefix = s
-          end
+          o.on("-f PREFIX", :REQUIRED, "Table names prefix [\"#{prefix}\"]") { |s| self.prefix = s }
           o.on("-t TIMEZONE", :REQUIRED, "Timezone used by SMF2 [auto-detected from PHP]") do |s|
             self.timezone = s
           end
@@ -897,8 +889,8 @@ class ImportScripts::Smf2 < ImportScripts::Base
       ser.scan(/i:(\d+);s:\d+:\"(.*?)\";/).each { |nv| board_slugs[nv[0].to_i] = nv[1] }
       topic_urls = query(<<-SQL, as: :array)
         SELECT t.id_first_msg, t.id_board,u.pretty_url
-        FROM smf_topics t
-        LEFT JOIN smf_pretty_topic_urls u ON u.id_topic = t.id_topic ;
+        FROM {prefix}topics t
+        LEFT JOIN {prefix}pretty_topic_urls u ON u.id_topic = t.id_topic ;
       SQL
       topic_urls.each do |url|
         t = topic_lookup_from_imported_post_id(url[:id_first_msg])

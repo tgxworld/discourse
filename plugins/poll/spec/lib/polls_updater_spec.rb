@@ -1,10 +1,6 @@
 # frozen_string_literal: true
 
 RSpec.describe DiscoursePoll::PollsUpdater do
-  def update(post, polls)
-    DiscoursePoll::PollsUpdater.update(post, polls)
-  end
-
   let(:user) { Fabricate(:user) }
 
   let(:post) { Fabricate(:post, raw: <<~RAW) }
@@ -42,7 +38,10 @@ RSpec.describe DiscoursePoll::PollsUpdater do
 
   describe "update" do
     it "does nothing when there are no changes" do
-      message = MessageBus.track_publish("/polls/#{post.topic_id}") { update(post, polls) }.first
+      message =
+        MessageBus
+          .track_publish("/polls/#{post.topic_id}") { described_class.update(post, polls) }
+          .first
 
       expect(message).to be(nil)
     end
@@ -65,7 +64,7 @@ RSpec.describe DiscoursePoll::PollsUpdater do
         DiscoursePoll::Poll.toggle_status(post.user, post.id, "poll", "closed")
 
         freeze_time (SiteSetting.poll_edit_window_mins + 1).minutes.from_now
-        update(post, DiscoursePoll::PollsValidator.new(post).validate_polls)
+        described_class.update(post, DiscoursePoll::PollsValidator.new(post).validate_polls)
 
         expect(post.errors[:base].size).to equal(0)
       end
@@ -73,7 +72,7 @@ RSpec.describe DiscoursePoll::PollsUpdater do
 
     describe "deletes polls" do
       it "that were removed" do
-        update(post, {})
+        described_class.update(post, {})
 
         post.reload
 
@@ -88,7 +87,10 @@ RSpec.describe DiscoursePoll::PollsUpdater do
 
         expect(Poll.find_by(post: post)).to_not be
 
-        message = MessageBus.track_publish("/polls/#{post.topic_id}") { update(post, polls) }.first
+        message =
+          MessageBus
+            .track_publish("/polls/#{post.topic_id}") { described_class.update(post, polls) }
+            .first
 
         poll = Poll.find_by(post: post)
 
@@ -98,11 +100,48 @@ RSpec.describe DiscoursePoll::PollsUpdater do
         expect(poll.post.custom_fields[DiscoursePoll::HAS_POLLS]).to eq(true)
 
         expect(message.data[:post_id]).to eq(post.id)
-        expect(message.data[:polls][0][:name]).to eq(poll.name)
+        expect(message.data).to eq(post_id: post.id)
       end
     end
 
     describe "updates polls" do
+      it "allows updating options after window when dynamic" do
+        post = Fabricate(:post, raw: <<~RAW)
+        [poll dynamic=true]
+        * A
+        * B
+        [/poll]
+      RAW
+
+        polls = DiscoursePoll::PollsValidator.new(post).validate_polls
+        DiscoursePoll::PollsUpdater.update(post, polls)
+
+        poll_record = Poll.find_by(post: post)
+        # dynamic is not persisted in DB; behavior is allowed via flag in updater
+
+        # cast a vote
+        user = Fabricate(:user)
+        DiscoursePoll::Poll.vote(user, post.id, "poll", [polls["poll"]["options"][0]["id"]])
+
+        edit_window = SiteSetting.poll_edit_window_mins
+        freeze_time (edit_window + 10).minutes.from_now
+
+        new_post = Fabricate(:post, raw: <<~RAW)
+        [poll dynamic=true]
+        * A
+        * C
+        [/poll]
+      RAW
+
+        new_polls = DiscoursePoll::PollsValidator.new(new_post).validate_polls
+        DiscoursePoll::PollsUpdater.update(post, new_polls)
+
+        poll_record.reload
+        digests = poll_record.poll_options.pluck(:digest)
+        expect(digests.size).to eq(2)
+        expect(poll_record.poll_votes.count).to eq(1)
+      end
+
       describe "when there are no votes" do
         it "at any time" do
           post # create the post
@@ -111,7 +150,9 @@ RSpec.describe DiscoursePoll::PollsUpdater do
 
           message =
             MessageBus
-              .track_publish("/polls/#{post.topic_id}") { update(post, polls_with_some_attributes) }
+              .track_publish("/polls/#{post.topic_id}") do
+                described_class.update(post, polls_with_some_attributes)
+              end
               .first
 
           poll = Poll.find_by(post: post)
@@ -125,7 +166,7 @@ RSpec.describe DiscoursePoll::PollsUpdater do
           expect(poll.post.custom_fields[DiscoursePoll::HAS_POLLS]).to eq(true)
 
           expect(message.data[:post_id]).to eq(post.id)
-          expect(message.data[:polls][0][:name]).to eq(poll.name)
+          expect(message.data).to eq(post_id: post.id)
         end
       end
 
@@ -141,7 +182,7 @@ RSpec.describe DiscoursePoll::PollsUpdater do
             message =
               MessageBus
                 .track_publish("/polls/#{post.topic_id}") do
-                  update(post, polls_with_some_attributes)
+                  described_class.update(post, polls_with_some_attributes)
                 end
                 .first
 
@@ -156,7 +197,7 @@ RSpec.describe DiscoursePoll::PollsUpdater do
             expect(poll.post.custom_fields[DiscoursePoll::HAS_POLLS]).to eq(true)
 
             expect(message.data[:post_id]).to eq(post.id)
-            expect(message.data[:polls][0][:name]).to eq(poll.name)
+            expect(message.data).to eq(post_id: post.id)
           end
         end
 
@@ -166,7 +207,7 @@ RSpec.describe DiscoursePoll::PollsUpdater do
 
             freeze_time (edit_window + 1).minutes.from_now
 
-            update(post, polls_with_some_attributes)
+            described_class.update(post, polls_with_some_attributes)
 
             poll = Poll.find_by(post: post)
 
@@ -183,6 +224,45 @@ RSpec.describe DiscoursePoll::PollsUpdater do
               ),
             )
           end
+        end
+
+        it "does not allow converting an existing poll to dynamic after creation" do
+          # Create a regular poll
+          post = Fabricate(:post, raw: <<~RAW)
+          [poll]
+          * A
+          * B
+          [/poll]
+          RAW
+
+          polls = DiscoursePoll::PollsValidator.new(post).validate_polls
+          DiscoursePoll::PollsUpdater.update(post, polls)
+
+          # cast a vote so updates would normally be blocked outside window
+          voter = Fabricate(:user)
+          DiscoursePoll::Poll.vote(voter, post.id, "poll", [polls["poll"]["options"][0]["id"]])
+
+          # Advance time and attempt to convert to dynamic while changing options
+          edit_window = SiteSetting.poll_edit_window_mins
+          freeze_time (edit_window + 10).minutes.from_now
+
+          new_post = Fabricate(:post, raw: <<~RAW)
+          [poll dynamic=true]
+          * A
+          * C
+          [/poll]
+          RAW
+
+          new_polls = DiscoursePoll::PollsValidator.new(new_post).validate_polls
+          DiscoursePoll::PollsUpdater.update(post, new_polls)
+
+          poll_record = Poll.find_by(post: post)
+          digests = poll_record.poll_options.pluck(:digest)
+          # Conversion should be ignored; options should remain unchanged
+          expect(digests.size).to eq(2)
+          expect(digests).to match_array(polls["poll"]["options"].map { |o| o["id"] })
+          # Vote should still be present
+          expect(poll_record.poll_votes.count).to eq(1)
         end
       end
     end

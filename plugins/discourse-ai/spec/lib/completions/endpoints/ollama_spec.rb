@@ -127,7 +127,7 @@ RSpec.describe DiscourseAi::Completions::Endpoints::Ollama do
   subject(:endpoint) { described_class.new(model) }
 
   fab!(:user)
-  fab!(:model) { Fabricate(:ollama_model) }
+  fab!(:model, :ollama_model)
 
   let(:ollama_mock) { OllamaMock.new(endpoint) }
 
@@ -136,6 +136,38 @@ RSpec.describe DiscourseAi::Completions::Endpoints::Ollama do
   end
 
   before { enable_current_plugin }
+
+  describe "output limit" do
+    it "omits max_tokens when nothing is configured" do
+      parsed_body = nil
+      stub_request(:post, "http://api.ollama.ai/api/chat").with(
+        body:
+          proc do |req_body|
+            parsed_body = JSON.parse(req_body, symbolize_names: true)
+            true
+          end,
+      ).to_return(status: 200, body: { message: { content: "ok" } }.to_json)
+
+      DiscourseAi::Completions::Llm.proxy(model).generate("hello", user: user)
+
+      expect(parsed_body).not_to have_key(:max_tokens)
+    end
+
+    it "passes an explicit max_tokens through" do
+      parsed_body = nil
+      stub_request(:post, "http://api.ollama.ai/api/chat").with(
+        body:
+          proc do |req_body|
+            parsed_body = JSON.parse(req_body, symbolize_names: true)
+            true
+          end,
+      ).to_return(status: 200, body: { message: { content: "ok" } }.to_json)
+
+      DiscourseAi::Completions::Llm.proxy(model).generate("hello", user: user, max_tokens: 123)
+
+      expect(parsed_body[:max_tokens]).to eq(123)
+    end
+  end
 
   describe "#perform_completion!" do
     context "when using regular mode" do

@@ -61,6 +61,15 @@ RSpec.describe Admin::ImpersonateController do
         expect(session[:current_user_id]).to eq(admin.id)
       end
 
+      it "raises an invalid access error if admin is already impersonating someone" do
+        User.any_instance.stubs(:is_impersonating).returns(true)
+
+        post "/admin/impersonate.json", params: { username_or_email: user.username }
+
+        expect(response.status).to eq(403)
+        expect(session[:current_user_id]).to eq(admin.id)
+      end
+
       context "with success" do
         it "succeeds and logs the impersonation" do
           expect do
@@ -68,13 +77,15 @@ RSpec.describe Admin::ImpersonateController do
           end.to change { UserHistory.where(action: UserHistory.actions[:impersonate]).count }.by(1)
 
           expect(response.status).to eq(200)
-          expect(session[:current_user_id]).to eq(user.id)
+          expect(session[:current_user_id]).to eq(admin.id)
+          expect(admin.user_auth_tokens.last.impersonated_user_id).to eq(user.id)
         end
 
         it "also works with an email address" do
           post "/admin/impersonate.json", params: { username_or_email: user.email }
           expect(response.status).to eq(200)
-          expect(session[:current_user_id]).to eq(user.id)
+          expect(session[:current_user_id]).to eq(admin.id)
+          expect(admin.user_auth_tokens.last.impersonated_user_id).to eq(user.id)
         end
       end
     end
@@ -103,6 +114,49 @@ RSpec.describe Admin::ImpersonateController do
 
       include_examples "impersonation not allowed" do
         let(:current_user) { user }
+      end
+    end
+  end
+
+  describe "#destroy" do
+    before { sign_in(admin) }
+
+    it "succeeds and logs the impersonation" do
+      post "/admin/impersonate.json", params: { username_or_email: user.username }
+
+      delete "/admin/impersonate"
+
+      expect(response.status).to eq(200)
+      expect(session[:current_user_id]).to eq(admin.id)
+    end
+
+    it "does nothing and returns success if not impersonating" do
+      delete "/admin/impersonate"
+
+      expect(response.status).to eq(200)
+    end
+
+    it "stops impersonating" do
+      post "/admin/impersonate.json", params: { username_or_email: user.username }
+      delete "/admin/impersonate"
+
+      expect(response.status).to eq(200)
+      expect(session[:current_user_id]).to eq(admin.id)
+    end
+
+    context "when enforce_second_factor is enabled and impersonated user has no 2FA" do
+      before do
+        SiteSetting.enforce_second_factor = "all"
+        Fabricate(:user_second_factor_totp, user: admin)
+      end
+
+      it "stops impersonating despite 2FA enforcement on the impersonated user" do
+        post "/admin/impersonate.json", params: { username_or_email: user.username }
+
+        delete "/admin/impersonate"
+
+        expect(response.status).to eq(200)
+        expect(session[:current_user_id]).to eq(admin.id)
       end
     end
   end

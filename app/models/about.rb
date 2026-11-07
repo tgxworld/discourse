@@ -26,8 +26,10 @@ class About
     Stat.api_stats
   end
 
-  def initialize(user = nil)
+  def initialize(user = nil, locale: I18n.locale, show_original: false)
     @user = user
+    @locale = locale
+    @show_original = show_original
   end
 
   def version
@@ -39,7 +41,7 @@ class About
   end
 
   def title
-    SiteSetting.title
+    localized_site_setting(:title)
   end
 
   def locale
@@ -47,11 +49,15 @@ class About
   end
 
   def description
-    SiteSetting.site_description
+    localized_site_setting(:site_description)
   end
 
   def extended_site_description
-    SiteSetting.extended_site_description_cooked
+    localized_site_setting(
+      :extended_site_description,
+      cooked: true,
+      fallback: SiteSetting.extended_site_description_cooked,
+    )
   end
 
   def banner_image
@@ -66,21 +72,33 @@ class About
 
   def moderators
     @moderators ||=
-      apply_excluded_groups(
-        User.where(moderator: true).human_users.order(last_seen_at: :desc),
-        ignore_groups: [Group::AUTO_GROUPS[:admins]],
-      )
+      if guardian.public_can_see_profiles?
+        apply_hidden_profile(
+          apply_excluded_groups(
+            User.where(moderator: true).human_users.order(last_seen_at: :desc),
+            ignore_groups: [Group::AUTO_GROUPS[:admins]],
+          ),
+        )
+      else
+        []
+      end
   end
 
   def admins
     @admins ||=
-      DiscoursePluginRegistry.apply_modifier(
-        :about_admins,
-        apply_excluded_groups(
-          User.where(admin: true).human_users.order(last_seen_at: :desc),
-          ignore_groups: [Group::AUTO_GROUPS[:moderators]],
-        ),
-      )
+      if guardian.public_can_see_profiles?
+        DiscoursePluginRegistry.apply_modifier(
+          :about_admins,
+          apply_hidden_profile(
+            apply_excluded_groups(
+              User.where(admin: true).human_users.order(last_seen_at: :desc),
+              ignore_groups: [Group::AUTO_GROUPS[:moderators]],
+            ),
+          ),
+        )
+      else
+        []
+      end
   end
 
   def stats
@@ -88,10 +106,22 @@ class About
   end
 
   def category_moderators
-    allowed_cats = Guardian.new(@user).allowed_category_ids
+    return [] unless guardian.public_can_see_profiles?
+
+    allowed_cats = guardian.allowed_category_ids
     return [] if allowed_cats.blank?
 
-    cats_with_mods = Category.joins(:category_moderation_groups).distinct.pluck(:id)
+    moderation_group_ids =
+      Group
+        .where(id: CategoryModerationGroup.select(:group_id))
+        .visible_groups(@user)
+        .members_visible_groups(@user)
+        .unscope(:order)
+        .pluck(:id)
+    return [] if moderation_group_ids.blank?
+
+    cats_with_mods =
+      CategoryModerationGroup.where(group_id: moderation_group_ids).distinct.pluck(:category_id)
 
     category_ids = cats_with_mods & allowed_cats
     return [] if category_ids.blank?
@@ -99,7 +129,9 @@ class About
     per_cat_limit = category_mods_limit / category_ids.size
     per_cat_limit = 1 if per_cat_limit < 1
 
-    results = DB.query(<<~SQL, category_ids:)
+    filter_hidden_profiles = !guardian.is_staff? && SiteSetting.allow_users_to_hide_profile
+
+    results = DB.query(<<~SQL, category_ids:, moderation_group_ids:)
       WITH moderator_users AS (
         SELECT
           cmg.category_id AS category_id,
@@ -111,7 +143,10 @@ class About
           ON cmg.group_id = gu.group_id
         INNER JOIN users u
           ON gu.user_id = u.id
+        #{"LEFT JOIN user_options uo ON uo.user_id = u.id" if filter_hidden_profiles}
         WHERE cmg.category_id IN (:category_ids)
+          AND cmg.group_id IN (:moderation_group_ids)
+        #{"AND uo.hide_profile IS NOT TRUE" if filter_hidden_profiles}
       )
       SELECT id AS category_id, user_ids
       FROM categories
@@ -143,13 +178,34 @@ class About
 
   private
 
+  def guardian
+    @guardian ||= Guardian.new(@user)
+  end
+
+  def localized_site_setting(setting_name, cooked: false, fallback: nil)
+    SiteSettingLocalization.value_for(
+      setting_name,
+      locale: @locale,
+      cooked:,
+      fallback: fallback || SiteSetting.public_send(setting_name),
+      show_original: @show_original,
+    )
+  end
+
+  def apply_hidden_profile(query)
+    return query if guardian.is_staff?
+    return query unless SiteSetting.allow_users_to_hide_profile
+
+    query.left_joins(:user_option).where("user_options.hide_profile IS NOT TRUE")
+  end
+
   def apply_excluded_groups(query, ignore_groups: [])
     group_ids = SiteSetting.about_page_hidden_groups_map - ignore_groups
     return query if group_ids.blank?
 
     query.joins(
       DB.sql_fragment(
-        "LEFT JOIN group_users ON group_id IN (:group_ids) AND user_id = users.id",
+        "LEFT JOIN group_users ON group_users.group_id IN (:group_ids) AND group_users.user_id = users.id",
         group_ids:,
       ),
     ).where("group_users.id": nil)

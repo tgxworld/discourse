@@ -8,6 +8,7 @@ uk:
   site_settings:
     policy_enabled: "Дозволити політики?"
     policy_restrict_to_staff_posts: "Політики можуть з'являтися лише на статтях персоналу"
+    create_policy_allowed_groups: "Для додавання правил до публікацій потрібне членство в групі"
     policy_easy_revoke: "Показувати кнопки \"Приймаю\" і \"відкликати\" одночасно,"
   discourse_policy:
     errors:
@@ -15,6 +16,9 @@ uk:
       group_not_found: "Групу для політики не знайдено"
       no_policy: "Для повідомлення не існує політики"
       staff_only: "Політика може застосовуватися лише до посад персоналу"
+      policy_group_inaccessible: "Цю політику наразі неможливо прийняти. Зверніться до адміністратора сайту."
+      policy_cannot_be_wiki: "Дописи з правилами не можуть бути дописами вікі."
+      no_policy_permission: "Ви не маєте дозволу змінювати правила в цій публікації."
     error:
       no_permission: "Не авторизовано"
   reports:

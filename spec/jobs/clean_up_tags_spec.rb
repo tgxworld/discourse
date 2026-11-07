@@ -7,7 +7,7 @@ describe Jobs::CleanUpTags do
     [
       Fabricate(
         :tag,
-        name: "used_publically",
+        name: "used_publicly",
         staff_topic_count: 2,
         public_topic_count: 2,
         pm_topic_count: 0,
@@ -31,6 +31,7 @@ describe Jobs::CleanUpTags do
       ),
     ]
   end
+
   fab!(:unused_tag) do
     Fabricate(
       :tag,

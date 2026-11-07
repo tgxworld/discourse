@@ -44,6 +44,15 @@ RSpec.describe TopicQuery do
     )
   end
 
+  describe "#list_filter" do
+    it "exposes the filter fragments it could not parse" do
+      topic_query = TopicQuery.new(nil, q: "status:nonsense")
+      topic_query.list_filter
+
+      expect(topic_query.invalid_filters).to eq(["status:nonsense"])
+    end
+  end
+
   describe "secure category" do
     it "filters categories out correctly" do
       category = Fabricate(:category_with_definition)
@@ -105,6 +114,20 @@ RSpec.describe TopicQuery do
         expect(TopicQuery.validate?(:per_page, "10")).to eq(true)
       end
     end
+
+    describe "page" do
+      it "respects SiteSetting.max_topic_query_page_param" do
+        SiteSetting.max_topic_query_page_param = 100
+
+        expect(TopicQuery.validate?(:page, -1)).to eq(false)
+        expect(TopicQuery.validate?(:page, 101)).to eq(false)
+
+        expect(TopicQuery.validate?(:page, 0)).to eq(true)
+        expect(TopicQuery.validate?(:page, 1)).to eq(true)
+        expect(TopicQuery.validate?(:page, 100)).to eq(true)
+        expect(TopicQuery.validate?(:page, "10")).to eq(true)
+      end
+    end
   end
 
   describe "#list_topics_by" do
@@ -127,7 +150,7 @@ RSpec.describe TopicQuery do
           pinned_globally: true,
           like_count: 1,
         )
-      _topic = Fabricate(:topic, created_at: 5.minute.ago, like_count: 100)
+      _topic = Fabricate(:topic, created_at: 5.minutes.ago, like_count: 100)
       topic = Fabricate(:topic, created_at: 1.minute.ago, like_count: 100)
 
       # pinned topic is older so generally it would not hit the batch without
@@ -207,21 +230,21 @@ RSpec.describe TopicQuery do
       pinned1 =
         Fabricate(
           :topic,
-          bumped_at: 3.hour.ago,
-          pinned_at: 1.hours.ago,
+          bumped_at: 3.hours.ago,
+          pinned_at: 1.hour.ago,
           pinned_until: 10.days.from_now,
           pinned_globally: true,
         )
       pinned2 =
         Fabricate(
           :topic,
-          bumped_at: 2.hour.ago,
+          bumped_at: 2.hours.ago,
           pinned_at: 4.hours.ago,
           pinned_until: 10.days.from_now,
           pinned_globally: true,
         )
-      unpinned1 = Fabricate(:topic, bumped_at: 2.hour.ago)
-      unpinned2 = Fabricate(:topic, bumped_at: 3.hour.ago)
+      unpinned1 = Fabricate(:topic, bumped_at: 2.hours.ago)
+      unpinned2 = Fabricate(:topic, bumped_at: 3.hours.ago)
 
       topic_query = TopicQuery.new(user)
       results = topic_query.send(:default_results)
@@ -238,20 +261,20 @@ RSpec.describe TopicQuery do
         Fabricate(
           :topic,
           category: cat,
-          bumped_at: 3.hour.ago,
-          pinned_at: 1.hours.ago,
+          bumped_at: 3.hours.ago,
+          pinned_at: 1.hour.ago,
           pinned_until: 10.days.from_now,
         )
       pinned2 =
         Fabricate(
           :topic,
           category: cat,
-          bumped_at: 2.hour.ago,
+          bumped_at: 2.hours.ago,
           pinned_at: 4.hours.ago,
           pinned_until: 10.days.from_now,
         )
-      unpinned1 = Fabricate(:topic, category: cat, bumped_at: 2.hour.ago)
-      unpinned2 = Fabricate(:topic, category: cat, bumped_at: 3.hour.ago)
+      unpinned1 = Fabricate(:topic, category: cat, bumped_at: 2.hours.ago)
+      unpinned2 = Fabricate(:topic, category: cat, bumped_at: 3.hours.ago)
 
       topic_query = TopicQuery.new(user)
       results = topic_query.send(:default_results)
@@ -352,17 +375,22 @@ RSpec.describe TopicQuery do
       group.add(group_moderator)
       category = Fabricate(:category)
       Fabricate(:category_moderation_group, category:, group:)
-      _topic = Fabricate(:topic, category: category, deleted_at: 1.year.ago)
+      deleted_topic = Fabricate(:topic, category: category, deleted_at: 1.year.ago)
+      child_category = Fabricate(:category, parent_category: category)
+      deleted_child_topic = Fabricate(:topic, category: child_category, deleted_at: 1.year.ago)
 
-      expect(TopicQuery.new(admin, status: "deleted").list_latest.topics.size).to eq(1)
-      expect(TopicQuery.new(moderator, status: "deleted").list_latest.topics.size).to eq(1)
+      [admin, moderator].each do |staff|
+        expect(
+          TopicQuery.new(staff, status: "deleted").list_latest.topics.map(&:id),
+        ).to contain_exactly(deleted_topic.id, deleted_child_topic.id)
+      end
       expect(
         TopicQuery
           .new(group_moderator, status: "deleted", category: category.id)
           .list_latest
           .topics
-          .size,
-      ).to eq(1)
+          .map(&:id),
+      ).to contain_exactly(deleted_topic.id)
       expect(TopicQuery.new(user, status: "deleted").list_latest.topics.size).to eq(0)
       expect(TopicQuery.new(nil, status: "deleted").list_latest.topics.size).to eq(0)
     end
@@ -505,6 +533,10 @@ RSpec.describe TopicQuery do
 
   describe "tag filter" do
     fab!(:tag)
+    fab!(:tag_2, :tag)
+    fab!(:tag_3, :tag)
+    fab!(:tag_4, :tag)
+    fab!(:tag_5, :tag)
     fab!(:other_tag, :tag)
     fab!(:uppercase_tag) { Fabricate(:tag, name: "HeLlO") }
 
@@ -515,6 +547,8 @@ RSpec.describe TopicQuery do
       fab!(:tagged_topic2) { Fabricate(:topic, tags: [other_tag]) }
       fab!(:tagged_topic3) { Fabricate(:topic, tags: [tag, other_tag]) }
       fab!(:tagged_topic4) { Fabricate(:topic, tags: [uppercase_tag]) }
+      fab!(:tagged_topic5) { Fabricate(:topic, tags: [tag_2, tag_3, tag_4]) }
+      fab!(:tagged_topic6) { Fabricate(:topic, tags: [tag_2, tag_3, tag_4, tag_5]) }
       fab!(:no_tags_topic, :topic)
       fab!(:tag_group) do
         Fabricate(:tag_group, permissions: { "staff" => 1 }, tag_names: [other_tag.name])
@@ -532,27 +566,25 @@ RSpec.describe TopicQuery do
       end
 
       it "returns topics with the tag when filtered to it" do
-        expect(TopicQuery.new(moderator, tags: tag.name).list_latest.topics).to contain_exactly(
-          tagged_topic1,
-          tagged_topic3,
-        )
-
-        expect(TopicQuery.new(moderator, tags: [tag.id]).list_latest.topics).to contain_exactly(
-          tagged_topic1,
-          tagged_topic3,
-        )
+        expect(
+          TopicQuery.new(moderator, tags: tag.name).list_latest.topics.map(&:id),
+        ).to contain_exactly(tagged_topic1.id, tagged_topic3.id)
 
         expect(
-          TopicQuery.new(moderator, tags: [tag.name, other_tag.name]).list_latest.topics,
-        ).to contain_exactly(tagged_topic1, tagged_topic2, tagged_topic3)
+          TopicQuery.new(moderator, tags: [tag.id]).list_latest.topics.map(&:id),
+        ).to contain_exactly(tagged_topic1.id, tagged_topic3.id)
 
         expect(
-          TopicQuery.new(moderator, tags: [tag.id, other_tag.id]).list_latest.topics,
-        ).to contain_exactly(tagged_topic1, tagged_topic2, tagged_topic3)
+          TopicQuery.new(moderator, tags: [tag.name, other_tag.name]).list_latest.topics.map(&:id),
+        ).to contain_exactly(tagged_topic1.id, tagged_topic2.id, tagged_topic3.id)
 
-        expect(TopicQuery.new(moderator, tags: ["hElLo"]).list_latest.topics).to contain_exactly(
-          tagged_topic4,
-        )
+        expect(
+          TopicQuery.new(moderator, tags: [tag.id, other_tag.id]).list_latest.topics.map(&:id),
+        ).to contain_exactly(tagged_topic1.id, tagged_topic2.id, tagged_topic3.id)
+
+        expect(
+          TopicQuery.new(moderator, tags: ["hElLo"]).list_latest.topics.map(&:id),
+        ).to contain_exactly(tagged_topic4.id)
       end
 
       it "can return topics with all specified tags" do
@@ -563,6 +595,26 @@ RSpec.describe TopicQuery do
             .topics
             .map(&:id),
         ).to eq([tagged_topic3.id])
+
+        expect(
+          TopicQuery
+            .new(moderator, tags: [tag_2.name, tag_3.name, tag_4.name], match_all_tags: true)
+            .list_latest
+            .topics
+            .map(&:id),
+        ).to contain_exactly(tagged_topic6.id, tagged_topic5.id)
+
+        expect(
+          TopicQuery
+            .new(
+              moderator,
+              tags: [tag_2.name, tag_3.name, tag_4.name, tag_5.name],
+              match_all_tags: true,
+            )
+            .list_latest
+            .topics
+            .map(&:id),
+        ).to contain_exactly(tagged_topic6.id)
       end
 
       it "can return topics with tag intersections using truthy/falsey values" do
@@ -571,9 +623,8 @@ RSpec.describe TopicQuery do
             .new(moderator, tags: [tag.name, other_tag.name], match_all_tags: "false")
             .list_latest
             .topics
-            .map(&:id)
-            .sort,
-        ).to eq([tagged_topic1.id, tagged_topic2.id, tagged_topic3.id].sort)
+            .map(&:id),
+        ).to contain_exactly(tagged_topic1.id, tagged_topic2.id, tagged_topic3.id)
       end
 
       it "returns an empty relation when an invalid tag is passed" do
@@ -592,28 +643,29 @@ RSpec.describe TopicQuery do
       end
 
       it "can filter using a synonym" do
-        expect(TopicQuery.new(moderator, tags: synonym.name).list_latest.topics).to contain_exactly(
-          tagged_topic1,
-          tagged_topic3,
-        )
-
-        expect(TopicQuery.new(moderator, tags: [synonym.id]).list_latest.topics).to contain_exactly(
-          tagged_topic1,
-          tagged_topic3,
-        )
+        expect(
+          TopicQuery.new(moderator, tags: synonym.name).list_latest.topics.map(&:id),
+        ).to contain_exactly(tagged_topic1.id, tagged_topic3.id)
 
         expect(
-          TopicQuery.new(moderator, tags: [synonym.name, other_tag.name]).list_latest.topics,
-        ).to contain_exactly(tagged_topic1, tagged_topic2, tagged_topic3)
+          TopicQuery.new(moderator, tags: [synonym.id]).list_latest.topics.map(&:id),
+        ).to contain_exactly(tagged_topic1.id, tagged_topic3.id)
 
         expect(
-          TopicQuery.new(moderator, tags: [synonym.id, other_tag.id]).list_latest.topics,
-        ).to contain_exactly(tagged_topic1, tagged_topic2, tagged_topic3)
+          TopicQuery
+            .new(moderator, tags: [synonym.name, other_tag.name])
+            .list_latest
+            .topics
+            .map(&:id),
+        ).to contain_exactly(tagged_topic1.id, tagged_topic2.id, tagged_topic3.id)
 
-        expect(TopicQuery.new(moderator, tags: ["SYnonYM"]).list_latest.topics).to contain_exactly(
-          tagged_topic1,
-          tagged_topic3,
-        )
+        expect(
+          TopicQuery.new(moderator, tags: [synonym.id, other_tag.id]).list_latest.topics.map(&:id),
+        ).to contain_exactly(tagged_topic1.id, tagged_topic2.id, tagged_topic3.id)
+
+        expect(
+          TopicQuery.new(moderator, tags: ["SYnonYM"]).list_latest.topics.map(&:id),
+        ).to contain_exactly(tagged_topic1.id, tagged_topic3.id)
       end
 
       context "with hidden tags" do
@@ -742,12 +794,12 @@ RSpec.describe TopicQuery do
 
     before { SiteSetting.mute_all_categories_by_default = true }
 
-    it "should remove all topics from new and latest lists by default" do
+    it "removes all topics from new and latest lists by default" do
       expect(topic_query.list_new.topics.map(&:id)).not_to include(topic.id)
       expect(topic_query.list_latest.topics.map(&:id)).not_to include(topic.id)
     end
 
-    it "should include tracked category topics in new and latest lists" do
+    it "includes tracked-category topics in new and latest lists" do
       topic = Fabricate(:topic, category: category)
       CategoryUser.create!(
         user_id: user.id,
@@ -758,17 +810,17 @@ RSpec.describe TopicQuery do
       expect(topic_query.list_latest.topics.map(&:id)).to include(topic.id)
     end
 
-    it "should include default watched category topics in latest list for anonymous users" do
+    it "includes default watched-category topics for anonymous users" do
       SiteSetting.default_categories_watching = category.id.to_s
       expect(TopicQuery.new.list_latest.topics.map(&:id)).to include(topic.id)
     end
 
-    it "should include default regular category topics in latest list for anonymous users" do
+    it "includes default regular-category topics for anonymous users" do
       SiteSetting.default_categories_normal = category.id.to_s
       expect(TopicQuery.new.list_latest.topics.map(&:id)).to include(topic.id)
     end
 
-    it "should include topics when filtered by category" do
+    it "includes topics when filtered by category" do
       topic_query = TopicQuery.new(user, category: topic.category_id)
       expect(topic_query.list_latest.topics.map(&:id)).to include(topic.id)
     end
@@ -1112,6 +1164,7 @@ RSpec.describe TopicQuery do
   describe "categorized" do
     fab!(:category, :category_with_definition)
     let(:topic_category) { category.topic }
+
     fab!(:topic_no_cat, :topic)
     fab!(:topic_in_cat1) do
       Fabricate(:topic, category: category, bumped_at: 10.minutes.ago, created_at: 10.minutes.ago)
@@ -1151,7 +1204,7 @@ RSpec.describe TopicQuery do
         expect(topic_ids - [topic_category.id]).to eq([topic_in_cat1.id, topic_in_cat2.id])
       end
 
-      it "should apply default sort order to latest and unseen filters only" do
+      it "applies the default sort order only to latest and unseen filters" do
         category.update!(sort_order: "created", sort_ascending: true)
 
         topic1 =
@@ -1234,6 +1287,26 @@ RSpec.describe TopicQuery do
 
         expect(TopicQuery.new(user).list_unread.topics).to eq([])
         expect(TopicQuery.new(admin).list_unread.topics).to eq([first.topic])
+      end
+    end
+
+    context "with a small action at the tail of an unread topic" do
+      it "excludes the topic from the unread list" do
+        topic = create_post(raw: "the original post", title: "super amazing title").topic
+        topic.add_small_action(Discourse.system_user, "closed.enabled")
+        topic.update_columns(updated_at: Time.zone.now, bumped_at: 1.year.ago)
+
+        TopicUser.change(
+          user.id,
+          topic.id,
+          notification_level: TopicUser.notification_levels[:tracking],
+        )
+        TopicUser.update_last_read(user, topic.id, 1, 1, 1)
+        user.user_stat.update!(first_unread_at: 1.minute.ago)
+
+        # The small action does not advance highest_post_number, so the user has
+        # read everything that counts — the topic is no longer unread.
+        expect(TopicQuery.new(user).list_unread.topics).not_to include(topic)
       end
     end
 
@@ -1532,11 +1605,11 @@ RSpec.describe TopicQuery do
       let(:topic) { Fabricate(:topic) }
       let!(:new_topic) { Fabricate(:post, user: creator).topic }
 
-      it "should return the new topic" do
+      it "returns the new topic" do
         expect(TopicQuery.new.list_suggested_for(topic).topics).to eq([new_topic])
       end
 
-      it "should return the nothing when random topics excluded" do
+      it "returns nothing when random topics are excluded" do
         expect(TopicQuery.new.list_suggested_for(topic, include_random: false).topics).to eq([])
       end
     end
@@ -1548,7 +1621,7 @@ RSpec.describe TopicQuery do
       let!(:archived_topic) { Fabricate(:topic, user: creator, archived: true) }
       let!(:invisible_topic) { Fabricate(:topic, user: creator, visible: false) }
 
-      it "should omit the closed/archived/invisible topics from suggested" do
+      it "omits closed, archived, and invisible topics from suggestions" do
         expect(TopicQuery.new.list_suggested_for(topic).topics).to eq([regular_topic])
       end
     end
@@ -1577,7 +1650,7 @@ RSpec.describe TopicQuery do
 
       let(:plugin) { plugin_class.new }
 
-      it "should return suggested defined by the custom provider" do
+      it "returns suggestions from the custom provider" do
         DiscoursePluginRegistry.register_list_suggested_for_provider(
           plugin_class.method(:custom_suggested_topics),
           plugin,
@@ -1589,19 +1662,15 @@ RSpec.describe TopicQuery do
       end
     end
 
-    context "when logged in and user is part of the `experimental_new_new_view_groups` site setting groups" do
-      fab!(:group)
+    context "when unified new is enabled" do
       fab!(:topic)
 
-      before do
-        SiteSetting.experimental_new_new_view_groups = group.name
-        group.add(user)
-      end
+      before { SiteSetting.enable_unified_new = true }
 
       after { clear_cache! }
 
       context "when there are no new topics for user" do
-        it "should return random topics excluding topics that are muted by user and not older than `suggested_topics_max_days_old` site setting" do
+        it "returns recent random topics that are not muted by the user" do
           topic2 = Fabricate(:topic, user: user)
           topic3 = Fabricate(:topic, user: user)
           _topic4 = Fabricate(:topic, user: user, created_at: 8.days.ago)
@@ -1684,7 +1753,7 @@ RSpec.describe TopicQuery do
 
         before { topic.update!(category:) }
 
-        it "should return new topics for user ordered by topics that user has created first, in the same category as the topic and then topic's bumped at" do
+        it "orders new topics by authorship, category, and bumped_at" do
           expect(
             topic_query.list_suggested_for(topic, include_random: false).topics.map(&:id),
           ).to eq(
@@ -1729,7 +1798,7 @@ RSpec.describe TopicQuery do
         suggested_for(tt)
       end
 
-      it "should return empty results when there is nothing to find" do
+      it "returns empty results when nothing matches" do
         expect(suggested_topics).to be_blank
       end
 
@@ -1805,7 +1874,7 @@ RSpec.describe TopicQuery do
         context "as user not part of group" do
           let!(:user) { Fabricate(:user) }
 
-          it "should not return topics by the group user" do
+          it "does not return topics by the group user" do
             expect(suggested_topics).to eq([private_message.id])
           end
         end
@@ -1813,7 +1882,7 @@ RSpec.describe TopicQuery do
         context "as user part of group" do
           let!(:user) { group_user }
 
-          it "should return the group topics" do
+          it "returns the group's topics" do
             expect(suggested_topics).to match_array([private_group_topic.id, private_message.id])
           end
 
@@ -1822,7 +1891,7 @@ RSpec.describe TopicQuery do
               SiteSetting.personal_message_enabled_groups = Group::AUTO_GROUPS[:trust_level_4]
             end
 
-            it "should not return topics by the group user" do
+            it "does not return topics by the group user" do
               expect(suggested_topics).to eq(nil)
             end
           end
@@ -1832,7 +1901,7 @@ RSpec.describe TopicQuery do
           let(:tag) { Fabricate(:tag) }
           let!(:user) { group_user }
 
-          it "should return only tagged topics" do
+          it "returns only tagged topics" do
             Fabricate(:topic_tag, topic: private_message, tag: tag)
             Fabricate(:topic_tag, topic: private_group_topic)
 
@@ -1883,8 +1952,8 @@ RSpec.describe TopicQuery do
           fully_read_archived.archived = true
           fully_read_archived.save
 
-          old_partially_read.update!(updated_at: 2.weeks.ago)
-          partially_read.update!(updated_at: Time.now)
+          old_partially_read.update!(bumped_at: 2.weeks.ago)
+          partially_read.update!(bumped_at: Time.now)
         end
 
         it "operates correctly" do
@@ -1940,13 +2009,13 @@ RSpec.describe TopicQuery do
     let!(:topic5) { Fabricate(:topic, user: user, visible: false) }
     let!(:topic6) { Fabricate(:topic, user: user2) }
 
-    it "should return the right lists for anon user" do
+    it "returns the expected lists for an anonymous user" do
       topics = TopicQuery.new.list_group_topics(group).topics
 
       expect(topics).to contain_exactly(topic1, topic2, topic6)
     end
 
-    it "should return the right list for users in the same group" do
+    it "returns the expected list for users in the same group" do
       topics = TopicQuery.new(user).list_group_topics(group).topics
 
       expect(topics).to contain_exactly(topic1, topic2, topic3, topic6)
@@ -1956,7 +2025,7 @@ RSpec.describe TopicQuery do
       expect(topics).to contain_exactly(topic1, topic2, topic3, topic6)
     end
 
-    it "should return the right list for user no in the group" do
+    it "returns the expected list for a user outside the group" do
       topics = TopicQuery.new(user3).list_group_topics(group).topics
 
       expect(topics).to contain_exactly(topic1, topic2, topic6)
@@ -2018,7 +2087,7 @@ RSpec.describe TopicQuery do
 
       it "doesn't include shared draft topics for regular users" do
         group.add(user)
-        SiteSetting.shared_drafts_category = nil
+        SiteSetting.shared_drafts_category = ""
         list = TopicQuery.new(user).list_latest
         expect(list.topics).to include(topic)
 
@@ -2261,7 +2330,7 @@ RSpec.describe TopicQuery do
 
   describe "with topic_query_create_list_topics modifier" do
     fab!(:topic1) { Fabricate(:topic, created_at: 3.days.ago, bumped_at: 1.hour.ago) }
-    fab!(:topic2) { Fabricate(:topic, created_at: 2.days.ago, bumped_at: 3.hour.ago) }
+    fab!(:topic2) { Fabricate(:topic, created_at: 2.days.ago, bumped_at: 3.hours.ago) }
 
     it "allows changing" do
       original_topic_query = TopicQuery.new(user)
@@ -2318,6 +2387,15 @@ RSpec.describe TopicQuery do
         )
       end
     end
+    fab!(:second_watched_tag) do
+      Fabricate(:tag).tap do |tag|
+        TagUser.create!(
+          user: user,
+          tag: tag,
+          notification_level: TagUser.notification_levels[:watching],
+        )
+      end
+    end
     fab!(:muted_tag) do
       Fabricate(:tag).tap do |tag|
         TagUser.create!(
@@ -2340,27 +2418,6 @@ RSpec.describe TopicQuery do
 
     context "when enabled" do
       it "returns topics even if category or tag is muted but another tag or category is watched" do
-        SiteSetting.watched_precedence_over_muted = true
-        query = TopicQuery.new(user).list_latest
-        expect(query.topics.map(&:id)).to contain_exactly(
-          topic.id,
-          topic_in_watched_category_and_muted_tag.id,
-          topic_in_muted_category_and_watched_tag.id,
-        )
-      end
-    end
-
-    context "when disabled" do
-      it "returns topics without muted category or tag" do
-        SiteSetting.watched_precedence_over_muted = false
-        query = TopicQuery.new(user).list_latest
-        expect(query.topics.map(&:id)).to contain_exactly(topic.id)
-      end
-    end
-
-    context "when disabled but overridden by user" do
-      it "returns topics even if category or tag is muted but another tag or category is watched" do
-        SiteSetting.watched_precedence_over_muted = false
         user.user_option.update!(watched_precedence_over_muted: true)
         query = TopicQuery.new(user).list_latest
         expect(query.topics.map(&:id)).to contain_exactly(
@@ -2368,6 +2425,89 @@ RSpec.describe TopicQuery do
           topic_in_watched_category_and_muted_tag.id,
           topic_in_muted_category_and_watched_tag.id,
         )
+      end
+
+      it "does not return fewer topics when multiple watched tags match the same topic" do
+        user.user_option.update!(watched_precedence_over_muted: true)
+        topics_with_multiple_watched_tags =
+          4.times.map do
+            Fabricate(:topic, category: muted_category, tags: [watched_tag, second_watched_tag])
+          end
+
+        query = TopicQuery.new(user, per_page: 4).list_latest
+
+        expect(query.topics.map(&:id)).to eq(topics_with_multiple_watched_tags.reverse.map(&:id))
+      end
+    end
+
+    context "when disabled" do
+      it "returns topics without muted category or tag" do
+        user.user_option.update!(watched_precedence_over_muted: false)
+        query = TopicQuery.new(user).list_latest
+        expect(query.topics.map(&:id)).to contain_exactly(topic.id)
+      end
+    end
+  end
+
+  describe "state parameter" do
+    describe "state=watching_first_post" do
+      fab!(:test_user, :user)
+      fab!(:category_watching_first_post, :category)
+      fab!(:category_regular, :category)
+      fab!(:tag_watching_first_post, :tag)
+      fab!(:tag_regular, :tag)
+
+      fab!(:topic_in_watched_category) { Fabricate(:topic, category: category_watching_first_post) }
+
+      fab!(:topic_in_regular_category) { Fabricate(:topic, category: category_regular) }
+      fab!(:topic_with_watched_tag) { Fabricate(:topic, tags: [tag_watching_first_post]) }
+      fab!(:topic_with_regular_tag) { Fabricate(:topic, tags: [tag_regular]) }
+
+      fab!(:topic_with_both) do
+        Fabricate(:topic, category: category_watching_first_post, tags: [tag_watching_first_post])
+      end
+
+      before do
+        SiteSetting.tagging_enabled = true
+        CategoryUser.set_notification_level_for_category(
+          test_user,
+          CategoryUser.notification_levels[:watching_first_post],
+          category_watching_first_post.id,
+        )
+        TagUser.change(
+          test_user.id,
+          tag_watching_first_post.id,
+          TagUser.notification_levels[:watching_first_post],
+        )
+      end
+
+      it "returns no topics when the user is anonymous" do
+        expect(
+          TopicQuery.new(nil, state: "watching_first_post").list_latest.topics.map(&:id),
+        ).to eq([])
+      end
+
+      it "returns the union of watched-category and watched-tag topics" do
+        ids = TopicQuery.new(test_user, state: "watching_first_post").list_latest.topics.map(&:id)
+
+        expect(ids).to contain_exactly(
+          topic_in_watched_category.id,
+          topic_with_watched_tag.id,
+          topic_with_both.id,
+        )
+      end
+
+      it "combines with other filters" do
+        topic_in_watched_category.update!(closed: true)
+
+        ids =
+          TopicQuery
+            .new(test_user, state: "watching_first_post", status: "closed")
+            .list_latest
+            .topics
+            .map(&:id)
+
+        expect(ids).to contain_exactly(topic_in_watched_category.id)
       end
     end
   end

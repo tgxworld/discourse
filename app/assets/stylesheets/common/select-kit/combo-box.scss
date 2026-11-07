@@ -27,7 +27,7 @@
 
     .select-kit-header {
       background: var(--secondary);
-      border-color: var(--primary-400);
+      border-color: var(--input-border-color);
 
       &.is-focused {
         @include default-focus;
@@ -58,7 +58,7 @@
 
     &.is-disabled {
       .select-kit-header {
-        background: var(--primary-low);
+        background: var(--d-input-bg-color--disabled);
         border-color: var(--primary-low-mid);
         color: var(--primary-medium);
 

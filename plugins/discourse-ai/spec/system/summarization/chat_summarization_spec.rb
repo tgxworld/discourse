@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-RSpec.describe "Summarize a channel since your last visit", type: :system do
-  fab!(:current_user) { Fabricate(:user) }
+RSpec.describe "Summarize a channel since your last visit" do
+  fab!(:current_user, :user)
   fab!(:group)
-  fab!(:channel) { Fabricate(:chat_channel) }
+  fab!(:channel, :chat_channel)
   fab!(:message_1) { Fabricate(:chat_message, chat_channel: channel) }
   let(:chat) { PageObjects::Pages::Chat.new }
   let(:summarization_result) { "This is a summary" }
@@ -14,7 +14,7 @@ RSpec.describe "Summarize a channel since your last visit", type: :system do
     group.add(current_user)
 
     assign_fake_provider_to(:ai_default_llm_model)
-    assign_persona_to(:ai_summarization_persona, [group.id])
+    assign_agent_to(:ai_summarization_agent, [group.id])
     SiteSetting.ai_summarization_enabled = true
 
     SiteSetting.chat_enabled = true
@@ -30,7 +30,7 @@ RSpec.describe "Summarize a channel since your last visit", type: :system do
       find(".chat-composer-dropdown__trigger-btn").click
       find(".chat-composer-dropdown__action-btn.channel-summary").click
 
-      expect(page.has_css?(".chat-modal-channel-summary")).to eq(true)
+      expect(page).to have_css(".chat-modal-channel-summary")
 
       find(".summarization-since").click
       find(".select-kit-row[data-value=\"3\"]").click

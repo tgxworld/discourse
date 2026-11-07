@@ -3,16 +3,13 @@ import { withPluginApi } from "discourse/lib/plugin-api";
 import { formatUsername } from "discourse/lib/utilities";
 import { i18n } from "discourse-i18n";
 import slugifyChannel from "discourse/plugins/chat/discourse/lib/slugify-channel";
+import UserMenuChatNotificationsList from "../components/user-menu/chat-notifications-list.js";
 
 export default {
   name: "chat-user-menu",
   initialize(container) {
     withPluginApi((api) => {
       const chat = container.lookup("service:chat");
-
-      if (!chat.userCanChat) {
-        return;
-      }
 
       if (api.registerNotificationTypeRenderer) {
         api.registerNotificationTypeRenderer(
@@ -142,6 +139,10 @@ export default {
         );
       }
 
+      if (!chat.userCanChat) {
+        return;
+      }
+
       if (api.registerUserMenuTab) {
         api.registerUserMenuTab((UserMenuTab) => {
           return class extends UserMenuTab {
@@ -150,7 +151,7 @@ export default {
             }
 
             get panelComponent() {
-              return "user-menu/chat-notifications-list";
+              return UserMenuChatNotificationsList;
             }
 
             get icon() {

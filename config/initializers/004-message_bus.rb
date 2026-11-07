@@ -17,16 +17,15 @@ end
 def setup_message_bus_env(env)
   return if env["__mb"]
 
-  ::Middleware::RequestTracker.populate_request_queue_seconds!(env)
-
-  if queue_time = env["REQUEST_QUEUE_SECONDS"]
-    if queue_time > (GlobalSetting.reject_message_bus_queue_seconds).to_f
+  if (queue_time = env[Middleware::ProcessingRequest::REQUEST_QUEUE_SECONDS_ENV_KEY]) &&
+       Discourse.redis.get("docker_manager:upgrade:server_restarting").blank?
+    if queue_time > GlobalSetting.reject_message_bus_queue_seconds.to_f
       raise RateLimiter::LimitExceeded, 30 + (rand * 120).to_i
     end
   end
 
   host = RailsMultisite::ConnectionManagement.host(env)
-  RailsMultisite::ConnectionManagement.with_hostname(host) do
+  RailsMultisite::ConnectionManagement.with_hostname(host, raise_on_missing: false) do
     cors_origin = Discourse.base_url_no_prefix
 
     if GlobalSetting.enable_cors && SiteSetting.cors_origins.present?
@@ -38,7 +37,7 @@ def setup_message_bus_env(env)
       "Access-Control-Allow-Origin" => cors_origin,
       "Access-Control-Allow-Methods" => "GET, POST",
       "Access-Control-Allow-Headers" =>
-        "X-SILENCE-LOGGER, X-Shared-Session-Key, Dont-Chunk, Discourse-Present, Discourse-Deferred-Track-View",
+        "X-SILENCE-LOGGER, X-Shared-Session-Key, Dont-Chunk, Discourse-Present",
       "Access-Control-Max-Age" => "7200",
     }
 
@@ -54,17 +53,27 @@ def setup_message_bus_env(env)
       Discourse.warn_exception(e, message: "Unexpected error in Message Bus", env: env)
     end
 
-    user_id = user && user.id
+    user_id = user&.id
 
     raise Discourse::InvalidAccess if !user_id && SiteSetting.login_required
 
-    is_admin = !!(user && user.admin?)
+    is_admin = user&.admin || false
+
+    logged_in_pseudogroups =
+      if SiteSetting.granular_anonymous_and_logged_in_groups_permissions
+        [Group::AUTO_GROUPS[:logged_in_users]]
+      else
+        [Group::AUTO_GROUPS[:logged_in_users], Group::AUTO_GROUPS[:everyone]]
+      end
+
     group_ids =
       if is_admin
-        # special rule, admin is allowed access to all groups
-        Group.pluck(:id)
+        # Special rule, admin is allowed access to all groups
+        Group.pluck(:id) + logged_in_pseudogroups
       elsif user
-        user.groups.pluck("groups.id")
+        user.belonging_to_group_ids + logged_in_pseudogroups
+      else
+        [Group::AUTO_GROUPS[:anonymous_users]]
       end
 
     extra_headers["Discourse-Logged-Out"] = "1" if env[Auth::DefaultCurrentUserProvider::BAD_TOKEN]
@@ -89,7 +98,12 @@ end
 
 MessageBus.extra_response_headers_lookup do |env|
   setup_message_bus_env(env)
-  env["__mb"][:extra_headers]
+  headers = env["__mb"][:extra_headers]
+  if view_tracking_data = env["discourse.view_tracking_data"]
+    headers["X-Discourse-TrackView"] = "1" if view_tracking_data[:track_view]
+    headers["X-Discourse-BrowserPageView"] = "1" if view_tracking_data[:browser_page_view]
+  end
+  headers
 end
 
 MessageBus.user_id_lookup do |env|
@@ -123,7 +137,7 @@ MessageBus.on_disconnect do |site_id|
   ActiveRecord::Base.connection_handler.clear_active_connections!
 end
 
-if Rails.env == "test"
+if Rails.env.test?
   MessageBus.configure(backend: :memory)
 else
   MessageBus.redis_config = GlobalSetting.message_bus_redis_config
@@ -135,7 +149,7 @@ MessageBus.long_polling_enabled =
   GlobalSetting.enable_long_polling.nil? ? true : GlobalSetting.enable_long_polling
 MessageBus.long_polling_interval = GlobalSetting.long_polling_interval || 25_000
 
-if Rails.env == "test" || $0 =~ /rake$/
+if Rails.env.test? || $0 =~ /rake$/
   # disable keepalive in testing
   MessageBus.keepalive_interval = -1
 end

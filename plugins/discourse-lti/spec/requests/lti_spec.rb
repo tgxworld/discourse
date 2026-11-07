@@ -17,12 +17,12 @@ describe "LTI Plugin" do
   end
 
   before do
-    SiteSetting.lti_enabled = true
     SiteSetting.lti_authorization_endpoint = authorize_url
     SiteSetting.lti_platform_public_key = platform_public_key.to_s
     SiteSetting.lti_platform_issuer_id = platform_issuer_id
     SiteSetting.lti_client_ids = tool_client_id
     SiteSetting.lti_email_verified = true
+    SiteSetting.lti_enabled = true
   end
 
   it "shows an error if auth is started on Discourse side" do
@@ -188,6 +188,7 @@ describe "LTI Plugin" do
 
     context "with invite custom field" do
       let(:invite) { Invite.generate(Discourse.system_user) }
+
       before do
         token_data[DiscourseLti::CUSTOM_DATA_CLAIM] = {
           DiscourseLti::DISCOURSE_INVITE_KEYS.first => invite.link,

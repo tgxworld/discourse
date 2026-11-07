@@ -1,0 +1,148 @@
+/* eslint-disable ember/no-classic-components, ember/require-tagless-components */
+import Component from "@ember/component";
+import { action, computed, set } from "@ember/object";
+import { scheduleOnce } from "@ember/runloop";
+import { trustHTML } from "@ember/template";
+import { classNameBindings } from "@ember-decorators/component";
+import PluginOutlet from "discourse/components/plugin-outlet";
+import DButton from "discourse/ui-kit/d-button";
+import { i18n } from "discourse-i18n";
+
+@classNameBindings("docked")
+export default class TopicProgress extends Component {
+  elementId = "topic-progress-wrapper";
+  docked = false;
+
+  /** @type {number | null} */
+  progressPosition = null;
+
+  /** @type {number | string | null} */
+  _streamPercentage = null;
+
+  @computed("topic.postStream")
+  get postStream() {
+    return this.topic?.postStream;
+  }
+
+  set postStream(value) {
+    set(this, "topic.postStream", value);
+  }
+
+  @computed(
+    "postStream.loaded",
+    "topic.currentPost",
+    "postStream.filteredPostsCount"
+  )
+  get hideProgress() {
+    const hideOnShortStream =
+      this.site.desktopView && this.postStream?.filteredPostsCount < 2;
+    return (
+      !this.postStream?.loaded || !this.topic?.currentPost || hideOnShortStream
+    );
+  }
+
+  @computed(
+    "progressPosition",
+    "topic.last_read_post_id",
+    "topic.last_read_post_number",
+    "postStream.filteredPostsCount"
+  )
+  get showBackButton() {
+    if (!this.topic?.last_read_post_id) {
+      return;
+    }
+
+    const readPos = this.postStream.progressIndexOfPostId({
+      id: this.topic.last_read_post_id,
+      post_number: this.topic.last_read_post_number,
+    });
+
+    return (
+      readPos < this.postStream.filteredPostsCount &&
+      readPos > this.progressPosition + 1
+    );
+  }
+
+  @computed("_streamPercentage")
+  get progressStyle() {
+    return `--progress-bg-width: ${this._streamPercentage || 0}%`;
+  }
+
+  didInsertElement() {
+    super.didInsertElement(...arguments);
+
+    this.appEvents.on("topic:current-post-scrolled", this, this._topicScrolled);
+
+    if (this.prevEvent) {
+      scheduleOnce("afterRender", this, this._topicScrolled, this.prevEvent);
+    }
+  }
+
+  willDestroyElement() {
+    super.willDestroyElement(...arguments);
+    this.appEvents.off(
+      "topic:current-post-scrolled",
+      this,
+      this._topicScrolled
+    );
+  }
+
+  click(e) {
+    if (e.target.closest("#topic-progress")) {
+      this.onExpandToggle?.();
+    }
+  }
+
+  @action
+  goBack() {
+    this.jumpToPost(this.get("topic.last_read_post_number"));
+  }
+
+  _topicScrolled(event) {
+    if (this.docked) {
+      this.setProperties({
+        progressPosition: this.get("postStream.filteredPostsCount"),
+        _streamPercentage: 100,
+      });
+    } else {
+      this.setProperties({
+        progressPosition: event.postIndex,
+        _streamPercentage: (event.percent * 100).toFixed(2),
+      });
+    }
+  }
+
+  <template>
+    {{#unless this.hideProgress}}
+      {{yield}}
+    {{/unless}}
+
+    {{#if this.showBackButton}}
+      <div class="progress-back-container">
+        <DButton
+          class="btn-primary btn-small progress-back"
+          @action={{this.goBack}}
+          @icon="arrow-down"
+          @label="topic.timeline.back"
+        />
+      </div>
+    {{/if}}
+
+    <nav
+      aria-label={{i18n "topic.progress.title"}}
+      class={{if this.hideProgress "hidden"}}
+      id="topic-progress"
+      style={{trustHTML this.progressStyle}}
+      title={{i18n "topic.progress.title"}}
+    >
+      <div class="nums">
+        <span>{{this.progressPosition}}</span>
+        <span>/</span>
+        <span>{{this.postStream.filteredPostsCount}}</span>
+      </div>
+      <div class="bg"></div>
+    </nav>
+
+    <PluginOutlet @connectorTagName="div" @name="after-topic-progress" />
+  </template>
+}

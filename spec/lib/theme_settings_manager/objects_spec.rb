@@ -4,7 +4,7 @@ RSpec.describe ThemeSettingsManager::Objects do
   fab!(:theme)
 
   let(:theme_setting) do
-    yaml = File.read("#{Rails.root}/spec/fixtures/theme_settings/objects_settings.yaml")
+    yaml = File.read("#{Rails.root.join("spec/fixtures/theme_settings/objects_settings.yaml")}")
     field = theme.set_field(target: :settings, name: "yaml", value: yaml)
     theme.save!
     theme.settings
@@ -28,6 +28,69 @@ RSpec.describe ThemeSettingsManager::Objects do
     theme_setting[:objects_setting].value = new_value
 
     expect(theme.reload.settings[:objects_setting].value).to eq(new_value)
+  end
+
+  it "rejects invalid root and nested object shapes before saving" do
+    setting = theme_setting[:objects_setting]
+    previous_value = setting.value
+    [
+      true,
+      1,
+      "{}",
+      "[1]",
+      [{ "name" => "Section", "links" => [1] }],
+      [{ "links" => {} }],
+    ].each do |value|
+      expect { setting.value = value }.to raise_error(Discourse::InvalidParameters)
+      expect(theme.reload.settings[:objects_setting].value).to eq(previous_value)
+    end
+  end
+
+  it "removes disallowed group ids before saving groups properties" do
+    theme.set_field(target: :settings, name: "yaml", value: <<~YAML)
+      objects_setting:
+        type: objects
+        default: []
+        schema:
+          name: section
+          properties:
+            group_ids:
+              type: groups
+              disallowed_groups: "#{Group::AUTO_GROUPS[:everyone]}|#{Group::AUTO_GROUPS[:admins]}"
+            links:
+              type: objects
+              schema:
+                name: link
+                properties:
+                  group_ids:
+                    type: groups
+                    disallowed_groups: "#{Group::AUTO_GROUPS[:trust_level_0]}"
+    YAML
+    theme.save!
+
+    theme.settings[:objects_setting].value = [
+      {
+        "group_ids" => [
+          Group::AUTO_GROUPS[:everyone],
+          Group::AUTO_GROUPS[:admins],
+          Group::AUTO_GROUPS[:staff],
+        ],
+        "links" => [
+          {
+            "group_ids" => [Group::AUTO_GROUPS[:trust_level_0], Group::AUTO_GROUPS[:trust_level_1]],
+          },
+        ],
+      },
+    ]
+
+    expect(theme.reload.settings[:objects_setting].value).to eq(
+      [
+        {
+          "group_ids" => [Group::AUTO_GROUPS[:staff]],
+          "links" => [{ "group_ids" => [Group::AUTO_GROUPS[:trust_level_1]] }],
+        },
+      ],
+    )
   end
 
   it "raises the right error when there are objects which are not valid" do

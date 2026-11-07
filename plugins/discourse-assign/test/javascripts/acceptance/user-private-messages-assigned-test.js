@@ -6,11 +6,12 @@ import {
   updateCurrentUser,
 } from "discourse/tests/helpers/qunit-helpers";
 import { i18n } from "discourse-i18n";
-import AssignedTopics from "../fixtures/assigned-topics-fixtures";
+import AssignedTopics from "../fixtures/assigned-topics-fixtures.js";
 
-acceptance("Discourse Assign | User Private Messages", function (needs) {
+acceptance("User Private Messages", function (needs) {
   needs.user({
     can_assign: true,
+    can_assign_globally: true,
   });
 
   needs.settings({ assign_enabled: true, assigns_user_url_path: "/" });
@@ -29,10 +30,10 @@ acceptance("Discourse Assign | User Private Messages", function (needs) {
     await visit("/u/eviltrout/messages");
     await click(".messages-dropdown-trigger");
     assert
-      .dom(".dropdown-menu li:nth-child(3)")
+      .dom(".dropdown-menu li:nth-child(2)")
       .hasText(i18n("discourse_assign.assigned"));
 
-    await click(".dropdown-menu li:nth-child(3) .btn");
+    await click(".dropdown-menu li:nth-child(2) .btn");
     assert.strictEqual(
       currentURL(),
       "/u/eviltrout/messages/assigned",

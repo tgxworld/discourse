@@ -13,7 +13,7 @@ module DiscourseChatIntegration::Provider::SlackProvider
       @requested_thread_ts = requested_thread_ts
 
       @first_message_index = 0
-      @last_message_index = -1 # We can use negative array indicies to select the last message - fancy!
+      @last_message_index = -1 # We can use negative array indices to select the last message - fancy!
     end
 
     def set_first_message_by_ts(ts)
@@ -75,6 +75,7 @@ module DiscourseChatIntegration::Provider::SlackProvider
     def first_message_number
       @first_message_index < 0 ? @messages.length + @first_message_index : @first_message_index
     end
+
     def last_message_number
       @last_message_index < 0 ? @messages.length + @last_message_index : @last_message_index
     end
@@ -264,7 +265,7 @@ module DiscourseChatIntegration::Provider::SlackProvider
     end
 
     def fetch_user_data
-      http = ::DiscourseChatIntegration::Provider::SlackProvider.slack_api_http
+      http = DiscourseChatIntegration::Provider::SlackProvider.slack_api_http
 
       cursor = nil
       req = Net::HTTP::Post.new(URI("https://slack.com/api/users.list"))

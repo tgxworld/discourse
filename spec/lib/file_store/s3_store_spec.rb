@@ -15,11 +15,51 @@ RSpec.describe FileStore::S3Store do
   fab!(:optimized_image)
   let(:optimized_image_file) { file_from_fixtures("logo.png") }
   let(:uploaded_file) { file_from_fixtures("logo.png") }
+
   fab!(:upload) { Fabricate(:upload, sha1: Digest::SHA1.hexdigest("secret image string")) }
 
   before do
     setup_s3
     SiteSetting.s3_region = "us-west-1"
+  end
+
+  describe "#download_file" do
+    it "propagates single-request download failures without leaving a file behind" do
+      helper = S3Helper.new("s3-upload-bucket", "", client: client)
+      store = described_class.new(helper)
+      client.stub_responses(:get_object, "NoSuchKey")
+
+      Dir.mktmpdir do |directory|
+        path = File.join(directory, "download")
+
+        expect { store.download_file(upload, path, mode: "single_request") }.to raise_error(
+          RuntimeError,
+          /Failed to download/,
+        )
+        expect(Dir.children(directory)).to be_empty
+        expect(client.api_requests.map { |request| request[:operation_name] }).to include(
+          :get_object,
+        )
+      end
+    end
+
+    it "keeps automatic downloads by default" do
+      helper = S3Helper.new("s3-upload-bucket", "", client: client)
+      store = described_class.new(helper)
+      client.stub_responses(:head_object, content_length: 13)
+      client.stub_responses(:get_object, body: "file contents", content_length: 13)
+
+      Dir.mktmpdir do |directory|
+        path = File.join(directory, "download")
+        store.download_file(upload, path)
+
+        expect(File.read(path)).to eq("file contents")
+        expect(client.api_requests.map { |request| request[:operation_name] }).to include(
+          :head_object,
+          :get_object,
+        )
+      end
+    end
   end
 
   describe "uploading to s3" do
@@ -52,6 +92,97 @@ RSpec.describe FileStore::S3Store do
         )
 
         expect(upload.etag).to eq(etag)
+      end
+
+      it "adds `stale-while-revalidate` response directive when `s3_stale_while_revalidate` site setting is set" do
+        SiteSetting.s3_stale_while_revalidate = 3600
+        expected_cache_control = "max-age=31556952, public, immutable, stale-while-revalidate=3600"
+        s3_helper.expects(:s3_bucket).returns(s3_bucket).at_least_once
+
+        s3_bucket
+          .expects(:object)
+          .with(regexp_matches(%r{original/\d+X.*/#{upload.sha1}\.png}))
+          .returns(s3_object)
+
+        s3_object
+          .expects(:put)
+          .with(
+            {
+              acl: FileStore::S3Store::CANNED_ACL_PUBLIC_READ,
+              cache_control: expected_cache_control,
+              content_type: "image/png",
+              content_disposition: "inline; filename=\"logo.png\"; filename*=UTF-8''logo.png",
+              body: uploaded_file,
+            },
+          )
+          .returns(Aws::S3::Types::PutObjectOutput.new(etag: "\"#{etag}\""))
+
+        expect(store.store_upload(uploaded_file, upload)).to match(
+          %r{//s3-upload-bucket\.s3\.dualstack\.us-west-1\.amazonaws\.com/original/\d+X.*/#{upload.sha1}\.png},
+        )
+
+        expect(upload.etag).to eq(etag)
+      end
+
+      it "respects `s3_max_age` site setting for cache_control" do
+        SiteSetting.s3_max_age = 60
+        expected_cache_control = "max-age=60, public, immutable"
+        s3_helper.expects(:s3_bucket).returns(s3_bucket).at_least_once
+
+        s3_bucket
+          .expects(:object)
+          .with(regexp_matches(%r{original/\d+X.*/#{upload.sha1}\.png}))
+          .returns(s3_object)
+
+        s3_object
+          .expects(:put)
+          .with(
+            {
+              acl: FileStore::S3Store::CANNED_ACL_PUBLIC_READ,
+              cache_control: expected_cache_control,
+              content_type: "image/png",
+              content_disposition: "inline; filename=\"logo.png\"; filename*=UTF-8''logo.png",
+              body: uploaded_file,
+            },
+          )
+          .returns(Aws::S3::Types::PutObjectOutput.new(etag: "\"#{etag}\""))
+
+        expect(store.store_upload(uploaded_file, upload)).to match(
+          %r{//s3-upload-bucket\.s3\.dualstack\.us-west-1\.amazonaws\.com/original/\d+X.*/#{upload.sha1}\.png},
+        )
+
+        expect(upload.etag).to eq(etag)
+      end
+
+      describe "when default site settings are set" do
+        it "cache_control is `max-age=31556952, public, immutable`" do
+          default_cache_control = "max-age=31556952, public, immutable"
+
+          s3_helper.expects(:s3_bucket).returns(s3_bucket).at_least_once
+
+          s3_bucket
+            .expects(:object)
+            .with(regexp_matches(%r{original/\d+X.*/#{upload.sha1}\.png}))
+            .returns(s3_object)
+
+          s3_object
+            .expects(:put)
+            .with(
+              {
+                acl: FileStore::S3Store::CANNED_ACL_PUBLIC_READ,
+                cache_control: default_cache_control,
+                content_type: "image/png",
+                content_disposition: "inline; filename=\"logo.png\"; filename*=UTF-8''logo.png",
+                body: uploaded_file,
+              },
+            )
+            .returns(Aws::S3::Types::PutObjectOutput.new(etag: "\"#{etag}\""))
+
+          expect(store.store_upload(uploaded_file, upload)).to match(
+            %r{//s3-upload-bucket\.s3\.dualstack\.us-west-1\.amazonaws\.com/original/\d+X.*/#{upload.sha1}\.png},
+          )
+          expect(upload.etag).to eq(etag)
+        end
       end
 
       describe "when s3_upload_bucket includes folders path" do
@@ -203,66 +334,104 @@ RSpec.describe FileStore::S3Store do
             %r{//s3-upload-bucket\.s3\.dualstack\.us-west-1\.amazonaws\.com/original/\d+X.*/#{upload.sha1}\.pdf},
           )
         end
-      end
 
-      context "when video conversion is enabled" do
-        let(:video_file) { file_from_fixtures("small.mp4", "media") }
-        let(:video_upload) do
-          Fabricate.build(:upload, original_filename: "small.mp4", extension: "mp4", id: 42)
-        end
+        context "when testing content-disposition security" do
+          it "sets inline disposition for safe images (PNG)" do
+            upload = Fabricate(:upload, original_filename: "safe.png", extension: "png")
+            uploaded_file = file_from_fixtures("logo.png")
 
-        before do
-          # Set up required MediaConvert settings
-          SiteSetting.video_conversion_service = "aws_mediaconvert"
-          SiteSetting.mediaconvert_role_arn = "arn:aws:iam::123456789012:role/MediaConvertRole"
-          SiteSetting.video_conversion_enabled = true
-          # Default stub that returns false for any argument
-          allow(FileHelper).to receive(:is_supported_video?).and_return(false)
-          # Override for the specific video file case
-          allow(FileHelper).to receive(:is_supported_video?).with("small.mp4").and_return(true)
-          allow(store.s3_helper).to receive(:upload).and_return(["some/path.mp4", "\"etag\""])
-          # Setup Jobs as a spy
-          allow(Jobs).to receive(:enqueue)
-        end
+            s3_helper.expects(:s3_bucket).returns(s3_bucket).at_least_once
+            s3_bucket.expects(:object).returns(s3_object)
+            s3_object
+              .expects(:put)
+              .with(
+                has_entries(
+                  content_disposition: "inline; filename=\"safe.png\"; filename*=UTF-8''safe.png",
+                ),
+              )
+              .returns(Aws::S3::Types::PutObjectOutput.new(etag: "\"#{etag}\""))
 
-        it "enqueues a convert_video job for supported video files" do
-          store.store_upload(video_file, video_upload)
+            store.store_upload(uploaded_file, upload)
+          end
 
-          expect(Jobs).to have_received(:enqueue).with(:convert_video, upload_id: video_upload.id)
-        end
+          it "sets inline disposition for PDFs" do
+            SiteSetting.authorized_extensions = "pdf|png"
+            upload = Fabricate(:upload, original_filename: "document.pdf", extension: "pdf")
 
-        it "does not enqueue a convert_video job for unsupported video files" do
-          allow(FileHelper).to receive(:is_supported_video?).with("small.mp4").and_return(false)
+            s3_helper.expects(:s3_bucket).returns(s3_bucket).at_least_once
+            s3_bucket.expects(:object).returns(s3_object)
+            s3_object
+              .expects(:put)
+              .with(
+                has_entries(
+                  content_disposition:
+                    "inline; filename=\"document.pdf\"; filename*=UTF-8''document.pdf",
+                ),
+              )
+              .returns(Aws::S3::Types::PutObjectOutput.new(etag: "\"#{etag}\""))
 
-          store.store_upload(video_file, video_upload)
+            store.store_upload(uploaded_file, upload)
+          end
 
-          expect(Jobs).not_to have_received(:enqueue).with(
-            :convert_video,
-            upload_id: video_upload.id,
-          )
-        end
+          it "sets attachment disposition for HTML files" do
+            SiteSetting.authorized_extensions = "html|png"
+            upload = Fabricate(:upload, original_filename: "evil.html", extension: "html")
+            uploaded_file = file_from_fixtures("logo.png")
 
-        it "does not enqueue a convert_video job when video conversion is disabled" do
-          SiteSetting.video_conversion_enabled = false
+            s3_helper.expects(:s3_bucket).returns(s3_bucket).at_least_once
+            s3_bucket.expects(:object).returns(s3_object)
+            s3_object
+              .expects(:put)
+              .with(
+                has_entries(
+                  content_disposition:
+                    "attachment; filename=\"evil.html\"; filename*=UTF-8''evil.html",
+                ),
+              )
+              .returns(Aws::S3::Types::PutObjectOutput.new(etag: "\"#{etag}\""))
 
-          store.store_upload(video_file, video_upload)
+            store.store_upload(uploaded_file, upload)
+          end
 
-          expect(Jobs).not_to have_received(:enqueue).with(
-            :convert_video,
-            upload_id: video_upload.id,
-          )
-        end
+          it "sets attachment disposition for XML files" do
+            SiteSetting.authorized_extensions = "xml|png"
+            upload = Fabricate(:upload, original_filename: "data.xml", extension: "xml")
+            uploaded_file = file_from_fixtures("logo.png")
 
-        it "does not enqueue a convert_video job for non-video files" do
-          non_video_upload =
-            Fabricate.build(:upload, original_filename: "image.png", extension: "png", id: 43)
+            s3_helper.expects(:s3_bucket).returns(s3_bucket).at_least_once
+            s3_bucket.expects(:object).returns(s3_object)
+            s3_object
+              .expects(:put)
+              .with(
+                has_entries(
+                  content_disposition:
+                    "attachment; filename=\"data.xml\"; filename*=UTF-8''data.xml",
+                ),
+              )
+              .returns(Aws::S3::Types::PutObjectOutput.new(etag: "\"#{etag}\""))
 
-          store.store_upload(uploaded_file, non_video_upload)
+            store.store_upload(uploaded_file, upload)
+          end
 
-          expect(Jobs).not_to have_received(:enqueue).with(
-            :convert_video,
-            upload_id: non_video_upload.id,
-          )
+          it "sets attachment disposition for SVG files" do
+            SiteSetting.authorized_extensions = "svg|png"
+            upload = Fabricate(:upload, original_filename: "image.svg", extension: "svg")
+            uploaded_file = file_from_fixtures("logo.png")
+
+            s3_helper.expects(:s3_bucket).returns(s3_bucket).at_least_once
+            s3_bucket.expects(:object).returns(s3_object)
+            s3_object
+              .expects(:put)
+              .with(
+                has_entries(
+                  content_disposition:
+                    "attachment; filename=\"image.svg\"; filename*=UTF-8''image.svg",
+                ),
+              )
+              .returns(Aws::S3::Types::PutObjectOutput.new(etag: "\"#{etag}\""))
+
+            store.store_upload(uploaded_file, upload)
+          end
         end
       end
     end
@@ -389,6 +558,8 @@ RSpec.describe FileStore::S3Store do
           FileStore::S3Store.visibility_tagging_option_value(secure: false),
         )
 
+        expect(copy_api_request[:context].params[:tagging_directive]).to eq("REPLACE")
+
         expect(bucket.find_object(source)).to be_present
         expect(bucket.find_object(destination)).to be_present
       end
@@ -422,6 +593,8 @@ RSpec.describe FileStore::S3Store do
         expect(copy_api_request[:context].params[:tagging]).to eq(
           FileStore::S3Store.visibility_tagging_option_value(secure: true),
         )
+
+        expect(copy_api_request[:context].params[:tagging_directive]).to eq("REPLACE")
 
         expect(bucket.find_object(source)).to be_present
         expect(bucket.find_object(destination)).to be_present
@@ -774,7 +947,7 @@ RSpec.describe FileStore::S3Store do
   end
 
   describe ".url_for" do
-    it "returns signed URL with content disposition when requesting to download image" do
+    it "returns signed URL with attachment content disposition when force_download is true" do
       s3_helper.expects(:s3_bucket).returns(s3_bucket).at_least_once
       s3_bucket
         .expects(:object)
@@ -790,17 +963,123 @@ RSpec.describe FileStore::S3Store do
 
       expect(store.url_for(upload, force_download: true)).not_to eq(upload.url)
     end
+
+    it "returns signed URL with inline content disposition for secure image" do
+      upload.update!(secure: true)
+      s3_helper.expects(:s3_bucket).returns(s3_bucket).at_least_once
+      s3_bucket
+        .expects(:object)
+        .with(regexp_matches(%r{original/\d+X.*/#{upload.sha1}\.png}))
+        .returns(s3_object)
+      opts = {
+        expires_in: SiteSetting.s3_presigned_get_url_expires_after_seconds,
+        response_content_disposition:
+          ActionDispatch::Http::ContentDisposition.format(
+            disposition: "inline",
+            filename: upload.original_filename,
+          ),
+      }
+      s3_object.expects(:presigned_url).with(:get, opts)
+      expect(store.url_for(upload)).not_to eq(upload.url)
+    end
+
+    it "returns signed URL with attachment content disposition for non-inline-safe secure upload" do
+      SiteSetting.authorized_extensions = "jpg|jpeg|png|gif|html"
+      upload = Fabricate(:upload, original_filename: "file.html", extension: "html", secure: true)
+      s3_helper.expects(:s3_bucket).returns(s3_bucket).at_least_once
+      s3_bucket
+        .expects(:object)
+        .with(regexp_matches(%r{original/\d+X.*/#{upload.sha1}\.html}))
+        .returns(s3_object)
+      opts = {
+        expires_in: SiteSetting.s3_presigned_get_url_expires_after_seconds,
+        response_content_disposition:
+          ActionDispatch::Http::ContentDisposition.format(
+            disposition: "attachment",
+            filename: "file.html",
+          ),
+      }
+      s3_object.expects(:presigned_url).with(:get, opts)
+      expect(store.url_for(upload)).not_to eq(upload.url)
+    end
   end
 
   describe ".signed_url_for_path" do
-    it "returns signed URL for a given path" do
+    it "returns signed URL with inline content disposition for a given path" do
+      s3_helper.expects(:s3_bucket).returns(s3_bucket).at_least_once
+      s3_bucket.expects(:object).with("special/optimized/file.png").returns(s3_object)
+      opts = {
+        expires_in: SiteSetting.s3_presigned_get_url_expires_after_seconds,
+        response_content_disposition:
+          ActionDispatch::Http::ContentDisposition.format(
+            disposition: "inline",
+            filename: "file.png",
+          ),
+      }
+      s3_object
+        .expects(:presigned_url)
+        .with(:get, opts)
+        .returns("https://s3.example.com/special/optimized/file.png?signed=true")
+      expect(
+        store.signed_url_for_path("special/optimized/file.png", include_content_disposition: true),
+      ).to eq("https://s3.example.com/special/optimized/file.png?signed=true")
+    end
+
+    it "returns signed URL with attachment content disposition for non-inline-safe path" do
+      s3_helper.expects(:s3_bucket).returns(s3_bucket).at_least_once
+      s3_bucket.expects(:object).with("special/optimized/file.html").returns(s3_object)
+      opts = {
+        expires_in: SiteSetting.s3_presigned_get_url_expires_after_seconds,
+        response_content_disposition:
+          ActionDispatch::Http::ContentDisposition.format(
+            disposition: "attachment",
+            filename: "file.html",
+          ),
+      }
+      s3_object
+        .expects(:presigned_url)
+        .with(:get, opts)
+        .returns("https://s3.example.com/special/optimized/file.html?signed=true")
+      expect(
+        store.signed_url_for_path("special/optimized/file.html", include_content_disposition: true),
+      ).to eq("https://s3.example.com/special/optimized/file.html?signed=true")
+    end
+
+    it "returns signed URL with attachment content disposition when force_download is true" do
+      s3_helper.expects(:s3_bucket).returns(s3_bucket).at_least_once
+      s3_bucket.expects(:object).with("special/optimized/file.png").returns(s3_object)
+      opts = {
+        expires_in: SiteSetting.s3_presigned_get_url_expires_after_seconds,
+        response_content_disposition:
+          ActionDispatch::Http::ContentDisposition.format(
+            disposition: "attachment",
+            filename: "file.png",
+          ),
+      }
+      s3_object
+        .expects(:presigned_url)
+        .with(:get, opts)
+        .returns("https://s3.example.com/special/optimized/file.png?signed=true")
+      expect(
+        store.signed_url_for_path(
+          "special/optimized/file.png",
+          force_download: true,
+          include_content_disposition: true,
+        ),
+      ).to eq("https://s3.example.com/special/optimized/file.png?signed=true")
+    end
+
+    it "returns signed URL without content disposition when include_content_disposition is false" do
       s3_helper.expects(:s3_bucket).returns(s3_bucket).at_least_once
       s3_bucket.expects(:object).with("special/optimized/file.png").returns(s3_object)
       opts = { expires_in: SiteSetting.s3_presigned_get_url_expires_after_seconds }
-
-      s3_object.expects(:presigned_url).with(:get, opts)
-
-      expect(store.signed_url_for_path("special/optimized/file.png")).not_to eq(upload.url)
+      s3_object
+        .expects(:presigned_url)
+        .with(:get, opts)
+        .returns("https://s3.example.com/special/optimized/file.png?signed=true")
+      expect(
+        store.signed_url_for_path("special/optimized/file.png", include_content_disposition: false),
+      ).to eq("https://s3.example.com/special/optimized/file.png?signed=true")
     end
 
     it "does not prefix the s3_bucket_folder_path onto temporary upload prefixed keys" do
@@ -809,12 +1088,19 @@ RSpec.describe FileStore::S3Store do
         URI.parse(
           store.signed_url_for_path(
             "#{FileStore::BaseStore::TEMPORARY_UPLOAD_PREFIX}folder_path/uploads/default/blah/def.xyz",
+            include_content_disposition: true,
           ),
         )
       expect(uri.path).to eq(
         "/#{FileStore::BaseStore::TEMPORARY_UPLOAD_PREFIX}folder_path/uploads/default/blah/def.xyz",
       )
-      uri = URI.parse(store.signed_url_for_path("uploads/default/blah/def.xyz"))
+      uri =
+        URI.parse(
+          store.signed_url_for_path(
+            "uploads/default/blah/def.xyz",
+            include_content_disposition: true,
+          ),
+        )
       expect(uri.path).to eq("/folder_path/uploads/default/blah/def.xyz")
     end
   end
@@ -822,7 +1108,7 @@ RSpec.describe FileStore::S3Store do
   describe "#create_multipart" do
     before { store.s3_helper.stub_client_responses! }
 
-    it "should create a multipart upload with the ACL parameter set to private canned ACL when `s3_use_acls` site setting is enabled" do
+    it "creates a multipart upload with a private canned ACL when `s3_use_acls` is enabled" do
       store.create_multipart("test_file.tar.gz", "application/gzip", metadata: {})
 
       create_multipart_request =
@@ -835,7 +1121,7 @@ RSpec.describe FileStore::S3Store do
       )
     end
 
-    it "should create a multipart upload with the ACL parameter set to nil when `s3_use_acls` site setting is disabled" do
+    it "creates a multipart upload without an ACL when `s3_use_acls` is disabled" do
       SiteSetting.s3_use_acls = false
       store.create_multipart("test_file.tar.gz", "application/gzip", metadata: {})
 
@@ -847,7 +1133,7 @@ RSpec.describe FileStore::S3Store do
       expect(create_multipart_request[:context].params[:acl]).to eq(nil)
     end
 
-    it "should create a multipart upload with the tagging parameter set to visibility tags when `s3_enable_access_control_tags` site setting is enabled" do
+    it "creates a multipart upload with visibility tags when access-control tags are enabled" do
       SiteSetting.s3_enable_access_control_tags = true
       store.create_multipart("test_file.tar.gz", "application/gzip", metadata: {})
 
@@ -859,6 +1145,42 @@ RSpec.describe FileStore::S3Store do
       expect(create_multipart_request[:context].params[:tagging]).to eq(
         FileStore::S3Store.visibility_tagging_option_value(secure: true),
       )
+    end
+  end
+
+  describe ".content_disposition_for" do
+    it "returns a valid header for short filenames" do
+      header = described_class.content_disposition_for("logo.png")
+
+      expect(header).to include("logo.png")
+      expect(header).to start_with("inline")
+    end
+
+    it "returns empty string for blank filenames" do
+      expect(described_class.content_disposition_for("")).to eq("")
+      expect(described_class.content_disposition_for(nil)).to eq("")
+    end
+
+    it "uses the specified disposition" do
+      header = described_class.content_disposition_for("logo.png", disposition: "attachment")
+
+      expect(header).to start_with("attachment")
+    end
+
+    it "truncates a very long ASCII filename while preserving extension" do
+      long_name = "a" * 2000 + ".html"
+      header = described_class.content_disposition_for(long_name)
+
+      expect(header.bytesize).to be <= described_class::MAX_CONTENT_DISPOSITION_BYTES
+      expect(header).to include(".html")
+    end
+
+    it "truncates long non-ASCII filenames that expand when percent-encoded" do
+      long_name = "\u4e2d\u6587" * 400 + ".png"
+      header = described_class.content_disposition_for(long_name)
+
+      expect(header.bytesize).to be <= described_class::MAX_CONTENT_DISPOSITION_BYTES
+      expect(header).to include(".png")
     end
   end
 

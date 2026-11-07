@@ -1,18 +1,16 @@
-/* eslint-disable ember/no-classic-components */
-import Component from "@ember/component";
-import { classNames, tagName } from "@ember-decorators/component";
-import icon from "discourse/helpers/d-icon";
+import Component from "@glimmer/component";
+import { tracked } from "@glimmer/tracking";
+import { uniqueItemsFromArray } from "discourse/lib/array-tools";
 import { afterRender } from "discourse/lib/decorators";
 import { REPLACEMENTS } from "discourse/lib/icon-library";
 import discourseLater from "discourse/lib/later";
+import dIcon from "discourse/ui-kit/helpers/d-icon";
 
-@tagName("section")
-@classNames("styleguide-icons")
 export default class StyleguideIcons extends Component {
-  iconIds = [];
+  @tracked iconIds = [];
 
-  init() {
-    super.init(...arguments);
+  constructor() {
+    super(...arguments);
     this.setIconIds();
   }
 
@@ -20,9 +18,9 @@ export default class StyleguideIcons extends Component {
   setIconIds() {
     let symbols = document.querySelectorAll("#svg-sprites symbol");
     if (symbols.length > 0) {
-      let ids = Array.from(symbols).mapBy("id");
+      let ids = Array.from(symbols).map((item) => item.id);
       ids.push(...Object.keys(REPLACEMENTS));
-      this.set("iconIds", [...new Set(ids.sort())]);
+      this.iconIds = uniqueItemsFromArray(ids).sort();
     } else {
       // Let's try again a short time later if there are no svgs loaded yet
       discourseLater(this, this.setIconIds, 1500);
@@ -30,11 +28,13 @@ export default class StyleguideIcons extends Component {
   }
 
   <template>
-    {{#each this.iconIds as |id|}}
-      <div class="styleguide-icon">
-        {{icon id}}
-        <span>{{id}}</span>
-      </div>
-    {{/each}}
+    <section class="styleguide-icons" ...attributes>
+      {{#each this.iconIds as |id|}}
+        <div class="styleguide-icon">
+          {{dIcon id}}
+          <span>{{id}}</span>
+        </div>
+      {{/each}}
+    </section>
   </template>
 }

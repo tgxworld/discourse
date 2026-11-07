@@ -1,6 +1,8 @@
-import RouteTemplate from "ember-route-template";
-import AiUsage from "../../../../discourse/components/ai-usage";
+import AiUsage from "../../../components/ai-usage.gjs";
 
-export default RouteTemplate(
-  <template><AiUsage @model={{@controller.model}} /></template>
-);
+export default <template>
+  <AiUsage
+    @model={{@controller.model.data}}
+    @queryParams={{@controller.model.queryParams}}
+  />
+</template>

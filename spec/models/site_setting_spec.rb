@@ -1,14 +1,77 @@
 # frozen_string_literal: true
 
 RSpec.describe SiteSetting do
+  describe ".dsa_reporting_enabled=" do
+    it "requires a community rule before enabling reporting" do
+      expect { SiteSetting.dsa_reporting_enabled = true }.to raise_error(
+        Discourse::InvalidParameters,
+        I18n.t("errors.site_settings.dsa_community_rules_required"),
+      )
+      expect(SiteSetting.dsa_reporting_enabled).to eq(false)
+
+      SiteSetting.dsa_community_rules = [
+        { ground: "Terms, section 3", explanation: "Personal attacks are prohibited." },
+      ].to_json
+      SiteSetting.dsa_reporting_enabled = true
+
+      expect(SiteSetting.dsa_reporting_enabled).to eq(true)
+    end
+  end
+
+  describe ".dsa_community_rules=" do
+    let(:rule) { { ground: "Terms, section 3", explanation: "Personal attacks are prohibited." } }
+
+    it "requires reporting to be disabled before removing the last community rule" do
+      SiteSetting.dsa_community_rules = [rule].to_json
+      SiteSetting.dsa_reporting_enabled = true
+
+      expect { SiteSetting.dsa_community_rules = "[]" }.to raise_error(
+        Discourse::InvalidParameters,
+        I18n.t("errors.site_settings.dsa_community_rules_in_use"),
+      )
+      expect(JSON.parse(SiteSetting.dsa_community_rules)).to eq([rule.stringify_keys])
+
+      SiteSetting.dsa_reporting_enabled = false
+      SiteSetting.dsa_community_rules = "[]"
+
+      expect(JSON.parse(SiteSetting.dsa_community_rules)).to eq([])
+    end
+
+    it "accepts a 500 character contractual ground and rejects 501 characters" do
+      rule[:ground] = "é" * 500
+
+      SiteSetting.dsa_community_rules = [rule].to_json
+
+      expect(JSON.parse(SiteSetting.dsa_community_rules).sole.fetch("ground")).to eq(rule[:ground])
+
+      rule[:ground] << "é"
+
+      expect { SiteSetting.dsa_community_rules = [rule].to_json }.to raise_error(
+        Discourse::InvalidParameters,
+      )
+    end
+
+    it "accepts a 500 character explanation and rejects 501 characters" do
+      rule[:explanation] = "é" * 500
+
+      SiteSetting.dsa_community_rules = [rule].to_json
+
+      expect(JSON.parse(SiteSetting.dsa_community_rules).sole.fetch("explanation")).to eq(
+        rule[:explanation],
+      )
+
+      rule[:explanation] << "é"
+
+      expect { SiteSetting.dsa_community_rules = [rule].to_json }.to raise_error(
+        Discourse::InvalidParameters,
+      )
+    end
+  end
+
   describe "topic_title_length" do
     it "returns a range of min/max topic title length" do
       expect(SiteSetting.topic_title_length).to eq(
-        (
-          SiteSetting.defaults[:min_topic_title_length]..SiteSetting.defaults[
-            :max_topic_title_length
-          ]
-        ),
+        SiteSetting.min_topic_title_length..SiteSetting.max_topic_title_length,
       )
     end
   end
@@ -16,7 +79,7 @@ RSpec.describe SiteSetting do
   describe "post_length" do
     it "returns a range of min/max post length" do
       expect(SiteSetting.post_length).to eq(
-        SiteSetting.defaults[:min_post_length]..SiteSetting.defaults[:max_post_length],
+        SiteSetting.min_post_length..SiteSetting.max_post_length,
       )
     end
   end
@@ -24,7 +87,7 @@ RSpec.describe SiteSetting do
   describe "first_post_length" do
     it "returns a range of min/max first post length" do
       expect(SiteSetting.first_post_length).to eq(
-        SiteSetting.defaults[:min_first_post_length]..SiteSetting.defaults[:max_post_length],
+        SiteSetting.min_first_post_length..SiteSetting.max_post_length,
       )
     end
   end
@@ -32,9 +95,7 @@ RSpec.describe SiteSetting do
   describe "private_message_title_length" do
     it "returns a range of min/max pm topic title length" do
       expect(SiteSetting.private_message_title_length).to eq(
-        SiteSetting.defaults[:min_personal_message_title_length]..SiteSetting.defaults[
-          :max_topic_title_length
-        ],
+        SiteSetting.min_personal_message_title_length..SiteSetting.max_topic_title_length,
       )
     end
   end
@@ -55,12 +116,45 @@ RSpec.describe SiteSetting do
     end
   end
 
+  describe "pending_users_reminder_delay_minutes" do
+    it "defaults to 30 while the update_pending_users_reminder_default change is enabled" do
+      expect(SiteSetting.pending_users_reminder_delay_minutes).to eq(480)
+
+      SiteSetting.update_pending_users_reminder_default = true
+      expect(SiteSetting.pending_users_reminder_delay_minutes).to eq(30)
+
+      SiteSetting.update_pending_users_reminder_default = false
+      expect(SiteSetting.pending_users_reminder_delay_minutes).to eq(480)
+    end
+
+    it "keeps a value an admin has set when the change is enabled" do
+      SiteSetting.pending_users_reminder_delay_minutes = 60
+
+      SiteSetting.update_pending_users_reminder_default = true
+      expect(SiteSetting.pending_users_reminder_delay_minutes).to eq(60)
+    end
+  end
+
+  describe "whispers_allowed_groups" do
+    it "defaults to staff while the update_whispers_allowed_groups_default change is enabled" do
+      expect(SiteSetting.whispers_allowed_groups).to eq("")
+
+      SiteSetting.update_whispers_allowed_groups_default = true
+      expect(SiteSetting.whispers_allowed_groups).to eq(Group::AUTO_GROUPS[:staff].to_s)
+      expect(Fabricate(:moderator)).to be_a_whisperer
+    end
+  end
+
   describe "top_menu" do
     describe "validations" do
       it "always demands latest" do
         expect do SiteSetting.top_menu = "categories" end.to raise_error(
           Discourse::InvalidParameters,
         )
+      end
+
+      it "does not allow an empty menu" do
+        expect do SiteSetting.top_menu = "" end.to raise_error(Discourse::InvalidParameters)
       end
 
       it "does not allow random text" do
@@ -79,10 +173,115 @@ RSpec.describe SiteSetting do
     end
 
     describe "homepage" do
-      it "has homepage" do
+      around do |example|
+        registrations = DiscoursePluginRegistry._raw_homepage_options.dup
+        example.run
+        DiscoursePluginRegistry._raw_homepage_options.replace(registrations)
+      end
+
+      it "uses default_homepage when set" do
+        SiteSetting.default_homepage = "bookmarks"
+        expect(SiteSetting.homepage).to eq("bookmarks")
+      end
+
+      it "falls back to the first top_menu item when default_homepage is not set" do
         SiteSetting.top_menu = "bookmarks|latest"
         expect(SiteSetting.homepage).to eq("bookmarks")
       end
+
+      it "falls back to the first top_menu item when the persisted value's filter is no longer registered" do
+        SiteSetting.top_menu = "categories|latest"
+
+        filters = Discourse.filters
+        Discourse.stubs(:filters).returns(filters + [:votes])
+        SiteSetting.default_homepage = "votes"
+        expect(SiteSetting.homepage).to eq("votes")
+
+        Discourse.stubs(:filters).returns(filters)
+        expect(SiteSetting.homepage).to eq("categories")
+      end
+
+      it "falls back when the persisted value is no longer an eligible choice" do
+        SiteSetting.enable_unified_new = false
+        SiteSetting.top_menu = "categories|latest"
+        SiteSetting.default_homepage = "unread"
+        expect(SiteSetting.homepage).to eq("unread")
+
+        # enabling unified-new removes unread from the eligible homepage choices
+        SiteSetting.enable_unified_new = true
+        expect(SiteSetting.homepage).to eq("categories")
+      end
+
+      it "uses a registered plugin homepage and falls back when the plugin is disabled" do
+        plugin = Plugin::Instance.new
+        plugin.stubs(:enabled?).returns(true)
+        plugin.register_homepage(
+          "directory",
+          name: "discourse_directory.navigation.title",
+          path: "/directory",
+          route: "discourse_directory/directory#index",
+          anonymous: true,
+        )
+        SiteSetting.top_menu = "categories|latest"
+        SiteSetting.default_homepage = "directory"
+
+        expect(SiteSetting.homepage).to eq("directory")
+        expect(SiteSetting.anonymous_homepage).to eq("directory")
+
+        plugin.stubs(:enabled?).returns(false)
+        expect(SiteSetting.homepage).to eq("categories")
+        expect(SiteSetting.anonymous_homepage).to eq("categories")
+      end
+
+      it "falls back when a registered plugin homepage's enabled condition fails" do
+        plugin = Plugin::Instance.new
+        plugin.stubs(:enabled?).returns(true)
+        plugin.register_homepage(
+          "directory",
+          name: "discourse_directory.navigation.title",
+          path: "/directory",
+          route: "discourse_directory/directory#index",
+          anonymous: true,
+          enabled: -> { SiteSetting.enable_user_directory },
+        )
+        SiteSetting.top_menu = "categories|latest"
+        SiteSetting.default_homepage = "directory"
+
+        SiteSetting.enable_user_directory = false
+
+        expect(SiteSetting.homepage).to eq("categories")
+        expect(SiteSetting.anonymous_homepage).to eq("categories")
+      end
+
+      it "does not use a private plugin homepage for anonymous visitors" do
+        plugin = Plugin::Instance.new
+        plugin.stubs(:enabled?).returns(true)
+        plugin.register_homepage(
+          "private_page",
+          name: "plugin.private_page",
+          path: "/private-page",
+          route: "plugin/private_page#index",
+        )
+        SiteSetting.top_menu = "categories|latest"
+        SiteSetting.default_homepage = "private_page"
+
+        expect(SiteSetting.homepage).to eq("private_page")
+        expect(SiteSetting.anonymous_homepage).to eq("categories")
+      end
+    end
+  end
+
+  describe "custom_homepage_crawler_route" do
+    it "allows public top menu routes" do
+      SiteSetting.custom_homepage_crawler_route = "categories"
+
+      expect(SiteSetting.custom_homepage_crawler_route).to eq("categories")
+    end
+
+    it "does not allow authenticated-only routes" do
+      expect { SiteSetting.custom_homepage_crawler_route = "bookmarks" }.to raise_error(
+        Discourse::InvalidParameters,
+      )
     end
   end
 
@@ -98,7 +297,7 @@ RSpec.describe SiteSetting do
       end
 
       it "should_return_a_time_period" do
-        expect(SiteSetting.min_redirected_to_top_period(1.days.ago)).to eq(:daily)
+        expect(SiteSetting.min_redirected_to_top_period(1.day.ago)).to eq(:daily)
       end
     end
 
@@ -110,7 +309,7 @@ RSpec.describe SiteSetting do
       end
 
       it "should_return_a_time_period" do
-        expect(SiteSetting.min_redirected_to_top_period(1.days.ago)).to eq(nil)
+        expect(SiteSetting.min_redirected_to_top_period(1.day.ago)).to eq(nil)
       end
     end
   end
@@ -145,7 +344,7 @@ RSpec.describe SiteSetting do
   end
 
   describe "cached settings" do
-    it "should recalculate cached setting when dependent settings are changed" do
+    it "recalculates a cached setting when its dependencies change" do
       SiteSetting.blocked_attachment_filenames = "foo"
       expect(SiteSetting.blocked_attachment_filenames_regex).to eq(/foo/)
 
@@ -174,26 +373,304 @@ RSpec.describe SiteSetting do
 
   describe "#all_settings" do
     it "does not include the `default_locale` setting if include_locale_setting is false" do
-      expect(SiteSetting.all_settings.map { |s| s[:setting] }).to include("default_locale")
+      expect(SiteSetting.all_settings.map { |s| s[:setting] }).to include(:default_locale)
       expect(
         SiteSetting.all_settings(include_locale_setting: false).map { |s| s[:setting] },
-      ).not_to include("default_locale")
+      ).not_to include(:default_locale)
     end
 
     it "does not include the `default_locale` setting if filter_categories are specified" do
       expect(
         SiteSetting.all_settings(filter_categories: ["branding"]).map { |s| s[:setting] },
-      ).not_to include("default_locale")
+      ).not_to include(:default_locale)
     end
 
     it "does not include the `default_locale` setting if filter_plugin is specified" do
       expect(
         SiteSetting.all_settings(filter_plugin: "chat").map { |s| s[:setting] },
-      ).not_to include("default_locale")
+      ).not_to include(:default_locale)
     end
 
     it "includes only settings for the specified category" do
-      expect(SiteSetting.all_settings(filter_categories: ["required"]).count).to eq(12)
+      expect(SiteSetting.all_settings(filter_categories: ["required"]).count).to eq(13)
+    end
+  end
+
+  describe ".history_for" do
+    fab!(:admin)
+
+    it "returns an empty relation when no changes have been made" do
+      expect(SiteSetting.history_for(:title)).to be_empty
+    end
+
+    it "returns UserHistory records for the specified setting" do
+      StaffActionLogger.new(admin).log_site_setting_change(:title, "Old Title", "New Title")
+      StaffActionLogger.new(admin).log_site_setting_change(:title, "New Title", "Newer Title")
+
+      history = SiteSetting.history_for(:title)
+
+      expect(history.count).to eq(2)
+      expect(history.first.action).to eq(UserHistory.actions[:change_site_setting])
+      expect(history.first.subject).to eq("title")
+      expect(history.first.new_value).to eq("Newer Title")
+      expect(history.last.new_value).to eq("New Title")
+    end
+
+    it "returns only records for the specified setting" do
+      StaffActionLogger.new(admin).log_site_setting_change(:title, "Old", "New")
+      StaffActionLogger.new(admin).log_site_setting_change(
+        :contact_email,
+        "old@test.com",
+        "new@test.com",
+      )
+
+      history = SiteSetting.history_for(:title)
+
+      expect(history.count).to eq(1)
+      expect(history.first.subject).to eq("title")
+    end
+
+    it "returns records ordered by most recent first" do
+      StaffActionLogger.new(admin).log_site_setting_change(:title, "First", "Second")
+      StaffActionLogger.new(admin).log_site_setting_change(:title, "Second", "Third")
+
+      history = SiteSetting.history_for(:title)
+
+      expect(history.first.new_value).to eq("Third")
+      expect(history.last.new_value).to eq("Second")
+    end
+  end
+
+  describe "ImageQuality" do
+    describe "#png_to_jpg_quality" do
+      context "when set to zero" do
+        before { SiteSetting.png_to_jpg_quality = 0 }
+
+        it "falls back to unified image quality setting" do
+          expect(SiteSetting.ImageQuality.png_to_jpg_quality).to eq(SiteSetting.image_quality)
+        end
+      end
+
+      context "when set to any non-zero value" do
+        before { SiteSetting.png_to_jpg_quality = 42 }
+
+        it "uses the configured value" do
+          expect(SiteSetting.ImageQuality.png_to_jpg_quality).to eq(42)
+        end
+      end
+    end
+
+    describe "#recompress_original_jpg_quality" do
+      context "when set to zero" do
+        before { SiteSetting.recompress_original_jpg_quality = 0 }
+
+        it "falls back to unified image quality setting" do
+          expect(SiteSetting.ImageQuality.recompress_original_jpg_quality).to eq(
+            SiteSetting.image_quality,
+          )
+        end
+      end
+
+      context "when set to any non-zero value" do
+        before { SiteSetting.recompress_original_jpg_quality = 42 }
+
+        it "uses the configured value" do
+          expect(SiteSetting.ImageQuality.recompress_original_jpg_quality).to eq(42)
+        end
+      end
+    end
+
+    describe "#image_preview_jpg_quality" do
+      context "when set to zero" do
+        before { SiteSetting.image_preview_jpg_quality = 0 }
+
+        it "falls back to unified image quality setting" do
+          expect(SiteSetting.ImageQuality.image_preview_jpg_quality).to eq(
+            SiteSetting.image_quality,
+          )
+        end
+      end
+
+      context "when set to any non-zero value" do
+        before { SiteSetting.image_preview_jpg_quality = 42 }
+
+        it "uses the configured value" do
+          expect(SiteSetting.ImageQuality.image_preview_jpg_quality).to eq(42)
+        end
+      end
+    end
+  end
+
+  describe "creating upload references for type objects settings with upload fields" do
+    let(:provider) { SiteSettings::DbProvider.new(SiteSetting) }
+
+    fab!(:upload)
+    fab!(:upload2, :upload)
+
+    it "creates upload references for objects with upload fields" do
+      objects_value =
+        JSON.generate(
+          [
+            { "name" => "object1", "upload_id" => upload.id },
+            { "name" => "object2", "upload_id" => upload2.id },
+          ],
+        )
+
+      expect {
+        provider.save(
+          "test_objects_with_uploads",
+          objects_value,
+          SiteSettings::TypeSupervisor.types[:objects],
+        )
+      }.to change { UploadReference.count }.by(2)
+
+      upload_references =
+        UploadReference.where(target: SiteSetting.find_by(name: "test_objects_with_uploads"))
+
+      expect(upload_references.pluck(:upload_id)).to contain_exactly(upload.id, upload2.id)
+
+      expect { provider.destroy("test_objects_with_uploads") }.to change {
+        UploadReference.count
+      }.by(-2)
+    end
+
+    it "creates upload references for objects with upload URLs" do
+      objects_value =
+        JSON.generate(
+          [
+            { "name" => "object1", "upload_id" => upload.url },
+            { "name" => "object2", "upload_id" => upload2.url },
+          ],
+        )
+
+      expect {
+        provider.save(
+          "test_objects_with_uploads",
+          objects_value,
+          SiteSettings::TypeSupervisor.types[:objects],
+        )
+      }.to change { UploadReference.count }.by(2)
+
+      upload_references =
+        UploadReference.where(target: SiteSetting.find_by(name: "test_objects_with_uploads"))
+
+      expect(upload_references.pluck(:upload_id)).to contain_exactly(upload.id, upload2.id)
+    end
+
+    it "stores object upload fields as upload IDs when set with upload URLs" do
+      old_provider = SiteSetting.provider
+      SiteSetting.provider = provider
+      SiteSetting.refresh!
+
+      begin
+        SiteSetting.ui_cards_setting =
+          JSON.generate([{ "title" => "Build a community", "image" => upload.url }])
+
+        setting = provider.find("ui_cards_setting")
+        expect(JSON.parse(setting.value)).to eq(
+          [{ "title" => "Build a community", "image" => upload.id }],
+        )
+      ensure
+        SiteSetting.provider = old_provider
+        SiteSetting.refresh!
+      end
+    end
+
+    it "hydrates object upload fields in client settings" do
+      settings = new_settings(SiteSettings::LocalProcessProvider.new)
+      settings.setting(
+        :ui_cards_setting,
+        "[]",
+        type: :objects,
+        client: true,
+        schema: {
+          name: "card",
+          identifier: "title",
+          properties: {
+            title: {
+              type: "string",
+              required: true,
+            },
+            image: {
+              type: "upload",
+            },
+          },
+        },
+      )
+
+      settings.ui_cards_setting =
+        JSON.generate([{ "title" => "Build a community", "image" => upload.url }])
+
+      client_settings = JSON.parse(settings.client_settings_json_uncached)
+      expect(JSON.parse(client_settings["ui_cards_setting"])).to eq(
+        [{ "title" => "Build a community", "image" => upload.url }],
+      )
+    end
+
+    it "removes upload references when uploads are removed from objects" do
+      # First save with two uploads
+      objects_value =
+        JSON.generate(
+          [
+            { "name" => "object1", "upload_id" => upload.url },
+            { "name" => "object2", "upload_id" => upload2.url },
+          ],
+        )
+
+      provider.save(
+        "test_objects_with_uploads",
+        objects_value,
+        SiteSettings::TypeSupervisor.types[:objects],
+      )
+
+      setting = SiteSetting.find_by(name: "test_objects_with_uploads")
+      expect(UploadReference.where(target: setting).count).to eq(2)
+
+      # Now save with only one upload - should remove the other reference
+      objects_value_updated = JSON.generate([{ "name" => "object1", "upload_id" => upload.url }])
+
+      expect {
+        provider.save(
+          "test_objects_with_uploads",
+          objects_value_updated,
+          SiteSettings::TypeSupervisor.types[:objects],
+        )
+      }.to change { UploadReference.count }.by(-1)
+
+      expect(UploadReference.where(target: setting).pluck(:upload_id)).to contain_exactly(upload.id)
+    end
+
+    it "removes all upload references when all uploads are removed from objects" do
+      # First save with uploads
+      objects_value =
+        JSON.generate(
+          [
+            { "name" => "object1", "upload_id" => upload.url },
+            { "name" => "object2", "upload_id" => upload2.url },
+          ],
+        )
+
+      provider.save(
+        "test_objects_with_uploads",
+        objects_value,
+        SiteSettings::TypeSupervisor.types[:objects],
+      )
+
+      setting = SiteSetting.find_by(name: "test_objects_with_uploads")
+      expect(UploadReference.where(target: setting).count).to eq(2)
+
+      # Now save with no uploads - should remove all references
+      objects_value_empty = JSON.generate([{ "name" => "object1" }])
+
+      expect {
+        provider.save(
+          "test_objects_with_uploads",
+          objects_value_empty,
+          SiteSettings::TypeSupervisor.types[:objects],
+        )
+      }.to change { UploadReference.count }.by(-2)
+
+      expect(UploadReference.where(target: setting).count).to eq(0)
     end
   end
 
@@ -233,6 +710,65 @@ RSpec.describe SiteSetting do
           expect(SiteSetting.Upload.use_dualstack_endpoint).to eq(true)
         end
       end
+    end
+  end
+
+  describe ".content_localization_locales" do
+    it "returns configured supported locales" do
+      SiteSetting.content_localization_supported_locales = "es|fr|de"
+      SiteSetting.default_locale = "es"
+
+      expect(SiteSetting.content_localization_locales).to contain_exactly("es", "fr", "de")
+    end
+
+    it "includes default locale when not in supported locales" do
+      SiteSetting.content_localization_supported_locales = "es|fr"
+      SiteSetting.default_locale = "en"
+
+      expect(SiteSetting.content_localization_locales).to contain_exactly("es", "fr", "en")
+    end
+
+    it "does not duplicate default locale when already in supported locales" do
+      SiteSetting.content_localization_supported_locales = "en|es|fr"
+      SiteSetting.default_locale = "en"
+
+      expect(SiteSetting.content_localization_locales).to contain_exactly("en", "es", "fr")
+    end
+
+    it "returns only default locale when no supported locales configured" do
+      SiteSetting.content_localization_supported_locales = ""
+      SiteSetting.default_locale = "en"
+
+      expect(SiteSetting.content_localization_locales).to eq(["en"])
+    end
+  end
+
+  describe ".ensure_consistency!" do
+    it "resets category settings whose category no longer exists" do
+      SiteSetting.default_composer_category = "999999"
+      SiteSetting.general_category_id = 999_999
+      SiteSetting.max_topics_per_day = 999
+
+      SiteSetting.ensure_consistency!
+
+      expect(SiteSetting.default_composer_category).to eq("")
+      expect(SiteSetting.general_category_id).to eq(-1)
+      expect(SiteSetting.max_topics_per_day).to eq(999)
+      expect(SiteSetting.uncategorized_category_id).not_to eq(-1)
+      expect(UserHistory.where(subject: "default_composer_category").last.details).to include(
+        "(id 999999) no longer exists",
+      )
+    end
+
+    it "disallows uncategorized topics when the uncategorized category no longer exists" do
+      SiteSetting.uncategorized_category_id = 999_999
+
+      SiteSetting.ensure_consistency!
+
+      expect(SiteSetting.uncategorized_category_id).to eq(
+        SiteSetting.defaults[:uncategorized_category_id],
+      )
+      expect(SiteSetting.allow_uncategorized_topics).to eq(false)
     end
   end
 end

@@ -9,7 +9,8 @@
       var(--topic-body-width-padding) * 2
   );
 
-  html.anon & {
+  html.anon &,
+  .styleguide-anon & {
     align-items: end;
   }
 
@@ -51,9 +52,14 @@
     }
 
     .bookmark.bookmarked {
-      .d-icon-discourse-bookmark-clock,
-      .d-icon-bookmark {
+      .d-icon-discourse-bookmark-clock {
         color: var(--tertiary);
+      }
+
+      &:not(.--post-bookmarked-only) {
+        .d-icon-bookmark {
+          color: var(--tertiary);
+        }
       }
     }
 
@@ -116,6 +122,32 @@
   }
 }
 
+.container.posts .topic-navigation {
+  --border-offset: -1px;
+
+  @media screen and (width <= 924px) {
+    // at 925px viewport width and above the timeline is visible (see topic-navigation.js)
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    grid-area: posts;
+    grid-row: 3;
+    width: auto;
+    margin-top: var(--border-offset);
+
+    .topic-admin-menu-trigger,
+    .topic-content-language-preferences {
+      border-radius: 0;
+      background: var(--secondary);
+      border: 1px solid var(--primary-low);
+    }
+
+    .topic-admin-menu-trigger + .topic-content-language-preferences {
+      margin-inline-start: var(--border-offset);
+    }
+  }
+}
+
 #topic-progress-wrapper {
   display: flex;
   justify-content: flex-end;
@@ -127,7 +159,7 @@
     }
   }
 
-  .btn {
+  .btn.progress-back {
     border: 0;
   }
 
@@ -144,8 +176,10 @@
     .nums {
       display: flex;
       gap: 0.3rem;
+      justify-content: center;
       align-items: center;
       height: 100%;
+      min-width: 6ch;
       position: relative;
       z-index: z("base");
       font-size: var(--font-up-1);

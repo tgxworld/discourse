@@ -13,6 +13,13 @@
     }
   }
 
+  .static-faq & {
+    img {
+      max-width: 100%;
+      height: auto;
+    }
+  }
+
   .mobile-view & {
     font-size: var(--font-0);
   }
@@ -23,6 +30,8 @@
 
   .nav-pills {
     margin: 0 0 2em;
+    gap: 0;
+    overflow: auto;
   }
 
   ul:not(.nav-pills),

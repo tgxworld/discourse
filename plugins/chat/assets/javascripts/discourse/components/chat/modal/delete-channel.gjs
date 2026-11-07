@@ -4,13 +4,13 @@ import { fn } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
-import { htmlSafe } from "@ember/template";
+import { trustHTML } from "@ember/template";
 import { isEmpty } from "@ember/utils";
-import DButton from "discourse/components/d-button";
-import DModal from "discourse/components/d-modal";
 import withEventValue from "discourse/helpers/with-event-value";
 import { popupAjaxError } from "discourse/lib/ajax-error";
 import discourseLater from "discourse/lib/later";
+import DButton from "discourse/ui-kit/d-button";
+import DModal from "discourse/ui-kit/d-modal";
 import { i18n } from "discourse-i18n";
 
 export default class ChatModalDeleteChannel extends Component {
@@ -44,7 +44,7 @@ export default class ChatModalDeleteChannel extends Component {
   }
 
   get instructionsText() {
-    return htmlSafe(
+    return trustHTML(
       i18n("chat.channel_delete.instructions", {
         name: this.channel.escapedTitle,
       })
@@ -73,38 +73,38 @@ export default class ChatModalDeleteChannel extends Component {
 
   <template>
     <DModal
-      @closeModal={{@closeModal}}
       class="chat-modal-delete-channel"
-      @inline={{@inline}}
-      @title={{i18n "chat.channel_delete.title"}}
+      @closeModal={{@closeModal}}
       @flash={{this.flash}}
       @flashType={{this.flashType}}
+      @inline={{@inline}}
+      @title={{i18n "chat.channel_delete.title"}}
     >
       <:body>
         <p class="chat-modal-delete-channel__instructions">
           {{this.instructionsText}}
         </p>
         <input
+          autocapitalize="off"
+          autocorrect="off"
+          id="channel-delete-confirm-name"
+          placeholder={{i18n "chat.channel_delete.confirm_channel_name"}}
+          type="text"
           {{on
             "input"
             (withEventValue (fn (mut this.channelNameConfirmation)))
           }}
-          id="channel-delete-confirm-name"
-          placeholder={{i18n "chat.channel_delete.confirm_channel_name"}}
-          autocorrect="off"
-          autocapitalize="off"
-          type="text"
         />
       </:body>
       <:footer>
         <DButton
-          @disabled={{this.buttonDisabled}}
-          @action={{this.deleteChannel}}
-          @label="chat.channel_delete.confirm"
-          id="chat-confirm-delete-channel"
           class="btn-danger"
+          id="chat-confirm-delete-channel"
+          @action={{this.deleteChannel}}
+          @disabled={{this.buttonDisabled}}
+          @label="chat.channel_delete.confirm"
         />
-        <DButton @label="cancel" @action={{@closeModal}} class="btn-flat" />
+        <DButton class="btn-flat" @action={{@closeModal}} @label="cancel" />
       </:footer>
     </DModal>
   </template>

@@ -50,6 +50,56 @@ module PageObjects
           ".sidebar-categories-form .sidebar-categories-form__category-row[data-category-id='#{category.id}'] .sidebar-categories-form__input#{disabled ? "[disabled]" : ""}",
         )
       end
+
+      def has_category_row?(category)
+        has_css?(".sidebar-categories-form__category-row[data-category-id='#{category.id}']")
+      end
+
+      def has_no_category_row?(category)
+        has_no_css?(".sidebar-categories-form__category-row[data-category-id='#{category.id}']")
+      end
+
+      def has_no_show_more_button?(category)
+        has_no_css?(
+          ".sidebar-categories-form__category-row[data-test-category-id='#{category.id}'] .sidebar-categories-form__show-more-btn",
+        )
+      end
+
+      def has_show_more_button?(category)
+        has_css?(
+          ".sidebar-categories-form__category-row[data-test-category-id='#{category.id}'] .sidebar-categories-form__show-more-btn",
+        )
+      end
+
+      def scroll_to_category(category)
+        scroll_to(find(".sidebar-categories-form__category-row[data-category-id='#{category.id}']"))
+        self
+      end
+
+      def click_show_more_button(category)
+        find(
+          ".sidebar-categories-form__category-row[data-test-category-id='#{category.id}'] .sidebar-categories-form__show-more-btn",
+        ).click
+        self
+      end
+
+      def has_tag_in_description?(category)
+        has_css?(
+          ".sidebar-categories-form__category-row[data-category-id='#{category.id}'] .sidebar-categories-form__category-description a.hashtag-cooked[data-type='tag']",
+        )
+      end
+
+      def has_icon_in_description?(category)
+        has_css?(
+          ".sidebar-categories-form__category-row[data-category-id='#{category.id}'] .sidebar-categories-form__category-description a.hashtag-cooked .hashtag-category-icon",
+        )
+      end
+
+      def has_emoji_in_description?(category)
+        has_css?(
+          ".sidebar-categories-form__category-row[data-category-id='#{category.id}'] .sidebar-categories-form__category-description a.hashtag-cooked .hashtag-category-emoji",
+        )
+      end
     end
   end
 end

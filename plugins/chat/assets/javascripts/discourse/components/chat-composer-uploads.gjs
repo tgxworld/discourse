@@ -2,23 +2,27 @@
 import Component from "@ember/component";
 import { fn } from "@ember/helper";
 import { action } from "@ember/object";
-import { getOwner } from "@ember/owner";
 import { service } from "@ember/service";
-import { classNames } from "@ember-decorators/component";
-import PickFilesButton from "discourse/components/pick-files-button";
+import { tagName } from "@ember-decorators/component";
+import { removeValueFromArray } from "discourse/lib/array-tools";
 import { bind } from "discourse/lib/decorators";
+import { openLightbox } from "discourse/lib/lightbox";
 import { cloneJSON } from "discourse/lib/object";
+import { autoTrackedArray } from "discourse/lib/tracked-tools";
 import UppyUpload from "discourse/lib/uppy/uppy-upload";
 import UppyMediaOptimization from "discourse/lib/uppy-media-optimization-plugin";
 import { clipboardHelpers } from "discourse/lib/utilities";
+import DPickFilesButton from "discourse/ui-kit/d-pick-files-button";
 import ChatComposerUpload from "discourse/plugins/chat/discourse/components/chat-composer-upload";
 
-@classNames("chat-composer-uploads")
+@tagName("")
 export default class ChatComposerUploads extends Component {
+  @service capabilities;
   @service mediaOptimizationWorker;
-  @service chatStateManager;
 
-  uppyUpload = new UppyUpload(getOwner(this), {
+  @autoTrackedArray uploads = null;
+
+  uppyUpload = new UppyUpload(this, {
     id: "chat-composer-uploader",
     type: "chat-composer",
     useMultipartUploadsIfAvailable: true,
@@ -28,25 +32,30 @@ export default class ChatComposerUploads extends Component {
         this.uppyUpload.uppyWrapper.useUploadPlugin(UppyMediaOptimization, {
           optimizeFn: (data, opts) =>
             this.mediaOptimizationWorker.optimizeImage(data, opts),
-          runParallel: !this.site.isMobileDevice,
+          cancelFn: (fileId) => this.mediaOptimizationWorker.cancel(fileId),
+          runParallel: !this.capabilities.isMobileDevice,
         });
       }
 
       this.uppyUpload.uppyWrapper.onPreProcessProgress((file) => {
-        const inProgressUpload = this.inProgressUploads.findBy("id", file.id);
+        const inProgressUpload = this.inProgressUploads.find(
+          (item) => item.id === file.id
+        );
         if (!inProgressUpload?.processing) {
           inProgressUpload?.set("processing", true);
         }
       });
 
       this.uppyUpload.uppyWrapper.onPreProcessComplete((file) => {
-        const inProgressUpload = this.inProgressUploads.findBy("id", file.id);
+        const inProgressUpload = this.inProgressUploads.find(
+          (item) => item.id === file.id
+        );
         inProgressUpload?.set("processing", false);
       });
     },
 
     uploadDone: (upload) => {
-      this.uploads.pushObject(upload);
+      this.uploads.push(upload);
       this._triggerUploadsChanged();
     },
 
@@ -62,23 +71,25 @@ export default class ChatComposerUploads extends Component {
   });
 
   existingUploads = null;
-  uploads = null;
   uploadDropZone = null;
+
+  #previews = new WeakMap();
 
   get inProgressUploads() {
     return this.uppyUpload.inProgressUploads;
   }
 
+  get showUploadsContainer() {
+    return this.uploads?.length > 0 || this.inProgressUploads.length > 0;
+  }
+
   didReceiveAttrs() {
     super.didReceiveAttrs(...arguments);
     if (this.inProgressUploads?.length > 0) {
-      this.uppyUpload.uppyWrapper.uppyInstance?.cancelAll();
+      this.uppyUpload.cancelAllUploads();
     }
 
-    this.set(
-      "uploads",
-      this.existingUploads ? cloneJSON(this.existingUploads) : []
-    );
+    this.uploads = this.existingUploads ? cloneJSON(this.existingUploads) : [];
   }
 
   didInsertElement() {
@@ -96,10 +107,6 @@ export default class ChatComposerUploads extends Component {
     );
   }
 
-  get showUploadsContainer() {
-    return this.get("uploads.length") > 0 || this.inProgressUploads.length > 0;
-  }
-
   @action
   cancelUploading(upload) {
     this.uppyUpload.cancelSingleUpload({
@@ -110,8 +117,41 @@ export default class ChatComposerUploads extends Component {
 
   @action
   removeUpload(upload) {
-    this.uploads.removeObject(upload);
+    removeValueFromArray(this.uploads, upload);
     this._triggerUploadsChanged();
+  }
+
+  @action
+  openPreview(upload) {
+    const shown = [...this.uploads, ...this.inProgressUploads].filter((item) =>
+      this.#previews.has(item)
+    );
+
+    // own links to unfinished files, so tiles can release theirs at any time
+    const localUrls = [];
+    const slides = shown.map((item) => {
+      const { type, element, alt } = this.#previews.get(item);
+      let src = element.currentSrc || element.src;
+      if (item.data instanceof Blob) {
+        src = URL.createObjectURL(item.data);
+        localUrls.push(src);
+      }
+      return { type, src, element, alt };
+    });
+
+    openLightbox(slides, { index: shown.indexOf(upload) }).finally(() =>
+      localUrls.forEach((url) => URL.revokeObjectURL(url))
+    );
+  }
+
+  @bind
+  registerPreview(upload, preview) {
+    this.#previews.set(upload, preview);
+    return () => {
+      if (this.#previews.get(upload) === preview) {
+        this.#previews.delete(upload);
+      }
+    };
   }
 
   @bind
@@ -143,30 +183,36 @@ export default class ChatComposerUploads extends Component {
   }
 
   <template>
-    {{#if this.showUploadsContainer}}
-      <div class="chat-composer-uploads-container">
-        {{#each this.uploads as |upload|}}
-          <ChatComposerUpload
-            @upload={{upload}}
-            @isDone={{true}}
-            @onCancel={{fn this.removeUpload upload}}
-          />
-        {{/each}}
+    <div class="chat-composer-uploads" ...attributes>
+      {{#if this.showUploadsContainer}}
+        <div class="chat-composer-uploads-container">
+          {{#each this.uploads as |upload|}}
+            <ChatComposerUpload
+              @isDone={{true}}
+              @onCancel={{fn this.removeUpload upload}}
+              @onPreview={{fn this.openPreview upload}}
+              @registerPreview={{fn this.registerPreview upload}}
+              @upload={{upload}}
+            />
+          {{/each}}
 
-        {{#each this.inProgressUploads as |upload|}}
-          <ChatComposerUpload
-            @upload={{upload}}
-            @onCancel={{fn this.cancelUploading upload}}
-          />
-        {{/each}}
-      </div>
-    {{/if}}
+          {{#each this.inProgressUploads as |upload|}}
+            <ChatComposerUpload
+              @onCancel={{fn this.cancelUploading upload}}
+              @onPreview={{fn this.openPreview upload}}
+              @registerPreview={{fn this.registerPreview upload}}
+              @upload={{upload}}
+            />
+          {{/each}}
+        </div>
+      {{/if}}
 
-    <PickFilesButton
-      @allowMultiple={{true}}
-      @fileInputId={{this.fileUploadElementId}}
-      @fileInputClass="hidden-upload-field"
-      @registerFileInput={{this.uppyUpload.setup}}
-    />
+      <DPickFilesButton
+        @allowMultiple={{true}}
+        @fileInputClass="hidden-upload-field"
+        @fileInputId={{this.fileUploadElementId}}
+        @registerFileInput={{this.uppyUpload.setup}}
+      />
+    </div>
   </template>
 }

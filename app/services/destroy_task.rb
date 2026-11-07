@@ -1,10 +1,13 @@
 # frozen_string_literal: true
 
-require "highline/import"
+require "highline"
+require "io/console"
 
 class DestroyTask
   def initialize(io = STDOUT)
     @io = io
+    @tty = IO.console
+    @hl = HighLine.new(@tty, @io)
   end
 
   def destroy_topics(category, parent_category = nil, delete_system_topics = false)
@@ -77,7 +80,7 @@ class DestroyTask
     end
 
     if require_confirmation
-      confirm_destroy = ask("Are you sure? (Y/n)")
+      confirm_destroy = @hl.ask("Are you sure? (Y/n)")
       exit 1 if confirm_destroy.downcase != "y"
     end
 
@@ -135,25 +138,23 @@ class DestroyTask
       .human_users
       .where(admin: false)
       .find_each do |user|
-        begin
-          if UserDestroyer.new(Discourse.system_user).destroy(
-               user,
-               delete_posts: true,
-               context: "destroy task",
-             )
-            @io.puts "#{user.username} deleted"
-          else
-            @io.puts "#{user.username} not deleted"
-          end
-        rescue UserDestroyer::PostsExistError
-          raise Discourse::InvalidAccess.new(
-                  "User #{user.username} has #{user.post_count} posts, so can't be deleted.",
-                )
-        rescue NoMethodError
-          @io.puts "#{user.username} could not be deleted"
-        rescue Discourse::InvalidAccess => e
-          @io.puts "#{user.username} #{e.message}"
+        if UserDestroyer.new(Discourse.system_user).destroy(
+             user,
+             delete_posts: true,
+             context: "destroy task",
+           )
+          @io.puts "#{user.username} deleted"
+        else
+          @io.puts "#{user.username} not deleted"
         end
+      rescue UserDestroyer::PostsExistError
+        raise Discourse::InvalidAccess.new(
+                "User #{user.username} has #{user.post_count} posts, so can't be deleted.",
+              )
+      rescue NoMethodError
+        @io.puts "#{user.username} could not be deleted"
+      rescue Discourse::InvalidAccess => e
+        @io.puts "#{user.username} #{e.message}"
       end
   end
 
@@ -161,6 +162,8 @@ class DestroyTask
     ApplicationRequest.delete_all
     IncomingLink.delete_all
     UserVisit.delete_all
+    UserVisitDailyRollup.delete_all
+    CategoryActivityDailyRollup.delete_all
     UserProfileView.delete_all
     UserProfile.update_all(views: 0)
     PostAction.unscoped.delete_all

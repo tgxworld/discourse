@@ -99,7 +99,7 @@ RSpec.describe Jobs::GroupSmtpEmail do
     expect(email_text).not_to include(recipient_user.username)
   end
 
-  it "creates an EmailLog record with the correct details" do
+  it "stores delivery details in the EmailLog" do
     job.execute(args)
     email_log =
       EmailLog.find_by(post_id: post.id, topic_id: post.topic_id, user_id: recipient_user.id)
@@ -107,7 +107,7 @@ RSpec.describe Jobs::GroupSmtpEmail do
     expect(email_log.message_id).to eq("discourse/post/#{post.id}@test.localhost")
   end
 
-  it "creates an IncomingEmail record with the correct details to avoid double processing IMAP" do
+  it "creates an IncomingEmail record with the correct details" do
     job.execute(args)
     expect(ActionMailer::Base.deliveries.count).to eq(1)
     expect(ActionMailer::Base.deliveries.last.subject).to eq("Re: Help I need support")
@@ -121,7 +121,7 @@ RSpec.describe Jobs::GroupSmtpEmail do
     expect(incoming_email.subject).to eq("Re: Help I need support")
   end
 
-  it "does not create a post reply key, it always replies to the group email_username" do
+  it "uses the group email address in the generated mail headers" do
     job.execute(args)
     expect(ActionMailer::Base.deliveries.count).to eq(1)
     expect(ActionMailer::Base.deliveries.last.subject).to eq("Re: Help I need support")
@@ -217,28 +217,6 @@ RSpec.describe Jobs::GroupSmtpEmail do
       expect(email_log.cc_addresses).to eq("otherguy@test.com")
       expect(email_log.bcc_addresses).to eq("cormac@lit.com")
       expect(email_log.cc_user_ids).to match_array([staged1.id])
-    end
-  end
-
-  context "when the post in the argument is the OP" do
-    let(:post_id) { post.topic.posts.first.id }
-
-    context "when the group has imap enabled" do
-      before { group.update!(imap_enabled: true) }
-
-      it "aborts and does not send a group SMTP email; the OP is the one that sent the email in the first place" do
-        expect { job.execute(args) }.not_to(change { EmailLog.count })
-        expect(ActionMailer::Base.deliveries.count).to eq(0)
-      end
-    end
-
-    context "when the group does not have imap enabled" do
-      before { group.update!(imap_enabled: false) }
-
-      it "sends the email as expected" do
-        job.execute(args)
-        expect(ActionMailer::Base.deliveries.count).to eq(1)
-      end
     end
   end
 

@@ -1,19 +1,5 @@
 # frozen_string_literal: true
 
-def generate_html(text, opts = {})
-  output = "<p><span"
-  output += " class=\"discourse-local-date\""
-  output += " data-date=\"#{opts[:date]}\"" if opts[:date]
-  output += " data-email-preview=\"#{opts[:email_preview]}\"" if opts[:email_preview]
-  output += " data-format=\"#{opts[:format]}\"" if opts[:format]
-  output += " data-time=\"#{opts[:time]}\"" if opts[:time]
-  output += " data-timezone=\"#{opts[:timezone]}\"" if opts[:timezone]
-  output += " data-timezones=\"#{opts[:timezones]}\"" if opts[:timezones]
-  output += ">"
-  output += text
-  output + "</span></p>"
-end
-
 RSpec.describe PrettyText do
   before { freeze_time }
 
@@ -22,11 +8,7 @@ RSpec.describe PrettyText do
       SiteSetting.discourse_local_dates_email_format = "YYYY-MM-DDTHH:mm:ss[Z] z"
       cooked = PrettyText.cook("[date=2018-05-08]")
       cooked_mail =
-        generate_html(
-          "2018-05-08T00:00:00Z UTC",
-          date: "2018-05-08",
-          email_preview: "2018-05-08T00:00:00Z UTC",
-        )
+        '<p><span class="discourse-local-date" data-date="2018-05-08" data-email-preview="2018-05-08T00:00:00Z UTC">2018-05-08T00:00:00Z UTC</span></p>'
 
       expect(PrettyText.format_for_email(cooked)).to match_html(cooked_mail)
     end
@@ -35,12 +17,7 @@ RSpec.describe PrettyText do
       SiteSetting.discourse_local_dates_email_format = "YYYY-MM-DDTHH:mm:ss[Z] UTC"
       cooked = PrettyText.cook("[date=2018-05-08  time=20:00:00]")
       cooked_mail =
-        generate_html(
-          "2018-05-08T20:00:00Z UTC",
-          date: "2018-05-08",
-          email_preview: "2018-05-08T20:00:00Z UTC",
-          time: "20:00:00",
-        )
+        '<p><span class="discourse-local-date" data-date="2018-05-08" data-email-preview="2018-05-08T20:00:00Z UTC" data-time="20:00:00">2018-05-08T20:00:00Z UTC</span></p>'
 
       expect(PrettyText.format_for_email(cooked)).to match_html(cooked_mail)
     end
@@ -52,13 +29,7 @@ RSpec.describe PrettyText do
           '[date=2023-05-08 timezone="Europe/Paris" timezones="America/Los_Angeles|Pacific/Auckland"]',
         )
       cooked_mail =
-        generate_html(
-          "2023-05-07T22:00:00Z UTC",
-          date: "2023-05-08",
-          email_preview: "2023-05-07T22:00:00Z UTC",
-          timezone: "Europe/Paris",
-          timezones: "America/Los_Angeles|Pacific/Auckland",
-        )
+        '<p><span class="discourse-local-date" data-date="2023-05-08" data-email-preview="2023-05-07T22:00:00Z UTC" data-timezone="Europe/Paris" data-timezones="America/Los_Angeles|Pacific/Auckland">2023-05-07T22:00:00Z UTC</span></p>'
 
       expect(PrettyText.format_for_email(cooked)).to match_html(cooked_mail)
     end
@@ -73,11 +44,7 @@ RSpec.describe PrettyText do
         cooked = PrettyText.cook("[date=2018-05-08]")
 
         cooked_mail =
-          generate_html(
-            "Tue, May 8, 2018 2:00 AM",
-            date: "2018-05-08",
-            email_preview: "Tue, May 8, 2018 2:00 AM",
-          )
+          '<p><span class="discourse-local-date" data-date="2018-05-08" data-email-preview="Tue, May 8, 2018 2:00 AM">Tue, May 8, 2018 2:00 AM</span></p>'
 
         expect(PrettyText.format_for_email(cooked)).to match_html(cooked_mail)
       end
@@ -88,7 +55,8 @@ RSpec.describe PrettyText do
 
       it "uses the site setting" do
         cooked = PrettyText.cook("[date=2018-05-08]")
-        cooked_mail = generate_html("08/05 UTC", date: "2018-05-08", email_preview: "08/05 UTC")
+        cooked_mail =
+          '<p><span class="discourse-local-date" data-date="2018-05-08" data-email-preview="08/05 UTC">08/05 UTC</span></p>'
 
         expect(PrettyText.format_for_email(cooked)).to match_html(cooked_mail)
       end
@@ -150,6 +118,23 @@ RSpec.describe PrettyText do
     it "converts french quotes to regular quotes" do
       excerpt = PrettyText.excerpt(post.cooked, 200)
       expect(excerpt).to eq("Wednesday, October 16, 2019 6:00 PM (UTC)")
+    end
+  end
+
+  describe "date normalization" do
+    it "normalizes dates without leading zeros in date-range" do
+      cooked =
+        PrettyText.cook('[date-range from=2024-3-9T09:00:00 to=2024-3-9T17:00:00 timezone="UTC"]')
+
+      expect(cooked).to include('data-date="2024-03-09"')
+      expect(cooked).not_to include('data-date="2024-3-9"')
+    end
+
+    it "normalizes dates without leading zeros in single date" do
+      cooked = PrettyText.cook("[date=2024-3-9]")
+
+      expect(cooked).to include('data-date="2024-03-09"')
+      expect(cooked).not_to include('data-date="2024-3-9"')
     end
   end
 end

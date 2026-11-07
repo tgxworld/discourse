@@ -5,10 +5,17 @@
 # https://translate.discourse.org/
 
 ja:
+  admin_js:
+    admin:
+      site_settings:
+        categories:
+          styleguide: "Discourse スタイルガイド"
   js:
     styleguide:
       title: "スタイルガイド"
-      welcome: "開始するには、左側のメニューからセクションを選択します。"
+      example:
+        kind:
+          component: "コンポーネント"
       categories:
         syntax: 構文
         atoms: 原子
@@ -25,12 +32,28 @@ ja:
           title: "日付/時刻の入力"
         menus:
           title: "メニュー"
+        context_menu:
+          actions:
+            duplicate: "複製"
+            delete: "削除"
+        multi_select:
+          title: "複数選択"
+        reorderable_list:
+          policies_pinned: "固定"
+          policies_required: "必須"
+          table_field: "フィールド"
+          table_type: "タイプ"
+          cross_list_primary: "プライマリー"
         toasts:
           title: "トースト"
         font_scale:
           title: "フォントシステム"
         colors:
           title: "色"
+        dialog:
+          title: "ダイアログ"
+        drag_and_drop:
+          locked: "ロック済み"
         icons:
           title: "アイコン"
           full_list: "Font Awesome Icons の全リストを表示"
@@ -53,7 +76,7 @@ ja:
         categories_list:
           title: "カテゴリリスト"
         topic_link:
-          title: "トピックリンク"
+          title: "トピックのリンクとステータス"
         topic_list_item:
           title: "トピックリスト項目"
         topic_statuses:
@@ -62,8 +85,6 @@ ja:
           title: "トピックリスト"
         basic_topic_list:
           title: "基本トピックリスト"
-        footer_message:
-          title: "フッターメッセージ"
         signup_cta:
           title: "アカウント登録 CTA"
         topic_timer_info:
@@ -78,14 +99,39 @@ ja:
           title: "投稿リスト"
           empty_example: "<PostList /> 空の状態"
           populated_example: "<PostList /> 入力状態"
+        post_oneboxes:
+          title: "ワンボックス投稿"
         topic_map:
           title: "トピックマップ"
         site_header:
           title: "サイトヘッダー"
-        suggested_topics:
-          title: "推奨トピック"
+        more_topics:
+          title: "その他のトピック"
         post_menu:
           title: "投稿メニュー"
+        roving_focus:
+          toolbar:
+            copy: "コピー"
+          tags:
+            remove: "%{tag} を削除"
+            design: "デザイン"
+            support: "支援する"
+          adjacent:
+            label: "フィルター"
+            field: "検索"
+            placeholder: "トピックを検索"
+            open: "オープン"
+            recent: "最近"
+          listbox:
+            apple: "Apple"
+          combobox:
+            daily: "毎日"
+            weekly: "毎週"
+            monthly: "毎月"
+            never: "なし"
+          tree:
+            components: "コンポーネント"
+            select: "選択"
         modal:
           title: "モーダル"
           header: "モーダルタイトル"
@@ -96,6 +142,8 @@ ja:
           title: "ヘッダーアイコン"
         spinners:
           title: "スピナー"
+        otp:
+          title: "OTP"
         empty_state:
           title: "エンプティステート"
         tooltips:

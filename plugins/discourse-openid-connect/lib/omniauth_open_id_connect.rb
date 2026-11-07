@@ -2,7 +2,7 @@
 
 require "omniauth-oauth2"
 
-module ::OmniAuth
+module OmniAuth
   module OpenIDConnect
     class DiscoveryError < Error
     end
@@ -12,6 +12,7 @@ module ::OmniAuth
     class OpenIDConnect < OmniAuth::Strategies::OAuth2
       class NonceVerifyError < StandardError
       end
+
       class SubVerifyError < StandardError
       end
 
@@ -24,6 +25,7 @@ module ::OmniAuth
       option :passthrough_authorize_options, [:p]
       option :passthrough_token_options, [:p]
       option :claims, nil
+      option :email_claim, "email"
 
       option :client_options,
              site: nil,
@@ -39,7 +41,7 @@ module ::OmniAuth
       def discover!
         discovery_document = options[:discovery_document]
         if discovery_document.nil?
-          raise ::OmniAuth::OpenIDConnect::DiscoveryError.new("Discovery document is missing")
+          raise OmniAuth::OpenIDConnect::DiscoveryError.new("Discovery document is missing")
         end
 
         discovery_params = {
@@ -51,7 +53,7 @@ module ::OmniAuth
         discovery_params.each do |internal_key, external_key|
           val = discovery_document[external_key]
           if val.nil? || val.empty?
-            raise ::OmniAuth::OpenIDConnect::DiscoveryError.new(
+            raise OmniAuth::OpenIDConnect::DiscoveryError.new(
                     "missing discovery parameter #{external_key}",
                   )
           end
@@ -73,12 +75,17 @@ module ::OmniAuth
              )
           options[:client_options][:auth_scheme] = :request_body
         end
+
+        # If we're using PKCE _and_ there is no client_secret, use the request_body auth_scheme.
+        if options[:pkce] && (options[:client_secret].nil? || options[:client_secret].empty?)
+          options[:client_options][:auth_scheme] = :request_body
+        end
       end
 
       def request_phase
         begin
           discover! if options[:discovery]
-        rescue ::OmniAuth::OpenIDConnect::DiscoveryError => e
+        rescue OmniAuth::OpenIDConnect::DiscoveryError => e
           return fail!(:openid_connect_discovery_error, e)
         end
 
@@ -128,10 +135,11 @@ module ::OmniAuth
           discover! if options[:discovery]
 
           oauth2_callback_phase = super
+          raise env["omniauth.error"] if env["omniauth.error"].is_a?(Faraday::Error)
           return oauth2_callback_phase if env["omniauth.error"]
 
           oauth2_callback_phase
-        rescue ::OmniAuth::OpenIDConnect::DiscoveryError => e
+        rescue OmniAuth::OpenIDConnect::DiscoveryError => e
           fail!(:openid_connect_discovery_error, e)
         rescue ::JWT::DecodeError => e
           fail!(:jwt_decode_failed, e)
@@ -139,6 +147,15 @@ module ::OmniAuth
           fail!(:jwt_nonce_verify_failed, e)
         rescue SubVerifyError => e
           fail!(:openid_connect_sub_mismatch, e)
+        rescue Faraday::Error => e
+          detail =
+            if e.is_a?(Faraday::TimeoutError)
+              "timed out after #{GlobalSetting.openid_connect_request_timeout_seconds}s"
+            else
+              "failed"
+            end
+          Rails.logger.error("OIDC Log: request #{detail}: #{e.class} #{e.message}")
+          fail!(:openid_connect_request_failed, e)
         end
       end
 
@@ -150,17 +167,12 @@ module ::OmniAuth
           begin
             decoded = ::JWT.decode(access_token["id_token"], nil, false).first
             verbose_log("Loaded JWT\n\n#{decoded.to_yaml}")
-            ::JWT::Verify.verify_claims(
+            ::JWT::Claims.verify_payload!(
               decoded,
-              verify_iss: true,
+              :exp,
+              :nbf,
               iss: options[:client_options][:site],
-              verify_aud: true,
               aud: options.client_id,
-              verify_sub: false,
-              verify_expiration: true,
-              verify_not_before: true,
-              verify_iat: false,
-              verify_jti: false,
             )
 
             if decoded["nonce"].nil? || decoded["nonce"].empty? ||
@@ -196,9 +208,10 @@ module ::OmniAuth
 
       info do
         data_source = options.use_userinfo ? userinfo_response : id_token_info
+        email = data_source[options.email_claim]
         prune!(
           name: data_source["name"],
-          email: data_source["email"],
+          email: email.is_a?(String) ? email : nil,
           first_name: data_source["given_name"],
           last_name: data_source["family_name"],
           nickname: data_source["preferred_username"],
@@ -210,6 +223,7 @@ module ::OmniAuth
         hash = {}
         hash[:raw_info] = options.use_userinfo ? userinfo_response : id_token_info
         hash[:id_token] = access_token["id_token"]
+        hash[:id_token_info] = id_token_info
         prune! hash
       end
 
@@ -242,7 +256,8 @@ module ::OmniAuth
         return super if options.use_userinfo
         response =
           client.request(:post, options[:client_options][:token_url], body: get_token_options)
-        ::OAuth2::AccessToken.from_hash(client, response.parsed)
+        parsed = response.parsed
+        ::OAuth2::AccessToken.new(client, parsed["id_token"].to_s, parsed)
       end
     end
   end

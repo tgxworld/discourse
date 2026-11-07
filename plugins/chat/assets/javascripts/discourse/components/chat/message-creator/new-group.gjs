@@ -3,12 +3,11 @@ import { tracked } from "@glimmer/tracking";
 import { Input } from "@ember/component";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
-import { gte } from "truth-helpers";
-import DButton from "discourse/components/d-button";
 import { popupAjaxError } from "discourse/lib/ajax-error";
+import DButton from "discourse/ui-kit/d-button";
 import { i18n } from "discourse-i18n";
-import MembersCount from "./members-count";
-import MembersSelector from "./members-selector";
+import MembersCount from "./members-count.gjs";
+import MembersSelector from "./members-selector.gjs";
 
 export default class NewGroup extends Component {
   @service chat;
@@ -38,11 +37,11 @@ export default class NewGroup extends Component {
     try {
       const usernames = this.args.members
         .filter((member) => member.type === "user")
-        .mapBy("model.username");
+        .map((member) => member.model.username);
 
       const groups = this.args.members
         .filter((member) => member.type === "group")
-        .mapBy("model.name");
+        .map((member) => member.model.name);
 
       const channel = await this.chat.createDmChannel(
         { usernames, groups },
@@ -66,8 +65,8 @@ export default class NewGroup extends Component {
         <div class="chat-message-creator__new-group-header-container">
           <div class="chat-message-creator__new-group-header">
             <Input
-              name="channel-name"
               class="chat-message-creator__new-group-header__input"
+              name="channel-name"
               placeholder={{this.placeholder}}
               @value={{this.newGroupTitle}}
             />
@@ -80,23 +79,23 @@ export default class NewGroup extends Component {
         </div>
 
         <MembersSelector
-          @members={{@members}}
-          @channel={{@channel}}
-          @onChange={{@onChangeMembers}}
-          @close={{@close}}
           @cancel={{@cancel}}
-          @membersCount={{this.membersCount}}
+          @channel={{@channel}}
+          @close={{@close}}
           @maxReached={{gte this.membersCount this.maxMembers}}
+          @members={{@members}}
+          @membersCount={{this.membersCount}}
+          @onChange={{@onChangeMembers}}
         />
 
         {{#if @members.length}}
           <div class="chat-message-creator__new-group-footer-container">
             <div class="chat-message-creator__new-group-footer">
-              <DButton class="btn-flat" @label="cancel" @action={{@cancel}} />
+              <DButton class="btn-flat" @action={{@cancel}} @label="cancel" />
               <DButton
                 class="btn-primary create-chat-group"
-                @label="chat.new_message_modal.create_new_group_chat"
                 @action={{this.createGroup}}
+                @label="chat.new_message_modal.create_new_group_chat"
               />
 
             </div>

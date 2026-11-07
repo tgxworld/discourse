@@ -22,9 +22,7 @@ def unbundled_require(gem)
     spec.activate
   end
 
-  begin
-    require gem
-  end
+  require gem
 end
 
 def sentence
@@ -58,11 +56,11 @@ def create_user(seq, admin: false, username: nil)
   end
 end
 
-require File.expand_path(File.dirname(__FILE__) + "/../config/environment")
+require_relative "../config/environment"
 
 Jobs.run_immediately!
 
-unless Rails.env == "profile"
+unless Rails.env.profile?
   puts "This script should only be used in the profile environment"
   exit
 end

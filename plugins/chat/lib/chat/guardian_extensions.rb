@@ -28,6 +28,8 @@ module Chat
     end
 
     def can_create_chat_message?
+      return false if anonymous?
+
       !SpamRule::AutoSilence.prevent_posting?(@user)
     end
 
@@ -61,7 +63,9 @@ module Chat
       return true if is_staff?
       return false if !target.user_option.allow_private_messages
 
-      !is_ignored_by_user?(target) && !is_muted_by_user?(target) && !target.suspended?
+      user_comm_screener = UserCommScreener.new(acting_user: @user, target_user_ids: target.id)
+
+      !user_comm_screener.disallowing_pms_from_actor?(target.id) && !target.suspended?
     end
 
     def hidden_tag_names
@@ -133,16 +137,35 @@ module Chat
       is_staff? || @user.has_trust_level?(TrustLevel[4])
     end
 
-    def can_preview_chat_channel?(chat_channel)
-      return false if !chat_channel&.chatable
-
-      if chat_channel.direct_message_channel?
-        chat_channel.chatable.user_can_access?(@user)
-      elsif chat_channel.category_channel?
-        can_see_category?(chat_channel.chatable)
+    def can_see_chatable?(chatable)
+      case chatable
+      when Category
+        can_see_category?(chatable)
+      when Chat::DirectMessage
+        chatable.user_can_access?(@user)
       else
         true
       end
+    end
+
+    def can_preview_chat_channel?(chat_channel)
+      return false if !chat_channel&.chatable
+
+      can_see_chatable?(chat_channel.chatable)
+    end
+
+    def can_preview_anonymous_public_chat_channel?(chat_channel)
+      return false if !Chat.anonymous_public_channel_access_allowed?
+      return false if !chat_channel&.category_channel?
+
+      Guardian.new(nil).can_preview_chat_channel?(chat_channel)
+    end
+
+    def can_see_chat_message?(message)
+      return false if !can_preview_chat_channel?(message.chat_channel)
+      return true if !message.trashed?
+
+      message.user_id == @user.id || is_staff?
     end
 
     def can_join_chat_channel?(chat_channel, post_allowed_category_ids: nil)
@@ -167,7 +190,12 @@ module Chat
           return true if is_admin?
           post_allowed_category_ids.include?(chatable.id)
         else
-          can_post_in_category?(chatable)
+          if is_anonymous?
+            SiteSetting.allow_chat_in_anonymous_mode &&
+              AnonymousShadowCreator.get_master(@user)&.guardian&.can_post_in_category?(chatable)
+          else
+            can_post_in_category?(chatable)
+          end
         end
       when Chat::DirectMessage
         true
@@ -177,6 +205,11 @@ module Chat
     def can_flag_chat_messages?
       return false if @user.silenced?
       @user.in_any_groups?(SiteSetting.chat_message_flag_allowed_groups_map)
+    end
+
+    # Illegal content must be reportable by anyone, regardless of flagging permissions.
+    def can_only_flag_chat_messages_as_illegal?
+      SiteSetting.allow_all_users_to_flag_illegal_content && !can_flag_chat_messages?
     end
 
     def can_flag_in_chat_channel?(chat_channel, post_allowed_category_ids: nil)
@@ -192,13 +225,24 @@ module Chat
       return false if chat_message.user.staff? && !SiteSetting.allow_flagging_staff
       return false if chat_message.user_id == @user.id
 
-      can_flag_chat_messages? && can_flag_in_chat_channel?(chat_message.chat_channel)
+      (can_flag_chat_messages? || SiteSetting.allow_all_users_to_flag_illegal_content) &&
+        can_flag_in_chat_channel?(chat_message.chat_channel)
+    end
+
+    def chat_flag_types
+      @chat_flag_types ||= PostActionType.flag_types
     end
 
     def can_flag_message_as?(chat_message, flag_type_id, opts)
+      return false if flag_type_id == chat_flag_types[:illegal] && SiteSetting.dsa_reporting_enabled
+
       return false if !is_staff? && (opts[:take_action] || opts[:queue_for_review])
 
-      if flag_type_id == ReviewableScore.types[:notify_user]
+      if can_only_flag_chat_messages_as_illegal? && flag_type_id != chat_flag_types[:illegal]
+        return false
+      end
+
+      if flag_type_id == chat_flag_types[:notify_user]
         is_warning = ActiveRecord::Type::Boolean.new.deserialize(opts[:is_warning])
 
         return false if is_warning && !is_staff?
@@ -210,6 +254,7 @@ module Chat
     def can_delete_chat?(message, chatable)
       return false if @user.silenced?
       return false if !can_modify_channel_message?(message.chat_channel)
+      return false if !is_admin? && !can_preview_chat_channel?(message.chat_channel)
 
       if message.user_id == current_user.id
         can_delete_own_chats?(chatable)
@@ -232,12 +277,14 @@ module Chat
     end
 
     def can_restore_chat?(message, chatable)
+      return false if @user.silenced?
       return false if !can_modify_channel_message?(message.chat_channel)
+      return false if !is_admin? && !can_preview_chat_channel?(message.chat_channel)
 
       if message.user_id == current_user.id
         case chatable
         when Category
-          return message.deleted_by_id == current_user.id || can_see_category?(chatable)
+          return message.deleted_by_id == current_user.id || can_moderate_chat?(chatable)
         when Chat::DirectMessage
           return message.deleted_by_id == current_user.id || is_staff?
         end
@@ -251,6 +298,8 @@ module Chat
     end
 
     def can_edit_chat?(message)
+      return false if !can_preview_chat_channel?(message.chat_channel)
+
       (message.user_id == @user.id && !@user.silenced?) || is_admin?
     end
 
@@ -264,6 +313,21 @@ module Chat
 
     def can_remove_members?(channel)
       is_admin? && (channel.category_channel? || channel.direct_message_group?)
+    end
+
+    def can_manage_chat_channel_pins?(channel)
+      return false unless can_chat?
+      return false unless can_preview_chat_channel?(channel)
+
+      if channel.direct_message_channel?
+        true
+      else
+        @user.in_any_groups?(SiteSetting.chat_pinning_messages_allowed_groups_map)
+      end
+    end
+
+    def can_manage_chat_message_pin?(message)
+      can_manage_chat_channel_pins?(message.chat_channel)
     end
   end
 end

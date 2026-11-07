@@ -1,11 +1,11 @@
 import { computed } from "@ember/object";
 import { classNames } from "@ember-decorators/component";
-import { i18n } from "discourse-i18n";
-import ComboBoxComponent from "select-kit/components/combo-box";
+import ComboBoxComponent from "discourse/select-kit/components/combo-box";
 import {
   pluginApiIdentifiers,
   selectKitOptions,
-} from "select-kit/components/select-kit";
+} from "discourse/select-kit/components/select-kit";
+import { i18n } from "discourse-i18n";
 
 @pluginApiIdentifiers("subscribe-us-state-select")
 @selectKitOptions({
@@ -31,7 +31,7 @@ export default class SubscribeUsStateSelect extends ComboBoxComponent {
       ["CO", "Colorado"],
       ["CT", "Connecticut"],
       ["DE", "Delaware"],
-      ["US", "District"],
+      ["US", "District of Columbia"],
       ["FL", "Florida"],
       ["GA", "Georgia"],
       ["HI", "Hawaii"],
@@ -62,16 +62,16 @@ export default class SubscribeUsStateSelect extends ComboBoxComponent {
       ["OK", "Oklahoma"],
       ["OR", "Oregon"],
       ["PA", "Pennsylvania"],
-      ["RI", "Rhode"],
-      ["SC", "South"],
-      ["SD", "South"],
+      ["RI", "Rhode Island"],
+      ["SC", "South Carolina"],
+      ["SD", "South Dakota"],
       ["TN", "Tennessee"],
       ["TX", "Texas"],
       ["UT", "Utah"],
       ["VT", "Vermont"],
       ["VA", "Virginia"],
       ["WA", "Washington"],
-      ["WV", "West"],
+      ["WV", "West Virginia"],
       ["WI", "Wisconsin"],
       ["WY", "Wyoming"],
       ["AS", "American Samoa"],

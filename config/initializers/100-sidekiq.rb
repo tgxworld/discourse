@@ -2,6 +2,7 @@
 
 require "sidekiq/pausable"
 require "sidekiq/discourse_event"
+require "sidekiq/suppress_user_email_errors"
 require "sidekiq_logster_reporter"
 require "sidekiq_long_running_job_logger"
 require "mini_scheduler_long_running_job_logger"
@@ -10,11 +11,12 @@ Sidekiq.configure_client { |config| config.redis = Discourse.sidekiq_redis_confi
 
 Sidekiq.configure_server do |config|
   config.redis = Discourse.sidekiq_redis_config
-  config[:skip_default_job_logging] = false
+  config[:skip_default_job_logging] = true
 
   config.server_middleware do |chain|
     chain.add Sidekiq::Pausable
     chain.add Sidekiq::DiscourseEvent
+    chain.add Sidekiq::SuppressUserEmailErrors
   end
 
   if stuck_sidekiq_job_minutes = GlobalSetting.sidekiq_report_long_running_jobs_minutes
@@ -36,17 +38,6 @@ if Sidekiq.server?
   Rails.application.config.after_initialize do
     # defer queue should simply run in sidekiq
     Scheduler::Defer.async = false
-
-    # warm up AR
-    RailsMultisite::ConnectionManagement.safe_each_connection do
-      (ActiveRecord::Base.connection.tables - %w[schema_migrations versions]).each do |table|
-        begin
-          table.classify.constantize.first
-        rescue StandardError
-          nil
-        end
-      end
-    end
 
     scheduler_hostname = ENV["UNICORN_SCHEDULER_HOSTNAME"]
 
@@ -87,7 +78,9 @@ Sidekiq.strict_args!
 
 Rails.application.config.to_prepare do
   # Ensure that scheduled jobs are loaded before mini_scheduler is configured.
-  Dir.glob("#{Rails.root}/app/jobs/scheduled/*.rb") { |f| require(f) } if Rails.env.development?
+  if Rails.env.development?
+    Dir.glob("#{Rails.root.join("app/jobs/scheduled/*.rb")}") { |f| require(f) }
+  end
 
   MiniScheduler.configure do |config|
     config.redis = DiscourseRedis.new(Discourse.sidekiq_redis_config)

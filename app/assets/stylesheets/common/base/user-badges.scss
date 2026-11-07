@@ -11,7 +11,6 @@
   display: inline-flex;
   align-items: center;
   background-color: var(--secondary);
-  margin: 4px 0 0;
 
   img {
     height: 16px;
@@ -166,6 +165,8 @@
     right: 0;
     bottom: 0;
     z-index: 1;
+    border-radius: var(--d-button-border-radius) 0 var(--d-button-border-radius)
+      0;
   }
 
   .badge-contents {
@@ -189,11 +190,15 @@
       }
     }
 
-    .badge-summary:has(a) {
-      // for summary links to be reachable
-      // they must be positioned above .badge-link:after
-      position: relative;
-      z-index: 1;
+    .badge-summary {
+      overflow-wrap: break-word;
+
+      &:has(a) {
+        // for summary links to be reachable
+        // they must be positioned above .badge-link:after
+        position: relative;
+        z-index: 1;
+      }
     }
 
     .badge-icon {
@@ -208,9 +213,9 @@
       }
 
       img {
-        width: 100%;
-        max-width: var(--badge-icon-size);
-        max-height: var(--badge-icon-size);
+        width: var(--badge-icon-size);
+        height: var(--badge-icon-size);
+        object-fit: contain;
       }
 
       &.badge-type-gold .fa {
@@ -227,6 +232,7 @@
     }
 
     .badge-info {
+      min-width: 0;
       color: var(--primary);
 
       h3 {
@@ -252,6 +258,15 @@
       h3 {
         font-size: var(--font-up-3);
       }
+    }
+  }
+
+  &.--can-favorite {
+    // helps description text avoid favorite button overlap
+    .badge-summary {
+      width: 100%;
+      padding-right: var(--space-6);
+      box-sizing: border-box;
     }
   }
 }
@@ -284,7 +299,7 @@
 .badge-group-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(18em, 1fr));
-  grid-gap: 1em;
+  gap: 1em;
   width: 100%;
   margin-bottom: 1.5em;
 
@@ -300,12 +315,6 @@
   margin-bottom: 2em;
   margin-top: 1em;
   gap: 1em;
-
-  .badge-grant-info {
-    &.hidden {
-      display: none;
-    }
-  }
 
   .grant-info-item {
     margin-bottom: 1em;

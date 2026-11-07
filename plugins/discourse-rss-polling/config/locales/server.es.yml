@@ -5,5 +5,3 @@
 # https://translate.discourse.org/
 
 es:
-  site_settings:
-    rss_polling_frequency: "[RSS Polling] Frecuencia del feed de la encuesta (en minutos)"

@@ -13,7 +13,9 @@ he:
   js:
     styleguide:
       title: "מדריך סגנון"
-      welcome: "כדי להתחיל, יש לבחור בסעיף מהתפריט שמימין."
+      example:
+        kind:
+          component: "רכיב"
       categories:
         syntax: תחביר
         atoms: אטומים
@@ -30,14 +32,28 @@ he:
           title: "קלטי תאריך/שעה"
         menus:
           title: "תפריטים"
+        context_menu:
+          actions:
+            duplicate: "שכפול"
+            delete: "מחיקה"
         multi_select:
           title: "בחירה במרוכז"
+        reorderable_list:
+          policies_pinned: "נעוץ"
+          policies_required: "נדרש"
+          table_field: "שדה"
+          table_type: "סוג"
+          cross_list_primary: "ראשית"
         toasts:
           title: "חלוניות מידע"
         font_scale:
           title: "מערכת גופנים"
         colors:
           title: "צבעים"
+        dialog:
+          title: "חלונית"
+        drag_and_drop:
+          locked: "נעול"
         icons:
           title: "סמלים"
           full_list: "הצגת רשימת הסמלים המלאה של Font Awesome"
@@ -59,8 +75,6 @@ he:
           title: "ניווט מוערם"
         categories_list:
           title: "רשימת קטגוריות"
-        topic_link:
-          title: "קישור נושא"
         topic_list_item:
           title: "פריט ברשימת נושאים"
         topic_statuses:
@@ -69,8 +83,6 @@ he:
           title: "רשימת נושאים"
         basic_topic_list:
           title: "רשימת נושאים בסיסית"
-        footer_message:
-          title: "הודעת כותרת תחתונה"
         signup_cta:
           title: "קריאה להרשמה"
         topic_timer_info:
@@ -89,10 +101,34 @@ he:
           title: "מפת נושאים"
         site_header:
           title: "כותרת האתר"
-        suggested_topics:
-          title: "נושאים מוצעים"
+        more_topics:
+          title: "נושאים נוספים"
         post_menu:
           title: "תפריט פוסט"
+        roving_focus:
+          toolbar:
+            bold: "מודגש"
+            italic: "נטוי"
+            copy: "העתקה"
+          tags:
+            remove: "הסרת %{tag}"
+            design: "עיצוב"
+            support: "תמיכה"
+          adjacent:
+            label: "מסננים"
+            field: "חיפוש"
+            open: "פתוח"
+            recent: "לאחרונה"
+          listbox:
+            apple: "Apple"
+          combobox:
+            daily: "יומי"
+            weekly: "שבועי"
+            monthly: "חודשי"
+            never: "לעולם לא"
+          tree:
+            components: "רכיבים"
+            select: "בחירה"
         modal:
           title: "מודאלי"
           header: "כותרת מודאלי"

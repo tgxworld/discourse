@@ -11,7 +11,7 @@ RSpec.describe AssociatedGroup do
   end
 
   it "detects whether any auth providers provide associated groups" do
-    SiteSetting.enable_google_oauth2_logins = true
+    enable_auth_provider(:google_oauth2)
     SiteSetting.google_oauth2_hd = "domain.com"
     SiteSetting.google_oauth2_hd_groups = false
     SiteSetting.google_oauth2_hd_groups_service_account_admin_email = "test@example.com"
@@ -33,13 +33,13 @@ RSpec.describe AssociatedGroup do
       expect(described_class.exists?(associated_group.id)).to eq(false)
     end
 
-    it "doesnt delete associated groups associated with groups" do
+    it "doesn't delete associated groups associated with groups" do
       GroupAssociatedGroup.create(group_id: group.id, associated_group_id: associated_group.id)
       described_class.cleanup!
       expect(described_class.exists?(associated_group.id)).to eq(true)
     end
 
-    it "doesnt delete associated groups associated with users" do
+    it "doesn't delete associated groups associated with users" do
       UserAssociatedGroup.create(user_id: user.id, associated_group_id: associated_group.id)
       described_class.cleanup!
       expect(described_class.exists?(associated_group.id)).to eq(true)

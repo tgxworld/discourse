@@ -40,6 +40,7 @@ class DiscourseId::Revoke
 
   model :associated_account
   step :revoke_auth_tokens
+  step :log_revocation
 
   private
 
@@ -53,6 +54,21 @@ class DiscourseId::Revoke
   end
 
   def revoke_auth_tokens(associated_account:)
-    UserAuthToken.where(user_id: associated_account.user_id).destroy_all
+    user = associated_account.user
+    return if user.nil?
+
+    UserAuthToken.transaction do
+      UserAuthToken.where(user_id: user.id).destroy_all
+      PushNotificationPusher.clear_subscriptions(user)
+    end
+  end
+
+  def log_revocation(associated_account:, params:)
+    return unless SiteSetting.discourse_id_verbose_logging
+
+    Rails.logger.info(
+      "Discourse ID: Revoked auth tokens for user_id=#{associated_account.user_id} " \
+        "(provider_uid=#{params.identifier})",
+    )
   end
 end

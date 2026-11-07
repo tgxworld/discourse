@@ -4,6 +4,12 @@ require "digest/sha1"
 class UserAuthToken < ActiveRecord::Base
   belongs_to :user
 
+  # Store a reference to the raw association reader, since we're
+  # overriding `#user` later in the class definition.
+  alias_method :acting_user, :user
+
+  scope :unexpired, -> { where("rotated_at > ?", SiteSetting.maximum_session_age.hours.ago) }
+
   ROTATE_TIME_MINS = 10
   ROTATE_TIME = ROTATE_TIME_MINS.minutes
   # used when token did not arrive at client
@@ -18,12 +24,31 @@ class UserAuthToken < ActiveRecord::Base
   before_destroy do
     UserAuthToken.log_verbose(
       action: "destroy",
-      user_auth_token_id: self.id,
-      user_id: self.user_id,
-      user_agent: self.user_agent,
-      client_ip: self.client_ip,
-      auth_token: self.auth_token,
+      user_auth_token_id: id,
+      user_id: user_id,
+      user_agent: user_agent,
+      client_ip: client_ip,
+      auth_token: auth_token,
     )
+  end
+
+  def user
+    impersonated_user || acting_user
+  end
+
+  def impersonated_user
+    return if impersonated_user_id.blank?
+    return if impersonation_expires_at.blank? || impersonation_expires_at.past?
+
+    guardian = Guardian.new(acting_user)
+    puppet = User.find_by(id: impersonated_user_id)
+
+    return if !guardian.can_impersonate?(puppet)
+
+    puppet.tap do |user|
+      user.is_impersonating = true
+      user.impersonation_expires_at = impersonation_expires_at
+    end
   end
 
   def self.log(info)
@@ -121,15 +146,8 @@ class UserAuthToken < ActiveRecord::Base
     mark_seen = opts && opts[:seen]
 
     token = hash_token(unhashed_token)
-    expire_before = SiteSetting.maximum_session_age.hours.ago
 
-    user_token =
-      where(
-        "(auth_token = :token OR
-                          prev_auth_token = :token) AND rotated_at > :expire_before",
-        token: token,
-        expire_before: expire_before,
-      )
+    user_token = unexpired.where("auth_token = :token OR prev_auth_token = :token", token: token)
 
     if SiteSetting.verbose_auth_token_logging && path = opts.dig(:path)
       user_token = user_token.annotate("path:#{path}")
@@ -204,12 +222,11 @@ class UserAuthToken < ActiveRecord::Base
   end
 
   def self.cleanup!
-    if SiteSetting.verbose_auth_token_logging
-      UserAuthTokenLog.where(
-        "created_at < :time",
-        time: SiteSetting.maximum_session_age.hours.ago - ROTATE_TIME,
-      ).delete_all
-    end
+    UserAuthTokenLog.where(
+      "created_at < :time AND action NOT IN (:preserved_actions)",
+      time: SiteSetting.maximum_session_age.hours.ago - ROTATE_TIME,
+      preserved_actions: %w[suspicious generate],
+    ).delete_all
 
     where(
       "rotated_at < :time",
@@ -218,8 +235,8 @@ class UserAuthToken < ActiveRecord::Base
   end
 
   def rotate!(info = nil)
-    user_agent = (info && info[:user_agent] || self.user_agent)
-    client_ip = (info && info[:client_ip] || self.client_ip)
+    user_agent = info && info[:user_agent] || self.user_agent
+    client_ip = info && info[:client_ip] || self.client_ip
 
     token = SecureRandom.hex(16)
 
@@ -237,7 +254,7 @@ class UserAuthToken < ActiveRecord::Base
     rotated_at = :now
   WHERE id = :id AND (auth_token_seen or rotated_at < :safeguard_time)
 ",
-        id: self.id,
+        id: id,
         user_agent: user_agent,
         client_ip: client_ip&.to_s,
         now: Time.zone.now,
@@ -281,21 +298,24 @@ end
 # Table name: user_auth_tokens
 #
 #  id                       :integer          not null, primary key
-#  user_id                  :integer          not null
 #  auth_token               :string           not null
-#  prev_auth_token          :string           not null
-#  user_agent               :string
 #  auth_token_seen          :boolean          default(FALSE), not null
+#  authenticated_with_oauth :boolean          default(FALSE)
 #  client_ip                :inet
+#  impersonation_expires_at :datetime
+#  prev_auth_token          :string           not null
 #  rotated_at               :datetime         not null
+#  seen_at                  :datetime
+#  user_agent               :string
 #  created_at               :datetime         not null
 #  updated_at               :datetime         not null
-#  seen_at                  :datetime
-#  authenticated_with_oauth :boolean          default(FALSE)
+#  impersonated_user_id     :integer
+#  user_id                  :integer          not null
 #
 # Indexes
 #
-#  index_user_auth_tokens_on_auth_token       (auth_token) UNIQUE
-#  index_user_auth_tokens_on_prev_auth_token  (prev_auth_token) UNIQUE
-#  index_user_auth_tokens_on_user_id          (user_id)
+#  index_user_auth_tokens_on_auth_token                (auth_token) UNIQUE
+#  index_user_auth_tokens_on_impersonation_expires_at  (impersonation_expires_at) WHERE (impersonation_expires_at IS NOT NULL)
+#  index_user_auth_tokens_on_prev_auth_token           (prev_auth_token) UNIQUE
+#  index_user_auth_tokens_on_user_id                   (user_id)
 #

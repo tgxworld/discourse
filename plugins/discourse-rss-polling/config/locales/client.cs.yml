@@ -5,10 +5,28 @@
 # https://translate.discourse.org/
 
 cs:
+  admin_js:
+    admin:
+      site_settings:
+        categories:
+          discourse_rss_polling: "Discourse RSS Polling"
   js:
+    rss_polling:
+      title: RSS Polling
     admin:
       rss_polling:
         author: Autor
         feed_url: URL
         discourse_category: Kategorie
-        discourse_tags: Tagy
+        discourse_tags: Štítky
+        feeds:
+          edit: Upravit
+          delete: Smazat
+          save: Uložit
+          confirm_delete: "Opravdu chcete tento kanál odstranit?"
+        test:
+          title: Náhled
+          dismiss: Označit jako přečtené
+        status:
+          enabled: Zapnuto
+          disabled: Vypnuto

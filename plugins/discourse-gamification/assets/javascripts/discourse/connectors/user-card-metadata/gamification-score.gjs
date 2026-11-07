@@ -1,16 +1,13 @@
-/* eslint-disable ember/no-classic-components */
-import Component from "@ember/component";
-import { classNames, tagName } from "@ember-decorators/component";
 import { i18n } from "discourse-i18n";
-import GamificationScore from "../../components/gamification-score";
+import GamificationScore from "../../components/gamification-score.gjs";
 
-@tagName("div")
-@classNames("user-card-metadata-outlet", "gamification-score")
-export default class GamificationScoreConnector extends Component {
-  <template>
-    {{#if this.user.gamification_score}}
+const GamificationScoreConnector = <template>
+  <div class="user-card-metadata-outlet gamification-score" ...attributes>
+    {{#if @user.gamification_score}}
       <span class="desc">{{i18n "gamification.score"}} </span>
-      <span><GamificationScore @model={{this.user}} /></span>
+      <span><GamificationScore @model={{@user}} /></span>
     {{/if}}
-  </template>
-}
+  </div>
+</template>;
+
+export default GamificationScoreConnector;

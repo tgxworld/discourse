@@ -1,19 +1,16 @@
 import { getOwner } from "@ember/owner";
-import { click, render } from "@ember/test-helpers";
+import { click, findAll, render } from "@ember/test-helpers";
 import { module, test } from "qunit";
 import { setupRenderingTest } from "discourse/tests/helpers/component-test";
 import pretender from "discourse/tests/helpers/create-pretender";
-import { queryAll } from "discourse/tests/helpers/qunit-helpers";
 import { i18n } from "discourse-i18n";
 import ChatNotices from "discourse/plugins/chat/discourse/components/chat-notices";
 import ChatFabricators from "discourse/plugins/chat/discourse/lib/fabricators";
 
-module("Discourse Chat | Component | chat-notice", function (hooks) {
+module("Component | ChatNotice", function (hooks) {
   setupRenderingTest(hooks);
 
   test("displays all notices for a channel", async function (assert) {
-    const self = this;
-
     this.channel = new ChatFabricators(getOwner(this)).channel();
     this.manager = this.container.lookup(
       "service:chat-channel-notices-manager"
@@ -32,10 +29,10 @@ module("Discourse Chat | Component | chat-notice", function (hooks) {
     });
 
     await render(
-      <template><ChatNotices @channel={{self.channel}} /></template>
+      <template><ChatNotices @channel={{this.channel}} /></template>
     );
 
-    const notices = queryAll(".chat-notices .chat-notices__notice");
+    const notices = findAll(".chat-notices .chat-notices__notice");
 
     assert.strictEqual(notices.length, 2, "Two notices are rendered");
 
@@ -44,8 +41,6 @@ module("Discourse Chat | Component | chat-notice", function (hooks) {
   });
 
   test("Notices can be cleared", async function (assert) {
-    const self = this;
-
     this.channel = new ChatFabricators(getOwner(this)).channel();
     this.manager = this.container.lookup(
       "service:chat-channel-notices-manager"
@@ -56,26 +51,20 @@ module("Discourse Chat | Component | chat-notice", function (hooks) {
     });
 
     await render(
-      <template><ChatNotices @channel={{self.channel}} /></template>
+      <template><ChatNotices @channel={{this.channel}} /></template>
     );
 
-    assert.strictEqual(
-      queryAll(".chat-notices .chat-notices__notice").length,
-      1,
-      "Notice is present"
-    );
+    assert
+      .dom(".chat-notices .chat-notices__notice")
+      .exists({ count: 1 }, "Notice is present");
 
     await click(".chat-notices__notice__clear");
 
-    assert.strictEqual(
-      queryAll(".chat-notices .chat-notices__notice").length,
-      0,
-      "Notice was cleared"
-    );
+    assert
+      .dom(".chat-notices .chat-notices__notice")
+      .doesNotExist("Notice was cleared");
   });
   test("MentionWithoutMembership notice renders", async function (assert) {
-    const self = this;
-
     this.channel = new ChatFabricators(getOwner(this)).channel();
     this.manager = this.container.lookup(
       "service:chat-channel-notices-manager"
@@ -88,16 +77,14 @@ module("Discourse Chat | Component | chat-notice", function (hooks) {
     });
 
     await render(
-      <template><ChatNotices @channel={{self.channel}} /></template>
+      <template><ChatNotices @channel={{this.channel}} /></template>
     );
 
-    assert.strictEqual(
-      queryAll(
+    assert
+      .dom(
         ".chat-notices .chat-notices__notice .mention-without-membership-notice"
-      ).length,
-      1,
-      "Notice is present"
-    );
+      )
+      .exists({ count: 1 }, "Notice is present");
 
     assert.dom(".mention-without-membership-notice__body__text").hasText(text);
     assert
@@ -114,12 +101,10 @@ module("Discourse Chat | Component | chat-notice", function (hooks) {
     // dismiss is called right away instead of waiting 3 seconds.. Not much we can
     // do about this - at least we are testing that nothing broke all the way through
     // clearing the notice
-    assert.strictEqual(
-      queryAll(
+    assert
+      .dom(
         ".chat-notices .chat-notices__notice .mention-without-membership-notice"
-      ).length,
-      0,
-      "Notice has been cleared"
-    );
+      )
+      .doesNotExist("Notice has been cleared");
   });
 });

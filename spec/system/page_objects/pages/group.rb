@@ -17,6 +17,11 @@ module PageObjects
         self
       end
 
+      def invite_members
+        find(".group-members-manage button.group-members-invite").click
+        self
+      end
+
       def delete_group
         page.find("[data-test-selector='delete-group-button']").click
         page.find(".dialog-footer .btn-danger").click
@@ -42,8 +47,26 @@ module PageObjects
         page.find(".user-secondary-navigation li", text: "Membership").click
       end
 
+      def click_interaction
+        page.find(
+          ".user-secondary-navigation li",
+          text: I18n.t("js.groups.manage.interaction.title"),
+        ).click
+      end
+
       def click_save
         page.find(".group-manage-save").click
+      end
+
+      def has_saved?
+        page.has_css?(".group-manage-save-button span", text: I18n.t("js.saved"))
+      end
+
+      def select_default_notification_level(level)
+        select_kit =
+          PageObjects::Components::SelectKit.new(".groups-form-default-notification-level")
+        select_kit.expand
+        select_kit.select_row_by_value(level)
       end
     end
   end

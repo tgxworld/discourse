@@ -7,19 +7,23 @@
 # We aren't manipulating the middleware stack directly because of
 # https://github.com/rails/rails/pull/27936
 
-require "middleware/processing_request"
-Rails.configuration.middleware.unshift(Middleware::ProcessingRequest)
 Rails.configuration.middleware.unshift(MessageBus::Rack::Middleware)
 
 # no reason to track this in development, that is 300+ redis calls saved per
 # page view (we serve all assets out of thin in development)
-if Rails.env != "development" || ENV["TRACK_REQUESTS"]
+if !Rails.env.development? || ENV["TRACK_REQUESTS"]
   require "middleware/request_tracker"
   Rails.configuration.middleware.unshift(Middleware::RequestTracker)
   Rails.configuration.middleware.move_before(Middleware::RequestTracker, ActionDispatch::RemoteIp)
 
   MethodProfiler.ensure_discourse_instrumentation! if GlobalSetting.enable_performance_http_headers
 end
+
+require "middleware/overload_protections"
+Rails.configuration.middleware.unshift(Middleware::OverloadProtections)
+
+require "middleware/processing_request"
+Rails.configuration.middleware.unshift(Middleware::ProcessingRequest)
 
 if Rails.env.test?
   # In test mode we can't insert/remove middlewares
@@ -57,14 +61,12 @@ if Rails.env.test?
     def call(env)
       request = Rack::Request.new(env)
 
-      if (
-           @@block_requests ||
-             (
-               request.xhr? && self.class.current_example_location.present? &&
-                 self.class.current_example_location !=
-                   request.cookies[RSPEC_CURRENT_EXAMPLE_COOKIE_STRING]
-             )
-         )
+      if @@block_requests ||
+           (
+             request.xhr? && self.class.current_example_location.present? &&
+               self.class.current_example_location !=
+                 request.cookies[RSPEC_CURRENT_EXAMPLE_COOKIE_STRING]
+           )
         return [
           503,
           { "Content-Type" => "text/plain" },
@@ -87,13 +89,8 @@ if Rails.env.test?
 
   Rails.configuration.middleware.unshift BlockRequestsMiddleware
 elsif Rails.configuration.multisite
-  assets_hostnames = GlobalSetting.cdn_hostnames
-
-  if assets_hostnames.empty?
-    assets_hostnames = Discourse::Application.config.database_configuration[Rails.env]["host_names"]
-  end
-
-  RailsMultisite::ConnectionManagement.asset_hostnames = assets_hostnames
+  # Never list site hostnames: `__ws` would serve one site's pages on another's origin.
+  RailsMultisite::ConnectionManagement.asset_hostnames = GlobalSetting.cdn_hostnames
 
   # Multisite needs to be first, because the request tracker and message bus rely on it
   Rails.configuration.middleware.unshift RailsMultisite::Middleware,

@@ -1,5 +1,6 @@
 @import "./vendor/normalize";
 @import "./vendor/normalize-ext";
+@import "./common/tokens";
 @import "./common/foundation/base";
 @import "./color_definitions";
 @import "./common/components/buttons";
@@ -64,7 +65,7 @@ article.post {
   .cooked {
     padding: 10px 0;
     margin-left: 65px;
-    word-wrap: break-word;
+    overflow-wrap: break-word;
     word-break: break-word;
 
     pre {
@@ -115,8 +116,8 @@ article.post {
 }
 
 img.emoji {
-  width: 20px;
-  height: 20px;
+  width: 1em;
+  height: 1em;
 }
 
 .in-reply-to {

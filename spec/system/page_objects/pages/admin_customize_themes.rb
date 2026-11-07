@@ -3,8 +3,32 @@
 module PageObjects
   module Pages
     class AdminCustomizeThemes < PageObjects::Pages::AdminBase
-      def visit(id)
-        page.visit("/admin/customize/themes/#{id}")
+      def visit(theme_or_theme_id)
+        page.visit(
+          "/admin/customize/themes/#{theme_or_theme_id.is_a?(Theme) ? theme_or_theme_id.id : theme_or_theme_id}",
+        )
+        self
+      end
+
+      def finish_install
+        find(".finish-install").click
+      end
+
+      def has_incomplete_installation?
+        has_button?(I18n.t("admin_js.admin.customize.theme.finish_install"))
+      end
+
+      def visit_editor(theme, target: "common", field: "scss")
+        page.visit("/admin/customize/themes/#{theme.id}/#{target}/#{field}/edit")
+        self
+      end
+
+      def click_editor_field(field)
+        find(".nav-pills.fields a[href$='/#{field}/edit']").click
+      end
+
+      def has_editor_field_description?(field)
+        has_css?(".field-info", text: I18n.t("admin_js.admin.customize.theme.#{field}.title"))
       end
 
       def has_colors_tab?
@@ -154,6 +178,25 @@ module PageObjects
         )
       end
 
+      def click_back_to_components
+        find('.back-to-themes-and-components a[href="/admin/config/customize/components"]').click
+      end
+
+      def fill_in_setting(setting_name, value)
+        find("#{setting_selector(setting_name)} input.input-setting-string").fill_in(with: value)
+        self
+      end
+
+      def has_setting_value?(setting_name, value)
+        has_css?("#{setting_selector(setting_name)} input.input-setting-string") do |input|
+          input.value == value
+        end
+      end
+
+      def click_edit_code
+        find(".edit-code").click
+      end
+
       def click_add_all_themes_button
         find(".relative-theme-selector .setting-label .btn-link").click
         find(".setting-controls .ok").click
@@ -193,13 +236,15 @@ module PageObjects
         find_button("Delete", disabled: true)
       end
 
-      def click_delete_themes_button
-        find(".btn-delete").click
+      def click_delete_button_and_confirm
+        find(".delete").click
+        PageObjects::Components::Dialog.new.click_danger
+        self
       end
 
-      def click_edit_objects_theme_setting_button(setting_name)
+      def click_edit_objects_setting_button(setting_name)
         find(".theme-setting[data-setting=\"#{setting_name}\"] .setting-value-edit-button").click
-        PageObjects::Pages::AdminObjectsThemeSettingEditor.new
+        PageObjects::Pages::AdminObjectsSettingEditor.new
       end
 
       def click_theme_settings_editor_button
@@ -229,6 +274,10 @@ module PageObjects
 
       def confirm_delete
         find(".dialog-footer .btn-danger").click
+      end
+
+      def parent_themes_selector
+        PageObjects::Components::SelectKit.new(".parent-themes-setting .select-kit")
       end
 
       def included_components_selector

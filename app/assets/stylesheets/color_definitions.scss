@@ -16,6 +16,8 @@
   --success: #{$success};
   --love: #{$love};
   --d-selected: #{$selected};
+  --d-selected-text-color: var(--primary);
+  --d-selected-hover: #{$selected-hover};
   --d-hover: #{$hover};
   --always-black-rgb: 0, 0, 0;
   --primary-rgb: #{hexToRGB($primary)};
@@ -76,6 +78,7 @@
   --danger-low-mid: #{$danger-low-mid};
   --danger-medium: #{$danger-medium};
   --danger-hover: #{$danger-hover};
+  --success-very-low: #{$success-very-low};
   --success-low: #{$success-low};
   --success-medium: #{$success-medium};
   --success-hover: #{$success-hover};
@@ -122,6 +125,13 @@
   --github-hover: #{$github-hover};
   --discord: #{$discord};
   --discord-hover: #{$discord-hover};
+  --discourse_id-text: var(--d-button-primary-text-color);
+  --discourse_id-text-hover: var(--d-button-primary-text-color--hover);
+  --discourse_id-background: var(--d-button-primary-bg-color);
+  --discourse_id-background-hover: var(--d-button-primary-bg-color--hover);
+  --discourse_id-icon: var(--d-button-primary-icon-color);
+  --discourse_id-icon-hover: var(--d-button-primary-icon-color--hover);
+  --discourse_id-border: var(--d-button-border);
   --gold: #{$gold};
   --silver: #{$silver};
   --bronze: #{$bronze};
@@ -131,7 +141,7 @@
   --input-border-color: var(--primary-400);
   --table-border-color: var(--content-border-color);
   --metadata-color: var(--primary-medium);
-  --d-badge-card-background-color: var(--primary-very-low);
+  --d-badge-card-background-color: var(--secondary);
   --mention-background-color: var(--primary-low);
   --title-color: var(--primary);
   --title-color--header: var(--header_primary);
@@ -144,7 +154,12 @@
   --shadow-header: 0 0 0 1px var(--content-border-color);
   --shadow-footer-nav: 0 0 2px 0 rgba(0, 0, 0, #{$shadow-opacity-footer-nav});
   --shadow-focus-danger: 0 0 6px 0 var(--danger);
+  --shadow-docked-composer: 0 4px 30px rgb(0, 0, 0, 0.15);
   --float-kit-arrow-stroke-color: var(--primary-low);
   --float-kit-arrow-fill-color: var(--secondary);
   --topic-timeline-border-color: #{$tertiary-low-or-tertiary-high};
+  --topic-timeline-handle-color: light-dark(
+    var(--tertiary-400),
+    var(--tertiary)
+  );
 }

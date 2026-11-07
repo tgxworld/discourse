@@ -7,27 +7,30 @@ module Jobs
     cluster_concurrency 1
 
     def execute(args)
-      return if !DiscourseAi::Translation.backfill_enabled?
+      return if !DiscourseAi::Translation.backfill_enabled?(target: Category)
 
-      categories = Category.where(locale: nil)
+      return if !DiscourseAi::Translation.locale_detector_configured?
 
-      if SiteSetting.ai_translation_backfill_limit_to_public_content
-        categories = categories.where(read_restricted: false)
+      unless DiscourseAi::Translation.credits_available_for_locale_detection?
+        Rails.logger.info(
+          "Categories locale detection backfill skipped: insufficient credits. Will resume when credits reset.",
+        )
+        return
       end
+
+      categories = DiscourseAi::Translation::CategoryCandidates.get.where(locale: nil)
 
       limit = SiteSetting.ai_translation_backfill_hourly_rate
       categories = categories.limit(limit)
       return if categories.empty?
 
       categories.each do |category|
-        begin
-          DiscourseAi::Translation::CategoryLocaleDetector.detect_locale(category)
-        rescue FinalDestination::SSRFDetector::LookupFailedError
-        rescue => e
-          DiscourseAi::Translation::VerboseLogger.log(
-            "Failed to detect category #{category.id}'s locale: #{e.message}\n\n#{e.backtrace[0..3].join("\n")}",
-          )
-        end
+        DiscourseAi::Translation::CategoryLocaleDetector.detect_locale(category)
+      rescue FinalDestination::SSRFDetector::LookupFailedError
+      rescue => e
+        DiscourseAi::Translation::VerboseLogger.log(
+          "Failed to detect category #{category.id}'s locale: #{e.message}\n\n#{e.backtrace[0..3].join("\n")}",
+        )
       end
 
       DiscourseAi::Translation::VerboseLogger.log("Detected #{categories.size} category locales")

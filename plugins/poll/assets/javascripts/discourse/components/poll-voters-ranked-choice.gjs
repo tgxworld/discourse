@@ -1,7 +1,6 @@
 import Component from "@glimmer/component";
-import { eq } from "truth-helpers";
-import avatar from "discourse/helpers/bound-avatar-template";
-import icon from "discourse/helpers/d-icon";
+import dBoundAvatarTemplate from "discourse/ui-kit/helpers/d-bound-avatar-template";
+import dIcon from "discourse/ui-kit/helpers/d-icon";
 
 export default class PollVotersComponent extends Component {
   groupVotersByRank = (voters) => {
@@ -32,19 +31,18 @@ export default class PollVotersComponent extends Component {
     {{#each this.rankedChoiceVoters as |rank|}}
       <ul>
         {{#if (eq rank.rank "Abstain")}}
-          <span class="rank">{{icon "ban"}}</span>
+          <span class="rank">{{dIcon "ban"}}</span>
         {{else}}
           <span class="rank">{{rank.rank}}</span>
         {{/if}}
         {{#each rank.voters as |voter|}}
           <li>
-            <a data-user-card={{voter.user.username}}>{{avatar
-                voter.user.avatar_template
-                "tiny"
-                usernamePath=voter.user.username
-                namePath=voter.user.name
-                title=voter.user.username
-              }}</a>
+            <a
+              data-user-card={{voter.user.username}}
+              title={{voter.user.username}}
+            >
+              {{dBoundAvatarTemplate voter.user.avatar_template "tiny"}}
+            </a>
           </li>
         {{/each}}
       </ul>

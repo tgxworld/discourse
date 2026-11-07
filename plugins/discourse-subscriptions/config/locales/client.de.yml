@@ -9,7 +9,7 @@ de:
     admin:
       site_settings:
         categories:
-          discourse_subscriptions: "Discourse – Abonnements"
+          discourse_subscriptions: "Discourse Abonnements"
   site_settings:
     discourse_subscriptions_enabled: Aktiviere das Discourse-Subscriptions-Plug-in.
     discourse_subscriptions_extra_nav_subscribe: Zeige die Schaltfläche „Abonnieren“ in der Hauptnavigation
@@ -36,7 +36,7 @@ de:
       subscribe:
         help: Unterstütze diese Website, indem du ein Abonnement abschließt
     discourse_subscriptions:
-      title: Discourse – Abonnements
+      title: Discourse-Abonnements
       admin_navigation: Abonnements
       optional: Optional
       navigation:
@@ -108,7 +108,7 @@ de:
             heading: "Karte für Abonnement aktualisieren: %{sub_id}"
             single: "Aktualisieren"
           created_at: Erstellt
-          cancel: abbrechen
+          cancel: kündigen
           cancelled: gekündigt
           operations:
             destroy:
@@ -404,13 +404,11 @@ de:
         confirm_payment: Zahlung bestätigen
         success: Zurück
       admin:
-        unconfigured: 'Stripe ist nicht richtig konfiguriert. Weitere Informationen findest du unter Discourse Meta.'
-        on_meta: Discourse-Abonnements bei Meta
         dashboard:
           title: Dashboard
           table:
             head:
-              user: Nutzer
+              user: Benutzer
               payment_intent: Zahlungs-ID
               receipt_email: Belegs-E-Mail
               amount: Betrag
@@ -473,7 +471,7 @@ de:
         subscriptions:
           title: Abonnements
           subscription:
-            user: Nutzer
+            user: Benutzer
             subscription_id: Abonnement-ID
             customer: Kunde
             product: Produkt

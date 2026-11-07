@@ -3,7 +3,7 @@
 module DiscourseAi
   module AiBot
     class ArtifactKeyValuesController < ::ApplicationController
-      requires_plugin DiscourseAi::PLUGIN_NAME
+      requires_plugin PLUGIN_NAME
       before_action :ensure_logged_in, only: %i[set destroy]
       before_action :find_artifact
 
@@ -92,7 +92,7 @@ module DiscourseAi
         query = @artifact.key_values
 
         query =
-          if current_user&.admin?
+          if can_read_all_private_key_values?
             query
           elsif current_user
             query.where("user_id = ? OR public = true", current_user.id)
@@ -113,11 +113,14 @@ module DiscourseAi
         query
       end
 
+      def can_read_all_private_key_values?
+        current_user&.admin?
+      end
+
       def find_artifact
         @artifact = AiArtifact.find_by(id: params[:artifact_id])
         raise Discourse::NotFound if !@artifact
-        raise Discourse::NotFound if !@artifact.public? && guardian.anonymous?
-        raise Discourse::NotFound if !@artifact.public? && !guardian.can_see?(@artifact.post)
+        raise Discourse::NotFound if !@artifact.available_to?(guardian)
       end
     end
   end

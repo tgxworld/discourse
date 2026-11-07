@@ -13,7 +13,7 @@ RSpec.describe TopicHotScore do
 
       # this will come in with a score
       topic = Fabricate(:topic, created_at: 1.hour.ago, bumped_at: 2.minutes.ago)
-      post = Fabricate(:post, topic: topic, created_at: 2.minute.ago)
+      post = Fabricate(:post, topic: topic, created_at: 2.minutes.ago)
       PostActionCreator.like(user, post)
 
       TopicHotScore.update_scores
@@ -115,14 +115,20 @@ RSpec.describe TopicHotScore do
     end
 
     it "caches 10% of the hottest topic IDs" do
-      9.times { Fabricate(:topic, like_count: 3, last_posted_at: 10.minutes.ago) }
-      hottest_topic = Fabricate(:topic, like_count: 10, last_posted_at: 10.minutes.ago)
+      freeze_time
+
+      9.times do
+        Fabricate(:topic, like_count: 3, created_at: 2.weeks.ago, last_posted_at: 10.minutes.ago)
+      end
+      hottest_topic =
+        Fabricate(:topic, like_count: 10, created_at: 2.weeks.ago, last_posted_at: 10.minutes.ago)
 
       TopicHotScore.update_scores
 
       expect(TopicHotScore.hottest_topic_ids).to contain_exactly(hottest_topic.id)
 
-      hottest_topic_2 = Fabricate(:topic, like_count: 100, last_posted_at: 10.minutes.ago)
+      hottest_topic_2 =
+        Fabricate(:topic, like_count: 100, created_at: 2.weeks.ago, last_posted_at: 10.minutes.ago)
 
       TopicHotScore.update_scores
 
@@ -155,6 +161,94 @@ RSpec.describe TopicHotScore do
       ensure
         DiscourseEvent.off(:topic_hot_scores_updated, &blk)
       end
+    end
+
+    it "excludes category description topics from hot topics list" do
+      freeze_time
+
+      category = Fabricate(:category_with_definition)
+      category_topic = category.topic
+      category_topic.update!(
+        like_count: 100,
+        created_at: 2.weeks.ago,
+        last_posted_at: 10.minutes.ago,
+      )
+
+      9.times do
+        Fabricate(:topic, like_count: 3, created_at: 2.weeks.ago, last_posted_at: 10.minutes.ago)
+      end
+
+      regular_topic =
+        Fabricate(:topic, like_count: 10, created_at: 2.weeks.ago, last_posted_at: 10.minutes.ago)
+
+      TopicHotScore.update_scores
+
+      category_score = TopicHotScore.find_by(topic_id: category_topic.id)
+      regular_score = TopicHotScore.find_by(topic_id: regular_topic.id)
+
+      expect(category_score).to be_present
+      expect(category_score.score).to be > regular_score.score
+
+      hottest_ids = TopicHotScore.hottest_topic_ids
+
+      expect(hottest_ids).not_to include(category_topic.id)
+    end
+
+    it "applies faster decay to closed topics" do
+      freeze_time
+
+      open_topic = Fabricate(:topic, like_count: 10, created_at: 2.weeks.ago)
+      closed_topic = Fabricate(:topic, like_count: 10, created_at: 2.weeks.ago, closed: true)
+
+      TopicHotScore.update_scores
+
+      open_score = TopicHotScore.find_by(topic_id: open_topic.id).score
+      closed_score = TopicHotScore.find_by(topic_id: closed_topic.id).score
+
+      expect(closed_score).to be < open_score
+      expect(closed_score).to be_within(0.0001).of(open_score * 0.5)
+    end
+
+    it "does not create hot scores for unlisted topics" do
+      freeze_time
+
+      unlisted_topic = Fabricate(:topic, visible: false, like_count: 10, created_at: 1.day.ago)
+
+      TopicHotScore.update_scores
+
+      expect(TopicHotScore.find_by(topic_id: unlisted_topic.id)).to be_nil
+    end
+
+    it "excludes unlisted topics from hottest_topic_ids cache" do
+      freeze_time
+
+      unlisted_topic =
+        Fabricate(
+          :topic,
+          visible: false,
+          like_count: 100,
+          created_at: 1.day.ago,
+          last_posted_at: 10.minutes.ago,
+        )
+      TopicHotScore.create!(topic_id: unlisted_topic.id, score: 999.0)
+
+      TopicHotScore.recreate_hottest_topic_ids_cache
+
+      expect(TopicHotScore.hottest_topic_ids).not_to include(unlisted_topic.id)
+    end
+
+    it "sets score to 0 for unlisted topics during update" do
+      freeze_time
+
+      topic = Fabricate(:topic, like_count: 10, created_at: 2.weeks.ago)
+      TopicHotScore.update_scores
+
+      expect(TopicHotScore.find_by(topic_id: topic.id).score).to be > 0
+
+      topic.update!(visible: false)
+      TopicHotScore.update_scores
+
+      expect(TopicHotScore.find_by(topic_id: topic.id).score).to eq(0)
     end
   end
 end

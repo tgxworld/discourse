@@ -17,11 +17,11 @@ class TopicLink < ActiveRecord::Base
   belongs_to :link_topic, class_name: "Topic"
   belongs_to :link_post, class_name: "Post"
 
-  validates_presence_of :url
+  validates :url, presence: true
 
-  validates_length_of :url, maximum: 500
+  validates :url, length: { maximum: 500 }
 
-  validates_uniqueness_of :url, scope: %i[topic_id post_id]
+  validates :url, uniqueness: { scope: %i[topic_id post_id] }
 
   has_many :topic_link_clicks, dependent: :destroy
 
@@ -46,8 +46,10 @@ class TopicLink < ActiveRecord::Base
              MIN(ftl.user_id) AS user_id,
              SUM(clicks) AS clicks
       FROM topic_links AS ftl
+      JOIN posts AS source_posts ON ftl.post_id = source_posts.id
       LEFT JOIN topics AS ft ON ftl.link_topic_id = ft.id
       LEFT JOIN categories AS c ON c.id = ft.category_id
+      LEFT JOIN posts AS target_posts ON ftl.link_post_id = target_posts.id
       /*where*/
       GROUP BY ftl.url, ft.title, ftl.title, ftl.link_topic_id, ftl.reflection, ftl.internal, ftl.domain
       ORDER BY clicks DESC, count(*) DESC
@@ -55,7 +57,14 @@ class TopicLink < ActiveRecord::Base
     SQL
 
     builder.where("ftl.topic_id = :topic_id", topic_id: topic_id)
-    builder.where("ft.deleted_at IS NULL")
+    apply_source_post_visibility_filters(builder, guardian, source_post: "source_posts")
+    apply_link_visibility_filters(
+      builder,
+      guardian,
+      link: "ftl",
+      target_topic: "ft",
+      target_posts: "target_posts",
+    )
     builder.where("ftl.extension IS NULL OR ftl.extension NOT IN ('png','jpg','gif')")
     builder.where(
       "COALESCE(ft.archetype, 'regular') <> :archetype",
@@ -70,6 +79,9 @@ class TopicLink < ActiveRecord::Base
 
   def self.counts_for(guardian, topic, posts)
     return {} if posts.blank?
+
+    post_ids = visible_source_post_ids(guardian, topic, posts)
+    return {} if post_ids.blank?
 
     # Sam: this is not tidy in AR and also happens to be a critical path
     # for topic view
@@ -86,12 +98,19 @@ class TopicLink < ActiveRecord::Base
               FROM topic_links l
               LEFT JOIN topics t ON t.id = l.link_topic_id
               LEFT JOIN categories AS c ON c.id = t.category_id
+              LEFT JOIN posts AS target_posts ON l.link_post_id = target_posts.id
               /*left_join*/
               /*where*/
               ORDER BY reflection ASC, clicks DESC",
       )
 
-    builder.where("t.deleted_at IS NULL")
+    apply_link_visibility_filters(
+      builder,
+      guardian,
+      link: "l",
+      target_topic: "t",
+      target_posts: "target_posts",
+    )
     builder.where(
       "COALESCE(t.archetype, 'regular') <> :archetype",
       archetype: Archetype.private_message,
@@ -108,7 +127,7 @@ class TopicLink < ActiveRecord::Base
     end
 
     # not certain if pluck is right, cause it may interfere with caching
-    builder.where("l.post_id in (:post_ids)", post_ids: posts.map(&:id))
+    builder.where("l.post_id in (:post_ids)", post_ids: post_ids)
     builder.secure_category(guardian.secure_category_ids)
 
     result = {}
@@ -128,6 +147,7 @@ class TopicLink < ActiveRecord::Base
   def self.extract_from(post)
     return if post.blank? || post.whisper? || post.user_id.blank? || post.deleted_at.present?
 
+    guardian = post.acting_user.guardian
     current_urls = []
     reflected_ids = []
 
@@ -141,19 +161,17 @@ class TopicLink < ActiveRecord::Base
       .uniq { |_, p| p }
       .each do |link, parsed|
         TopicLink.transaction do
-          begin
-            url, reflected_id = self.ensure_entry_for(post, link, parsed)
-            current_urls << url unless url.nil?
-            reflected_ids << reflected_id unless reflected_id.nil?
-          rescue URI::Error
-            # if the URI is invalid, don't store it.
-          rescue ActionController::RoutingError
-            # If we can't find the route, no big deal
-          end
+          url, reflected_id = ensure_entry_for(post, link, parsed, guardian)
+          current_urls << url unless url.nil?
+          reflected_ids << reflected_id unless reflected_id.nil?
+        rescue URI::Error
+          # if the URI is invalid, don't store it.
+        rescue ActionController::RoutingError
+          # If we can't find the route, no big deal
         end
       end
 
-    self.cleanup_entries(post, current_urls, reflected_ids)
+    cleanup_entries(post, current_urls, reflected_ids)
   end
 
   def self.crawl_link_title(topic_link_id)
@@ -164,17 +182,32 @@ class TopicLink < ActiveRecord::Base
     TopicLink.crawl_link_title(id)
   end
 
-  def self.duplicate_lookup(topic)
+  def self.duplicate_lookup(topic, guardian = Guardian.new)
     results =
       TopicLink
-        .includes(:post, :user)
+        .includes(:post, :user, :link_topic, link_post: :topic)
         .joins(:post, :user)
         .where("posts.id IS NOT NULL AND users.id IS NOT NULL")
         .where(topic_id: topic.id, reflection: false)
+        .where(
+          posts: {
+            deleted_at: nil,
+            hidden: false,
+            post_type: Topic.visible_post_types(guardian.user),
+          },
+        )
         .last(200)
 
     lookup = {}
     results.each do |tl|
+      if tl.internal? &&
+           (
+             (tl.link_topic_id && !guardian.can_see?(tl.link_topic)) ||
+               (tl.link_post_id && !guardian.can_see?(tl.link_post))
+           )
+        next
+      end
+
       normalized = tl.url.downcase.sub(%r{\Ahttps?://}, "").sub(%r{/\z}, "")
       lookup[normalized] = {
         domain: tl.domain,
@@ -186,6 +219,42 @@ class TopicLink < ActiveRecord::Base
 
     lookup
   end
+
+  def self.visible_source_post_ids(guardian, topic, posts)
+    return posts.map(&:id) if guardian.can_see_all_hidden_posts?(topic&.category)
+
+    posts.filter_map { |post| post.id if !post.hidden? || guardian.can_see_hidden_post?(post) }
+  end
+  private_class_method :visible_source_post_ids
+
+  def self.apply_link_visibility_filters(builder, guardian, link:, target_topic:, target_posts:)
+    builder.where(<<~SQL)
+      #{target_topic}.deleted_at IS NULL
+      AND (#{target_topic}.id IS NULL OR #{target_topic}.visible = true)
+      AND (#{link}.internal = false OR #{target_topic}.id IS NOT NULL)
+      AND (#{link}.link_post_id IS NULL OR (#{target_posts}.id IS NOT NULL AND #{target_posts}.deleted_at IS NULL))
+    SQL
+
+    builder.where(
+      "#{link}.link_post_id IS NULL OR #{target_posts}.post_type IN (:link_visible_post_types)",
+      link_visible_post_types: Topic.visible_post_types(guardian.user),
+    )
+
+    unless guardian.is_staff?
+      builder.where("#{link}.link_post_id IS NULL OR #{target_posts}.hidden = false")
+    end
+  end
+  private_class_method :apply_link_visibility_filters
+
+  def self.apply_source_post_visibility_filters(builder, guardian, source_post:)
+    builder.where("#{source_post}.deleted_at IS NULL")
+    builder.where(
+      "#{source_post}.post_type IN (:visible_post_types)",
+      visible_post_types: Topic.visible_post_types(guardian.user),
+    )
+    builder.where("#{source_post}.hidden = false") unless guardian.is_staff?
+  end
+  private_class_method :apply_source_post_visibility_filters
 
   private
 
@@ -277,7 +346,7 @@ class TopicLink < ActiveRecord::Base
     topic_link_id
   end
 
-  def self.ensure_entry_for(post, link, parsed)
+  def self.ensure_entry_for(post, link, parsed, guardian)
     url = link.url
     internal = false
     topic_id = nil
@@ -291,7 +360,7 @@ class TopicLink < ActiveRecord::Base
     elsif route = Discourse.route_for(parsed.to_s[...TopicLink.max_url_length])
       # this is a special case for the silent flag
       # in internal links
-      return nil if url && (url.split("?")[1] == "silent=true")
+      return nil if parsed&.query&.split("&")&.include?("silent=true")
 
       internal = true
 
@@ -309,11 +378,12 @@ class TopicLink < ActiveRecord::Base
 
       topic = Topic.find_by(id: topic_id) if topic_id
       topic ||= Topic.find_by(slug: topic_slug) if topic_slug.present?
+      target_visible = topic.present? && guardian.can_see?(topic)
 
-      if topic.present?
+      if target_visible
         url = +"#{Discourse.base_url_no_prefix}#{topic.relative_url}"
         url << "/#{post_number}" if post_number.to_i > 1
-      else
+      elsif topic.blank?
         topic_id = nil
       end
     end
@@ -348,7 +418,7 @@ class TopicLink < ActiveRecord::Base
     reflected_id = nil
 
     # Create the reflection if we can
-    if topic && post.topic && topic.archetype != "private_message" &&
+    if target_visible && post.topic && topic.archetype != "private_message" &&
          post.topic.archetype != "private_message" && post.topic.visible?
       prefix = Discourse.base_url_no_prefix
       reflected_url = "#{prefix}#{post.topic.relative_url(post.post_number)}"
@@ -403,22 +473,22 @@ end
 # Table name: topic_links
 #
 #  id            :integer          not null, primary key
-#  topic_id      :integer          not null
-#  post_id       :integer
-#  user_id       :integer          not null
-#  url           :string           not null
+#  clicks        :integer          default(0), not null
+#  crawled_at    :datetime
 #  domain        :string(100)      not null
+#  extension     :string(10)
 #  internal      :boolean          default(FALSE), not null
-#  link_topic_id :integer
+#  quote         :boolean          default(FALSE), not null
+#  reflection    :boolean          default(FALSE)
+#  title         :string
+#  url           :string           not null
 #  created_at    :datetime         not null
 #  updated_at    :datetime         not null
-#  reflection    :boolean          default(FALSE)
-#  clicks        :integer          default(0), not null
 #  link_post_id  :integer
-#  title         :string
-#  crawled_at    :datetime
-#  quote         :boolean          default(FALSE), not null
-#  extension     :string(10)
+#  link_topic_id :integer
+#  post_id       :integer
+#  topic_id      :integer          not null
+#  user_id       :integer          not null
 #
 # Indexes
 #

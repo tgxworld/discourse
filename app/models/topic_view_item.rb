@@ -7,7 +7,7 @@ class TopicViewItem < ActiveRecord::Base
   self.table_name = "topic_views"
   belongs_to :user
   belongs_to :topic
-  validates_presence_of :topic_id, :ip_address, :viewed_at
+  validates :topic_id, :ip_address, :viewed_at, presence: true
 
   def self.add(topic_id, ip, user_id = nil, at = nil, skip_redis = false)
     # Only store a view once per day per thing per (user || ip)
@@ -68,13 +68,14 @@ end
 #
 # Table name: topic_views
 #
-#  topic_id   :integer          not null
-#  viewed_at  :date             not null
-#  user_id    :integer
 #  ip_address :inet
+#  viewed_at  :date             not null
+#  topic_id   :integer          not null
+#  user_id    :integer
 #
 # Indexes
 #
+#  index_topic_views_for_user_participation     (viewed_at,user_id,topic_id) WHERE (user_id IS NOT NULL)
 #  index_topic_views_on_topic_id_and_viewed_at  (topic_id,viewed_at)
 #  index_topic_views_on_user_id_and_viewed_at   (user_id,viewed_at)
 #  index_topic_views_on_viewed_at_and_topic_id  (viewed_at,topic_id)

@@ -24,80 +24,113 @@ RSpec.describe SiteSettings::TypeSupervisor do
       it "'string' should be at 1st position" do
         expect(SiteSettings::TypeSupervisor.types[:string]).to eq(1)
       end
+
       it "'time' should be at 2nd position" do
         expect(SiteSettings::TypeSupervisor.types[:time]).to eq(2)
       end
+
       it "'integer' should be at 3rd position" do
         expect(SiteSettings::TypeSupervisor.types[:integer]).to eq(3)
       end
+
       it "'float' should be at 4th position" do
         expect(SiteSettings::TypeSupervisor.types[:float]).to eq(4)
       end
+
       it "'bool' should be at 5th position" do
         expect(SiteSettings::TypeSupervisor.types[:bool]).to eq(5)
       end
+
       it "'null' should be at 6th position" do
         expect(SiteSettings::TypeSupervisor.types[:null]).to eq(6)
       end
+
       it "'enum' should be at 7th position" do
         expect(SiteSettings::TypeSupervisor.types[:enum]).to eq(7)
       end
+
       it "'list' should be at 8th position" do
         expect(SiteSettings::TypeSupervisor.types[:list]).to eq(8)
       end
+
       it "'url_list' should be at 9th position" do
         expect(SiteSettings::TypeSupervisor.types[:url_list]).to eq(9)
       end
+
       it "'host_list' should be at 10th position" do
         expect(SiteSettings::TypeSupervisor.types[:host_list]).to eq(10)
       end
+
       it "'category_list' should be at 11th position" do
         expect(SiteSettings::TypeSupervisor.types[:category_list]).to eq(11)
       end
+
       it "'value_list' should be at 12th position" do
         expect(SiteSettings::TypeSupervisor.types[:value_list]).to eq(12)
       end
+
       it "'regex' should be at 13th position" do
         expect(SiteSettings::TypeSupervisor.types[:regex]).to eq(13)
       end
+
       it "'email' should be at 14th position" do
         expect(SiteSettings::TypeSupervisor.types[:email]).to eq(14)
       end
+
       it "'username' should be at 15th position" do
         expect(SiteSettings::TypeSupervisor.types[:username]).to eq(15)
       end
+
       it "'category' should be at 16th position" do
         expect(SiteSettings::TypeSupervisor.types[:category]).to eq(16)
       end
+
       it "'uploaded_image_list' should be at 17th position" do
         expect(SiteSettings::TypeSupervisor.types[:uploaded_image_list]).to eq(17)
       end
+
       it "'upload' should be at the right position" do
         expect(SiteSettings::TypeSupervisor.types[:upload]).to eq(18)
       end
+
       it "'group' should be at the right position" do
         expect(SiteSettings::TypeSupervisor.types[:group]).to eq(19)
       end
+
       it "'group_list' should be at the right position" do
         expect(SiteSettings::TypeSupervisor.types[:group_list]).to eq(20)
       end
+
       it "'tag_list' should be at the right position" do
         expect(SiteSettings::TypeSupervisor.types[:tag_list]).to eq(21)
       end
+
       it "'color' should be at the right position" do
         expect(SiteSettings::TypeSupervisor.types[:color]).to eq(22)
       end
+
       it "'simple_list' should be at the right position" do
         expect(SiteSettings::TypeSupervisor.types[:simple_list]).to eq(23)
       end
+
       it "'emoji_list' should be at the right position" do
         expect(SiteSettings::TypeSupervisor.types[:emoji_list]).to eq(24)
       end
+
       it "'tag_group_list' should be at the right position" do
         expect(SiteSettings::TypeSupervisor.types[:tag_group_list]).to eq(26)
       end
+
       it "'file_size_restriction' should be at the right position" do
         expect(SiteSettings::TypeSupervisor.types[:file_size_restriction]).to eq(27)
+      end
+
+      it "'datetime' should be at the right position" do
+        expect(SiteSettings::TypeSupervisor.types[:datetime]).to eq(31)
+      end
+
+      it "'date' should be at the right position" do
+        expect(SiteSettings::TypeSupervisor.types[:date]).to eq(33)
       end
     end
   end
@@ -137,7 +170,7 @@ RSpec.describe SiteSettings::TypeSupervisor do
   context "with different data types" do
     class TestEnumClass
       def self.valid_value?(v)
-        self.values.include?(v)
+        values.include?(v)
       end
 
       def self.values
@@ -175,12 +208,14 @@ RSpec.describe SiteSettings::TypeSupervisor do
       settings.setting(:type_false, false)
       settings.setting(:type_float, 2.3232)
       settings.setting(:type_string, "string")
+      settings.setting(:type_date, "2024-01-01", type: "date")
       settings.setting(:type_enum_default_string, "2", type: "enum", choices: ["2"])
       settings.setting(:type_enum_class, "en", enum: "TestEnumClass")
       settings.setting(:type_validator, 5, validator: "TestSmallThanTenValidator")
       settings.setting(:type_mock_validate_method, "no_value")
       settings.setting(:type_custom, "custom", type: "list")
       settings.setting(:type_upload, "", type: "upload")
+      settings.setting(:type_group, "", type: "group")
       settings.setting(
         :type_json_schema,
         "[{\"name\":\"Brett\"}]",
@@ -207,11 +242,32 @@ RSpec.describe SiteSettings::TypeSupervisor do
       let(:true_val) { "t" }
       let(:false_val) { "f" }
 
-      it "returns nil value" do
-        expect(settings.type_supervisor.to_db_value(:type_null, nil)).to eq [
-             nil,
-             SiteSetting.types[:null],
+      it "converts a group name to its id" do
+        group = Fabricate(:group, name: "Support")
+
+        expect(settings.type_supervisor.to_db_value(:type_group, "Support")).to eq [
+             group.id.to_s,
+             SiteSetting.types[:group],
            ]
+        expect(settings.type_supervisor.to_db_value(:type_group, "support")).to eq [
+             group.id.to_s,
+             SiteSetting.types[:group],
+           ]
+      end
+
+      it "stores an integer group id as a string" do
+        group = Fabricate(:group)
+
+        expect(settings.type_supervisor.to_db_value(:type_group, group.id)).to eq [
+             group.id.to_s,
+             SiteSetting.types[:group],
+           ]
+      end
+
+      it "rejects a name that matches no group" do
+        expect { settings.type_supervisor.to_db_value(:type_group, "nope") }.to raise_error(
+          Discourse::InvalidParameters,
+        )
       end
 
       it "gives a second chance to guess even told :null type" do
@@ -245,10 +301,6 @@ RSpec.describe SiteSettings::TypeSupervisor do
              false_val,
              SiteSetting.types[:bool],
            ]
-        expect(settings.type_supervisor.to_db_value(:type_true, nil)).to eq [
-             false_val,
-             SiteSetting.types[:bool],
-           ]
       end
 
       it "returns floats value" do
@@ -266,6 +318,13 @@ RSpec.describe SiteSettings::TypeSupervisor do
         expect(settings.type_supervisor.to_db_value(:type_string, "a")).to eq [
              "a",
              SiteSetting.types[:string],
+           ]
+      end
+
+      it "returns date values" do
+        expect(settings.type_supervisor.to_db_value(:type_date, "2024-12-29")).to eq [
+             "2024-12-29",
+             SiteSetting.types[:date],
            ]
       end
 
@@ -436,7 +495,7 @@ RSpec.describe SiteSettings::TypeSupervisor do
         expect(settings.type_supervisor.to_rb_value(:type_custom, "2|3")).to eq "2|3"
       end
 
-      it "should not modify the types of settings" do
+      it "does not modify setting types" do
         types = SiteSettings::TypeSupervisor.types
         settings.type_supervisor.to_rb_value(:default_locale, "fr", types[:enum])
         expect(settings.type_supervisor.to_db_value(:default_locale, "en")).to eq(
@@ -452,7 +511,7 @@ RSpec.describe SiteSettings::TypeSupervisor do
       settings.setting(:type_upload, "", type: :upload)
     end
 
-    it "should return the right type that has been registered" do
+    it "returns the registered type" do
       expect(settings.type_supervisor.get_type(:type_null)).to eq(:null)
       expect(settings.type_supervisor.get_type(:type_upload)).to eq(:upload)
     end
@@ -461,7 +520,7 @@ RSpec.describe SiteSettings::TypeSupervisor do
   describe ".type_hash" do
     class TestEnumClass2
       def self.valid_value?(v)
-        self.values.include?(v)
+        values.include?(v)
       end
 
       def self.values
@@ -479,6 +538,7 @@ RSpec.describe SiteSettings::TypeSupervisor do
       settings.setting(:type_true, true)
       settings.setting(:type_float, 2.3232)
       settings.setting(:type_string, "string")
+      settings.setting(:type_date, "2024-01-01", type: "date")
       settings.setting(:type_url_list, "string", type: "url_list")
       settings.setting(:type_textarea, "string", textarea: true)
       settings.setting(:type_enum_choices, "2", type: "enum", choices: %w[1 2])
@@ -518,6 +578,10 @@ RSpec.describe SiteSettings::TypeSupervisor do
 
     it "returns string type" do
       expect(settings.type_supervisor.type_hash(:type_string)[:type]).to eq "string"
+    end
+
+    it "returns date type" do
+      expect(settings.type_supervisor.type_hash(:type_date)[:type]).to eq "date"
     end
 
     it "returns url_list type" do
@@ -561,6 +625,149 @@ RSpec.describe SiteSettings::TypeSupervisor do
     it "returns int min/max values" do
       expect(settings.type_supervisor.type_hash(:type_int)[:min]).to eq(-10)
       expect(settings.type_supervisor.type_hash(:type_int)[:max]).to eq(10)
+    end
+
+    it "returns authorized_extensions for upload type" do
+      settings.setting(
+        :type_upload_with_extensions,
+        "",
+        type: "upload",
+        authorized_extensions: ".txt",
+      )
+      settings.refresh!
+
+      hash = settings.type_supervisor.type_hash(:type_upload_with_extensions)
+      expect(hash[:type]).to eq "upload"
+      expect(hash[:authorized_extensions]).to eq ".txt"
+    end
+
+    it "does not return authorized_extensions when not specified" do
+      settings.setting(:type_upload_no_extensions, "", type: "upload")
+      settings.refresh!
+
+      hash = settings.type_supervisor.type_hash(:type_upload_no_extensions)
+      expect(hash[:type]).to eq "upload"
+      expect(hash[:authorized_extensions]).to be_nil
+    end
+
+    it "returns max_file_size_kb for upload type" do
+      settings.setting(
+        :type_upload_with_max_size,
+        "",
+        type: "upload",
+        authorized_extensions: ".txt",
+        max_file_size_kb: 512,
+      )
+      settings.refresh!
+
+      hash = settings.type_supervisor.type_hash(:type_upload_with_max_size)
+      expect(hash[:type]).to eq "upload"
+      expect(hash[:max_file_size_kb]).to eq 512
+    end
+
+    it "does not return max_file_size_kb when not specified" do
+      settings.setting(:type_upload_no_max_size, "", type: "upload")
+      settings.refresh!
+
+      hash = settings.type_supervisor.type_hash(:type_upload_no_max_size)
+      expect(hash[:max_file_size_kb]).to be_nil
+    end
+  end
+
+  describe "list type with enum class" do
+    class TestListEnumClass
+      def self.valid_value?(v)
+        v.to_s.split("|").all? { |item| valid_items.include?(item) }
+      end
+
+      def self.valid_items
+        %w[item1 item2 item3]
+      end
+
+      def self.values
+        valid_items.map { |item| { name: item.titleize, value: item } }
+      end
+
+      def self.translate_names?
+        true
+      end
+    end
+
+    before do
+      settings.setting(:type_list_enum, "", type: "list", enum: "TestListEnumClass")
+      settings.setting(:type_list_no_enum, "", type: "list", choices: %w[a b c])
+      settings.setting(
+        :type_list_enum_with_choices,
+        "",
+        type: "list",
+        enum: "TestListEnumClass",
+        choices: %w[item1 item2],
+      )
+      settings.refresh!
+    end
+
+    describe "#type_hash" do
+      it "returns valid_values from enum class for list type" do
+        hash = settings.type_supervisor.type_hash(:type_list_enum)
+        expect(hash[:type]).to eq "list"
+        expect(hash[:valid_values]).to eq(
+          [
+            { name: "Item1", value: "item1" },
+            { name: "Item2", value: "item2" },
+            { name: "Item3", value: "item3" },
+          ],
+        )
+        expect(hash[:translate_names]).to eq true
+      end
+
+      it "does not return valid_values for list type without enum" do
+        hash = settings.type_supervisor.type_hash(:type_list_no_enum)
+        expect(hash[:type]).to eq "list"
+        expect(hash[:valid_values]).to be_nil
+        expect(hash[:choices]).to eq %w[a b c]
+      end
+
+      it "returns both valid_values and choices when both enum and choices are specified" do
+        hash = settings.type_supervisor.type_hash(:type_list_enum_with_choices)
+        expect(hash[:type]).to eq "list"
+        expect(hash[:valid_values]).to eq(
+          [
+            { name: "Item1", value: "item1" },
+            { name: "Item2", value: "item2" },
+            { name: "Item3", value: "item3" },
+          ],
+        )
+        expect(hash[:choices]).to eq %w[item1 item2]
+      end
+    end
+
+    describe "#to_db_value" do
+      it "validates list values using enum class" do
+        expect(settings.type_supervisor.to_db_value(:type_list_enum, "item1")).to eq [
+             "item1",
+             SiteSetting.types[:list],
+           ]
+        expect(settings.type_supervisor.to_db_value(:type_list_enum, "item1|item2")).to eq [
+             "item1|item2",
+             SiteSetting.types[:list],
+           ]
+      end
+
+      it "raises when list value is not valid according to enum class" do
+        expect { settings.type_supervisor.to_db_value(:type_list_enum, "invalid") }.to raise_error(
+          Discourse::InvalidParameters,
+        )
+        expect {
+          settings.type_supervisor.to_db_value(:type_list_enum, "item1|invalid")
+        }.to raise_error(Discourse::InvalidParameters)
+      end
+
+      it "allows empty value for list with enum" do
+        expect(settings.type_supervisor.to_db_value(:type_list_enum, "")).to eq [
+             "",
+             SiteSetting.types[:list],
+           ]
+      end
     end
   end
 end

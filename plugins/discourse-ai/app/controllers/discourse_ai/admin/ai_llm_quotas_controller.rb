@@ -3,7 +3,7 @@
 module DiscourseAi
   module Admin
     class AiLlmQuotasController < ::Admin::AdminController
-      requires_plugin ::DiscourseAi::PLUGIN_NAME
+      requires_plugin PLUGIN_NAME
 
       def index
         quotas = LlmQuota.includes(:group)
@@ -40,7 +40,7 @@ module DiscourseAi
 
         head :no_content
       rescue ActiveRecord::RecordNotFound
-        render json: { error: I18n.t("not_found") }, status: 404
+        render json: { error: I18n.t("not_found") }, status: :not_found
       end
 
       private
@@ -51,6 +51,7 @@ module DiscourseAi
           :llm_model_id,
           :max_tokens,
           :max_usages,
+          :max_cost,
           :duration_seconds,
         )
       end

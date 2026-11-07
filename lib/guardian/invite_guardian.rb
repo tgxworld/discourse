@@ -9,6 +9,10 @@ module InviteGuardian
     is_staff? || is_me?(user)
   end
 
+  def can_create_admin_invite?
+    is_admin? && @user.upcoming_change_enabled?(:enable_invite_modal_with_roles)
+  end
+
   def can_invite_to_forum?(groups = nil)
     return false if !authenticated?
     return false if !@user.in_any_groups?(SiteSetting.invite_allowed_groups_map)
@@ -54,7 +58,11 @@ module InviteGuardian
     is_staff?
   end
 
-  def can_destroy_all_invites?
-    is_staff?
+  def can_destroy_all_invites?(user)
+    is_staff? && (is_admin? || is_me?(user))
+  end
+
+  def can_destroy_invite?(invite)
+    invite && (is_admin? || is_me?(invite.invited_by))
   end
 end

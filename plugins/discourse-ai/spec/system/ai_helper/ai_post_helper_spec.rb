@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-RSpec.describe "AI Post helper", type: :system do
-  fab!(:user) { Fabricate(:admin) }
-  fab!(:non_member_group) { Fabricate(:group) }
+RSpec.describe "AI Post helper" do
+  fab!(:user, :admin)
+  fab!(:non_member_group, :group)
   fab!(:topic)
   fab!(:post) do
     Fabricate(
@@ -37,8 +37,10 @@ RSpec.describe "AI Post helper", type: :system do
 
   def select_post_text(selected_post)
     topic_page.visit_topic(topic)
+    post_paragraph = "#{topic_page.post_by_number_selector(selected_post.post_number)} .cooked p"
+    expect(page).to have_css(post_paragraph)
     page.execute_script(
-      "var element = document.querySelector('#{topic_page.post_by_number_selector(selected_post.post_number)} .cooked p'); " +
+      "var element = document.querySelector('#{post_paragraph}'); " +
         "var range = document.createRange(); " + "range.selectNodeContents(element); " +
         "var selection = window.getSelection(); " + "selection.removeAllRanges(); " +
         "selection.addRange(range);" + "const event = new PointerEvent('pointerup');" +
@@ -60,7 +62,7 @@ RSpec.describe "AI Post helper", type: :system do
       expect(post_ai_helper).to have_post_ai_helper_options
     end
 
-    it "should not have the mobile post AI helper" do
+    it "does not display the mobile post AI helper" do
       select_post_text(post)
       post_ai_helper.click_ai_button
       expect(post_ai_helper).to have_no_mobile_post_ai_helper
@@ -179,7 +181,7 @@ RSpec.describe "AI Post helper", type: :system do
   end
 
   context "when triggering post AI helper on mobile", mobile: true do
-    it "should use the bottom modal instead of the popup menu" do
+    it "uses the bottom modal instead of the popup menu" do
       select_post_text(post)
       post_ai_helper.click_ai_button
       expect(post_ai_helper).to have_mobile_post_ai_helper

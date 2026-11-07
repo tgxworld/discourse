@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 class DirectoryColumn < ActiveRecord::Base
-  self.ignored_columns = ["automatic"] # TODO: Remove when 20240212034010_drop_deprecated_columns has been promoted to pre-deploy
   self.inheritance_column = nil
 
   enum :type, { automatic: 0, user_field: 1, plugin: 2 }, scopes: false
@@ -61,14 +60,14 @@ end
 # Table name: directory_columns
 #
 #  id                 :bigint           not null, primary key
-#  name               :string
 #  automatic_position :integer
-#  icon               :string
-#  user_field_id      :integer
 #  enabled            :boolean          not null
+#  icon               :string
+#  name               :string
 #  position           :integer          not null
-#  created_at         :datetime
 #  type               :integer          default("automatic"), not null
+#  created_at         :datetime
+#  user_field_id      :integer
 #
 # Indexes
 #

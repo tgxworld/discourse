@@ -10,8 +10,8 @@ module DiscourseNarrativeBot
       def can_create_post?(parent)
         if SiteSetting.discourse_narrative_bot_enabled &&
              parent.try(:subtype) == "system_message" &&
-             parent.try(:user) == ::DiscourseNarrativeBot::Base.new.discobot_user
-          return true
+             parent.try(:user) == DiscourseNarrativeBot::Base.new.discobot_user
+          return can_see_topic?(parent)
         end
 
         existing_can_create_post?(parent)

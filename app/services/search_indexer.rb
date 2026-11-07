@@ -144,16 +144,24 @@ class SearchIndexer
         search_data.values.select { |d| d.length > 0 }.join(" ")
       end
 
+    handler = DiscoursePluginRegistry.search_handlers.find { |h| h[:table_name] == table }
+    index_version = handler ? handler[:index_version] : const_get("#{table.upcase}_INDEX_VERSION")
+
     params = {
       "raw_data" => indexed_data,
       "#{foreign_key}" => id,
       "locale" => SiteSetting.default_locale,
-      "version" => const_get("#{table.upcase}_INDEX_VERSION"),
+      "version" => index_version,
       "search_data" => tsvector,
     }
 
     yield params if block_given?
-    table_name.camelize.constantize.upsert(params)
+
+    if handler
+      handler[:search_data_class].upsert(params)
+    else
+      table_name.camelize.constantize.upsert(params)
+    end
   rescue => e
     if Rails.env.test?
       raise
@@ -188,8 +196,19 @@ class SearchIndexer
     category_name:,
     topic_tags:,
     cooked:,
-    private_message:
+    private_message:,
+    locale: SiteSetting.default_locale
   )
+    post_text = HtmlScrubber.scrub(cooked)
+    post_text =
+      DiscoursePluginRegistry.apply_modifier(
+        :post_search_index_text,
+        post_text,
+        post_id,
+        cooked,
+        locale,
+      )
+
     update_index(
       table: "post",
       id: post_id,
@@ -200,7 +219,7 @@ class SearchIndexer
       # the original string. Since there is no way to estimate the length of
       # the expected tsvector, we limit the input to ~50% of the maximum
       # length of a tsvector (1_048_576 bytes).
-      d_weight: HtmlScrubber.scrub(cooked)[0..600_000],
+      d_weight: post_text[0..600_000],
     ) { |params| params["private_message"] = private_message }
   end
 
@@ -261,6 +280,16 @@ class SearchIndexer
   def self.index(obj, force: false)
     return if @disabled
 
+    # Check registered search handlers for this object type
+    handler = DiscoursePluginRegistry.search_handlers.find { |h| obj.is_a?(h[:model_class]) }
+
+    if handler
+      indexer_helper = IndexerHelper.new
+      search_weights = handler[:search_data].call(obj, indexer_helper)
+      update_index(table: handler[:table_name], id: obj.id, **search_weights)
+      return
+    end
+
     category_name = nil
     tag_names = nil
     topic = nil
@@ -292,6 +321,7 @@ class SearchIndexer
           topic_tags: tag_names,
           cooked: obj.cooked,
           private_message: topic.private_message?,
+          locale: obj.locale.presence || SiteSetting.default_locale,
         )
 
         SearchIndexer.update_topics_index(topic.id, topic.title, obj.cooked) if obj.is_first_post?
@@ -317,6 +347,7 @@ class SearchIndexer
             topic_tags: tag_names,
             cooked: post.cooked,
             private_message: obj.private_message?,
+            locale: post.locale.presence || SiteSetting.default_locale,
           )
 
           SearchIndexer.update_topics_index(obj.id, obj.title, post.cooked)
@@ -339,15 +370,13 @@ class SearchIndexer
     raw_data.scan(Discourse::Utils::URI_REGEXP) { urls << $& }
 
     urls.each do |url|
-      begin
-        case File.extname(URI(url).path || "")
-        when Oneboxer::VIDEO_REGEX
-          raw_data.gsub!(url, I18n.t("search.video"))
-        when Oneboxer::AUDIO_REGEX
-          raw_data.gsub!(url, I18n.t("search.audio"))
-        end
-      rescue URI::InvalidURIError
+      case File.extname(URI(url).path || "")
+      when Oneboxer::VIDEO_REGEX
+        raw_data.gsub!(url, I18n.t("search.video"))
+      when Oneboxer::AUDIO_REGEX
+        raw_data.gsub!(url, I18n.t("search.audio"))
       end
+    rescue URI::InvalidURIError
     end
 
     raw_data
@@ -421,6 +450,12 @@ class SearchIndexer
 
     def characters(str)
       scrubbed << " #{str} "
+    end
+  end
+
+  class IndexerHelper
+    def scrub_html(html)
+      HtmlScrubber.scrub(html)
     end
   end
 end

@@ -23,11 +23,18 @@
   }
 
   &__inner-content {
+    box-sizing: border-box;
     display: flex;
-    overflow: hidden;
+    max-height: 60dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     overflow-wrap: break-word;
     padding: 0.5rem;
-    align-items: center;
+
+    // `safe` so content taller than the cap starts at the top instead of being centred,
+    // which would put the first lines above the scrollport and out of reach
+    align-items: safe center;
   }
 
   &__content {
@@ -69,7 +76,7 @@
 
     &[data-placement^="top"] {
       .arrow {
-        bottom: -10px;
+        bottom: -11px;
         rotate: 180deg;
       }
     }
@@ -82,21 +89,21 @@
 
     &[data-placement^="bottom"] {
       .arrow {
-        top: -10px;
+        top: -11px;
       }
     }
 
     &[data-placement^="right"] {
       .arrow {
         rotate: -90deg;
-        left: -10px;
+        left: -11px;
       }
     }
 
     &[data-placement^="left"] {
       .arrow {
         rotate: 90deg;
-        right: -10px;
+        right: -11px;
       }
     }
   }

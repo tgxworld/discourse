@@ -28,6 +28,8 @@ ko:
       cast-votes:
         title: "표 던지기"
         label: "지금 투표!"
+      keep-vote:
+        label: "뒤로"
       show-results:
         title: "투표 결과 표시"
         label: "검색 결과"
@@ -67,7 +69,6 @@ ko:
       error_while_fetching_voters: "죄송합니다. 투표한 사람을 표시하는 도중 에러가 발생하였습니다."
       error_while_exporting_results: "설문 조사 결과를 내보내는 중에 오류가 발생했습니다."
       ui_builder:
-        title: 투표 만들기
         insert: 투표 삽입하기
         help:
           options_min_count: 옵션을 하나 이상 입력하세요.
@@ -106,5 +107,3 @@ ko:
           add: 옵션 추가
         automatic_close:
           label: 설문 조사 자동 종료
-        show_advanced: "고급 옵션 표시"
-        hide_advanced: "고급 옵션 숨기기"

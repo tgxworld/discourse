@@ -5,6 +5,7 @@ class Poll < ActiveRecord::Base
   self.inheritance_column = nil
 
   belongs_to :post, -> { with_deleted }
+  belongs_to :closed_by, class_name: "User", optional: true
 
   has_many :poll_options, -> { order(:id) }, dependent: :destroy
   has_many :poll_votes
@@ -25,7 +26,7 @@ class Poll < ActiveRecord::Base
 
   after_initialize { @has_voted = {} }
 
-  def reload
+  def reload(options = nil)
     @has_voted = {}
     super
   end
@@ -101,22 +102,25 @@ end
 # Table name: polls
 #
 #  id               :bigint           not null, primary key
-#  post_id          :bigint
-#  name             :string           default("poll"), not null
-#  close_at         :datetime
-#  type             :integer          default("regular"), not null
-#  status           :integer          default("open"), not null
-#  results          :integer          default("always"), not null
-#  visibility       :integer          default("secret"), not null
-#  min              :integer
-#  max              :integer
-#  step             :integer
 #  anonymous_voters :integer
+#  chart_type       :integer          default("bar"), not null
+#  close_at         :datetime
+#  closed_at        :datetime
+#  dynamic          :boolean          default(FALSE), not null
+#  groups           :string
+#  max              :integer
+#  min              :integer
+#  name             :string           default("poll"), not null
+#  results          :integer          default("always"), not null
+#  status           :integer          default("open"), not null
+#  step             :integer
+#  title            :string
+#  type             :integer          default("regular"), not null
+#  visibility       :integer          default("secret"), not null
 #  created_at       :datetime         not null
 #  updated_at       :datetime         not null
-#  chart_type       :integer          default("bar"), not null
-#  groups           :string
-#  title            :string
+#  closed_by_id     :integer
+#  post_id          :bigint
 #
 # Indexes
 #

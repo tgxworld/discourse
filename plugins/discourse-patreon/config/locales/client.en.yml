@@ -13,6 +13,8 @@ en:
       title: 'Patreon'
       header:
         rules: 'Filters'
+      unconfigured: "Patreon is not connected yet. Please see <a href='%{url}' target='_blank'>the documentation on Discourse Meta</a> for details."
+      configure_tokens: 'Go to settings'
       group: 'Group'
       rewards: 'Rewards'
       filter: 'Filter'
@@ -47,7 +49,7 @@ en:
             Every dollar counts and will be put to good use.
           </p>
 
-          <p>Thank you for your support!<p>
+          <p>Thank you for your support!</p>
 
           <p>
             <a class="btn btn-large btn-danger" href="%{campaignUrl}">Become a Patron</a>

@@ -62,8 +62,8 @@ RSpec.describe DiscourseId::Revoke do
 
     context "when discourse id is not properly configured" do
       before do
-        SiteSetting.discourse_id_client_id = nil
-        SiteSetting.discourse_id_client_secret = nil
+        SiteSetting.discourse_id_client_id = ""
+        SiteSetting.discourse_id_client_secret = ""
       end
 
       it { is_expected.to fail_a_policy(:discourse_id_properly_configured) }
@@ -81,13 +81,22 @@ RSpec.describe DiscourseId::Revoke do
       it { is_expected.to fail_to_find_a_model(:associated_account) }
     end
 
+    context "when account registration is incomplete" do
+      before { uaa.update!(user: nil) }
+
+      it { is_expected.to run_successfully }
+    end
+
     context "when everything is ok" do
       before { UserAuthToken.generate!(user_id: user.id) }
 
       it { is_expected.to run_successfully }
 
-      it "destroys user auth tokens" do
+      it "revokes sessions and push subscriptions" do
+        Fabricate(:push_subscription, user:)
+
         expect { result }.to change { UserAuthToken.where(user_id: user.id).count }.by(-1)
+        expect(user.push_subscriptions).to be_empty
       end
     end
   end

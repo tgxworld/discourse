@@ -2,30 +2,47 @@
 
 class UserBadgesController < ApplicationController
   MAX_BADGES = 96 # This was limited in PR#2360 to make it divisible by 8
+  MAX_INDEX_LIMIT = 400
+  MAX_BADGE_IDS = 100
 
   before_action :ensure_badges_enabled
+  before_action :ensure_logged_in, only: %i[create destroy toggle_favorite]
 
   def index
-    params.permit %i[granted_before offset username]
+    params.permit %i[
+                    granted_before
+                    offset
+                    username
+                    badge_id
+                    badge_name
+                    badge_ids
+                    badge_type_id
+                    limit
+                  ]
 
-    badge = fetch_badge_from_params
-    user_badges = badge.user_badges.order("granted_at DESC, id DESC").limit(MAX_BADGES)
-    user_badges =
-      user_badges.includes(
-        :user,
-        :granted_by,
-        badge: :badge_type,
-        post: :topic,
-        user: %i[primary_group flair_group],
-      )
+    user_badges = scoped_user_badges
 
     grant_count = nil
 
     if params[:username]
-      user_id = User.where(username_lower: params[:username].downcase).pick(:id)
-      user_badges = user_badges.where(user_id: user_id) if user_id
-      grant_count = badge.user_badges.where(user_id: user_id).count
+      user = fetch_user_from_params(include_inactive: true)
+      raise Discourse::NotFound unless guardian.can_see_profile?(user)
+
+      user_badges = user_badges.where(user_id: user.id)
+      grant_count = user_badges.count
     end
+
+    user_badges =
+      user_badges
+        .order("granted_at DESC, id DESC")
+        .limit(index_limit)
+        .includes(
+          :user,
+          :granted_by,
+          badge: :badge_type,
+          post: :topic,
+          user: %i[primary_group flair_group],
+        )
 
     offset = fetch_int_from_params(:offset, default: 0)
     user_badges = user_badges.offset(offset) if offset > 0
@@ -81,21 +98,33 @@ class UserBadgesController < ApplicationController
     params.require(:username)
     user = fetch_user_from_params
 
-    return render json: failed_json, status: 403 unless can_assign_badge_to_user?(user)
+    return render json: failed_json, status: :forbidden unless can_assign_badge_to_user?(user)
 
     badge = fetch_badge_from_params
     post_id = nil
 
-    if params[:reason].present?
+    if params.key?(:post_id)
+      raise Discourse::InvalidParameters.new(:post_id) if params[:reason].present?
+
+      post_id = Integer(params[:post_id].to_s, 10, exception: false)
+      raise Discourse::InvalidParameters.new(:post_id) if post_id.nil? || post_id < 1
+
+      post = Post.find_by(id: post_id)
+      raise Discourse::NotFound if post.blank?
+
+      guardian.ensure_can_see!(post)
+      post_id = post.id
+    elsif params[:reason].present?
       unless is_badge_reason_valid? params[:reason]
         return(
           render json: failed_json.merge(message: I18n.t("invalid_grant_badge_reason_link")),
-                 status: 400
+                 status: :bad_request
         )
       end
 
       if route = Discourse.route_for(params[:reason])
-        if route[:controller] == "topics" && route[:action] == "show"
+        if (route[:controller] == "topics" && route[:action] == "show") ||
+             route[:controller] == "nested_topics"
           topic_id = (route[:id] || route[:topic_id]).to_i
           post_number = route[:post_number] || 1
           post_id = Post.find_by(topic_id: topic_id, post_number: post_number)&.id if topic_id > 0
@@ -106,7 +135,11 @@ class UserBadgesController < ApplicationController
     grant_opts_from_params =
       DiscoursePluginRegistry.apply_modifier(
         :user_badges_badge_grant_opts,
-        { granted_by: current_user, post_id: post_id },
+        {
+          granted_by: current_user,
+          post_id: post_id,
+          suppress_notification: params[:suppress_notification].to_s == "true",
+        },
         { param: params },
       )
 
@@ -120,7 +153,7 @@ class UserBadgesController < ApplicationController
     user_badge = UserBadge.find(params[:id])
 
     unless can_assign_badge_to_user?(user_badge.user)
-      render json: failed_json, status: 403
+      render json: failed_json, status: :forbidden
       return
     end
 
@@ -133,14 +166,14 @@ class UserBadgesController < ApplicationController
     user_badge = UserBadge.find(params[:user_badge_id])
     user_badges = user_badge.user.user_badges
 
-    return render json: failed_json, status: 403 unless can_favorite_badge?(user_badge)
+    return render json: failed_json, status: :forbidden unless can_favorite_badge?(user_badge)
 
     is_favorite = user_badges.where(badge: user_badge.badge, is_favorite: true).exists?
 
     if !is_favorite &&
          user_badges.select(:badge_id).distinct.where(is_favorite: true).count >=
            SiteSetting.max_favorite_badges
-      return render json: failed_json, status: 400
+      return render json: failed_json, status: :bad_request
     end
 
     UserBadge.where(user_id: user_badge.user_id, badge_id: user_badge.badge_id).update_all(
@@ -150,6 +183,67 @@ class UserBadgesController < ApplicationController
   end
 
   private
+
+  def scoped_user_badges
+    ids = selected_badge_ids
+
+    scope =
+      if ids
+        UserBadge.where(badge: Badge.enabled).where(badge_id: ids)
+      else
+        UserBadge.where(badge: Badge.enabled.where(listable: true))
+      end
+
+    if params[:badge_type_id].present?
+      type_id = fetch_int_from_params(:badge_type_id, default: nil, min: 1)
+      scope = scope.joins(:badge).where(badges: { badge_type_id: type_id })
+    end
+
+    scope
+  end
+
+  def selected_badge_ids
+    return parse_badge_ids(params[:badge_ids]) if params.key?(:badge_ids)
+
+    if params.key?(:badge_name)
+      badge = Badge.find_by(name: params[:badge_name], enabled: true)
+      raise Discourse::NotFound if badge.blank?
+
+      return [badge.id]
+    end
+
+    if params.key?(:badge_id)
+      params.require(:badge_id)
+      badge = Badge.find_by(id: params[:badge_id], enabled: true)
+      raise Discourse::NotFound if badge.blank?
+
+      return [badge.id]
+    end
+
+    nil
+  end
+
+  def parse_badge_ids(raw)
+    return nil if raw.blank?
+
+    tokens = raw.is_a?(Array) ? raw.flatten : raw.to_s.split(/[,|\s+]/)
+    ids =
+      tokens
+        .flat_map { |token| token.to_s.split(/[,|\s+]/) }
+        .filter_map { |token| Integer(token, exception: false) }
+        .select(&:positive?)
+        .uniq
+    raise Discourse::InvalidParameters.new(:badge_ids) if ids.length > MAX_BADGE_IDS
+
+    ids
+  end
+
+  def index_limit
+    limit = fetch_int_from_params(:limit, default: nil, min: 1)
+    return MAX_BADGES if limit.nil?
+
+    [limit, MAX_INDEX_LIMIT].min
+  end
 
   # Get the badge from either the badge name or id specified in the params.
   def fetch_badge_from_params
@@ -182,6 +276,10 @@ class UserBadgesController < ApplicationController
 
   def is_badge_reason_valid?(reason)
     route = Discourse.route_for(reason)
-    route && (route[:controller] == "posts" || route[:controller] == "topics")
+    route &&
+      (
+        route[:controller] == "posts" || route[:controller] == "topics" ||
+          route[:controller] == "nested_topics"
+      )
   end
 end

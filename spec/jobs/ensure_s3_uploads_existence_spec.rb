@@ -6,14 +6,14 @@ RSpec.describe Jobs::EnsureS3UploadsExistence do
   context "when `s3_inventory_bucket` has been set" do
     before { SiteSetting.s3_inventory_bucket = "some-bucket-name" }
 
-    it "works" do
+    it "checks that the S3 uploads exist" do
       S3Inventory.any_instance.expects(:backfill_etags_and_list_missing).once
       job.execute({})
     end
   end
 
   context "when `s3_inventory_bucket` has not been set" do
-    before { SiteSetting.s3_inventory_bucket = nil }
+    before { SiteSetting.s3_inventory_bucket = "" }
 
     it "doesn't execute" do
       S3Inventory.any_instance.expects(:backfill_etags_and_list_missing).never

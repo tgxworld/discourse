@@ -1,7 +1,6 @@
 import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
 import { action } from "@ember/object";
-import { readOnly } from "@ember/object/computed";
 import { service } from "@ember/service";
 import Form from "discourse/components/form";
 import { ajax } from "discourse/lib/ajax";
@@ -13,10 +12,7 @@ export default class AdminCreateLeaderboard extends Component {
   @service router;
   @service toasts;
 
-  @tracked newLeaderboardName = "";
   @tracked loading = false;
-
-  @readOnly("newLeaderboardName") nameValid;
 
   get formData() {
     return { name: "", created_by_id: this.currentUser.id };
@@ -39,14 +35,13 @@ export default class AdminCreateLeaderboard extends Component {
         }
       );
       this.toasts.success({
-        duration: 3000,
+        duration: "short",
         data: {
           message: i18n("gamification.leaderboard.create_success"),
         },
       });
-      this.args.onCancel();
       this.router.transitionTo(
-        "adminPlugins.show.discourse-gamification-leaderboards.show",
+        "adminPlugins.show.discourse-gamification-leaderboards.edit",
         leaderboard.id
       );
     } catch (err) {
@@ -56,40 +51,42 @@ export default class AdminCreateLeaderboard extends Component {
     }
   }
 
+  @action
+  cancel() {
+    this.router.transitionTo(
+      "adminPlugins.show.discourse-gamification-leaderboards"
+    );
+  }
+
   <template>
-    <div class="new-leaderboard-container">
-      <Form
-        @data={{this.formData}}
-        @onSubmit={{this.createNewLeaderboard}}
-        class="new-leaderboard-form"
-        as |form|
+    <Form
+      class="new-leaderboard-form"
+      @data={{this.formData}}
+      @onSubmit={{this.createNewLeaderboard}}
+      as |form|
+    >
+      <form.Field
+        class="new-leaderboard__name"
+        @name="name"
+        @title={{i18n "gamification.leaderboard.name"}}
+        @type="input"
+        @validation="required"
+        as |field|
       >
-        <form.Row>
-          <form.Field
-            @name="name"
-            @title={{i18n "gamification.leaderboard.name"}}
-            @showTitle={{false}}
-            class="new-leaderboard__name"
-            @validation="required"
-            as |field|
-          >
-            <field.Input
-              placeholder={{i18n "gamification.leaderboard.name_placeholder"}}
-            />
-          </form.Field>
+        <field.Control
+          placeholder={{i18n "gamification.leaderboard.name_placeholder"}}
+        />
+      </form.Field>
 
-        </form.Row>
-        <form.Actions>
-          <form.Submit />
+      <form.Actions>
+        <form.Submit />
 
-          <form.Button
-            @action={{@onCancel}}
-            class="new-leaderboard__cancel form-kit__button"
-            @label="gamification.cancel"
-            @title="gamification.cancel"
-          />
-        </form.Actions>
-      </Form>
-    </div>
+        <form.Button
+          class="new-leaderboard__cancel btn-default"
+          @action={{this.cancel}}
+          @label="gamification.cancel"
+        />
+      </form.Actions>
+    </Form>
   </template>
 }

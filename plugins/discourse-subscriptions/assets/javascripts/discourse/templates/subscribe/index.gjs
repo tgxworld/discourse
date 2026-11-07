@@ -1,16 +1,13 @@
-import RouteTemplate from "ember-route-template";
-import LoginRequired from "../../components/login-required";
-import ProductList from "../../components/product-list";
+import LoginRequired from "../../components/login-required.gjs";
+import ProductList from "../../components/product-list.gjs";
 
-export default RouteTemplate(
-  <template>
-    {{#unless @controller.isLoggedIn}}
-      <LoginRequired />
-    {{/unless}}
+export default <template>
+  {{#unless @controller.isLoggedIn}}
+    <LoginRequired />
+  {{/unless}}
 
-    <ProductList
-      @products={{@controller.model}}
-      @isLoggedIn={{@controller.isLoggedIn}}
-    />
-  </template>
-);
+  <ProductList
+    @isLoggedIn={{@controller.isLoggedIn}}
+    @products={{@controller.model}}
+  />
+</template>

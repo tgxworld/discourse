@@ -25,8 +25,8 @@ class Site
   cattr_accessor :markdown_additional_options
   self.markdown_additional_options = {}
 
-  def self.add_categories_callbacks(&block)
-    categories_callbacks << block
+  def self.add_categories_callbacks(enabled: -> { true }, &block)
+    categories_callbacks << { block:, enabled: }
   end
 
   def self.categories_callbacks
@@ -53,6 +53,48 @@ class Site
     UserField.includes(:user_field_options).order(:position).all
   end
 
+  def access_control
+    self.class.access_control
+  end
+
+  def self.access_control_target_classes
+    (
+      AclTarget.target_classes +
+        DiscoursePluginRegistry.acl_target_classes.filter_map do |target_class|
+          if target_class.is_a?(String)
+            target_class = target_class.safe_constantize
+            if target_class.nil?
+              Rails.logger.warn(
+                "[ACL] Unknown target class in plugin registry for site (#{target_class}) maybe the plugin is gone, the class has been renamed, or the class does not include AclTarget",
+              )
+            end
+            target_class
+          else
+            target_class
+          end
+        end
+    ).compact.uniq
+  end
+
+  def self.access_control
+    {
+      mandatory_acl:
+        access_control_target_classes.each_with_object({}) do |target_class, mandatory_acl|
+          next if !target_class.respond_to?(:has_mandatory_acl?)
+          next if !target_class.has_mandatory_acl?
+
+          mandatory_acl[target_class.acl_target_key] = target_class.mandatory_acl
+        end,
+      banned_acl:
+        access_control_target_classes.each_with_object({}) do |target_class, banned_acl|
+          next if !target_class.respond_to?(:has_banned_acl?)
+          next if !target_class.has_banned_acl?
+
+          banned_acl[target_class.acl_target_key] = target_class.banned_acl
+        end,
+    }
+  end
+
   def self.categories_cache_key
     "site_categories_#{I18n.locale}_#{Discourse.git_version}"
   end
@@ -73,33 +115,18 @@ class Site
         categories =
           begin
             query =
-              Category.includes(
-                :uploaded_logo,
-                :uploaded_logo_dark,
-                :uploaded_background,
-                :uploaded_background_dark,
-                :tags,
-                :tag_groups,
-                :form_templates,
-                category_required_tag_groups: :tag_group,
-              ).joins("LEFT JOIN topics t on t.id = categories.topic_id")
-
-            if SiteSetting.content_localization_enabled
-              locale = I18n.locale.to_s
-              query =
-                query.joins(
-                  "LEFT JOIN category_localizations cl ON cl.category_id = categories.id AND cl.locale = '#{ActiveRecord::Base.connection.quote_string(locale)}'",
-                ).select(
-                  "categories.*,
-                      t.slug topic_slug,
-                      COALESCE(cl.name, categories.name) AS name,
-                      COALESCE(cl.description, categories.description) AS description",
+              Category
+                .includes(
+                  :uploaded_logo,
+                  :uploaded_logo_dark,
+                  :uploaded_background,
+                  :uploaded_background_dark,
+                  :category_required_tag_groups,
+                  :form_templates,
                 )
-            else
-              query = query.select("categories.*, t.slug topic_slug")
-            end
-
-            query = query.order(:position)
+                .joins("LEFT JOIN topics t on t.id = categories.topic_id")
+                .select("categories.*, t.slug topic_slug")
+                .order(:position)
             query =
               DiscoursePluginRegistry.apply_modifier(:site_all_categories_cache_query, query, self)
             query.to_a
@@ -128,15 +155,14 @@ class Site
       end
     end
 
+    can_lazy_load_categories = @guardian.can_lazy_load_categories?
+
     @categories ||=
       begin
         categories = []
 
         self.class.all_categories_cache.each do |category|
-          if (
-               !@guardian.can_lazy_load_categories? ||
-                 preloaded_category_ids.include?(category[:id])
-             ) &&
+          if (!can_lazy_load_categories || preloaded_category_ids.include?(category[:id])) &&
                @guardian.can_see_serialized_category?(
                  category_id: category[:id],
                  read_restricted: category[:read_restricted],
@@ -178,7 +204,10 @@ class Site
 
         categories.reject! { |c| c[:parent_category_id] && !by_id[c[:parent_category_id]] }
 
-        self.class.categories_callbacks.each { |callback| callback.call(categories, @guardian) }
+        self.class.categories_callbacks.each do |callback|
+          next unless callback[:enabled].call
+          callback[:block].call(categories, @guardian)
+        end
 
         categories
       end
@@ -186,9 +215,12 @@ class Site
 
   def groups
     query =
-      Group.visible_groups(@guardian.user, "groups.name ASC", include_everyone: true).includes(
-        :flair_upload,
-      )
+      Group.visible_groups(
+        @guardian.user,
+        "groups.name ASC",
+        include_everyone: !SiteSetting.granular_anonymous_and_logged_in_groups_permissions,
+        include_pseudogroups: true,
+      ).includes(:flair_upload)
     query = DiscoursePluginRegistry.apply_modifier(:site_groups_query, query, self)
 
     query
@@ -197,7 +229,7 @@ class Site
   def anonymous_sidebar_sections
     SidebarSection
       .public_sections
-      .includes(:sidebar_urls)
+      .includes(:localizations, sidebar_urls: :localizations)
       .order("(section_type IS NOT NULL) DESC, (public IS TRUE) DESC")
   end
 
@@ -215,6 +247,7 @@ class Site
         {
           periods: TopTopic.periods.map(&:to_s),
           filters: Discourse.filters.map(&:to_s),
+          anonymous_list_filters: Discourse.anonymous_list_filters.map(&:to_s),
           user_fields:
             UserField
               .includes(:user_field_options)
@@ -227,6 +260,9 @@ class Site
             end,
           full_name_required_for_signup:,
           full_name_visible_in_signup:,
+          tos_url: Discourse.tos_url,
+          privacy_policy_url: Discourse.privacy_policy_url,
+          upcoming_changes_with_css: UpcomingChanges.including_css,
         }.to_json
       )
     end
@@ -278,10 +314,10 @@ class Site
   end
 
   def self.full_name_required_for_signup
-    SiteSetting.enable_names && SiteSetting.full_name_requirement == "required_at_signup"
+    SiteSetting.full_name_requirement == "required_at_signup"
   end
 
   def self.full_name_visible_in_signup
-    SiteSetting.enable_names && SiteSetting.full_name_requirement != "hidden_at_signup"
+    SiteSetting.full_name_requirement != "hidden_at_signup"
   end
 end

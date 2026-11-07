@@ -11,11 +11,12 @@ export default class ChatChannelThreadSubscriptionManager {
 
   @tracked channel;
 
-  constructor(context, thread, { onNewMessage } = {}) {
+  constructor(context, thread, { onNewMessage, onRemoveMessage } = {}) {
     setOwner(this, getOwner(context));
 
     this.thread = thread;
     this.onNewMessage = onNewMessage;
+    this.onRemoveMessage = onRemoveMessage;
 
     this.messageBus.subscribe(
       this.messageBusChannel,
@@ -105,9 +106,17 @@ export default class ChatChannelThreadSubscriptionManager {
     stagedMessage.error = null;
     stagedMessage.id = data.chat_message.id;
     stagedMessage.staged = false;
+    stagedMessage.message = data.chat_message.message;
     stagedMessage.excerpt = data.chat_message.excerpt;
     stagedMessage.channel = channel;
     stagedMessage.createdAt = new Date(data.chat_message.created_at);
+    stagedMessage.cooked = data.chat_message.cooked;
+    stagedMessage.uploads = cloneJSON(data.chat_message.uploads || []);
+    stagedMessage.streaming = data.chat_message.streaming;
+    stagedMessage.edited = data.chat_message.edited;
+    stagedMessage.isAction = data.chat_message.is_action;
+
+    messagesManager.sortMessages();
 
     return stagedMessage;
   }
@@ -136,6 +145,9 @@ export default class ChatChannelThreadSubscriptionManager {
       message.uploads = cloneJSON(data.chat_message.uploads || []);
       message.edited = data.chat_message.edited;
       message.streaming = data.chat_message.streaming;
+      message.aiLlmName = data.chat_message.ai_llm_name;
+      message.blocks = data.chat_message.blocks;
+      message.isAction = data.chat_message.is_action;
     }
   }
 
@@ -163,11 +175,16 @@ export default class ChatChannelThreadSubscriptionManager {
       return;
     }
 
-    if (this.currentUser.staff || this.currentUser.id === targetMsg.user.id) {
+    if (
+      this.currentUser.staff ||
+      this.thread.channel.canModerate ||
+      this.currentUser.id === targetMsg.user.id
+    ) {
       targetMsg.deletedAt = data.deleted_at;
       targetMsg.deletedById = data.deleted_by_id;
       targetMsg.expanded = false;
     } else {
+      this.onRemoveMessage?.(targetMsg);
       this.messagesManager.removeMessage(targetMsg);
     }
 

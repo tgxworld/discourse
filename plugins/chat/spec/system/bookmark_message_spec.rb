@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "Bookmark message", type: :system do
+RSpec.describe "Bookmark message" do
   fab!(:current_user, :user)
 
   let(:chat_page) { PageObjects::Pages::Chat.new }
@@ -28,6 +28,7 @@ RSpec.describe "Bookmark message", type: :system do
 
       expect(channel_page).to have_bookmarked_message(message_1)
     end
+
     context "when in a long thread" do
       it "supports linking to a bookmark in a long thread" do
         category_channel_1.update!(threading_enabled: true)
@@ -101,6 +102,37 @@ RSpec.describe "Bookmark message", type: :system do
         expect(bookmark.auto_delete_preference).to eq(
           Bookmark.auto_delete_preferences[:on_owner_reply],
         )
+      end
+    end
+
+    context "with reminder notification cleanup" do
+      it "removes bookmark reminder notification when bookmark is deleted" do
+        chat_page.visit_channel(category_channel_1)
+        channel_page.bookmark_message(message_1)
+        bookmark_modal.fill_name("Check this out later")
+        bookmark_modal.select_preset_reminder(:tomorrow)
+
+        expect(channel_page).to have_bookmarked_message(message_1)
+
+        bookmark = Bookmark.find_by(bookmarkable: message_1, user: current_user)
+        Chat::MessageBookmarkable.send_reminder_notification(
+          bookmark,
+          data: {
+            title: bookmark.bookmarkable.chat_channel.title(current_user),
+            bookmarkable_url: bookmark.bookmarkable.url,
+          },
+        )
+
+        user_menu.open
+
+        expect(page).to have_css("#quick-access-all-notifications .bookmark-reminder")
+
+        channel_page.bookmark_message(message_1)
+        bookmark_modal.delete
+        bookmark_modal.confirm_delete
+        user_menu.open
+
+        expect(page).to have_no_css("#quick-access-all-notifications .bookmark-reminder")
       end
     end
   end

@@ -3,22 +3,19 @@
 module DiscourseAi
   module AiHelper
     class AssistantController < ::ApplicationController
-      requires_plugin ::DiscourseAi::PLUGIN_NAME
+      include AiCreditLimitHandler
+
+      requires_plugin PLUGIN_NAME
       requires_login
-      before_action :ensure_can_request_suggestions
+      before_action :ensure_can_request_composer_suggestions, except: :stream_suggestion
+      before_action :ensure_can_request_stream_suggestions, only: :stream_suggestion
       before_action :rate_limiter_performed!
 
-      include SecureUploadEndpointHelpers
-
-      RATE_LIMITS = {
-        "default" => {
-          amount: 6,
-          interval: 3.minutes,
-        },
-        "caption_image" => {
-          amount: 20,
-          interval: 1.minute,
-        },
+      RATE_LIMITS = { "default" => { amount: 6, interval: 3.minutes } }.freeze
+      STREAM_LOCATION_CONTEXTS = {
+        "composer" => "composer",
+        "post" => "post",
+        "helper" => "post",
       }.freeze
 
       def suggest
@@ -31,20 +28,23 @@ module DiscourseAi
           raise Discourse::InvalidParameters.new(:custom_prompt) if params[:custom_prompt].blank?
         end
 
+        assistant = DiscourseAi::AiHelper::Assistant.new
+        assistant.ensure_mode_access!(params[:mode], current_user)
+
         if params[:mode] == DiscourseAi::AiHelper::Assistant::ILLUSTRATE_POST
           return suggest_thumbnails(input)
         end
 
         hijack do
           render json:
-                   DiscourseAi::AiHelper::Assistant.new.generate_and_send_prompt(
+                   assistant.generate_and_send_prompt(
                      params[:mode],
                      input,
                      current_user,
                      force_default_locale: force_default_locale,
                      custom_prompt: params[:custom_prompt],
                    ),
-                 status: 200
+                 status: :ok
         end
       rescue DiscourseAi::Completions::Endpoints::Base::CompletionFailed
         render_json_error I18n.t("discourse_ai.ai_helper.errors.completion_request_failed"),
@@ -54,6 +54,7 @@ module DiscourseAi
       def suggest_title
         if params[:topic_id]
           topic = Topic.find_by(id: params[:topic_id])
+          guardian.ensure_can_see!(topic)
           input = DiscourseAi::Summarization::Strategies::TopicSummary.new(topic).targets_data
         else
           input = get_text_param!
@@ -66,54 +67,115 @@ module DiscourseAi
                      input,
                      current_user,
                    ),
-                 status: 200
+                 status: :ok
+        rescue LlmCreditAllocation::CreditLimitExceeded => e
+          render_credit_limit_error(e)
+        rescue DiscourseAi::Completions::Endpoints::Base::CompletionFailed
+          render_json_error I18n.t("discourse_ai.ai_helper.errors.completion_request_failed"),
+                            status: 502
         end
-      rescue DiscourseAi::Completions::Endpoints::Base::CompletionFailed
-        render_json_error I18n.t("discourse_ai.ai_helper.errors.completion_request_failed"),
-                          status: 502
       end
 
       def suggest_category
         if params[:topic_id]
-          opts = { topic_id: params[:topic_id] }
+          topic = Topic.find_by(id: params[:topic_id])
+          guardian.ensure_can_see!(topic)
+          opts = { topic_id: topic.id }
         else
           input = get_text_param!
           opts = { text: input }
         end
 
         render json: DiscourseAi::AiHelper::SemanticCategorizer.new(current_user, opts).categories,
-               status: 200
+               status: :ok
       end
 
       def suggest_tags
         if params[:topic_id]
-          opts = { topic_id: params[:topic_id] }
+          topic = Topic.find_by(id: params[:topic_id])
+          guardian.ensure_can_see!(topic)
+          opts = { topic_id: topic.id, category: topic.category, selected_tag_ids: topic.tag_ids }
         else
           input = get_text_param!
-          opts = { text: input }
+          opts = {
+            text: input,
+            category: suggestible_category,
+            selected_tag_ids: selected_tag_ids_param,
+          }
         end
 
         render json: DiscourseAi::AiHelper::SemanticCategorizer.new(current_user, opts).tags,
-               status: 200
+               status: :ok
       end
 
       def suggest_thumbnails(input)
         hijack do
-          thumbnails = DiscourseAi::AiHelper::Painter.new.commission_thumbnails(input, current_user)
+          result =
+            DiscourseAi::AiHelper::GenerateThumbnails.call(
+              params: {
+                text: input,
+              },
+              guardian: guardian,
+            )
 
-          render json: { thumbnails: thumbnails }, status: 200
+          if result.failure?
+            failing_step = nil
+            failing_step = "contract.default" if result[:"result.contract.default"]&.failure?
+            failing_step = "model.agent" if result[:"result.model.agent"]&.failure?
+            failing_step = "policy.has_image_generation_tool" if result[
+              :"result.policy.has_image_generation_tool"
+            ]&.failure?
+            failing_step = "model.llm_model" if result[:"result.model.llm_model"]&.failure?
+
+            status =
+              case failing_step
+              when "contract.default"
+                422
+              when "model.agent"
+                404
+              when "policy.has_image_generation_tool"
+                422
+              when "model.llm_model"
+                500
+              else
+                500
+              end
+
+            translation_key =
+              case failing_step
+              when "contract.default"
+                "discourse_ai.ai_helper.errors.completion_request_failed"
+              when "model.agent"
+                "discourse_ai.ai_helper.errors.no_illustrator_agent"
+              when "policy.has_image_generation_tool"
+                "discourse_ai.ai_helper.errors.no_image_generation_tool"
+              when "model.llm_model"
+                "discourse_ai.ai_helper.errors.llm_model_not_configured"
+              else
+                "discourse_ai.ai_helper.errors.no_image_generated"
+              end
+
+            render_json_error(I18n.t(translation_key), status: status)
+          else
+            render json: { thumbnails: result[:thumbnails] }, status: :ok
+          end
+        rescue LlmCreditAllocation::CreditLimitExceeded => e
+          render_credit_limit_error(e)
         end
       end
 
       def stream_suggestion
         text = get_text_param!
-
-        location = params[:location]
-        raise Discourse::InvalidParameters.new(:location) if !location
+        location = normalized_stream_location
 
         raise Discourse::InvalidParameters.new(:mode) if params[:mode].blank?
+
+        assistant = DiscourseAi::AiHelper::Assistant.new
+
+        assistant.ensure_mode_access_for_location!(params[:mode], current_user, location)
+
         if params[:mode] == DiscourseAi::AiHelper::Assistant::ILLUSTRATE_POST
-          return suggest_thumbnails(input)
+          return suggest_thumbnails(text)
         end
 
         if params[:mode] == DiscourseAi::AiHelper::Assistant::CUSTOM_PROMPT
@@ -143,6 +205,7 @@ module DiscourseAi
           post = Post.includes(:topic).find_by(id: post_id)
 
           raise Discourse::InvalidParameters.new(:post_id) unless post
+          guardian.ensure_can_see!(post)
 
           Jobs.enqueue(
             :stream_post_helper,
@@ -156,41 +219,8 @@ module DiscourseAi
           )
         end
 
-        render json: { success: true, progress_channel: }, status: 200
+        render json: { success: true, progress_channel: }, status: :ok
       rescue DiscourseAi::Completions::Endpoints::Base::CompletionFailed
-        render_json_error I18n.t("discourse_ai.ai_helper.errors.completion_request_failed"),
-                          status: 502
-      end
-
-      def caption_image
-        image_url = params[:image_url]
-        image_url_type = params[:image_url_type]
-
-        raise Discourse::InvalidParameters.new(:image_url) if !image_url
-        raise Discourse::InvalidParameters.new(:image_url) if !image_url_type
-
-        if image_url_type == "short_path"
-          image = Upload.find_by(sha1: Upload.sha1_from_short_path(image_url))
-        elsif image_url_type == "short_url"
-          image = Upload.find_by(sha1: Upload.sha1_from_short_url(image_url))
-        else
-          image = upload_from_full_url(image_url)
-        end
-
-        raise Discourse::NotFound if image.blank?
-
-        check_secure_upload_permission(image) if image.secure?
-        user = current_user
-
-        hijack do
-          caption = DiscourseAi::AiHelper::Assistant.new.generate_image_caption(image, user)
-          render json: {
-                   caption:
-                     "#{caption} (#{I18n.t("discourse_ai.ai_helper.image_caption.attribution")})",
-                 },
-                 status: 200
-        end
-      rescue DiscourseAi::Completions::Endpoints::Base::CompletionFailed, Net::HTTPBadResponse
         render_json_error I18n.t("discourse_ai.ai_helper.errors.completion_request_failed"),
                           status: 502
       end
@@ -217,6 +247,15 @@ module DiscourseAi
         params[:post_id].tap { |t| raise Discourse::InvalidParameters.new(:post_id) if t.blank? }
       end
 
+      def suggestible_category
+        return if params[:category_id].blank?
+        Category.where(id: params[:category_id]).where(id: guardian.allowed_category_ids).first
+      end
+
+      def selected_tag_ids_param
+        Tag.where_name(Array(params[:selected_tags]).first(100)).pluck(:id)
+      end
+
       def rate_limiter_performed!
         action_rate_limit = RATE_LIMITS[action_name] || RATE_LIMITS["default"]
         RateLimiter.new(
@@ -227,13 +266,28 @@ module DiscourseAi
         ).performed!
       end
 
-      def ensure_can_request_suggestions
-        allowed_groups =
-          (
-            SiteSetting.composer_ai_helper_allowed_groups_map |
-              SiteSetting.post_ai_helper_allowed_groups_map
-          )
+      def ensure_can_request_composer_suggestions
+        ensure_user_is_in_any_allowed_group!(SiteSetting.composer_ai_helper_allowed_groups_map)
+      end
 
+      def ensure_can_request_stream_suggestions
+        allowed_groups =
+          if normalized_stream_location == "composer"
+            SiteSetting.composer_ai_helper_allowed_groups_map
+          else
+            SiteSetting.post_ai_helper_allowed_groups_map
+          end
+
+        ensure_user_is_in_any_allowed_group!(allowed_groups)
+      end
+
+      def normalized_stream_location
+        STREAM_LOCATION_CONTEXTS.fetch(params[:location]) do
+          raise Discourse::InvalidParameters.new(:location)
+        end
+      end
+
+      def ensure_user_is_in_any_allowed_group!(allowed_groups)
         raise Discourse::InvalidAccess if !current_user.in_any_groups?(allowed_groups)
       end
     end

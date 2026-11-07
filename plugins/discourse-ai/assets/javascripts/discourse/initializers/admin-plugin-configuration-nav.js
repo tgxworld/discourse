@@ -1,5 +1,7 @@
 import { withPluginApi } from "discourse/lib/plugin-api";
 
+const PLUGIN_ID = "discourse-ai";
+
 export default {
   name: "discourse-ai-admin-plugin-configuration-nav",
 
@@ -10,7 +12,8 @@ export default {
     }
 
     withPluginApi((api) => {
-      api.addAdminPluginConfigurationNav("discourse-ai", [
+      api.setAdminPluginIcon(PLUGIN_ID, "discourse-sparkles");
+      api.addAdminPluginConfigurationNav(PLUGIN_ID, [
         {
           label: "discourse_ai.features.short_title",
           route: "adminPlugins.show.discourse-ai-features",
@@ -22,29 +25,40 @@ export default {
           description: "discourse_ai.usage.subheader_description",
         },
         {
-          label: "discourse_ai.llms.short_title",
-          route: "adminPlugins.show.discourse-ai-llms",
-          description: "discourse_ai.llms.preconfigured.description",
+          label: "discourse_ai.models.short_title",
+          route: "adminPlugins.show.discourse-ai-models",
+          description: "discourse_ai.models.description",
         },
         {
-          label: "discourse_ai.ai_persona.short_title",
-          route: "adminPlugins.show.discourse-ai-personas",
-          description: "discourse_ai.ai_persona.persona_description",
+          label: "discourse_ai.secrets.short_title",
+          route: "adminPlugins.show.discourse-ai-secrets",
+          description: "discourse_ai.secrets.description",
         },
         {
-          label: "discourse_ai.embeddings.short_title",
-          route: "adminPlugins.show.discourse-ai-embeddings",
-          description: "discourse_ai.embeddings.description",
+          label: "discourse_ai.ai_agent.short_title",
+          route: "adminPlugins.show.discourse-ai-agents",
+          description: "discourse_ai.ai_agent.agent_description",
         },
         {
           label: "discourse_ai.tools.short_title",
           route: "adminPlugins.show.discourse-ai-tools",
           description: "discourse_ai.tools.subheader_description",
+          keywords: "discourse_ai.tools.keywords",
         },
         {
           label: "discourse_ai.spam.short_title",
           route: "adminPlugins.show.discourse-ai-spam",
           description: "discourse_ai.spam.spam_description",
+        },
+        {
+          label: "discourse_ai.translations.title",
+          route: "adminPlugins.show.discourse-ai-translations",
+          description: "discourse_ai.translations.description",
+        },
+        {
+          label: "discourse_ai.logs.short_title",
+          route: "adminPlugins.show.discourse-ai-logs",
+          description: "discourse_ai.logs.description",
         },
       ]);
     });

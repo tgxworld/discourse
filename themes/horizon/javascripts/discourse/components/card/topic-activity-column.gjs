@@ -1,14 +1,12 @@
 import Component from "@glimmer/component";
-import concatClass from "discourse/helpers/concat-class";
-import formatDate from "discourse/helpers/format-date";
+import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
+import dFormatDate from "discourse/ui-kit/helpers/d-format-date";
+import { topicWasUpdatedAfterLastPost } from "../../lib/topic-activity.js";
 
 export default class TopicActivityColumn extends Component {
   get topicUser() {
-    if (
-      moment(this.args.topic.bumped_at).isAfter(this.args.topic.last_posted_at)
-    ) {
+    if (topicWasUpdatedAfterLastPost(this.args.topic)) {
       return {
-        user: undefined,
         username: undefined,
         class: "--updated",
       };
@@ -16,13 +14,11 @@ export default class TopicActivityColumn extends Component {
 
     if (this.args.topic.posts_count > 1) {
       return {
-        user: this.args.topic.lastPosterUser,
         username: this.args.topic.last_poster_username,
         class: "--replied",
       };
     } else if (this.args.topic.posts_count === 1) {
       return {
-        user: this.args.topic.firstPosterUser,
         username: this.args.topic.last_poster_username,
         class: "--created",
       };
@@ -32,7 +28,7 @@ export default class TopicActivityColumn extends Component {
   }
 
   <template>
-    <span class={{concatClass "topic-activity" this.topicUser.class}}>
+    <span class={{dConcatClass "topic-activity" this.topicUser.class}}>
       {{#if this.topicUser.username}}
         <span
           class="topic-activity__username"
@@ -40,7 +36,7 @@ export default class TopicActivityColumn extends Component {
         <span class="dot-separator"></span>
       {{/if}}
       <div class="topic-activity__time">
-        {{formatDate @topic.bumpedAt leaveAgo="true" format="tiny"}}
+        {{dFormatDate @topic.bumpedAt leaveAgo="true" format="tiny"}}
       </div>
     </span>
   </template>

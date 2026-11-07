@@ -1,4 +1,6 @@
 en:
   js:
     checklist:
-      edit_reason: "checklist change"
+      item: "Checklist item"
+      composer:
+        checklist: "Check list"

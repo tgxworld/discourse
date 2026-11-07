@@ -16,7 +16,7 @@ register_asset "stylesheets/common/layout.scss"
 register_asset "stylesheets/common/subscribe.scss"
 register_asset "stylesheets/common/campaign.scss"
 register_asset "stylesheets/mobile/main.scss"
-register_svg_icon "far-credit-card" if respond_to?(:register_svg_icon)
+register_svg_icon "far-credit-card"
 
 register_html_builder("server:before-head-close") do |controller|
   "<script src='https://js.stripe.com/v3/' nonce='#{controller.helpers.csp_nonce_placeholder}'></script>"
@@ -28,11 +28,11 @@ end
 
 extend_content_security_policy(script_src: %w[https://js.stripe.com/v3/ https://hooks.stripe.com])
 
-add_admin_route "discourse_subscriptions.admin_navigation", "discourse-subscriptions.products"
+add_admin_route "discourse_subscriptions.admin_navigation",
+                "discourse-subscriptions",
+                use_new_show_route: true
 
 Discourse::Application.routes.append do
-  get "/admin/plugins/discourse-subscriptions" => "admin/plugins#index",
-      :constraints => AdminConstraint.new
   get "/admin/plugins/discourse-subscriptions/products" => "admin/plugins#index",
       :constraints => AdminConstraint.new
   get "/admin/plugins/discourse-subscriptions/products/:product_id" => "admin/plugins#index",
@@ -44,22 +44,20 @@ Discourse::Application.routes.append do
       :constraints => AdminConstraint.new
   get "/admin/plugins/discourse-subscriptions/subscriptions" => "admin/plugins#index",
       :constraints => AdminConstraint.new
-  get "/admin/plugins/discourse-subscriptions/plans" => "admin/plugins#index",
-      :constraints => AdminConstraint.new
-  get "/admin/plugins/discourse-subscriptions/plans/:plan_id" => "admin/plugins#index",
-      :constraints => AdminConstraint.new
   get "/admin/plugins/discourse-subscriptions/coupons" => "admin/plugins#index",
       :constraints => AdminConstraint.new
-  get "u/:username/billing" => "users#show", :constraints => { username: USERNAME_ROUTE_FORMAT }
-  get "u/:username/billing/:id" => "users#show", :constraints => { username: USERNAME_ROUTE_FORMAT }
+  get "u/:username/billing" => "users#show", :constraints => { username: RouteFormat.username }
+  get "u/:username/billing/:id" => "users#show", :constraints => { username: RouteFormat.username }
   get "u/:username/billing/subscriptions/card/:subscription_id" => "users#show",
       :constraints => {
-        username: USERNAME_ROUTE_FORMAT,
+        username: RouteFormat.username,
       }
 end
 
 module ::DiscourseSubscriptions
   PLUGIN_NAME = "discourse-subscriptions"
+  CHECKOUT_SESSION_USER_REFERENCE_PURPOSE = "checkout_user"
+  CHECKOUT_SESSION_USER_REFERENCE_EXPIRES_IN = 30.days
 end
 
 require_relative "lib/discourse_subscriptions/engine"
@@ -68,6 +66,7 @@ require_relative "app/controllers/concerns/group"
 
 after_initialize do
   ::Stripe.api_version = "2024-04-10"
+  ::Stripe.ca_bundle_path = OpenSSL::X509::DEFAULT_CERT_FILE
 
   ::Stripe.set_app_info(
     "Discourse Subscriptions",
@@ -75,17 +74,35 @@ after_initialize do
     url: "https://github.com/discourse/discourse-subscriptions",
   )
 
-  Discourse::Application.routes.append { mount ::DiscourseSubscriptions::Engine, at: "s" }
+  Discourse::Application.routes.append { mount DiscourseSubscriptions::Engine, at: "s" }
+
+  add_to_serializer(
+    :current_user,
+    :discourse_subscriptions_checkout_session_user_reference,
+    include_condition: -> do
+      SiteSetting.discourse_subscriptions_enabled &&
+        SiteSetting.discourse_subscriptions_pricing_table_enabled
+    end,
+  ) do
+    object.signed_id(
+      expires_in: DiscourseSubscriptions::CHECKOUT_SESSION_USER_REFERENCE_EXPIRES_IN,
+      purpose: DiscourseSubscriptions::CHECKOUT_SESSION_USER_REFERENCE_PURPOSE,
+    )
+  end
+
+  add_to_serializer(
+    :site,
+    :discourse_subscriptions_stripe_configured,
+    include_condition: -> { scope.is_admin? },
+  ) { DiscourseSubscriptions::Stripe.configured? }
 
   add_to_serializer(:site, :show_campaign_banner) do
-    begin
-      enabled = SiteSetting.discourse_subscriptions_enabled
-      campaign_enabled = SiteSetting.discourse_subscriptions_campaign_enabled
-      goal_met = Discourse.redis.get("subscriptions_goal_met_date")
+    enabled = SiteSetting.discourse_subscriptions_enabled
+    campaign_enabled = SiteSetting.discourse_subscriptions_campaign_enabled
+    goal_met = Discourse.redis.get("subscriptions_goal_met_date")
 
-      enabled && campaign_enabled && (!goal_met || 7.days.ago <= Date.parse(goal_met))
-    rescue StandardError
-      false
-    end
+    enabled && campaign_enabled && (!goal_met || 7.days.ago <= Date.parse(goal_met))
+  rescue StandardError
+    false
   end
 end

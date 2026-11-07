@@ -5,8 +5,6 @@
 # https://translate.discourse.org/
 
 it:
-  site_settings:
-    data_explorer_enabled: "Abilitare il plugin Data Explorer su /admin/plugins/explorer"
   discourse_automation:
     scriptables:
       recurring_data_explorer_result_pm:
@@ -17,6 +15,7 @@ it:
         title: Pianifica un messaggio a un argomento con i risultati di Data Explorer
         description: Ricevi report programmati pubblicati su un argomento specifico
   data_explorer:
+    admin_dashboard_label: "Data Explorer"
     report_generator:
       private_message:
         title: "Report programmato per %{query_name}"

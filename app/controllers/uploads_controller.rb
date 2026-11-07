@@ -18,7 +18,8 @@ class UploadsController < ApplicationController
   before_action :is_asset_path,
                 :apply_cdn_headers,
                 only: %i[show show_short _show_secure_deprecated show_secure]
-  before_action :external_store_check, only: %i[_show_secure_deprecated show_secure]
+  # A symbol callback would overwrite the external upload actions' store check.
+  before_action(only: %i[_show_secure_deprecated show_secure]) { external_store_check }
 
   SECURE_REDIRECT_GRACE_SECONDS = 5
 
@@ -50,10 +51,10 @@ class UploadsController < ApplicationController
 
     if type == "avatar" &&
          (
-           SiteSetting.discourse_connect_overrides_avatar ||
+           SiteSetting.discourse_connect_overrides_avatar || SiteSetting.auth_overrides_avatar ||
              !me.in_any_groups?(SiteSetting.uploaded_avatars_allowed_groups_map)
          )
-      return render json: failed_json, status: 422
+      return render json: failed_json, status: :unprocessable_entity
     end
 
     url = params[:url]
@@ -61,30 +62,35 @@ class UploadsController < ApplicationController
     pasted = params[:pasted] == "true"
     for_private_message = params[:for_private_message] == "true"
     for_site_setting = params[:for_site_setting] == "true"
+    site_setting_name = for_site_setting ? params[:site_setting_name] : nil
     is_api = is_api?
     retain_hours = params[:retain_hours].to_i
 
     # note, atm hijack is processed in its own context and has not access to controller
     # longer term we may change this
     hijack do
-      begin
-        info =
-          UploadsController.create_upload(
-            current_user: me,
-            file: file,
-            url: url,
-            type: type,
-            for_private_message: for_private_message,
-            for_site_setting: for_site_setting,
-            pasted: pasted,
-            is_api: is_api,
-            retain_hours: retain_hours,
-          )
-      rescue => e
-        render json: failed_json.merge(message: e.message&.split("\n")&.first), status: 422
-      else
-        render json: UploadsController.serialize_upload(info), status: Upload === info ? 200 : 422
-      end
+      info =
+        UploadsController.create_upload(
+          current_user: me,
+          file:,
+          url:,
+          type:,
+          for_private_message:,
+          for_site_setting:,
+          site_setting_name:,
+          pasted:,
+          is_api:,
+          retain_hours:,
+        )
+    rescue => e
+      Rails.logger.error(
+        "Failed to create upload: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}",
+      )
+
+      render json: failed_json.merge(message: I18n.t("upload.failed")),
+             status: :unprocessable_entity
+    else
+      render json: UploadsController.serialize_upload(info), status: Upload === info ? 200 : 422
     end
   end
 
@@ -92,12 +98,23 @@ class UploadsController < ApplicationController
     params.permit(short_urls: [])
     uploads = []
 
-    if (params[:short_urls] && params[:short_urls].length > 0)
-      PrettyText::Helpers
-        .lookup_upload_urls(params[:short_urls])
-        .each do |short_url, paths|
-          uploads << { short_url: short_url, url: paths[:url], short_path: paths[:short_path] }
+    if params[:short_urls] && params[:short_urls].length > 0
+      upload_urls = PrettyText::Helpers.lookup_upload_urls(params[:short_urls])
+      uploads_by_sha1 =
+        Upload.where(
+          sha1:
+            upload_urls.values.map { |paths| Upload.sha1_from_base62_encoded(paths[:base62_sha1]) },
+        ).index_by(&:sha1)
+
+      upload_urls.each do |short_url, paths|
+        upload = uploads_by_sha1[Upload.sha1_from_base62_encoded(paths[:base62_sha1])]
+        if upload.nil? ||
+             (upload.access_control_post_id.present? && !guardian.can_see_upload?(upload))
+          next
         end
+
+        uploads << { short_url: short_url, url: paths[:url], short_path: paths[:short_path] }
+      end
     end
 
     render json: uploads.to_json
@@ -109,21 +126,35 @@ class UploadsController < ApplicationController
 
     return render_404 if !RailsMultisite::ConnectionManagement.has_db?(params[:site])
 
-    RailsMultisite::ConnectionManagement.with_connection(params[:site]) do |db|
-      return render_404 if SiteSetting.prevent_anons_from_downloading_files && current_user.nil?
+    begin
+      request_site_current_user =
+        request.env.delete(Auth::DefaultCurrentUserProvider::CURRENT_USER_KEY)
 
-      if upload =
-           Upload.find_by(sha1: params[:sha]) ||
-             Upload.find_by(id: params[:id], url: request.env["PATH_INFO"])
-        unless Discourse.store.internal?
-          local_store = FileStore::LocalStore.new
-          return render_404 unless local_store.has_been_uploaded?(upload.url)
+      RailsMultisite::ConnectionManagement.with_connection(params[:site]) do |db|
+        # current_user here refers to the user for the site that we are operating on
+        # using with_connection. If DB for the target site matches the current site
+        # for the request, then current_user will be the same as the request_site_current_user
+        return render_404 if SiteSetting.prevent_anons_from_downloading_files && current_user.nil?
+
+        upload =
+          Upload.find_by(sha1: params[:sha]) ||
+            Upload.find_by(id: params[:id], url: request.env["PATH_INFO"])
+
+        if upload.present?
+          check_secure_upload_permission(upload) if upload.secure? && SiteSetting.secure_uploads?
+
+          if !Discourse.store.internal?
+            local_store = FileStore::LocalStore.new
+            return render_404 unless local_store.has_been_uploaded?(upload.url)
+          end
+
+          send_file_local_upload(upload)
+        else
+          render_404
         end
-
-        send_file_local_upload(upload)
-      else
-        render_404
       end
+    ensure
+      request.env[Auth::DefaultCurrentUserProvider::CURRENT_USER_KEY] = request_site_current_user
     end
   end
 
@@ -160,8 +191,7 @@ class UploadsController < ApplicationController
     # do not serve uploads requested via XHR to prevent XSS
     return xhr_not_allowed if request.xhr?
 
-    path_with_ext =
-      params[:extension].nil? ? params[:path] : "#{params[:path]}.#{params[:extension]}"
+    path_with_ext = params[:path]
     upload = upload_from_path_and_extension(path_with_ext)
 
     return render_404 if upload.blank?
@@ -176,7 +206,12 @@ class UploadsController < ApplicationController
     # if the upload is still secure, that means the ACL is probably still
     # private, so we don't want to go to the CDN url just yet otherwise we
     # will get a 403. if the upload is not secure we assume the ACL is public
-    signed_secure_url = Discourse.store.signed_url_for_path(path_with_ext)
+    signed_secure_url =
+      Discourse.store.signed_url_for_path(
+        path_with_ext,
+        filename: upload.original_filename,
+        include_content_disposition: true,
+      )
     redirect_to upload.secure? ? signed_secure_url : Discourse.store.cdn_url(upload.url),
                 allow_other_host: true
   end
@@ -202,6 +237,8 @@ class UploadsController < ApplicationController
                   path_with_ext,
                   expires_in: SiteSetting.s3_presigned_get_url_expires_after_seconds,
                   force_download: force_download?,
+                  filename: upload.original_filename,
+                  include_content_disposition: true,
                 ),
                 allow_other_host: true
   end
@@ -210,6 +247,8 @@ class UploadsController < ApplicationController
     params.require(:url)
     upload = Upload.get_from_url(params[:url])
     raise Discourse::NotFound unless upload
+
+    check_secure_upload_permission(upload)
 
     render json: {
              original_filename: upload.original_filename,
@@ -279,6 +318,7 @@ class UploadsController < ApplicationController
     type:,
     for_private_message:,
     for_site_setting:,
+    site_setting_name: nil,
     pasted:,
     is_api:,
     retain_hours:
@@ -309,12 +349,7 @@ class UploadsController < ApplicationController
 
     return { errors: [I18n.t("upload.file_missing")] } if tempfile.nil?
 
-    opts = {
-      type: type,
-      for_private_message: for_private_message,
-      for_site_setting: for_site_setting,
-      pasted: pasted,
-    }
+    opts = { type:, for_private_message:, for_site_setting:, site_setting_name:, pasted: }
 
     upload = UploadCreator.new(tempfile, filename, opts).create_for(current_user.id)
 
@@ -357,28 +392,28 @@ class UploadsController < ApplicationController
       content_type: MiniMime.lookup_by_filename(upload.original_filename)&.content_type,
     }
 
-    if !FileHelper.is_inline_image?(upload.original_filename)
+    if force_download? || !FileHelper.is_inline_safe?(upload.original_filename)
       opts[:disposition] = "attachment"
-    elsif params[:inline]
+    else
       opts[:disposition] = "inline"
     end
 
+    response.headers["Content-Security-Policy"] = "sandbox;"
+
     file_path = Discourse.store.path_for(upload)
-    return render_404 unless file_path
+    return render_404 unless file_path && File.exist?(file_path)
 
     send_file(file_path, opts)
   end
 
   def create_direct_multipart_upload
-    begin
-      yield
-    rescue Aws::S3::Errors::ServiceError => err
-      message =
-        debug_upload_error(
-          err,
-          I18n.t("upload.create_multipart_failure", additional_detail: err.message),
-        )
-      raise ExternalUploadHelpers::ExternalUploadValidationError.new(message)
-    end
+    yield
+  rescue Aws::S3::Errors::ServiceError => err
+    message =
+      debug_upload_error(
+        err,
+        I18n.t("upload.create_multipart_failure", additional_detail: err.message),
+      )
+    raise ExternalUploadHelpers::ExternalUploadValidationError.new(message)
   end
 end

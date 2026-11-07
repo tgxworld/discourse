@@ -9,7 +9,7 @@ fi:
     admin:
       site_settings:
         categories:
-          poll: "Discourse Kysely"
+          poll: "Discourse-kysely"
   js:
     poll:
       voters:
@@ -51,6 +51,8 @@ fi:
       cast-votes:
         title: "Antakaa äänenne"
         label: "Äänestä nyt!"
+      keep-vote:
+        label: "Takaisin"
       show-results:
         title: "Näytä kyselyn tulos"
         label: "Tulokset"
@@ -115,7 +117,7 @@ fi:
       error_while_fetching_voters: "Äänestäneiden näyttämisessä tapahtui virhe."
       error_while_exporting_results: "Kyselyn tuloksen vienti epäonnistui."
       ui_builder:
-        title: Luo kysely
+        title: Laadi kysely
         insert: Lisää kysely
         help:
           options_min_count: Syötä vähintään 1 vaihtoehto.
@@ -155,5 +157,3 @@ fi:
           add: Lisää vaihtoehto
         automatic_close:
           label: Sulje kysely automaattisesti
-        show_advanced: "Näytä lisäasetukset"
-        hide_advanced: "Piilota lisäasetukset"

@@ -25,6 +25,12 @@ be:
         group:
           label: група
       triggerables:
+        post_flag_created:
+          fields:
+            categories:
+              label: катэгорыі
+            tags:
+              label: Цэтлікі
         user_badge_granted:
           fields:
             badge:
@@ -83,7 +89,7 @@ be:
             level:
               label: ўзровень
           levels:
-            success: поспех
+            success: Поспех
             error: памылка
         user_group_membership_through_badge:
           fields:

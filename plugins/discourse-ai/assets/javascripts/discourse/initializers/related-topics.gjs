@@ -1,21 +1,20 @@
-import { cached, tracked } from "@glimmer/tracking";
 import BasicTopicList from "discourse/components/basic-topic-list";
-import icon from "discourse/helpers/d-icon";
 import { withPluginApi } from "discourse/lib/plugin-api";
+import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { i18n } from "discourse-i18n";
 
 const RelatedTopics = <template>
   <div
-    role="complementary"
     aria-labelledby="related-topics-title"
-    id="related-topics"
     class="more-topics__list"
+    id="related-topics"
+    role="complementary"
   >
-    <h3 id="related-topics-title" class="more-topics__list-title">
-      {{icon "discourse-sparkles"}}{{i18n "discourse_ai.related_topics.title"}}
+    <h3 class="more-topics__list-title" id="related-topics-title">
+      {{dIcon "discourse-sparkles"}}{{i18n "discourse_ai.related_topics.title"}}
     </h3>
     <div class="topics">
-      <BasicTopicList @topics={{@topic.relatedTopics}} />
+      <BasicTopicList @listContext="related" @topics={{@topic.relatedTopics}} />
     </div>
   </div>
 </template>;
@@ -42,36 +41,33 @@ export default {
         condition: ({ topic }) => topic.relatedTopics?.length,
       });
 
-      api.modifyClass(
-        "model:topic",
-        (Superclass) =>
-          class extends Superclass {
-            @tracked related_topics;
-            relatedTopicsCache = [];
+      api.addModelField("topic", "_relatedTopicsRecords", {
+        defaultValue: null,
+      });
 
-            @cached
-            get relatedTopics() {
-              // Used to keep related topics when a user scrolls up from the
-              // bottom of the topic and then scrolls back down
-              if (this.related_topics) {
-                this.relatedTopicsCache = this.related_topics;
-              }
-              return this.relatedTopicsCache?.map((topic) =>
-                this.store.createRecord("topic", topic)
-              );
-            }
-          }
-      );
+      // Only updates if we have data - preserves cache when scrolling.
+      api.addModelSetter("topic", "related_topics", function (value) {
+        if (value?.length) {
+          this._relatedTopicsRecords = value.map((topic) =>
+            this.store.createRecord("topic", topic)
+          );
+        }
+      });
 
-      api.modifyClass(
-        "model:post-stream",
-        (Superclass) =>
-          class extends Superclass {
-            _setSuggestedTopics(result) {
-              super._setSuggestedTopics(...arguments);
-              this.topic.related_topics = result.related_topics;
-            }
+      api.addModelGetter("topic", "relatedTopics", function () {
+        return this._relatedTopicsRecords;
+      });
+
+      api.registerBehaviorTransformer(
+        "post-stream-suggested-topics",
+        ({ context, next }) => {
+          next();
+
+          if (context.result.related_topics) {
+            context.postStream.topic.related_topics =
+              context.result.related_topics;
           }
+        }
       );
     });
   },

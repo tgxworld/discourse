@@ -73,6 +73,15 @@ RSpec.describe CategoryHashtagDataSource do
       expect(result.text).to eq("Silly Land > Random")
     end
 
+    it "uses only the category name when category hashtag cards are enabled" do
+      SiteSetting.enable_category_hashtag_cards = true
+
+      result = described_class.lookup(guardian, ["fun:random"]).first
+
+      expect(result.text).to eq("Random")
+      expect(result.ref).to eq("fun:random")
+    end
+
     context "with sub-sub-categories" do
       before { SiteSetting.max_category_nesting = 3 }
 
@@ -136,6 +145,21 @@ RSpec.describe CategoryHashtagDataSource do
       result = described_class.search(guardian, "ook sec", 5).first
       expect(result.ref).to eq("books")
       expect(result.slug).to eq("books")
+    end
+
+    it "finds categories with accented names using unaccented search term" do
+      Fabricate(:category, name: "Cinéma", slug: "films", topic_count: 10)
+
+      result = described_class.search(guardian, "cinema", 5)
+      expect(result.map(&:text)).to include("Cinéma")
+    end
+
+    it "finds categories with accented slugs using unaccented search term" do
+      SiteSetting.slug_generation_method = "none"
+      Fabricate(:category, name: "Cinéma", slug: "cinéma", topic_count: 10)
+
+      result = described_class.search(guardian, "cinema", 5)
+      expect(result.map(&:text)).to include("Cinéma")
     end
 
     it "does not find categories the user cannot access" do

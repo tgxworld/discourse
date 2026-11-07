@@ -2,6 +2,7 @@
 
 class DiscourseDiff
   MAX_DIFFERENCE = 200
+  CLASS_ATTRIBUTE = " class=\""
 
   def initialize(before, after)
     @before = before
@@ -86,7 +87,7 @@ class DiscourseDiff
       i += 1
     end
 
-    "<div class=\"revision-content\">#{left.join}</div><div class=\"revision-content\">#{right.join}</div>"
+    "<div class=\"revision-content --previous\">#{left.join}</div><div class=\"revision-content --current\">#{right.join}</div>"
   end
 
   def side_by_side_markdown
@@ -96,8 +97,8 @@ class DiscourseDiff
       table << "<tr>"
       op_code = line_by_line_diff[i][1]
       if op_code == :common
-        table << "<td>#{line_by_line_diff[i][0]}</td>"
-        table << "<td>#{line_by_line_diff[i][0]}</td>"
+        table << "<td class=\"--previous\">#{line_by_line_diff[i][0]}</td>"
+        table << "<td class=\"--current\">#{line_by_line_diff[i][0]}</td>"
       else
         if op_code == :delete
           opposite_op_code = :add
@@ -120,16 +121,16 @@ class DiscourseDiff
           end
           diff = ONPDiff.new(before_tokens, after_tokens).short_diff
           deleted, inserted = generate_side_by_side_markdown(diff)
-          table << "<td class=\"diff-del\">#{deleted.join}</td>"
-          table << "<td class=\"diff-ins\">#{inserted.join}</td>"
+          table << "<td class=\"--previous\">#{deleted.join}</td>"
+          table << "<td class=\"--current\">#{inserted.join}</td>"
           i += 1
         else
           if op_code == :delete
-            table << "<td class=\"diff-del\">#{line_by_line_diff[i][0]}</td>"
-            table << "<td></td>"
+            table << "<td class=\"--previous diff-del\">#{line_by_line_diff[i][0]}</td>"
+            table << "<td class=\"--current\"></td>"
           else
-            table << "<td></td>"
-            table << "<td class=\"diff-ins\">#{line_by_line_diff[i][0]}</td>"
+            table << "<td class=\"--previous\"></td>"
+            table << "<td class=\"--current diff-ins\">#{line_by_line_diff[i][0]}</td>"
           end
         end
       end
@@ -199,41 +200,26 @@ class DiscourseDiff
   end
 
   def add_class_or_wrap_in_tags(html_or_text, klass)
+    return html_or_text if html_or_text.start_with?("</")
+
+    chevron = html_or_text.index(">")
+    return "<#{klass}>#{html_or_text}</#{klass}>" unless html_or_text.start_with?("<") && chevron
+
     result = html_or_text.dup
-    index_of_next_chevron = result.index(">")
-    if result.size > 0 && result[0] == "<" && index_of_next_chevron
-      index_of_class = result.index("class=")
-      if index_of_class.nil? || index_of_class > index_of_next_chevron
-        # we do not have a class for the current tag
-        # add it right before the ">"
-        result.insert(index_of_next_chevron, " class=\"diff-#{klass}\"")
-      else
-        # we have a class, insert it at the beginning if not already present
-        classes = result[/class=(["'])([^\1]*)\1/, 2]
-        if classes.include?("diff-#{klass}")
-          result
-        else
-          result.insert(index_of_class + "class=".size + 1, "diff-#{klass} ")
-        end
-      end
-    else
-      "<#{klass}>#{result}</#{klass}>"
+    class_index = html_or_text.index(CLASS_ATTRIBUTE)
+    if class_index.nil? || class_index > chevron
+      return result.insert(chevron, "#{CLASS_ATTRIBUTE}diff-#{klass}\"")
     end
+
+    result.insert(class_index + CLASS_ATTRIBUTE.size, "diff-#{klass} ")
   end
 
   def generate_inline_html(diff)
-    inline = []
-    diff.each do |d|
-      case d[1]
-      when :common
-        inline << d[0]
-      when :delete
-        inline << add_class_or_wrap_in_tags(d[0], "del")
-      when :add
-        inline << add_class_or_wrap_in_tags(d[0], "ins")
-      end
+    diff.map do |text, op_code|
+      next text if op_code == :common
+
+      add_class_or_wrap_in_tags(text, op_code == :delete ? "del" : "ins")
     end
-    inline
   end
 
   def generate_side_by_side_html(diff)
@@ -296,6 +282,8 @@ class DiscourseDiff
     end
 
     def characters(string)
+      return @tokens[-1] << string if string.blank? && @tokens.last&.start_with?("<")
+
       @tokens.concat string.scan(/\W|\w+[ \t]*/).map { |x| CGI.escapeHTML(x) }
     end
   end

@@ -1,38 +1,18 @@
-import MobileNav from "discourse/components/mobile-nav";
 import StyleguideExample from "discourse/plugins/styleguide/discourse/components/styleguide-example";
+import NavStackedExample from "../../examples/molecules/nav-stacked.gjs";
+import navStackedSource from "../../examples/molecules/nav-stacked?source=file";
+import UserNavStackedExample from "../../examples/molecules/user-nav-stacked.gjs";
+import userNavStackedSource from "../../examples/molecules/user-nav-stacked?source=file";
 
-const NavigationStacked = <template>
-  <StyleguideExample @title=".nav-stacked" class="half-size">
-    <MobileNav
-      @desktopClass="preferences-list action-list nav-stacked"
-      class="preferences-nav"
-    >
-      {{#each @dummy.navItems as |ni|}}
-        <li>
-          <a href={{ni.href}} class={{if ni.styleGuideActive "active"}}>
-            {{ni.displayName}}
-          </a>
-        </li>
-      {{/each}}
-    </MobileNav>
+export default <template>
+  <StyleguideExample @code={{navStackedSource}} @title=".nav-stacked">
+    <NavStackedExample @navItems={{@dummy.navItems}} />
   </StyleguideExample>
 
-  <StyleguideExample @title=".user-navigation .nav-stacked" class="half-size">
-    <section class="user-navigation">
-      <MobileNav
-        @desktopClass="preferences-list action-list nav-stacked"
-        class="preferences-nav"
-      >
-        {{#each @dummy.navItems as |ni|}}
-          <li>
-            <a href={{ni.href}} class={{if ni.styleGuideActive "active"}}>
-              {{ni.displayName}}
-            </a>
-          </li>
-        {{/each}}
-      </MobileNav>
-    </section>
+  <StyleguideExample
+    @code={{userNavStackedSource}}
+    @title=".user-navigation .nav-stacked"
+  >
+    <UserNavStackedExample @navItems={{@dummy.navItems}} />
   </StyleguideExample>
-</template>;
-
-export default NavigationStacked;
+</template>

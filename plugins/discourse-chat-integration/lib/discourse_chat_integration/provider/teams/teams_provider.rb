@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
 module DiscourseChatIntegration::Provider::TeamsProvider
-  PROVIDER_NAME = "teams".freeze
+  PROVIDER_NAME = "teams"
+  POPULARITY_SCORE = 100
   PROVIDER_ENABLED_SETTING = :chat_integration_teams_enabled
-  CHANNEL_IDENTIFIER_KEY = "name".freeze
+  CHANNEL_IDENTIFIER_KEY = "name"
   CHANNEL_PARAMETERS = [
-    { key: "name", regex: '^\S+$', unique: true },
+    { key: "name", unique: true },
     { key: "webhook_url", regex: '^https:\/\/\S+$', unique: true, hidden: true },
   ]
 
@@ -26,62 +27,116 @@ module DiscourseChatIntegration::Provider::TeamsProvider
       else
         error_key = nil
       end
-      raise ::DiscourseChatIntegration::ProviderError.new info: {
-                                                            error_key: error_key,
-                                                            request: req.body,
-                                                            response_code: response.code,
-                                                            response_body: response.body,
-                                                          }
+      raise DiscourseChatIntegration::ProviderError.new info: {
+                                                          error_key: error_key,
+                                                          request: req.body,
+                                                          response_code: response.code,
+                                                          response_body: response.body,
+                                                        }
     end
   end
 
   def self.get_message(post)
     display_name = "@#{post.user.username}"
-    full_name =
-      if SiteSetting.enable_names && post.user.name.present?
-        post.user.name
-      else
-        ""
-      end
+    if SiteSetting.enable_names && post.user.name.present?
+      display_name = "#{post.user.name} (#{display_name})"
+    end
 
     topic = post.topic
 
-    category = ""
+    category = nil
     if topic.category&.uncategorized?
-      category = "[#{I18n.t("uncategorized_category_name")}]"
+      category = "#{I18n.t("uncategorized_category_name")}"
     elsif topic.category
       category =
         (
-          if (topic.category.parent_category)
-            "[#{topic.category.parent_category.name}/#{topic.category.name}]"
+          if topic.category.parent_category
+            "#{topic.category.parent_category.name}/#{topic.category.name}"
           else
-            "[#{topic.category.name}]"
+            topic.category.name
           end
         )
     end
+    tags = DiscourseChatIntegration::Provider.display_tag_names(topic).presence
+    category_and_tags_line = [category, tags].compact.join(" | ").presence
 
-    message = {
-      "@type": "MessageCard",
-      summary: topic.title,
-      sections: [
+    body = [
+      {
+        type: "RichTextBlock",
+        inlines: [
+          {
+            type: "TextRun",
+            text: topic.title,
+            size: "Large",
+            weight: "Bolder",
+            selectAction: {
+              type: "Action.OpenUrl",
+              url: post.full_url,
+            },
+          },
+        ],
+      },
+    ]
+
+    if category_and_tags_line
+      body.push(
         {
-          activityTitle:
-            "[#{topic.title} #{category} #{topic.tags.present? ? topic.tags.map(&:name).join(", ") : ""}](#{post.full_url})",
-          activitySubtitle:
-            post.excerpt(
-              SiteSetting.chat_integration_teams_excerpt_length,
-              text_entities: true,
-              strip_links: true,
-              remap_emoji: true,
-            ),
-          activityImage: post.user.small_avatar_url,
-          facts: [{ name: full_name, value: display_name }],
-          markdown: true,
+          type: "TextBlock",
+          text: category_and_tags_line,
+          wrap: true,
+          size: "Small",
+          isSubtle: true,
+          weight: "Lighter",
+          spacing: "Small",
         },
-      ],
-    }
+      )
+    end
 
-    message
+    body.push(
+      {
+        type: "ColumnSet",
+        columns: [
+          {
+            type: "Column",
+            items: [
+              {
+                type: "Image",
+                style: "Person",
+                url: post.user.small_avatar_url,
+                altText: display_name,
+                size: "Small",
+              },
+            ],
+            width: "auto",
+          },
+          {
+            type: "Column",
+            width: "stretch",
+            items: [{ type: "TextBlock", weight: "Bolder", text: display_name, wrap: true }],
+            verticalContentAlignment: "Center",
+            horizontalAlignment: "Left",
+          },
+        ],
+      },
+      {
+        type: "TextBlock",
+        text:
+          post.excerpt(
+            SiteSetting.chat_integration_teams_excerpt_length,
+            text_entities: true,
+            strip_links: true,
+            remap_emoji: true,
+          ),
+        wrap: true,
+      },
+    )
+
+    {
+      type: "AdaptiveCard",
+      "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+      version: "1.5",
+      body: body,
+    }
   end
 
   def self.get_channel_by_name(name)

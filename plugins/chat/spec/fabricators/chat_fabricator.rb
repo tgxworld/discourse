@@ -44,7 +44,6 @@ Fabricator(:direct_message_channel, from: :chat_channel) do
   end
   status { :open }
   name nil
-  threading_enabled true
   after_create do |channel, attrs|
     if attrs[:with_membership]
       channel.chatable.users.each do |user|
@@ -177,6 +176,7 @@ Fabricator(:chat_reviewable_message, class_name: "Chat::ReviewableMessage") do
   type "ReviewableChatMessage"
   created_by { Fabricate(:user) }
   target { Fabricate(:chat_message) }
+  target_created_by { |attrs| attrs[:target].user }
   reviewable_scores { |p| [Fabricate.build(:reviewable_score, reviewable_id: p[:id])] }
 end
 

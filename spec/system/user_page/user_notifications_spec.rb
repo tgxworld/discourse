@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe "User notifications", type: :system do
+describe "User notifications" do
   fab!(:user) { Fabricate(:user, name: "Awesome Name") }
   let(:user_notifications_page) { PageObjects::Pages::UserNotifications.new }
   let(:user_page) { PageObjects::Pages::User.new }
@@ -49,6 +49,19 @@ describe "User notifications", type: :system do
       # It is 1 here because we blocked infinite scrolling. Even though the limit is 1,
       # without the callback, we would have 2 items here as it immediately fires another request.
       expect(user_notifications_page).to have_notification_count_of(1)
+    end
+  end
+
+  describe "infinite scrolling" do
+    it "loads notifications progressively as user scrolls" do
+      Fabricate.times(70, :notification, user: user, read: true)
+
+      user_notifications_page.visit(user)
+
+      expect(user_notifications_page).to have_notification_count_of(60)
+
+      page.execute_script("window.scrollTo(0, document.body.scrollHeight)")
+      expect(user_notifications_page).to have_notification_count_of(72)
     end
   end
 

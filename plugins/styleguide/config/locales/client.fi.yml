@@ -9,11 +9,13 @@ fi:
     admin:
       site_settings:
         categories:
-          styleguide: "Discourse Styleguide"
+          styleguide: "Discoursen tyyliopas"
   js:
     styleguide:
       title: "Tyyliopas"
-      welcome: "Aloita valitsemalla osio vasemmalla olevasta valikosta."
+      example:
+        kind:
+          component: "Komponentti"
       categories:
         syntax: Syntaksi
         atoms: Atomit
@@ -30,8 +32,18 @@ fi:
           title: "Päivämäärä-/kellonaikakentät"
         menus:
           title: "Valikot"
+        context_menu:
+          actions:
+            duplicate: "Monista"
+            delete: "Poista"
         multi_select:
           title: "Monivalinta"
+        reorderable_list:
+          policies_pinned: "Kiinnitetty"
+          policies_required: "Pakollinen"
+          table_field: "Kenttä"
+          table_type: "Tyyppi"
+          cross_list_primary: "Ensisijainen"
         toasts:
           title: "Ilmoitusruudut"
         font_scale:
@@ -59,8 +71,6 @@ fi:
           title: "Pystynavigointi"
         categories_list:
           title: "Alueluettelo"
-        topic_link:
-          title: "Ketjun linkki"
         topic_list_item:
           title: "Ketjulistauksen osa"
         topic_statuses:
@@ -69,8 +79,6 @@ fi:
           title: "Ketjulistaus"
         basic_topic_list:
           title: "Tavallinen ketjulistaus"
-        footer_message:
-          title: "Alatunnisteen viesti"
         signup_cta:
           title: "Rekisteröitymisen CTA"
         topic_timer_info:
@@ -89,10 +97,30 @@ fi:
           title: "Ketjun kartta"
         site_header:
           title: "Sivuston yläpalkki"
-        suggested_topics:
-          title: "Ehdotettuja ketjuja"
+        more_topics:
+          title: "Lisää ketjuja"
         post_menu:
           title: "Viestin valikko"
+        roving_focus:
+          toolbar:
+            copy: "Kopioi"
+          tags:
+            support: "Tuki"
+          adjacent:
+            label: "Suodattimet"
+            field: "Hae"
+            open: "Avoinna"
+            recent: "Tuoreimpia"
+          listbox:
+            apple: "Apple"
+          combobox:
+            daily: "Päivittäin"
+            weekly: "Viikoittain"
+            monthly: "Kuukausittain"
+            never: "Ei koskaan"
+          tree:
+            components: "Komponentit"
+            select: "Valitse"
         modal:
           title: "Modaali-ikkuna"
           header: "Modaalin otsikko"

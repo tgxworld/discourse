@@ -2,32 +2,19 @@ import { action } from "@ember/object";
 import { service } from "@ember/service";
 import { debounce } from "discourse/lib/decorators";
 import { i18n } from "discourse-i18n";
-import ChatComposer from "../../chat-composer";
+import ChatComposer from "../../chat-composer.gjs";
 
 export default class ChatComposerChannel extends ChatComposer {
-  @service("chat-channel-composer") composer;
-  @service("chat-channel-pane") pane;
+  // eslint-disable-next-line discourse/no-unused-services
+  @service("chat-channel-composer") composer; // used in the parent class
+  // eslint-disable-next-line discourse/no-unused-services
+  @service("chat-channel-pane") pane; // used in the parent class
   @service currentUser;
   @service chatDraftsManager;
 
   context = "channel";
 
   composerId = "channel-composer";
-
-  @debounce(2000)
-  persistDraft() {
-    this.chatDraftsManager.add(this.draft, this.args.channel.id);
-  }
-
-  @action
-  destroyDraft() {
-    this.chatDraftsManager.remove(this.args.channel.id);
-  }
-
-  @action
-  resetDraft() {
-    this.args.channel.resetDraft(this.currentUser);
-  }
 
   get draft() {
     return this.args.channel.draft;
@@ -49,10 +36,6 @@ export default class ChatComposerChannel extends ChatComposer {
     return this.args.channel.messagesManager.findLastMessage();
   }
 
-  lastUserMessage(user) {
-    return this.args.channel.messagesManager.findLastUserMessage(user);
-  }
-
   get placeholder() {
     if (!this.args.channel.canModifyMessages(this.currentUser)) {
       return i18n(
@@ -65,6 +48,25 @@ export default class ChatComposerChannel extends ChatComposer {
     } else {
       return this.#messageRecipients(this.args.channel);
     }
+  }
+
+  @debounce(2000)
+  persistDraft() {
+    this.chatDraftsManager.add(this.draft, this.args.channel.id);
+  }
+
+  @action
+  destroyDraft() {
+    this.chatDraftsManager.remove(this.args.channel.id);
+  }
+
+  @action
+  resetDraft() {
+    this.args.channel.resetDraft(this.currentUser);
+  }
+
+  lastUserMessage(user) {
+    return this.args.channel.messagesManager.findLastUserMessage(user);
   }
 
   handleEscape(event) {

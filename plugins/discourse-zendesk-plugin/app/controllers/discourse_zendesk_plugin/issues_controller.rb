@@ -2,14 +2,17 @@
 
 module DiscourseZendeskPlugin
   class IssuesController < ApplicationController
-    include ::DiscourseZendeskPlugin::Helper
+    include DiscourseZendeskPlugin::Helper
 
-    requires_plugin ::DiscourseZendeskPlugin::PLUGIN_NAME
+    requires_plugin PLUGIN_NAME
+    requires_login
 
     def create
+      guardian.ensure_can_create_zendesk_ticket!
       topic = Topic.find(params[:topic_id])
+      guardian.ensure_can_see!(topic)
 
-      if topic.custom_fields[::DiscourseZendeskPlugin::ZENDESK_ID_FIELD].blank?
+      if topic.custom_fields[DiscourseZendeskPlugin::ZENDESK_ID_FIELD].blank?
         create_ticket(topic.first_post)
       end
 

@@ -2,7 +2,7 @@
 
 module DiscourseChatIntegration::Provider::MattermostProvider
   class MattermostCommandController < DiscourseChatIntegration::Provider::HookController
-    requires_provider ::DiscourseChatIntegration::Provider::MattermostProvider::PROVIDER_NAME
+    requires_provider DiscourseChatIntegration::Provider::MattermostProvider::PROVIDER_NAME
 
     before_action :mattermost_token_valid?, only: :command
 
@@ -17,6 +17,8 @@ module DiscourseChatIntegration::Provider::MattermostProvider
 
       render json: { response_type: "ephemeral", text: text }
     end
+
+    private
 
     def process_command(params)
       tokens = params[:text].split(" ")
@@ -49,7 +51,7 @@ module DiscourseChatIntegration::Provider::MattermostProvider
           },
         )
 
-      ::DiscourseChatIntegration::Helper.process_command(channel, tokens)
+      DiscourseChatIntegration::Helper.process_command(channel, tokens)
     end
 
     def mattermost_token_valid?

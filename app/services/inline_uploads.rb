@@ -23,8 +23,8 @@ class InlineUploads
       if node.name == "img"
         # Do nothing
       elsif !(
-            node.children.count == 1 &&
-              (node.children[0].name != "img" && node.children[0].children.blank?)
+            node.children.count == 1 && node.children[0].name != "img" &&
+              node.children[0].children.blank?
           ) &&
             !(
               node.name == "a" && node.children.count > 1 &&
@@ -34,7 +34,7 @@ class InlineUploads
       end
 
       if seen_link = matched_uploads(node).first
-        if (actual_link = (node.attributes["href"]&.value || node.attributes["src"]&.value))
+        if (actual_link = node.attributes["href"]&.value || node.attributes["src"]&.value)
           link_occurrences << { link: actual_link, is_valid: true }
         elsif node.name != "p"
           link_occurrences << { link: seen_link, is_valid: false }
@@ -150,8 +150,12 @@ class InlineUploads
     markdown
   end
 
+  URL_REGEX = /(?:[^\s()"']|\((?:[^\s()]*|\([^\s()]*\))*\))+/
+  TITLE_PART_REGEX = /"[^"]*"|'[^']*'/
+  private_constant :URL_REGEX, :TITLE_PART_REGEX
+
   def self.match_md_inline_img(markdown, external_src: false)
-    markdown.scan(/(!?\[([^\[\]]*)\]\(([^\s\)]+)([ ]*['"]{1}[^\)]*['"]{1}[ ]*)?\))/) do |match|
+    markdown.scan(/(!?\[([^\[\]]*)\]\((#{URL_REGEX})([ ]*#{TITLE_PART_REGEX}[ ]*)?\))/) do |match|
       if (external_src || matched_uploads(match[2]).present?) && block_given?
         yield(
           match[0],
@@ -164,8 +168,10 @@ class InlineUploads
   end
 
   def self.match_bbcode_img(markdown, external_src: false)
-    markdown.scan(%r{(\[img\]\s*([^\[\]\s]+)\s*\[/img\])}i) do |match|
-      if (external_src || (matched_uploads(match[1]).present?)) && block_given?
+    # matches [img=WxH]url[/img] and [img width=W height=H]url[/img]
+    # in addition to [img]url[/img]
+    markdown.scan(%r{(\[img\b[^\]]*\]\s*([^\[\]\s]+)\s*\[/img\])}i) do |match|
+      if (external_src || matched_uploads(match[1]).present?) && block_given?
         yield(match[0], match[1], +"![](#{PLACEHOLDER})", $~.offset(0)[0])
       end
     end
@@ -192,7 +198,7 @@ class InlineUploads
       if href && (external_href || matched_uploads(href).present?)
         has_attachment = node.attributes["class"]&.value
         index = $~.offset(0)[0]
-        text = match[2].strip.gsub("\n", "").gsub(/ +/, " ")
+        text = match[2].strip.gsub("\n", "").gsub(/ +/, " ").gsub(/[\[\]\|]/, "")
         text = "#{text}|attachment" if has_attachment
 
         yield(match[0], href, +"[#{text}](#{PLACEHOLDER})", index) if block_given?

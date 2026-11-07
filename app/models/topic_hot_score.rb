@@ -11,23 +11,31 @@ class TopicHotScore < ActiveRecord::Base
   end
 
   def self.recreate_hottest_topic_ids_cache
-    hot_topics_limit =
-      (
-        Topic
-          .where(archetype: Archetype.default)
-          .where("last_posted_at > ?", SiteSetting.hot_topics_recent_days.days.ago)
-          .count * 0.1
-      ).to_i # 10% of the topics with activity since the hot topics cutoff.
+    hot_topics =
+      Topic
+        .where(archetype: Archetype.default)
+        .where(visible: true)
+        .where.not(id: Category.topic_ids)
 
-    hot_topics_limit = [hot_topics_limit, 100].min # Capped at 100 IDs.
+    # 10% of the topics with activity since the hot topics cutoff.
+    limit =
+      hot_topics
+        .where("last_posted_at > ?", SiteSetting.hot_topics_recent_days.days.ago)
+        .count
+        .to_i * 0.1
 
-    Discourse.cache.write(
-      CACHE_KEY,
-      DB.query_single(
-        "SELECT topic_id FROM topic_hot_scores ORDER BY score DESC LIMIT :limit",
-        limit: hot_topics_limit,
-      ).to_set,
-    )
+    # capped at 100 topics
+    limit = [limit, 100].min
+
+    sql = <<~SQL
+      SELECT topic_id
+      FROM topic_hot_scores
+      WHERE topic_id IN (#{hot_topics.select(:id).to_sql})
+      ORDER BY score DESC
+      LIMIT :limit
+    SQL
+
+    Discourse.cache.write(CACHE_KEY, DB.query_single(sql, limit:).to_set)
   end
 
   def self.update_scores(max = DEFAULT_BATCH_SIZE)
@@ -73,6 +81,7 @@ class TopicHotScore < ActiveRecord::Base
         AND topics.deleted_at IS NULL
         AND topics.archetype <> :private_message
         AND topics.created_at <= :now
+        AND topics.visible = true
       ORDER BY
         CASE WHEN topics.pinned_at IS NOT NULL THEN 0 ELSE 1 END ASC,
         topics.bumped_at desc
@@ -114,6 +123,7 @@ class TopicHotScore < ActiveRecord::Base
               p.created_at >= :recent_cutoff
               AND t.archetype <> 'private_message'
               AND t.deleted_at IS NULL
+              AND t.visible = true
               AND p.deleted_at IS NULL
               AND p.user_deleted = false
               AND t.created_at <= :now
@@ -150,17 +160,19 @@ class TopicHotScore < ActiveRecord::Base
         ) X
       )
       UPDATE topic_hot_scores ths
-      SET score = (
-        CASE WHEN topics.created_at > :recent_cutoff
-          THEN ths.recent_likes ELSE topics.like_count END
-        ) /
-        (EXTRACT(EPOCH FROM (:now - topics.created_at)) / 3600 + 2) ^ :gravity
- +
-        CASE WHEN ths.recent_first_bumped_at IS NULL THEN 0 ELSE
-          (ths.recent_likes + ths.recent_posters - 1) /
-          (EXTRACT(EPOCH FROM (:now - recent_first_bumped_at)) / 3600 + 2) ^ :gravity
-        END
-        ,
+      SET score = CASE WHEN topics.visible = false THEN 0 ELSE
+        ((
+          CASE WHEN topics.created_at > :recent_cutoff
+            THEN ths.recent_likes ELSE topics.like_count END
+          ) /
+          (EXTRACT(EPOCH FROM (:now - topics.created_at)) / 3600 + 2) ^ :gravity
+   +
+          CASE WHEN ths.recent_first_bumped_at IS NULL THEN 0 ELSE
+            (ths.recent_likes + ths.recent_posters - 1) /
+            (EXTRACT(EPOCH FROM (:now - recent_first_bumped_at)) / 3600 + 2) ^ :gravity
+          END
+        ) * CASE WHEN topics.closed THEN 0.5 ELSE 1 END
+        END,
         updated_at = :now
 
       FROM topics
@@ -182,13 +194,13 @@ end
 # Table name: topic_hot_scores
 #
 #  id                     :bigint           not null, primary key
-#  topic_id               :integer          not null
-#  score                  :float            default(0.0), not null
+#  recent_first_bumped_at :datetime
 #  recent_likes           :integer          default(0), not null
 #  recent_posters         :integer          default(0), not null
-#  recent_first_bumped_at :datetime
+#  score                  :float            default(0.0), not null
 #  created_at             :datetime         not null
 #  updated_at             :datetime         not null
+#  topic_id               :integer          not null
 #
 # Indexes
 #

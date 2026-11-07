@@ -3,11 +3,15 @@
 class SiteSetting::Update
   include Service::Base
 
+  class Conflict < StandardError
+  end
+
   Setting = Struct.new(:name, :value, :backfill, :change)
 
   options do
     attribute :allow_changing_hidden, :array, default: []
-    attribute :overridden_setting_names, default: {}
+    attribute :overridden_setting_names, default: -> { {} }
+    attribute :expected_values, default: -> { {} }
   end
 
   policy :current_user_is_admin
@@ -16,22 +20,27 @@ class SiteSetting::Update
     attribute :settings
 
     before_validation do
+      dependent_order = SiteSetting.type_supervisor.dependencies.order
+
       self.settings =
-        self.settings.to_a.map do |setting|
-          Setting.new(
-            setting[:setting_name].to_sym,
-            setting[:value].to_s.strip,
-            !!setting[:backfill],
-            nil,
-          )
-        end
+        settings
+          .to_a
+          .map do |setting|
+            Setting.new(
+              setting[:setting_name].to_sym,
+              setting[:value].to_s.strip,
+              !!setting[:backfill],
+              nil,
+            )
+          end
+          .sort_by { |s| dependent_order.index(s.name) }
     end
 
     validates :settings, presence: true
 
     after_validation do
       self.settings =
-        self.settings.map do |setting|
+        settings.map do |setting|
           raw_value = setting.value
 
           setting.value =
@@ -48,6 +57,11 @@ class SiteSetting::Update
               raw_value
             end
 
+          # Make sure to get the correct value here based on type, otherwise
+          # we can end up inserting a staff action log when e.g. setting the value
+          # to "false" when the setting value is already false.
+          setting.value = SiteSetting.type_supervisor.to_rb_value(setting.name, setting.value)
+
           setting
         end
     end
@@ -58,11 +72,16 @@ class SiteSetting::Update
          class_name: SiteSetting::Policy::SettingsAreUnshadowedGlobally
   policy :settings_are_visible, class_name: SiteSetting::Policy::SettingsAreVisible
   policy :settings_are_configurable, class_name: SiteSetting::Policy::SettingsAreConfigurable
-  policy :values_are_valid, class_name: SiteSetting::Policy::ValuesAreValid
 
-  transaction do
-    step :save
-    step :backfill
+  try do
+    lock do
+      step :ensure_expected_values
+
+      transaction do
+        step :save
+        step :backfill
+      end
+    end
   end
 
   private
@@ -71,13 +90,38 @@ class SiteSetting::Update
     guardian.is_admin?
   end
 
+  def ensure_expected_values(options:)
+    options.expected_values.each do |name, expected_value|
+      stored_setting = SiteSetting.provider.find(name)
+      current_value =
+        if stored_setting
+          SiteSetting.type_supervisor.to_rb_value(
+            name,
+            stored_setting.value,
+            stored_setting.data_type,
+          )
+        else
+          SiteSetting.public_send(name)
+        end
+      raise Conflict if current_value.to_s != expected_value.to_s
+    end
+  end
+
   def save(params:, options:, guardian:)
     params.settings.each do |setting|
+      detailed_message =
+        if default_user_preference?(setting)
+          value =
+            setting.backfill ? I18n.t("csv_export.boolean_yes") : I18n.t("csv_export.boolean_no")
+          I18n.t("staff_action_logs.site_setting.update_existing_users", value:)
+        end
+
       setting.change =
         SiteSetting.set_and_log(
           options.overridden_setting_names[setting.name] || setting.name,
           setting.value,
           guardian.user,
+          detailed_message,
         )
     end
   end

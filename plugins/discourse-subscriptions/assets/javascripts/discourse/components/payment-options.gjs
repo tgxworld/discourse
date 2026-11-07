@@ -1,43 +1,37 @@
-/* eslint-disable ember/no-classic-components */
-import Component from "@ember/component";
+import Component from "@glimmer/component";
 import { action } from "@ember/object";
-import discourseComputed from "discourse/lib/decorators";
 import { i18n } from "discourse-i18n";
-import PaymentPlan from "./payment-plan";
+import PaymentPlan from "./payment-plan.gjs";
 
 export default class PaymentOptions extends Component {
-  @discourseComputed("plans")
-  orderedPlans(plans) {
-    if (plans) {
-      return plans.sort((a, b) => (a.unit_amount > b.unit_amount ? 1 : -1));
-    }
-  }
-
-  didInsertElement() {
-    super.didInsertElement(...arguments);
-    if (this.plans && this.plans.length === 1) {
-      this.set("selectedPlan", this.plans[0].id);
+  get orderedPlans() {
+    if (this.args.plans) {
+      return this.args.plans.toSorted((a, b) =>
+        a.unit_amount > b.unit_amount ? 1 : -1
+      );
     }
   }
 
   @action
   clickPlan(plan) {
-    this.set("selectedPlan", plan.id);
+    this.args.onSelectPlan(plan.id);
   }
 
   <template>
-    <p>
-      {{i18n "discourse_subscriptions.plans.select"}}
-    </p>
+    <div ...attributes>
+      <p>
+        {{i18n "discourse_subscriptions.plans.select"}}
+      </p>
 
-    <div class="subscribe-buttons">
-      {{#each this.orderedPlans as |plan|}}
-        <PaymentPlan
-          @plan={{plan}}
-          @selectedPlan={{this.selectedPlan}}
-          @clickPlan={{this.clickPlan}}
-        />
-      {{/each}}
+      <div class="subscribe-buttons">
+        {{#each this.orderedPlans as |plan|}}
+          <PaymentPlan
+            @clickPlan={{this.clickPlan}}
+            @plan={{plan}}
+            @selectedPlan={{@selectedPlan}}
+          />
+        {{/each}}
+      </div>
     </div>
   </template>
 }

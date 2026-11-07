@@ -1,35 +1,37 @@
 import { withPluginApi } from "discourse/lib/plugin-api";
 
-const CHAT_ENABLED_FIELD = "chat_enabled";
-const ONLY_CHAT_PUSH_NOTIFICATIONS_FIELD = "only_chat_push_notifications";
-const IGNORE_CHANNEL_WIDE_MENTION = "ignore_channel_wide_mention";
-const SHOW_THREAD_TITLE_PROMPTS = "show_thread_title_prompts";
-const CHAT_SOUND = "chat_sound";
-const CHAT_EMAIL_FREQUENCY = "chat_email_frequency";
-const CHAT_HEADER_INDICATOR_PREFERENCE = "chat_header_indicator_preference";
-const CHAT_SEPARATE_SIDEBAR_MODE = "chat_separate_sidebar_mode";
-const CHAT_SEND_SHORTCUT = "chat_send_shortcut";
-const CHAT_QUICK_REACTION_TYPE = "chat_quick_reaction_type";
-const CHAT_QUICK_REACTIONS_CUSTOM = "chat_quick_reactions_custom";
-
 export default {
   name: "chat-user-options",
 
   initialize(container) {
     withPluginApi((api) => {
-      const siteSettings = container.lookup("service:site-settings");
-      if (siteSettings.chat_enabled) {
-        api.addSaveableUserOptionField(CHAT_ENABLED_FIELD);
-        api.addSaveableUserOptionField(ONLY_CHAT_PUSH_NOTIFICATIONS_FIELD);
-        api.addSaveableUserOptionField(IGNORE_CHANNEL_WIDE_MENTION);
-        api.addSaveableUserOptionField(SHOW_THREAD_TITLE_PROMPTS);
-        api.addSaveableUserOptionField(CHAT_SOUND);
-        api.addSaveableUserOptionField(CHAT_EMAIL_FREQUENCY);
-        api.addSaveableUserOptionField(CHAT_HEADER_INDICATOR_PREFERENCE);
-        api.addSaveableUserOptionField(CHAT_SEPARATE_SIDEBAR_MODE);
-        api.addSaveableUserOptionField(CHAT_SEND_SHORTCUT);
-        api.addSaveableUserOptionField(CHAT_QUICK_REACTION_TYPE);
-        api.addSaveableUserOptionField(CHAT_QUICK_REACTIONS_CUSTOM);
+      const { chat_enabled } = container.lookup("service:site-settings");
+
+      if (chat_enabled) {
+        // Chat settings
+        api.addSaveableUserOption("chat_announce_new_messages");
+        api.addSaveableUserOption("chat_channel_list_filter");
+        api.addSaveableUserOption("chat_channel_list_filter_starred");
+        api.addSaveableUserOption("chat_channel_list_filter_dms");
+        api.addSaveableUserOption("chat_channel_list_sort");
+        api.addSaveableUserOption("chat_channel_list_sort_starred");
+        api.addSaveableUserOption("chat_channel_list_sort_dms");
+        api.addSaveableUserOption("chat_new_message_sound");
+        api.addSaveableUserOption("chat_enabled");
+        api.addSaveableUserOption("chat_quick_reaction_type");
+        api.addSaveableUserOption("chat_quick_reactions_custom");
+        api.addSaveableUserOption("chat_separate_sidebar_mode");
+        api.addSaveableUserOption("show_thread_title_prompts");
+        // Notification settings (rendered on the notifications preferences tab)
+        api.addSaveableUserOption("chat_header_indicator_preference", {
+          page: "notifications",
+        });
+        api.addSaveableUserOption("chat_sound", { page: "notifications" });
+        api.addSaveableUserOption("ignore_channel_wide_mention", {
+          page: "notifications",
+        });
+        // Email settings
+        api.addSaveableUserOption("chat_email_frequency", { page: "emails" });
       }
     });
   },

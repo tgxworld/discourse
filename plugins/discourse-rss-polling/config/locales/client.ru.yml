@@ -5,10 +5,28 @@
 # https://translate.discourse.org/
 
 ru:
+  admin_js:
+    admin:
+      site_settings:
+        categories:
+          discourse_rss_polling: "Плагин «RSS-опрос» для Discourse"
   js:
+    rss_polling:
+      title: RSS-опрос
     admin:
       rss_polling:
         author: Автор
         feed_url: URL-адрес
         discourse_category: Категория
         discourse_tags: Теги
+        feeds:
+          edit: Изменить
+          delete: Удалить
+          save: Сохранить
+          confirm_delete: "Действительно удалить эту ленту?"
+        test:
+          title: Предпросмотр
+          dismiss: Закрыть
+        status:
+          enabled: Включено
+          disabled: Отключен

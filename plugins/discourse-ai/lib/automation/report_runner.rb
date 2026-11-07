@@ -36,7 +36,7 @@ module DiscourseAi
       def initialize(
         sender_username:,
         model:,
-        persona_id:,
+        agent_id:,
         sample_size:,
         instructions:,
         tokens_per_post:,
@@ -53,7 +53,7 @@ module DiscourseAi
         exclude_category_ids: nil,
         exclude_tags: nil,
         top_p: 0.1,
-        temperature: 0.2,
+        temperature: nil,
         suppress_notifications: false,
         automation: nil
       )
@@ -68,14 +68,9 @@ module DiscourseAi
           @receivers = []
         end
         @email_receivers = receivers&.filter { |r| r.include? "@" }
-        @title =
-          if title.present?
-            title
-          else
-            I18n.t("discourse_automation.scriptables.llm_report.title")
-          end
+        @title = title.presence || I18n.t("discourse_automation.scriptables.llm_report.title")
         @model = LlmModel.find_by(id: model)
-        @persona = AiPersona.find(persona_id).class_instance.new
+        @agent = AiAgent.find(agent_id).class_instance.new
         @category_ids = category_ids
         @tags = tags
         @allow_secure_categories = allow_secure_categories
@@ -142,9 +137,9 @@ module DiscourseAi
         INPUT
 
         report_ctx =
-          DiscourseAi::Personas::BotContext.new(
+          DiscourseAi::Agents::BotContext.new(
             user: Discourse.system_user,
-            skip_tool_details: true,
+            skip_show_thinking: true,
             feature_name: "ai_report",
             messages: [{ type: :user, content: input }],
           )
@@ -152,16 +147,18 @@ module DiscourseAi
         puts if Rails.env.development? && @debug_mode
 
         result = +""
-        bot = DiscourseAi::Personas::Bot.as(Discourse.system_user, persona: @persona, model: @model)
-        json_summary_schema_key = @persona.response_format&.first.to_h
+        bot = DiscourseAi::Agents::Bot.as(Discourse.system_user, agent: @agent, model: @model)
+        json_summary_schema_key = @agent.response_format&.first.to_h
 
         buffer_blk =
           Proc.new do |partial, _, type|
             if type == :structured_output
-              read_chunk = partial.read_buffered_property(json_summary_schema_key["key"]&.to_sym)
-
-              print read_chunk if Rails.env.development? && @debug_mode
-              result << read_chunk if read_chunk.present?
+              partial.read_buffered_property_chunk(
+                json_summary_schema_key["key"]&.to_sym,
+              ) do |read_chunk|
+                print read_chunk if Rails.env.development? && @debug_mode
+                result << read_chunk
+              end
             elsif type.blank?
               # Assume response is a regular completion.
               print partial if Rails.env.development? && @debug_mode

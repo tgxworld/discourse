@@ -1,16 +1,16 @@
 import { hash } from "@ember/helper";
-import ComboBox from "select-kit/components/combo-box";
+import ComboBox from "discourse/select-kit/components/combo-box";
 
 const AiLlmSelector = <template>
   <ComboBox
-    @value={{@value}}
+    ...attributes
     @content={{@llms}}
     @onChange={{@onChange}}
     @options={{hash
       filterable=true
-      none="discourse_ai.ai_persona.no_llm_selected"
+      none="discourse_ai.ai_agent.no_llm_selected"
     }}
-    class={{@class}}
+    @value={{@value}}
   />
 </template>;
 

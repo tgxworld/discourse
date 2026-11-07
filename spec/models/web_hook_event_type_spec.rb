@@ -24,6 +24,7 @@ RSpec.describe WebHookEventType do
           user_destroyed
           user_suspended
           user_unsuspended
+          user_anonymized
           group_created
           group_updated
           group_destroyed
@@ -49,6 +50,7 @@ RSpec.describe WebHookEventType do
       SiteSetting.stubs(:assign_enabled).returns(true)
       SiteSetting.stubs(:topic_voting_enabled).returns(true)
       SiteSetting.stubs(:chat_enabled).returns(true)
+      SiteSetting.stubs(:discourse_post_event_enabled).returns(true)
       plugins_event_types = WebHookEventType.active.map(&:name) - core_event_types
       expect(plugins_event_types).to match_array(
         %w[
@@ -62,6 +64,9 @@ RSpec.describe WebHookEventType do
           chat_message_edited
           chat_message_trashed
           chat_message_restored
+          calendar_event_created
+          calendar_event_updated
+          calendar_event_destroyed
         ],
       )
     end

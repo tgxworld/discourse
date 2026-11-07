@@ -1,5 +1,5 @@
-import { PLATFORM_KEY_MODIFIER } from "discourse/lib/keyboard-shortcuts";
 import { withPluginApi } from "discourse/lib/plugin-api";
+import { PLATFORM_KEY_MODIFIER } from "discourse/services/keyboard-shortcuts";
 import ChatModalNewMessage from "discourse/plugins/chat/discourse/components/chat/modal/new-message";
 
 export default {
@@ -22,8 +22,9 @@ export default {
     const chatChannelsManager = container.lookup(
       "service:chat-channels-manager"
     );
+
     const openQuickChannelSelector = (e) => {
-      if (isInputSelection(event.target) && !isChatComposer(event.target)) {
+      if (isInputSelection(e.target) && !isChatComposer(e.target)) {
         return;
       }
       e.preventDefault();
@@ -89,21 +90,24 @@ export default {
       });
     };
 
-    const openChatDrawer = (event) => {
+    const toggleChatDrawer = (event) => {
       if (isInputSelection(event.target)) {
         return;
       }
       event.preventDefault();
       event.stopPropagation();
 
-      chatStateManager.prefersDrawer();
-      router.transitionTo(chatStateManager.lastKnownChatURL || "chat");
+      if (chatStateManager.isDrawerActive) {
+        appEvents.trigger("chat:toggle-close", event);
+      } else {
+        chatStateManager.prefersDrawer();
+        router.transitionTo(chatStateManager.lastKnownChatURL || "chat");
+      }
     };
 
     const closeChat = (event) => {
-      // TODO (joffrey): removes this when we move from magnific popup
-      // there's no proper way to prevent propagation in mfp
-      if (event.srcElement?.classList?.value?.includes("mfp-wrap")) {
+      // when escaping from lightbox, do not close chat
+      if (event.srcElement?.classList?.value?.includes("lightbox")) {
         return;
       }
 
@@ -125,6 +129,16 @@ export default {
         event.preventDefault();
         event.stopPropagation();
         chatThreadListPane.close();
+        return;
+      }
+
+      if (chatStateManager.isPinnedMessagesPaneOpen) {
+        event.preventDefault();
+        event.stopPropagation();
+        router.transitionTo(
+          "chat.channel",
+          ...chatService.activeChannel.routeModels
+        );
         return;
       }
     };
@@ -250,11 +264,11 @@ export default {
           },
         }
       );
-      api.addKeyboardShortcut(`-`, (event) => openChatDrawer(event), {
+      api.addKeyboardShortcut(`-`, (event) => toggleChatDrawer(event), {
         global: true,
         help: {
           category: "chat",
-          name: "chat.keyboard_shortcuts.drawer_open",
+          name: "chat.keyboard_shortcuts.drawer_toggle",
           definition: {
             keys1: ["-"],
           },

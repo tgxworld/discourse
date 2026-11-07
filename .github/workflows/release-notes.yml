@@ -31,12 +31,12 @@ jobs:
       - name: Set working directory owner
         run: chown root:root .
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Bundler cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: vendor/bundle
           key: ${{ runner.os }}-gem-${{ hashFiles('**/Gemfile.lock') }}
@@ -75,7 +75,7 @@ jobs:
           bin/rake "release_note:plugins:generate[ ${{ steps.dates.outputs.from }} , ${{ steps.dates.outputs.to }} , ./tmp/all-the-plugins/official/* , discourse ]" | tee tmp/notes/plugins.txt
 
       - name: Export files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-notes
           path: ./tmp/notes/*.txt

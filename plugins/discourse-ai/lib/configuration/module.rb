@@ -8,10 +8,15 @@ module DiscourseAi
       DISCORD = "discord"
       INFERENCE = "inference"
       AI_HELPER = "ai_helper"
+      IMAGE_CAPTION = "image_caption"
       TRANSLATION = "translation"
       BOT = "bot"
       SPAM = "spam"
       EMBEDDINGS = "embeddings"
+      AUTOMATION_REPORTS = "automation_reports"
+      AUTOMATION_TRIAGE = "automation_triage"
+      ADMIN_DASHBOARD = "admin_dashboard"
+      SENTIMENT = "sentiment"
 
       NAMES = [
         SUMMARIZATION,
@@ -19,10 +24,15 @@ module DiscourseAi
         DISCORD,
         INFERENCE,
         AI_HELPER,
+        IMAGE_CAPTION,
         TRANSLATION,
         BOT,
         SPAM,
         EMBEDDINGS,
+        AUTOMATION_REPORTS,
+        AUTOMATION_TRIAGE,
+        ADMIN_DASHBOARD,
+        SENTIMENT,
       ].freeze
 
       SUMMARIZATION_ID = 1
@@ -34,10 +44,19 @@ module DiscourseAi
       BOT_ID = 7
       SPAM_ID = 8
       EMBEDDINGS_ID = 9
+      AUTOMATION_REPORTS_ID = 10
+      AUTOMATION_TRIAGE_ID = 11
+      ADMIN_DASHBOARD_ID = 12
+      IMAGE_CAPTION_ID = 13
+      SENTIMENT_ID = 14
 
       class << self
+        def external_module_id(module_name)
+          Digest::SHA1.hexdigest(module_name.to_s).to_i(16) % 100_000 + 1000
+        end
+
         def all
-          [
+          base_modules = [
             new(
               SUMMARIZATION_ID,
               SUMMARIZATION,
@@ -47,9 +66,8 @@ module DiscourseAi
             new(
               SEARCH_ID,
               SEARCH,
-              enabled_by_setting: "ai_bot_enabled",
               features: DiscourseAi::Configuration::Feature.search_features,
-              extra_check: -> { SiteSetting.ai_bot_discover_persona.present? },
+              extra_check: -> { SiteSetting.ai_discover_enabled || SiteSetting.ai_ask_ai_enabled },
             ),
             new(
               DISCORD_ID,
@@ -68,6 +86,12 @@ module DiscourseAi
               AI_HELPER,
               enabled_by_setting: "ai_helper_enabled",
               features: DiscourseAi::Configuration::Feature.ai_helper_features,
+            ),
+            new(
+              IMAGE_CAPTION_ID,
+              IMAGE_CAPTION,
+              enabled_by_setting: "ai_post_image_captions_enabled",
+              features: DiscourseAi::Configuration::Feature.image_caption_features,
             ),
             new(
               TRANSLATION_ID,
@@ -94,7 +118,78 @@ module DiscourseAi
               features: DiscourseAi::Configuration::Feature.embeddings_features,
               extra_check: -> { SiteSetting.ai_embeddings_semantic_search_enabled },
             ),
+            new(
+              ADMIN_DASHBOARD_ID,
+              ADMIN_DASHBOARD,
+              enabled_by_setting: "ai_admin_dashboard_enabled",
+              features: DiscourseAi::Configuration::Feature.admin_dashboard_features,
+              extra_check: -> do
+                DiscourseAi::Configuration::Feature.admin_dashboard_features.any?(&:enabled?)
+              end,
+              visible: false,
+            ),
+            new(
+              SENTIMENT_ID,
+              SENTIMENT,
+              features: DiscourseAi::Configuration::Feature.sentiment_features,
+              extra_check: -> { DiscourseAi::Sentiment::PostClassification.any_enabled? },
+            ),
           ]
+
+          if SiteSetting.discourse_automation_enabled
+            base_modules << new(
+              AUTOMATION_REPORTS_ID,
+              AUTOMATION_REPORTS,
+              enabled_by_setting: "discourse_automation_enabled",
+              features: DiscourseAi::Configuration::Feature.ai_automation_report_scripts,
+              extra_check: -> { has_scripts?(["llm_report"]) },
+            )
+            base_modules << new(
+              AUTOMATION_TRIAGE_ID,
+              AUTOMATION_TRIAGE,
+              enabled_by_setting: "discourse_automation_enabled",
+              features: DiscourseAi::Configuration::Feature.ai_automation_triage_scripts,
+              extra_check: -> { has_scripts?(%w[llm_triage llm_agent_triage]) },
+            )
+          end
+
+          # external modules from plugin registry
+          DiscoursePluginRegistry
+            .external_ai_features
+            .group_by { |e| e[:module_name] }
+            .each do |mod_name, entries|
+              module_id = external_module_id(mod_name)
+              features =
+                entries.map do |e|
+                  setting_name = "#{mod_name}_#{e[:feature]}_agent"
+                  DiscourseAi::Configuration::Feature.new(
+                    e[:feature].to_s,
+                    setting_name,
+                    module_id,
+                    mod_name.to_s,
+                    enabled_by_setting: e[:enabled_by_setting],
+                  )
+                end
+              base_modules << new(
+                module_id,
+                mod_name,
+                features:,
+                extra_check: -> { features.any?(&:enabled?) },
+                visible: entries.any? { |e| e.fetch(:visible, true) },
+              )
+            end
+
+          base_modules
+        end
+
+        def has_scripts?(script_names)
+          DB
+            .query_single(
+              "SELECT COUNT(*) FROM discourse_automation_automations WHERE script IN (:names) and enabled",
+              names: script_names,
+            )
+            .first
+            .to_i > 0
         end
 
         def find_by(id:)
@@ -102,18 +197,30 @@ module DiscourseAi
         end
       end
 
-      def initialize(id, name, enabled_by_setting: nil, features: [], extra_check: nil)
+      def initialize(
+        id,
+        name,
+        enabled_by_setting: nil,
+        features: [],
+        extra_check: nil,
+        visible: true
+      )
         @id = id
         @name = name
         @enabled_by_setting = enabled_by_setting
         @features = features
         @extra_check = extra_check
+        @visible = visible
       end
 
       attr_reader :id, :name, :enabled_by_setting, :features
 
+      def visible?
+        @visible
+      end
+
       def enabled?
-        return @extra_check.call if enabled_by_setting.blank? && @extra_check.present?
+        return @extra_check.present? ? @extra_check.call : true if enabled_by_setting.blank?
 
         enabled_setting = SiteSetting.get(enabled_by_setting)
 

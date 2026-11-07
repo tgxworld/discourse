@@ -1,15 +1,22 @@
 # frozen_string_literal: true
 
+# Scores are read through a materialized view that filters on PostgreSQL's
+# CURRENT_DATE, which is pinned to the start of the test transaction. Fixtures
+# created from the wall clock fall outside it when a run straddles UTC midnight,
+# so every shared example freezes the clock.
 RSpec.shared_examples "Scorable Type" do
-  fab!(:leaderboard) { Fabricate(:gamification_leaderboard) }
+  fab!(:leaderboard, :gamification_leaderboard)
   let(:current_user) { Fabricate(:user) }
   let(:other_user) { Fabricate(:user) }
   let(:third_user) { Fabricate(:user) }
   let(:expected_score) { expected_score }
 
+  before { freeze_time DateTime.parse("2024-01-01 12:00") }
+
   describe "#{described_class} updates gamification score" do
     it "has correct total score" do
-      DiscourseGamification::GamificationScore.calculate_scores(
+      DiscourseGamification::GamificationLeaderboardScore.calculate_scores(
+        leaderboard,
         since_date: "2022-1-1",
         only_subclass: described_class,
       )
@@ -21,7 +28,7 @@ RSpec.shared_examples "Scorable Type" do
 end
 
 RSpec.shared_examples "Category Scoped Scorable Type" do
-  fab!(:leaderboard) { Fabricate(:gamification_leaderboard) }
+  fab!(:leaderboard, :gamification_leaderboard)
   let(:user) { Fabricate(:user) }
   let(:user_2) { Fabricate(:user) }
   let(:category_allowed) { Fabricate(:category) }
@@ -29,15 +36,21 @@ RSpec.shared_examples "Category Scoped Scorable Type" do
   let(:expected_score) { described_class.score_multiplier }
   let(:after_create_hook) { nil }
 
+  before { freeze_time DateTime.parse("2024-01-01 12:00") }
+
   describe "updates gamification score" do
     let!(:create_score) { class_action_fabricator }
     let!(:trigger_after_create_hook) { after_create_hook }
+
     before { DiscourseGamification::LeaderboardCachedView.create_all }
 
     it "#{described_class} updates scores for action in the category configured" do
       expect(user.gamification_score).to eq(0)
       SiteSetting.scorable_categories = category_allowed.id.to_s
-      DiscourseGamification::GamificationScore.calculate_scores(only_subclass: described_class)
+      DiscourseGamification::GamificationLeaderboardScore.calculate_scores(
+        leaderboard,
+        only_subclass: described_class,
+      )
       DiscourseGamification::LeaderboardCachedView.refresh_all
       expect(user.gamification_score).to eq(expected_score)
     end
@@ -45,7 +58,10 @@ RSpec.shared_examples "Category Scoped Scorable Type" do
     it "#{described_class} doesn't updates scores for action in the category configured" do
       expect(user_2.gamification_score).to eq(0)
       SiteSetting.scorable_categories = category_not_allowed.id.to_s
-      DiscourseGamification::GamificationScore.calculate_scores(only_subclass: described_class)
+      DiscourseGamification::GamificationLeaderboardScore.calculate_scores(
+        leaderboard,
+        only_subclass: described_class,
+      )
       DiscourseGamification::LeaderboardCachedView.refresh_all
       expect(user_2.gamification_score).to eq(0)
     end
@@ -53,7 +69,7 @@ RSpec.shared_examples "Category Scoped Scorable Type" do
 end
 
 RSpec.shared_examples "No Score Value" do
-  fab!(:leaderboard) { Fabricate(:gamification_leaderboard) }
+  fab!(:leaderboard, :gamification_leaderboard)
   let(:current_user) { Fabricate(:user) }
   let(:other_user) { Fabricate(:user) }
   let(:class_action_fabricator_for_pm) { nil }
@@ -61,6 +77,8 @@ RSpec.shared_examples "No Score Value" do
   let(:class_action_fabricator_for_wiki) { nil }
   let(:class_action_fabricator_for_themselves) { nil }
   let(:after_create_hook) { nil }
+
+  before { freeze_time DateTime.parse("2024-01-01 12:00") }
 
   describe "#{described_class} awards no score value" do
     let!(:create_score_for_deleted_object) { class_action_fabricator_for_deleted_object }
@@ -70,7 +88,8 @@ RSpec.shared_examples "No Score Value" do
     let!(:trigger_after_create_hook) { after_create_hook }
 
     it "does not increase user gamification score" do
-      DiscourseGamification::GamificationScore.calculate_scores(
+      DiscourseGamification::GamificationLeaderboardScore.calculate_scores(
+        leaderboard,
         since_date: "2022-1-1",
         only_subclass: described_class,
       )
@@ -81,7 +100,7 @@ RSpec.shared_examples "No Score Value" do
   end
 end
 
-RSpec.describe ::DiscourseGamification::LikeReceived do
+RSpec.describe DiscourseGamification::LikeReceived do
   it_behaves_like "Scorable Type" do
     before do
       Fabricate.times(10, :post, user: current_user)
@@ -118,7 +137,7 @@ RSpec.describe ::DiscourseGamification::LikeReceived do
   end
 end
 
-RSpec.describe ::DiscourseGamification::LikeGiven do
+RSpec.describe DiscourseGamification::LikeGiven do
   it_behaves_like "Scorable Type" do
     before do
       Fabricate.times(10, :post, user: other_user)
@@ -161,7 +180,7 @@ RSpec.describe ::DiscourseGamification::LikeGiven do
   end
 end
 
-RSpec.describe ::DiscourseGamification::PostCreated do
+RSpec.describe DiscourseGamification::PostCreated do
   it_behaves_like "Scorable Type" do
     before do
       Fabricate.times(2, :post, user: current_user, post_number: 2)
@@ -212,7 +231,7 @@ RSpec.describe ::DiscourseGamification::PostCreated do
   end
 end
 
-RSpec.describe ::DiscourseGamification::DayVisited do
+RSpec.describe DiscourseGamification::DayVisited do
   it_behaves_like "Scorable Type" do
     before do
       (Date.new(2022, 01, 01)..Date.new(2022, 01, 30)).each do |date|
@@ -225,7 +244,7 @@ RSpec.describe ::DiscourseGamification::DayVisited do
   end
 end
 
-RSpec.describe ::DiscourseGamification::PostRead do
+RSpec.describe DiscourseGamification::PostRead do
   it_behaves_like "Scorable Type" do
     before do
       (Date.new(2022, 01, 01)..Date.new(2022, 01, 30)).each do |date|
@@ -238,7 +257,7 @@ RSpec.describe ::DiscourseGamification::PostRead do
   end
 end
 
-RSpec.describe ::DiscourseGamification::TimeRead do
+RSpec.describe DiscourseGamification::TimeRead do
   it_behaves_like "Scorable Type" do
     before do
       (Date.new(2022, 01, 01)..Date.new(2022, 01, 30)).each do |date|
@@ -251,11 +270,11 @@ RSpec.describe ::DiscourseGamification::TimeRead do
   end
 end
 
-RSpec.describe ::DiscourseGamification::FlagCreated do
+RSpec.describe DiscourseGamification::FlagCreated do
   it_behaves_like "Scorable Type" do
     before do
       Fabricate.times(10, :reviewable, created_by: current_user) do
-        after_create { self.update(status: 1) }
+        after_create { update(status: 1) }
       end
     end
 
@@ -264,7 +283,7 @@ RSpec.describe ::DiscourseGamification::FlagCreated do
   end
 end
 
-RSpec.describe ::DiscourseGamification::TopicCreated do
+RSpec.describe DiscourseGamification::TopicCreated do
   it_behaves_like "Scorable Type" do
     before { Fabricate.times(10, :topic, user: current_user) }
 
@@ -287,7 +306,7 @@ RSpec.describe ::DiscourseGamification::TopicCreated do
   end
 end
 
-RSpec.describe ::DiscourseGamification::UserInvited do
+RSpec.describe DiscourseGamification::UserInvited do
   it_behaves_like "Scorable Type" do
     before do
       stub_request(
@@ -301,7 +320,7 @@ RSpec.describe ::DiscourseGamification::UserInvited do
         },
       ).to_return(status: 200, body: "", headers: {})
       Fabricate.times(10, :invite, invited_by: current_user) do
-        after_create { self.update(redemption_count: 1) }
+        after_create { update(redemption_count: 1) }
       end
     end
 
@@ -310,14 +329,14 @@ RSpec.describe ::DiscourseGamification::UserInvited do
   end
 end
 
-RSpec.describe ::DiscourseGamification::ChatReactionReceived do
+RSpec.describe DiscourseGamification::ChatReactionReceived do
   it_behaves_like "Scorable Type" do
     before do
       Fabricate.times(10, :chat_message, user: current_user)
       Chat::Message.all.each { |m| Fabricate(:chat_message_reaction, chat_message: m) }
     end
 
-    # ten reactions recieved
+    # ten reactions received
     let(:expected_score) { 10 }
   end
 
@@ -336,7 +355,7 @@ RSpec.describe ::DiscourseGamification::ChatReactionReceived do
   end
 end
 
-RSpec.describe ::DiscourseGamification::ChatReactionGiven do
+RSpec.describe DiscourseGamification::ChatReactionGiven do
   it_behaves_like "Scorable Type" do
     before do
       Fabricate.times(10, :chat_message, user: other_user)
@@ -368,7 +387,7 @@ RSpec.describe ::DiscourseGamification::ChatReactionGiven do
   end
 end
 
-RSpec.describe ::DiscourseGamification::ChatMessageCreated do
+RSpec.describe DiscourseGamification::ChatMessageCreated do
   it_behaves_like "Scorable Type" do
     before { Fabricate.times(10, :chat_message, user: current_user) }
 

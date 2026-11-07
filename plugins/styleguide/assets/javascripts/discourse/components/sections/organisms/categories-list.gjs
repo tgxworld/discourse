@@ -1,10 +1,9 @@
-import CategoriesOnly from "discourse/components/categories-only";
 import StyleguideExample from "discourse/plugins/styleguide/discourse/components/styleguide-example";
+import CategoriesOnlyExample from "../../examples/organisms/categories-only.gjs";
+import categoriesOnlySource from "../../examples/organisms/categories-only?source=file";
 
-const CategoriesList = <template>
-  <StyleguideExample @title="<CategoriesOnly>">
-    <CategoriesOnly @categories={{@dummy.categories}} />
+export default <template>
+  <StyleguideExample @code={{categoriesOnlySource}} @title="<CategoriesOnly>">
+    <CategoriesOnlyExample />
   </StyleguideExample>
-</template>;
-
-export default CategoriesList;
+</template>

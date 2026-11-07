@@ -55,12 +55,10 @@ const PRELOADEDVOTERS = {
   ],
 };
 
-module("Poll | Component | poll-results-tabs", function (hooks) {
+module("Component | PollResultsTabs", function (hooks) {
   setupRenderingTest(hooks);
 
   test("Renders one tab for non-ranked-choice poll", async function (assert) {
-    const self = this;
-
     this.setProperties({
       options: TWO_OPTIONS,
       pollName: "Two Choice Poll",
@@ -77,16 +75,16 @@ module("Poll | Component | poll-results-tabs", function (hooks) {
     await render(
       <template>
         <PollResultsTabs
-          @options={{self.options}}
-          @pollName={{self.pollName}}
-          @pollType={{self.pollType}}
-          @isPublic={{self.isPublic}}
-          @isRankedChoice={{self.isRankedChoice}}
-          @postId={{self.postId}}
-          @vote={{self.vote}}
-          @voters={{self.voters}}
-          @votersCount={{self.votersCount}}
-          @fetchVoters={{self.fetchVoters}}
+          @fetchVoters={{this.fetchVoters}}
+          @isPublic={{this.isPublic}}
+          @isRankedChoice={{this.isRankedChoice}}
+          @options={{this.options}}
+          @pollName={{this.pollName}}
+          @pollType={{this.pollType}}
+          @postId={{this.postId}}
+          @vote={{this.vote}}
+          @voters={{this.voters}}
+          @votersCount={{this.votersCount}}
         />
       </template>
     );
@@ -95,8 +93,6 @@ module("Poll | Component | poll-results-tabs", function (hooks) {
   });
 
   test("Renders two tabs for public ranked choice poll", async function (assert) {
-    const self = this;
-
     this.setProperties({
       options: TWO_OPTIONS,
       pollName: "Two Choice Poll",
@@ -114,17 +110,17 @@ module("Poll | Component | poll-results-tabs", function (hooks) {
     await render(
       <template>
         <PollResultsTabs
-          @options={{self.options}}
-          @pollName={{self.pollName}}
-          @pollType={{self.pollType}}
-          @isPublic={{self.isPublic}}
-          @isRankedChoice={{self.isRankedChoice}}
-          @rankedChoiceOutcome={{self.rankedChoiceOutcome}}
-          @postId={{self.postId}}
-          @vote={{self.vote}}
-          @voters={{self.voters}}
-          @votersCount={{self.votersCount}}
-          @fetchVoters={{self.fetchVoters}}
+          @fetchVoters={{this.fetchVoters}}
+          @isPublic={{this.isPublic}}
+          @isRankedChoice={{this.isRankedChoice}}
+          @options={{this.options}}
+          @pollName={{this.pollName}}
+          @pollType={{this.pollType}}
+          @postId={{this.postId}}
+          @rankedChoiceOutcome={{this.rankedChoiceOutcome}}
+          @vote={{this.vote}}
+          @voters={{this.voters}}
+          @votersCount={{this.votersCount}}
         />
       </template>
     );
@@ -133,8 +129,6 @@ module("Poll | Component | poll-results-tabs", function (hooks) {
   });
 
   test("Renders one tab for private ranked choice poll", async function (assert) {
-    const self = this;
-
     this.setProperties({
       options: TWO_OPTIONS,
       pollName: "Two Choice Poll",
@@ -152,17 +146,17 @@ module("Poll | Component | poll-results-tabs", function (hooks) {
     await render(
       <template>
         <PollResultsTabs
-          @options={{self.options}}
-          @pollName={{self.pollName}}
-          @pollType={{self.pollType}}
-          @isPublic={{self.isPublic}}
-          @isRankedChoice={{self.isRankedChoice}}
-          @rankedChoiceOutcome={{self.rankedChoiceOutcome}}
-          @postId={{self.postId}}
-          @vote={{self.vote}}
-          @voters={{self.voters}}
-          @votersCount={{self.votersCount}}
-          @fetchVoters={{self.fetchVoters}}
+          @fetchVoters={{this.fetchVoters}}
+          @isPublic={{this.isPublic}}
+          @isRankedChoice={{this.isRankedChoice}}
+          @options={{this.options}}
+          @pollName={{this.pollName}}
+          @pollType={{this.pollType}}
+          @postId={{this.postId}}
+          @rankedChoiceOutcome={{this.rankedChoiceOutcome}}
+          @vote={{this.vote}}
+          @voters={{this.voters}}
+          @votersCount={{this.votersCount}}
         />
       </template>
     );

@@ -4,7 +4,7 @@ module DiscourseAi
   module Automation
     describe ReportRunner do
       fab!(:user)
-      fab!(:receiver) { Fabricate(:user) }
+      fab!(:receiver, :user)
       fab!(:post) { Fabricate(:post, user: user) }
       fab!(:group)
       fab!(:secure_category) { Fabricate(:private_category, group: group) }
@@ -43,8 +43,7 @@ module DiscourseAi
               sender_username: user.username,
               receivers: ["fake@discourse.com"],
               title: "test report %DATE%",
-              persona_id:
-                DiscourseAi::Personas::Persona.system_personas[DiscourseAi::Personas::ReportRunner],
+              agent_id: DiscourseAi::Agents::Agent.system_agents[DiscourseAi::Agents::ReportRunner],
               model: llm_model.id,
               category_ids: nil,
               tags: nil,
@@ -82,8 +81,7 @@ module DiscourseAi
               sender_username: user.username,
               receivers: [receiver.username],
               title: "test report",
-              persona_id:
-                DiscourseAi::Personas::Persona.system_personas[DiscourseAi::Personas::ReportRunner],
+              agent_id: DiscourseAi::Agents::Agent.system_agents[DiscourseAi::Agents::ReportRunner],
               model: llm_model.id,
               category_ids: nil,
               tags: nil,
@@ -129,8 +127,7 @@ module DiscourseAi
               sender_username: user.username,
               receivers: [receiver.username],
               title: "test report",
-              persona_id:
-                DiscourseAi::Personas::Persona.system_personas[DiscourseAi::Personas::ReportRunner],
+              agent_id: DiscourseAi::Agents::Agent.system_agents[DiscourseAi::Agents::ReportRunner],
               model: llm_model.id,
               category_ids: nil,
               tags: nil,
@@ -174,8 +171,7 @@ module DiscourseAi
               sender_username: user.username,
               receivers: [receiver.username],
               title: "test report",
-              persona_id:
-                DiscourseAi::Personas::Persona.system_personas[DiscourseAi::Personas::ReportRunner],
+              agent_id: DiscourseAi::Agents::Agent.system_agents[DiscourseAi::Agents::ReportRunner],
               model: llm_model.id,
               category_ids: nil,
               tags: nil,
@@ -208,8 +204,7 @@ module DiscourseAi
               sender_username: user.username,
               receivers: [group_for_reports.name],
               title: "group report",
-              persona_id:
-                DiscourseAi::Personas::Persona.system_personas[DiscourseAi::Personas::ReportRunner],
+              agent_id: DiscourseAi::Agents::Agent.system_agents[DiscourseAi::Agents::ReportRunner],
               model: llm_model.id,
               category_ids: nil,
               tags: nil,
@@ -238,8 +233,7 @@ module DiscourseAi
               sender_username: user.username,
               receivers: [receiver.username],
               title: "test report",
-              persona_id:
-                DiscourseAi::Personas::Persona.system_personas[DiscourseAi::Personas::ReportRunner],
+              agent_id: DiscourseAi::Agents::Agent.system_agents[DiscourseAi::Agents::ReportRunner],
               model: llm_model.id,
               category_ids: nil,
               tags: nil,

@@ -30,7 +30,7 @@ class ExternalUploadManager
   end
 
   def self.create_direct_upload(current_user:, file_name:, file_size:, upload_type:, metadata: {})
-    store = store_for_upload_type(upload_type)
+    store = store_for_upload_type(upload_type, guardian: current_user.guardian)
     url, signed_headers = store.signed_request_for_temporary_upload(file_name, metadata: metadata)
     key = store.s3_helper.path_from_url(url)
 
@@ -59,7 +59,7 @@ class ExternalUploadManager
     metadata: {}
   )
     content_type = MiniMime.lookup_by_filename(file_name)&.content_type
-    store = store_for_upload_type(upload_type)
+    store = store_for_upload_type(upload_type, guardian: current_user.guardian)
     multipart_upload = store.create_multipart(file_name, content_type, metadata: metadata)
 
     upload_stub =
@@ -80,9 +80,9 @@ class ExternalUploadManager
     }
   end
 
-  def self.store_for_upload_type(upload_type)
+  def self.store_for_upload_type(upload_type, guardian:)
     if upload_type == "backup"
-      if !SiteSetting.enable_backups? ||
+      if !guardian.is_admin? || !SiteSetting.enable_backups? ||
            SiteSetting.backup_location != BackupLocationSiteSetting::S3
         raise Discourse::InvalidAccess.new
       end
@@ -95,7 +95,11 @@ class ExternalUploadManager
   def initialize(external_upload_stub, upload_create_opts = {})
     @external_upload_stub = external_upload_stub
     @upload_create_opts = upload_create_opts
-    @store = ExternalUploadManager.store_for_upload_type(external_upload_stub.upload_type)
+    @store =
+      ExternalUploadManager.store_for_upload_type(
+        external_upload_stub.upload_type,
+        guardian: external_upload_stub.created_by.guardian,
+      )
   end
 
   def can_promote?
@@ -172,7 +176,9 @@ class ExternalUploadManager
   end
 
   def move_to_final_destination
-    content_type = MiniMime.lookup_by_filename(external_upload_stub.original_filename).content_type
+    content_type =
+      MiniMime.lookup_by_filename(external_upload_stub.original_filename)&.content_type ||
+        "application/gzip"
     @store.move_existing_stored_upload(
       existing_external_upload_key: external_upload_stub.key,
       original_filename: external_upload_stub.original_filename,
@@ -198,7 +204,7 @@ class ExternalUploadManager
   end
 
   def download(key, type)
-    url = @store.signed_url_for_path(external_upload_stub.key)
+    url = @store.signed_url_for_path(external_upload_stub.key, include_content_disposition: false)
     uri = URI(url)
     FileHelper.download(
       url,
