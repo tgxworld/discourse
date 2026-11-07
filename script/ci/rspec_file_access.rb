@@ -5,8 +5,30 @@ module RspecFileAccess
   FILE_PATH = File.instance_method(:path)
   EXPAND_PATH = File.method(:expand_path)
   REALPATH = File.method(:realpath)
+  COERCE_PATH = File.method(:path)
+  COERCE_IO = IO.method(:try_convert)
   MATCH_GLOB = File.method(:fnmatch?)
-  private_constant :FILE_PATH, :EXPAND_PATH, :REALPATH, :MATCH_GLOB
+  private_constant :FILE_PATH, :EXPAND_PATH, :REALPATH, :COERCE_PATH, :COERCE_IO, :MATCH_GLOB
+
+  class PathArgument
+    def initialize(original)
+      @original = original
+    end
+
+    def to_io
+      @io = COERCE_IO.call(@original)
+    end
+
+    def path
+      return @path if defined?(@path)
+      FILE_PATH.bind_call(@io) if @io.is_a?(File)
+    end
+
+    def to_path
+      @path = COERCE_PATH.call(@original)
+    end
+  end
+  private_constant :PathArgument
 
   def self.metadata_observer(methods:, skip_arguments: 0, private_methods: false)
     Module.new do
@@ -14,6 +36,13 @@ module RspecFileAccess
       methods.each do |name|
         define_method(name) do |*arguments, **options, &block|
           inputs = skip_arguments.zero? ? arguments : arguments.drop(skip_arguments)
+          inputs.each_with_index do |path, index|
+            if !path.is_a?(String) && !path.instance_of?(Pathname) && !path.is_a?(IO) &&
+                 (path.respond_to?(:to_path, true) || path.respond_to?(:to_str, true))
+              inputs[index] = PathArgument.new(path)
+              arguments[skip_arguments + index] = inputs[index]
+            end
+          end
           value = super(*arguments, **options, &block)
         rescue SystemCallError, NotImplementedError => error
           RspecFileAccess.record_metadata(method: name, arguments: inputs, value: error)
@@ -29,12 +58,15 @@ module RspecFileAccess
 
   FileMetadataReads = metadata_observer(methods: RspecFileMetadata.method_names)
   TestMetadataReads = metadata_observer(methods: FileTest.singleton_methods(false))
+  PrivateTestMetadataReads =
+    metadata_observer(methods: FileTest.singleton_methods(false), private_methods: true)
   StatMetadataReads = metadata_observer(methods: [:new])
   KernelMetadataReads = metadata_observer(methods: [:test], skip_arguments: 1)
   PrivateKernelMetadataReads =
     metadata_observer(methods: [:test], skip_arguments: 1, private_methods: true)
   private_constant :FileMetadataReads,
                    :TestMetadataReads,
+                   :PrivateTestMetadataReads,
                    :StatMetadataReads,
                    :KernelMetadataReads,
                    :PrivateKernelMetadataReads
@@ -82,6 +114,7 @@ module RspecFileAccess
     File.prepend(InstanceReads)
     File.singleton_class.prepend(FileMetadataReads)
     FileTest.singleton_class.prepend(TestMetadataReads)
+    FileTest.prepend(PrivateTestMetadataReads)
     File::Stat.singleton_class.prepend(StatMetadataReads)
     Kernel.singleton_class.prepend(KernelMetadataReads)
     Kernel.prepend(PrivateKernelMetadataReads)
@@ -108,7 +141,9 @@ module RspecFileAccess
 
   def self.record_metadata(method:, arguments:, value:)
     if %i[realpath realdirpath].include?(method) && arguments.length == 2
-      arguments = [EXPAND_PATH.call(*arguments)]
+      resolved_arguments =
+        arguments.map { |argument| argument.is_a?(PathArgument) ? argument.path : argument }
+      arguments = [EXPAND_PATH.call(*resolved_arguments)]
     end
     description = RspecFileMetadata.describe(method: method, value: value, root: @root.chomp("/"))
     if arguments.length == 1 && description
@@ -141,6 +176,7 @@ module RspecFileAccess
   end
 
   def self.paths(path)
+    path = path.path if path.is_a?(PathArgument)
     path = path.to_path if path.instance_of?(Pathname)
     return [] unless path.is_a?(String)
     absolute = EXPAND_PATH.call(path)
