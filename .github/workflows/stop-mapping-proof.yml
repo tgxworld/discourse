@@ -1,0 +1,19 @@
+name: Stop obsolete mapping proof
+
+on:
+  push:
+    branches:
+      - tgxworld/cancel-mapping-01a17736
+
+concurrency:
+  group: test-mapping-main
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  supersede:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: echo "Obsolete mapping collection superseded"
