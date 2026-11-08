@@ -115,6 +115,208 @@ RSpec.describe Crystalball do
     end
   end
 
+  it "observes content paths at native conversion time" do
+    program = <<~RUBY
+      require "json"
+      require "tmpdir"
+      require "pathname"
+      require "set"
+      require #{Rails.root.join("script/ci/rspec_file_access").to_s.inspect}
+      Dir.mktmpdir do |directory|
+        cases = [File, IO].flat_map do |receiver|
+          %i[read binread readlines foreach].product(%i[to_path to_str]).map do |operation, protocol|
+            [receiver, operation, protocol]
+          end
+        end
+        cases += %i[to_path to_str].map { |protocol| [File, :sysopen, protocol] }
+        paths = cases.map do |receiver, operation, protocol|
+          name = [receiver.name, operation, protocol].join("_") + ".txt"
+          path = File.join(directory, name)
+          File.write(path, "content")
+          path
+        end
+        RspecFileAccess.enable(root: directory)
+        results = cases.zip(paths).map do |(receiver, operation, protocol), path|
+          conversions = 0
+          argument = Object.new
+          argument.define_singleton_method(protocol) do
+            conversions += 1
+            raise "Repeated path conversion" if conversions > 1
+            path
+          end
+          value =
+            case operation
+            when :foreach
+              receiver.foreach(argument).to_a.join
+            when :readlines
+              receiver.readlines(argument).join
+            when :sysopen
+              stream = IO.new(receiver.sysopen(argument))
+              begin
+                stream.read
+              ensure
+                stream.close
+              end
+            else
+              receiver.public_send(operation, argument)
+            end
+          { value: value, conversions: conversions }
+        end
+        puts JSON.generate({ results: results, shared: RspecFileAccess.shared_files.sort, expected_paths: paths.map { |path| File.basename(path) }.sort })
+      end
+    RUBY
+
+    output, status =
+      Open3.capture2e(isolated_rspec_environment, "bundle", "exec", "ruby", "-e", program)
+
+    expect(status.success?).to eq(true), output
+    result = JSON.parse(output)
+    expect(result.fetch("results")).to eq(
+      Array.new(18) { { "value" => "content", "conversions" => 1 } },
+    )
+    expect(result.fetch("shared")).to eq(result.fetch("expected_paths"))
+  end
+
+  it "observes native pathname coercion without predicate queries" do
+    program = <<~RUBY
+      require "json"
+      require "tmpdir"
+      require "pathname"
+      require "set"
+      require #{Rails.root.join("script/ci/rspec_file_access").to_s.inspect}
+      Dir.mktmpdir do |directory|
+        cases = %i[basic hidden].product(%i[read size])
+        paths = cases.map do |kind, operation|
+          path = File.join(directory, [kind, operation].join("_") + ".txt")
+          File.write(path, "metadata")
+          path
+        end
+        RspecFileAccess.enable(root: directory)
+        results = cases.zip(paths).map do |(kind, operation), path|
+          argument_type = Class.new(kind == :basic ? BasicObject : Object) do
+            attr_reader :conversions
+            def initialize(path)
+              @path = path
+              @conversions = 0
+            end
+            def to_io
+              nil
+            end
+          end
+          if kind == :hidden
+            argument_type.define_method(:method_missing) do |name, *arguments|
+              if name == :to_path
+                @conversions += 1
+                @path
+              else
+                super(name, *arguments)
+              end
+            end
+          else
+            argument_type.define_method(:to_path) do
+              @conversions += 1
+              @path
+            end
+          end
+          argument = argument_type.new(path)
+          value = File.public_send(operation, argument)
+          { value: value, conversions: argument.conversions }
+        end
+        puts JSON.generate({ results: results, shared: RspecFileAccess.shared_files.sort, metadata: RspecFileAccess.metadata, failure: RspecFileAccess.failure })
+      end
+    RUBY
+
+    output, status =
+      Open3.capture2e(isolated_rspec_environment, "bundle", "exec", "ruby", "-e", program)
+
+    expect(status.success?).to eq(true), output
+    result = JSON.parse(output)
+    expect(result.fetch("results")).to eq(
+      [
+        { "value" => "metadata", "conversions" => 1 },
+        { "value" => 8, "conversions" => 1 },
+        { "value" => "metadata", "conversions" => 1 },
+        { "value" => 8, "conversions" => 1 },
+      ],
+    )
+    expect(result.fetch("shared")).to eq(%w[basic_read.txt hidden_read.txt])
+    expect(result.fetch("metadata")).to eq(
+      "basic_size.txt" => [{ "method" => "size", "value" => 8 }],
+      "hidden_size.txt" => [{ "method" => "size", "value" => 8 }],
+    )
+    expect(result.fetch("failure")).to eq(nil)
+  end
+
+  it "preserves native argument validation under actual collection" do
+    Dir.mktmpdir do |directory|
+      FileUtils.mkdir_p("#{directory}/spec")
+      File.write("#{directory}/spec/native_arguments_spec.rb", <<~RUBY)
+        require "rspec"
+
+        RSpec.describe "Native argument validation" do
+          [File, IO].each do |receiver|
+            %i[read binread readlines foreach sysopen].each do |operation|
+              it "preserves missing arguments for " + receiver.name + "." + operation.to_s do
+                expect { receiver.public_send(operation) }.to raise_error(ArgumentError)
+              end
+            end
+            it "preserves keyword-only input for " + receiver.name + ".read" do
+              expect { receiver.read(mode: "r") }.to raise_error(ArgumentError)
+            end
+          end
+
+          %i[realpath realdirpath].each do |operation|
+            it "preserves a nil base for " + operation.to_s do
+              relative = "spec/native_arguments_spec.rb"
+              expect(File.public_send(operation, relative, nil)).to eq(File.expand_path(relative))
+            end
+          end
+        end
+      RUBY
+
+      [[], ["--require", Rails.root.join("script/ci/rspec_mapping.rb").to_s]].each do |arguments|
+        output, status =
+          Open3.capture2e(
+            isolated_rspec_environment.merge(
+              "BUNDLE_GEMFILE" => Rails.root.join("Gemfile").to_s,
+              "GITHUB_SHA" => "a" * 40,
+              "RSPEC_MAPPING_DIRECTORY" => "#{directory}/mapping",
+            ),
+            "bundle",
+            "exec",
+            "rspec",
+            "--options",
+            "/dev/null",
+            *arguments,
+            "spec/native_arguments_spec.rb",
+            "--format",
+            "json",
+            "--out",
+            "result.json",
+            chdir: directory,
+          )
+
+        report = JSON.parse(File.read("#{directory}/result.json"))
+        expect(status.success?).to eq(true), "#{output}\n#{report}"
+        expect(
+          report.fetch("summary").slice(
+            "example_count",
+            "failure_count",
+            "pending_count",
+            "errors_outside_of_examples_count",
+          ),
+        ).to eq(
+          "example_count" => 14,
+          "failure_count" => 0,
+          "pending_count" => 0,
+          "errors_outside_of_examples_count" => 0,
+        )
+      end
+      worker = JSON.parse(File.read(Dir["#{directory}/mapping/worker-*.json"].sole))
+      expect(worker.fetch("complete")).to eq(true)
+    end
+  end
+
   it "preserves a single path conversion when observing file metadata" do
     program = <<~RUBY
       require "json"
@@ -297,6 +499,10 @@ RSpec.describe Crystalball do
         expect(report.fetch("summary").slice("example_count", "failure_count")).to eq(
           "example_count" => 2,
           "failure_count" => 0,
+        )
+        expect(JSON.parse(File.read("#{directory}/conversion.json"))).to eq(
+          "mtime" => 200,
+          "conversions" => %w[to_path to_io to_path],
         )
       end
       worker = JSON.parse(File.read(Dir["#{directory}/mapping/worker-*.json"].sole))
