@@ -1,0 +1,171 @@
+name: Diagnose mapping timing failures
+
+on:
+  push:
+    branches:
+      - tgxworld/selection-source139-timing
+
+permissions:
+  contents: read
+
+concurrency:
+  group: selection-source139-timing
+  cancel-in-progress: false
+
+env:
+  CONTROLLER_REVISION: ${{ github.sha }}
+  APPLICATION_REVISION: 6497807e4643ec574384bb8113f7e4fc8ffdd10b
+  RAILS_ENV: test
+  LOAD_PLUGINS: "0"
+  PGUSER: discourse
+  PGPASSWORD: discourse
+
+jobs:
+  timing:
+    name: ${{ matrix.variant }} timing
+    runs-on: ubuntu-latest
+    container: discourse/discourse_test:release
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [ordinary, published, blocked]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Set working directory owner
+        run: chown root:root .
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.APPLICATION_REVISION }}
+          fetch-depth: 1
+      - name: Start Redis
+        run: redis-server /etc/redis/redis.conf --daemonize yes --logfile ""
+      - name: Start Postgres
+        run: |
+          chown -R postgres /var/run/postgresql
+          sudo -E -u postgres script/start_test_db.rb
+          sudo -u postgres psql -c "CREATE ROLE $PGUSER LOGIN SUPERUSER PASSWORD '$PGPASSWORD';"
+      - name: Install locked dependencies
+        run: |
+          export GITHUB_SHA="$APPLICATION_REVISION"
+          ln -s /var/www/discourse/vendor/bundle vendor/bundle
+          bundle config --local path vendor/bundle
+          bundle config --local deployment true
+          bundle config --local without development
+          bundle install --jobs $(($(nproc) - 1))
+          bundle clean
+          pnpm install --frozen-lockfile
+      - name: Prepare database
+        run: |
+          export GITHUB_SHA="$APPLICATION_REVISION"
+          bin/rake db:create
+          bin/rake db:migrate
+      - name: Execute identical observed examples
+        env:
+          DIAGNOSTIC_VARIANT: ${{ matrix.variant }}
+        run: |
+          LD_PRELOAD="$RUBY_ALLOCATOR" ruby <<'RUBY'
+          require "json"
+          require "digest"
+          require "fileutils"
+          source = ENV.fetch("APPLICATION_REVISION")
+          raise "Wrong application checkout" unless `git rev-parse HEAD`.strip == source
+          original = File.expand_path("script/ci/dependency_set.rb")
+          original_hash = Digest::SHA256.file(original).hexdigest
+          raise "Unexpected iterator source" unless original_hash == "cff2c35fb2c9165b4bf5457097843dbdaccdc002e14d1e969591323f4b1d5943"
+          directory = File.expand_path("tmp/timing-diagnostic")
+          FileUtils.mkdir_p(directory)
+          variant = ENV.fetch("DIAGNOSTIC_VARIANT")
+          raise "Unknown variant" unless %w[ordinary published blocked].include?(variant)
+          selectors = %w[
+            spec/lib/html_to_markdown_spec.rb:270
+            spec/lib/html_to_markdown_spec.rb:276
+            spec/lib/html_to_markdown_spec.rb:282
+            spec/lib/pretty_text_spec.rb:2202
+            spec/lib/scheduler/thread_pool_spec.rb:109
+            spec/requests/uploads_controller_spec.rb:683
+            spec/requests/posts_controller_spec.rb:1642
+          ]
+          files = selectors.map { |path| path.sub(/:\d+\z/, "") }.uniq.sort
+          inventory = File.join(directory, "inventory.json")
+          File.write(inventory, JSON.generate(files.map { |path| File.expand_path(path) }))
+          preload = []
+          candidate_hash = nil
+          if variant == "blocked"
+            method = <<~METHOD
+              def each(bits)
+                offset = 0
+                limit = bits.bit_length
+                while offset < limit
+                  block = bits[offset, 1024]
+                  word_offset = 0
+                  block_limit = block.bit_length
+                  while word_offset < block_limit
+                    word = block[word_offset, WORD_BITS]
+                    until word.zero?
+                      first = word & -word
+                      yield @paths[offset + word_offset + first.bit_length - 1]
+                      word ^= first
+                    end
+                    word_offset += WORD_BITS
+                  end
+                  offset += 1024
+                end
+              end
+            METHOD
+            replacement = method.lines.map { |line| "      #{line}" }.join.chomp
+            content = File.read(original)
+            pattern = /      def each\(bits\)\n.*?^      end/m
+            raise "Unexpected iterator declaration" unless content.scan(pattern).length == 1
+            candidate = File.join(directory, "blocked_dependency_set.rb")
+            File.write(candidate, content.sub(pattern, replacement))
+            candidate_hash = Digest::SHA256.file(candidate).hexdigest
+            raise "Unexpected candidate source" unless candidate_hash == "85919b07079765d54d05f2dcfbc9982cea6d6f8f50a47e37a230b11dfed88001"
+            hook = File.join(directory, "candidate_hook.rb")
+            File.write(hook, "require #{original.dump}\nload #{candidate.dump}\n")
+            preload << "-r#{hook}"
+          end
+          ENV["GITHUB_SHA"] = source
+          ENV["COLLECT_TEST_MAPPING"] = variant == "ordinary" ? "0" : "1"
+          ENV["COLLECT_RSPEC_MAPPING"] = "0"
+          ENV["TEST_SELECTION_ROOT"] = Dir.pwd
+          ENV["TEST_SELECTION_ENVIRONMENT"] = "source139-timing-diagnostic"
+          ENV["TEST_SELECTION_INVENTORY"] = inventory
+          ENV["TEST_EXECUTION_DIRECTORY"] = File.join(directory, "workers")
+          ENV["RSPEC_MAPPING_DIRECTORY"] = File.join(directory, "mapping")
+          ENV["TEST_SELECTION_ORIGINAL_RUBYOPT"] = ENV.fetch("RUBYOPT", "")
+          ENV["RUBYOPT"] = [ENV["RUBYOPT"], "-rbundler/setup", *preload, "-r#{File.expand_path("script/ci/rspec_execution.rb")}"].compact.join(" ")
+          command = ["bin/rspec", *selectors, "--seed", "1687650430", "--format", "json", "--out", File.join(directory, "rspec.json")]
+          record = {
+            "controller_revision" => ENV.fetch("CONTROLLER_REVISION"),
+            "application_revision" => source,
+            "actual_event" => ENV.fetch("GITHUB_EVENT_NAME"),
+            "variant" => variant,
+            "original_iterator_sha256" => original_hash,
+            "private_candidate_sha256" => candidate_hash,
+            "selectors" => selectors,
+            "command" => command,
+            "scope" => "Focused diagnostic, not a mapping producer or PR selection proof. Only the blocked variant overrides the iterator in memory. Application source and assertions are unchanged.",
+          }
+          result_path = File.join(directory, "result.json")
+          File.write(result_path, JSON.pretty_generate(record))
+          started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          system(*command)
+          status = $?
+          record["exit_code"] = status.exitstatus
+          record["term_signal"] = status.termsig
+          record["elapsed_seconds"] = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+          File.write(result_path, JSON.pretty_generate(record))
+          raise "Application source changed" unless Digest::SHA256.file(original).hexdigest == original_hash
+          exit(status.exitstatus || 128 + status.termsig)
+          RUBY
+      - name: Publish original diagnostic records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: timing-diagnostic-${{ matrix.variant }}
+          path: tmp/timing-diagnostic
+          retention-days: 14
+          if-no-files-found: error
