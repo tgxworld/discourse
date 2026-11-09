@@ -41,6 +41,60 @@ RSpec.describe Scheduler::ThreadPool, type: :multisite do
   end
 
   describe "#post" do
+    it "rejects work if shutdown begins while capturing its context" do
+      started = Queue.new
+      release_workers = Queue.new
+      capturing = Queue.new
+      release_context = Queue.new
+      result = Queue.new
+      executed = Queue.new
+
+      min_threads.times do
+        pool.post do
+          started << true
+          release_workers.pop
+        end
+      end
+      expect(min_threads.times.map { started.pop(timeout: 5) }).to eq([true] * min_threads)
+
+      poster =
+        Thread.new do
+          original_config = I18n.config
+          config = original_config.dup
+          config.define_singleton_method(:locale) do
+            capturing << true
+            release_context.pop
+            original_config.locale
+          end
+          I18n.config = config
+
+          begin
+            pool.post { executed << true }
+            result << :accepted
+          rescue Scheduler::ThreadPool::ShutdownError => error
+            result << error.class
+          ensure
+            I18n.config = original_config
+          end
+        end
+
+      expect(capturing.pop(timeout: 5)).to eq(true)
+      pool.shutdown
+      release_context << true
+
+      expect(poster.join(5)).to eq(poster)
+      expect(result.pop(timeout: 5)).to eq(described_class::ShutdownError)
+      min_threads.times { release_workers << true }
+      pool.wait_for_termination(timeout: 5)
+
+      expect(executed.empty?).to eq(true)
+      expect(pool.stats[:thread_count]).to eq(0)
+    ensure
+      release_context&.push(true)
+      min_threads.times { release_workers&.push(true) }
+      poster&.kill
+    end
+
     it "starts queued work when all existing workers are busy" do
       started = Queue.new
       release = Queue.new
