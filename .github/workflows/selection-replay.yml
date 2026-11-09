@@ -1,0 +1,220 @@
+name: Replay frontend file selection
+
+on:
+  push:
+    branches:
+      - tgxworld/selection-source138-replay
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: selection-source138-replay
+  cancel-in-progress: false
+
+env:
+  REPLAY_CONTROLLER_REF: ${{ github.sha }}
+  REPLAY_SOURCE_REF: f0dac41e117cf9c7f0cda56c459e260dcca65d14
+  REPLAY_BASE_REF: 3d683f026afbb20d3a72f9f7d5d445ef1bc330fa
+  RAILS_ENV: test
+  LOAD_PLUGINS: "0"
+
+jobs:
+  selection:
+    runs-on: ubuntu-latest
+    container: discourse/discourse_test:release
+    timeout-minutes: 20
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has_tests: ${{ steps.plan.outputs.has_tests }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Set working directory owner
+        run: chown root:root .
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.REPLAY_SOURCE_REF }}
+          fetch-depth: 0
+      - name: Setup gems
+        run: |
+          export GITHUB_SHA="$REPLAY_SOURCE_REF"
+          ln -s /var/www/discourse/vendor/bundle vendor/bundle
+          bundle config set --local path vendor/bundle
+          bundle config set --local deployment true
+          bundle config set --local without development
+          bundle install --jobs 4
+      - name: Checkout official plugins and themes for inventory
+        run: |
+          export GITHUB_SHA="$REPLAY_SOURCE_REF"
+          bin/rake plugin:install_all_official themes:clone_all_official themes:pull_compatible_all
+      - name: Run production planning with explicit replay inputs
+        id: plan
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          bundle exec ruby <<'RUBY'
+          require "json"
+          require "fileutils"
+          record = {
+            "actual_event" => ENV.fetch("GITHUB_EVENT_NAME"),
+            "controller_revision" => ENV.fetch("REPLAY_CONTROLLER_REF"),
+            "source_revision" => `git rev-parse HEAD`.strip,
+            "source_tree" => `git rev-parse HEAD^{tree}`.strip,
+            "base_revision" => ENV.fetch("REPLAY_BASE_REF"),
+            "simulated_event" => "pull_request",
+            "scope" => "Explicit replay fixture, not an actual pull request event",
+          }
+          raise "Wrong source checkout" unless record.fetch("source_revision") == ENV.fetch("REPLAY_SOURCE_REF")
+          FileUtils.mkdir_p("tmp/test-plan")
+          event_path = File.expand_path("tmp/replay-event.json")
+          File.write(event_path, JSON.generate("pull_request" => { "base" => { "sha" => record.fetch("base_revision") } }))
+          ENV["GITHUB_SHA"] = record.fetch("source_revision")
+          ENV["GITHUB_EVENT_NAME"] = "pull_request"
+          ENV["GITHUB_EVENT_PATH"] = event_path
+          ENV["GITHUB_BASE_REF"] = "main"
+          ENV["TEST_SELECTION_MODE"] = "select"
+          ENV["TEST_SELECTION_AUDIT_PERCENT"] = "0"
+          system("bundle", "exec", "ruby", "script/ci/test_mapping_download.rb", "tmp/test-plan/mappings", "tests")
+          record["mapping_download_exit_code"] = $?.exitstatus
+          system("bundle", "exec", "ruby", "script/ci/test_prepare.rb", "tests", "tmp/test-plan", exception: true)
+          catalog = JSON.parse(File.read("tmp/test-plan/catalog.json"))
+          plan = JSON.parse(File.read("tmp/test-plan/plan.json"))
+          selected = plan.fetch("jobs").reject { |_, files| files.empty? }
+          expected = catalog.fetch("jobs").fetch("core-frontend").fetch("inventory")
+          raise "Unexpected selection" unless plan.fetch("mode") == "select" && selected == { "core-frontend" => expected } && expected.length == 957
+          raise "New file omitted" unless expected.include?("frontend/discourse/tests/unit/lib/ci-file-selection-proof-test.js")
+          outputs = File.readlines(ENV.fetch("GITHUB_OUTPUT"), chomp: true).map { |line| line.split("=", 2) }.to_h
+          matrix = JSON.parse(outputs.fetch("matrix"))
+          raise "Unexpected matrix" unless matrix == { "include" => [{ "target" => "core", "build_type" => "frontend" }] }
+          record["matrix"] = matrix
+          record["plan_mode"] = plan.fetch("mode")
+          record["selected_core_frontend_files"] = expected.length
+          record["empty_other_environments"] = plan.fetch("jobs").count { |_, files| files.empty? }
+          File.write("tmp/replay-provenance.json", JSON.pretty_generate(record))
+          RUBY
+      - name: Publish replay plan and provenance
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: selection-replay-plan
+          path: |
+            tmp/test-plan
+            tmp/replay-event.json
+            tmp/replay-provenance.json
+          retention-days: 14
+          if-no-files-found: error
+
+  execute:
+    needs: selection
+    if: needs.selection.outputs.has_tests == 'true'
+    name: ${{ matrix.target }} ${{ matrix.build_type }} replay
+    runs-on: ubuntu-latest
+    container: discourse/discourse_test:release
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.selection.outputs.matrix) }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      PGUSER: discourse
+      PGPASSWORD: discourse
+      EMBER_ENV: development
+      QUNIT_REUSE_BUILD: "1"
+      DISCOURSE_DOWNLOAD_PRE_BUILT_ASSETS: "0"
+      TEST_MAPPING_COLLECT: "0"
+    steps:
+      - name: Set working directory owner
+        run: chown root:root .
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.REPLAY_SOURCE_REF }}
+          fetch-depth: 1
+      - uses: actions/download-artifact@v7
+        with:
+          name: selection-replay-plan
+          path: tmp
+      - name: Setup Git and QUnit workers
+        run: |
+          git config --global user.email "ci@ci.invalid"
+          git config --global user.name "Discourse CI"
+          echo "QUNIT_PARALLEL=$(($(nproc) / 2))" >> "$GITHUB_ENV"
+      - name: Start Redis
+        run: redis-server /etc/redis/redis.conf --daemonize yes --logfile ""
+      - name: Start Postgres
+        run: |
+          chown -R postgres /var/run/postgresql
+          sudo -E -u postgres script/start_test_db.rb
+          sudo -u postgres psql -c "CREATE ROLE $PGUSER LOGIN SUPERUSER PASSWORD '$PGPASSWORD';"
+      - name: Install locked dependencies
+        run: |
+          export GITHUB_SHA="$REPLAY_SOURCE_REF"
+          ln -s /var/www/discourse/vendor/bundle vendor/bundle
+          bundle config --local path vendor/bundle
+          bundle config --local deployment true
+          bundle config --local without development
+          bundle install --jobs $(($(nproc) - 1))
+          bundle clean
+          pnpm install --frozen-lockfile
+      - name: Prepare database and assets
+        run: |
+          export GITHUB_SHA="$REPLAY_SOURCE_REF"
+          bin/rake db:create
+          bin/rake db:migrate
+          script/assemble_ember_build.rb
+      - name: Prepare Chrome environment
+        run: |
+          mkdir -p "$HOME/.pki/nssdb" "$HOME/.local/share/pki/nssdb"
+          dbus-daemon --system --fork 2>/dev/null || true
+          bus_addr=$(dbus-daemon --session --fork --print-address 2>/dev/null)
+          echo "DBUS_SESSION_BUS_ADDRESS=$bus_addr" >> "$GITHUB_ENV"
+      - name: Execute planned files and companion reference
+        run: |
+          LD_PRELOAD="$RUBY_ALLOCATOR" ruby <<'RUBY'
+          require "json"
+          source = ENV.fetch("REPLAY_SOURCE_REF")
+          raise "Wrong source checkout" unless `git rev-parse HEAD`.strip == source
+          ENV["GITHUB_SHA"] = source
+          ENV["GITHUB_EVENT_NAME"] = "pull_request"
+          ENV["GITHUB_EVENT_PATH"] = File.expand_path("tmp/replay-event.json")
+          ENV["GITHUB_BASE_REF"] = "main"
+          plan_path = "tmp/test-plan/plan.json"
+          catalog_path = "tmp/test-plan/catalog.json"
+          plan = JSON.parse(File.read(plan_path))
+          catalog = JSON.parse(File.read(catalog_path))
+          system("ruby", "script/ci/test_job.rb", plan_path, catalog_path, "core-frontend", "tmp/test-results/core-frontend", exception: true)
+          system("ruby", "script/ci/test_job.rb", plan_path, catalog_path, "asset-processor", "tmp/test-results/asset-processor", exception: true)
+          reference = plan.merge(
+            "mode" => "full",
+            "files" => catalog.fetch("jobs").values.flat_map { |job| job.fetch("inventory") }.uniq.sort,
+            "jobs" => catalog.fetch("jobs").transform_values { |job| job.fetch("inventory") },
+          )
+          File.write("tmp/test-plan/reference-plan.json", JSON.generate(reference))
+          system("ruby", "script/ci/test_job.rb", "tmp/test-plan/reference-plan.json", catalog_path, "asset-processor", "tmp/test-results/asset-processor-reference", exception: true)
+          core = JSON.parse(File.read("tmp/test-results/core-frontend/execution.json"))
+          raise "Incomplete owner reference" unless core.fetch("assigned") == catalog.fetch("jobs").fetch("core-frontend").fetch("inventory") && core.fetch("success") && core.fetch("exact")
+          record = {
+            "source_revision" => source,
+            "actual_event" => "push",
+            "simulated_event" => "pull_request",
+            "core_reference_reuses_identical_full_owner" => true,
+            "scope" => "One actual full frontend owner execution and an empty asset assignment with a full asset reference. Other family reference suites are not executed. This is a replay, not actual PR CI.",
+          }
+          File.write("tmp/replay-execution.json", JSON.pretty_generate(record))
+          RUBY
+      - name: Publish original execution records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: selection-replay-execution
+          path: |
+            tmp/test-results
+            tmp/replay-execution.json
+            tmp/test-plan/reference-plan.json
+            tmp/test_server_*.log
+          retention-days: 14
+          if-no-files-found: error
