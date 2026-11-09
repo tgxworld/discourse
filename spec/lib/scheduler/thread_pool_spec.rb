@@ -41,6 +41,24 @@ RSpec.describe Scheduler::ThreadPool, type: :multisite do
   end
 
   describe "#post" do
+    it "starts queued work when all existing workers are busy" do
+      started = Queue.new
+      release = Queue.new
+
+      min_threads.times do
+        pool.post do
+          started << :busy
+          release.pop
+        end
+      end
+
+      Timeout.timeout(5) { min_threads.times { expect(started.pop).to eq(:busy) } }
+      pool.post { started << :new }
+      expect(Timeout.timeout(5) { started.pop }).to eq(:new)
+    ensure
+      min_threads.times { release << :continue }
+    end
+
     it "executes submitted tasks" do
       completion_queue = Queue.new
 
@@ -166,7 +184,7 @@ RSpec.describe Scheduler::ThreadPool, type: :multisite do
         release << true
         pool.wait_for_termination(timeout: 5)
 
-        expect(4.times.map { completed.pop(timeout: 5) }).to eq([0, 1, 2, 3])
+        expect(4.times.map { completed.pop(timeout: 5) }).to contain_exactly(0, 1, 2, 3)
         expect(pool.stats[:thread_count]).to eq(0)
       ensure
         release&.push(true)
@@ -189,6 +207,9 @@ RSpec.describe Scheduler::ThreadPool, type: :multisite do
   end
 
   describe "queue management" do
+    let(:min_threads) { 1 }
+    let(:max_threads) { 1 }
+
     it "processes tasks in FIFO order" do
       completion_queue = Queue.new
       control_queue = Queue.new

@@ -1378,8 +1378,7 @@ module TestSelection
         value = OBJECT_IVAR_GET.bind_call(event.self, variable)
         record_object(value: value, sources: [method_node, read_slots[index]].compact, field: true)
       end
-      inherited_slots = inputs.grep(%r{\A__state__/})
-      read_slots |= inherited_slots
+      inherited_slots = mutating ? inputs.grep(%r{\A__state__/}) : []
       write_slots |= inherited_slots if mutating
       @observed_sources.add(source) if source
       inputs = inputs.map { |path| path == source ? method_node : path } if source
