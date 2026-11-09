@@ -319,7 +319,46 @@ jobs:
           echo "DBUS_SESSION_BUS_ADDRESS=$bus_addr" >> "$GITHUB_ENV"
 
       - name: Execute planned test files
-        run: LD_PRELOAD="$RUBY_ALLOCATOR" ruby script/ci/test_job.rb tmp/test-plan/plan.json tmp/test-plan/catalog.json "$TEST_JOB" "tmp/test-results/$TEST_JOB"
+        run: |
+          mkdir -p tmp/producer-diagnostics
+          cat > tmp/producer-diagnostics/monitor.rb <<'RUBY'
+          require "json"
+          require "fileutils"
+          started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          output = "tmp/producer-diagnostics/#{ENV.fetch("TEST_JOB")}.json"
+          record = { "command" => ARGV, "samples" => 0, "parent_peak_rss_kib" => 0 }
+          def cgroup
+            %w[memory.current memory.peak memory.max memory.events].to_h do |name|
+              path = "/sys/fs/cgroup/#{name}"
+              [name, File.file?(path) ? File.read(path) : nil]
+            end
+          end
+          record["cgroup_before"] = cgroup
+          pid = Process.spawn(*ARGV)
+          record["pid"] = pid
+          loop do
+            path = "/proc/#{pid}/status"
+            if File.file?(path)
+              status = File.read(path)
+              peak = status[/^VmHWM:\s+(\d+)/, 1].to_i
+              record["parent_peak_rss_kib"] = [peak, record["parent_peak_rss_kib"]].max
+            end
+            record["samples"] += 1
+            record["cgroup_last"] = cgroup
+            record["elapsed_seconds"] = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+            File.write(output, JSON.pretty_generate(record))
+            break if Process.waitpid(pid, Process::WNOHANG)
+            sleep 1
+          end
+          result = $?
+          record["exit_status"] = result.exitstatus
+          record["term_signal"] = result.termsig
+          record["success"] = result.success?
+          record["cgroup_after"] = cgroup
+          File.write(output, JSON.pretty_generate(record))
+          exit(result.exitstatus || 128 + result.termsig)
+          RUBY
+          LD_PRELOAD="$RUBY_ALLOCATOR" ruby tmp/producer-diagnostics/monitor.rb ruby script/ci/test_job.rb tmp/test-plan/plan.json tmp/test-plan/catalog.json "$TEST_JOB" "tmp/test-results/$TEST_JOB"
 
       - name: Execute planned asset processor files
         if: matrix.build_type == 'frontend' && matrix.target == 'core'
@@ -335,6 +374,17 @@ jobs:
             !tmp/test-results/**/raw/**
           retention-days: 14
           if-no-files-found: error
+
+      - name: Preserve producer diagnostics
+        if: always() && inputs.collect_mapping
+        uses: actions/upload-artifact@v7
+        with:
+          name: producer-debug-${{ matrix.target }}-${{ matrix.build_type }}
+          path: |
+            tmp/test-results/**/raw/**
+            tmp/producer-diagnostics
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: Publish main mapping fragment
         if: inputs.collect_mapping && github.event_name == 'push' && github.ref == 'refs/heads/main'
