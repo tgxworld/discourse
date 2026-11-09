@@ -1,0 +1,189 @@
+name: Test shared and merged tracing hooks
+
+on:
+  push:
+    branches:
+      - tgxworld/selection-source139-merged-traces
+
+permissions:
+  contents: read
+
+concurrency:
+  group: selection-source139-merged-traces
+  cancel-in-progress: false
+
+env:
+  CONTROLLER_REVISION: ${{ github.sha }}
+  APPLICATION_REVISION: e682028b6ad7f9e777e5b382b2cb9f6d910def10
+  RAILS_ENV: test
+  LOAD_PLUGINS: "0"
+  PGUSER: discourse
+  PGPASSWORD: discourse
+
+jobs:
+  timing:
+    name: ${{ matrix.variant }} timing
+    runs-on: ubuntu-latest
+    container: discourse/discourse_test:release
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [merged]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Set working directory owner
+        run: chown root:root .
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.APPLICATION_REVISION }}
+          fetch-depth: 1
+      - name: Start Redis
+        run: redis-server /etc/redis/redis.conf --daemonize yes --logfile ""
+      - name: Start Postgres
+        run: |
+          chown -R postgres /var/run/postgresql
+          sudo -E -u postgres script/start_test_db.rb
+          sudo -u postgres psql -c "CREATE ROLE $PGUSER LOGIN SUPERUSER PASSWORD '$PGPASSWORD';"
+      - name: Install locked dependencies
+        run: |
+          export GITHUB_SHA="$APPLICATION_REVISION"
+          ln -s /var/www/discourse/vendor/bundle vendor/bundle
+          bundle config --local path vendor/bundle
+          bundle config --local deployment true
+          bundle config --local without development
+          bundle install --jobs $(($(nproc) - 1))
+          bundle clean
+          pnpm install --frozen-lockfile
+      - name: Prepare database
+        run: |
+          export GITHUB_SHA="$APPLICATION_REVISION"
+          bin/rake db:create
+          bin/rake db:migrate
+      - name: Execute identical observed examples
+        env:
+          DIAGNOSTIC_VARIANT: ${{ matrix.variant }}
+        run: |
+          LD_PRELOAD="$RUBY_ALLOCATOR" ruby <<'RUBY'
+          require "json"
+          require "digest"
+          require "fileutils"
+          
+          source = ENV.fetch("APPLICATION_REVISION")
+          raise "Wrong application checkout" unless IO.popen(%w[git rev-parse HEAD], &:read).strip == source
+          expected = {
+            "lib/scheduler/thread_pool.rb" => "9f7a4eb07b971b1131af038b852fbc7f0b8030737704228c5229a13e6865bfda",
+            "script/ci/dependency_graph.rb" => "1e7d5ba68612d760c45eed72aa7e20f668fd402694011ed2289293afb39050f5",
+            "script/ci/ruby_dependencies.rb" => "04042c9572c9885facf60464f37ca900fc9d6cb489499cc2be4bf8e4c7b57b47",
+            "spec/lib/scheduler/thread_pool_spec.rb" => "f65ddcd7b4f17fa22f2afc7fa50a979b4a732b712c9d3541cc6e6fe076467ee1",
+          }
+          expected.each do |path, digest|
+            raise "Unexpected source: #{path}" unless Digest::SHA256.file(path).hexdigest == digest
+          end
+          original_source_sha256 = expected.dup
+          path = "script/ci/ruby_dependencies.rb"
+          content = File.read(path)
+          replacements = [["        classes:,\n", "", 1], ["        @classes = classes\n", "", 1], ["        classes.enable(target_thread: target_thread)\n", "", 1], ["        classes.disable\n", "", 1], ["                  :classes,\n", "", 1], ["TracePoint.new(:thread_begin, :thread_end) do |event|", "TracePoint.new(:thread_begin, :thread_end, :class, :end) do |event|", 1], ["          else\n            @native_traces.delete(Thread.current)&.disable\n            @thread_states.delete(Thread.current)\n          end", "          elsif event.event == :thread_end\n            @native_traces.delete(Thread.current)&.disable\n            @thread_states.delete(Thread.current)\n          else\n            thread = Thread.current\n            @trace_event.call(event, 3, thread, @thread_states[thread])\n          end", 1], ["      classes = TracePoint.new(:class, :end) { |event| @trace_event.call(event, 3, thread, state) }\n", "", 1], ["          classes: classes,\n", "", 1], ["        calls:,\n        returns:,", "        native_events:,", 1], ["        ruby_returns:,\n", "", 1], ["        @calls = calls\n        @returns = returns", "        @native_events = native_events", 1], ["        @ruby_returns = ruby_returns\n", "", 1], ["        ruby_returns.disable\n", "", 1], ["        calls.disable\n        returns.disable", "        native_events.disable", 1], ["          ruby_returns.disable if ruby_returns.enabled?\n", "", 1], ["          ruby_returns.enable(target_thread: thread) unless ruby_returns.enabled?\n", "", 1], ["          calls.disable if calls.enabled?\n          returns.disable if returns.enabled?", "          native_events.disable if native_events.enabled?", 1], ["          calls.enable(target_thread: thread) unless calls.enabled?\n          returns.enable(target_thread: thread) unless returns.enabled?", "          native_events.enable(target_thread: thread) unless native_events.enabled?", 1], ["      attr_reader :calls,\n                  :returns,", "      attr_reader :native_events,", 1], ["                  :ruby_returns,\n", "", 1], ["      ruby_events = TracePoint.new(:call, :b_call, &ruby_callback)\n      ruby_returns = TracePoint.new(:return, &ruby_callback)", "      ruby_events = TracePoint.new(:call, :b_call, :return, &ruby_callback)", 1], ["      calls = TracePoint.new(:c_call) { |event| @trace_event.call(event, 3, thread, state) }\n      returns = TracePoint.new(:c_return) { |event| @trace_event.call(event, 3, thread, state) }", "      native_events =\n        TracePoint.new(:c_call, :c_return) do |event|\n          @trace_event.call(event, 3, thread, state)\n        end", 1], ["          calls: calls,\n          returns: returns,", "          native_events: native_events,", 1], ["          ruby_returns: ruby_returns,\n", "", 1]]
+          replacements.each do |before, after, count|
+            raise "Unexpected type predicate" unless content.scan(Regexp.new(Regexp.escape(before))).length == count
+            content = content.gsub(before, after)
+          end
+          private_sha256 = Digest::SHA256.hexdigest(content)
+          raise "Unexpected type candidate" unless private_sha256 == "c998fc726f6c3143e63f82b0a58155bf7cb579ee437d18a6644eda7febbead73"
+          File.write(path, content)
+          expected[path] = private_sha256
+          directory = File.expand_path("tmp/merged-traces-worker-diagnostic")
+          FileUtils.mkdir_p(directory)
+          variant = ENV.fetch("DIAGNOSTIC_VARIANT")
+          raise "Unknown variant" unless %w[merged].include?(variant)
+          selectors = %w[
+            spec/lib/concern/positionable_spec.rb
+            spec/lib/concern/searchable_spec.rb
+            spec/lib/content_localization/onebox_localizer_spec.rb
+            spec/lib/design_wizard/palette_pairs_spec.rb
+            spec/lib/discourse/safe_exec_spec.rb
+            spec/lib/discourse_event_spec.rb
+            spec/lib/discourse_mcp/tools/groups_spec.rb
+            spec/lib/discourse_redis_spec.rb
+            spec/lib/discourse_updates_spec.rb
+            spec/lib/discourse_vips_spec.rb
+            spec/lib/distributed_cache_spec.rb
+            spec/lib/email/email_spec.rb
+            spec/lib/email/message_builder_spec.rb
+            spec/lib/email/sender_spec.rb
+            spec/lib/email/styles_spec.rb
+            spec/lib/enum_spec.rb
+            spec/lib/file_helper_spec.rb
+            spec/lib/file_store/local_store_spec.rb
+            spec/lib/final_destination/http_spec.rb
+            spec/lib/final_destination/resolver_spec.rb
+            spec/lib/final_destination_spec.rb
+            spec/lib/freedom_patches/erb_util_spec.rb
+            spec/lib/freedom_patches/translate_accelerator_spec.rb
+            spec/lib/git_url_spec.rb
+            spec/lib/group_member_adder_spec.rb
+            spec/lib/group_membership_requester_spec.rb
+            spec/lib/group_owner_manager_spec.rb
+            spec/lib/group_self_membership_spec.rb
+            spec/lib/guardian/post_guardian_spec.rb
+            spec/lib/guardian/tag_guardian_spec.rb
+            spec/lib/guardian/upload_guardian_spec.rb
+            spec/lib/guardian_spec.rb
+            spec/lib/html_to_markdown_spec.rb
+            spec/lib/http_language_parser_spec.rb
+            spec/lib/i18n/breton_plural_rule_spec.rb
+            spec/lib/i18n/config_spec.rb
+            spec/lib/i18n/i18n_interpolation_keys_finder_spec.rb
+            spec/lib/inline_oneboxer_spec.rb
+            spec/lib/json_api_kit/adapters/active_record/association/grouped_records_spec.rb
+            spec/lib/json_api_kit/adapters/active_record/association_spec.rb
+          ]
+          files = selectors.map { |path| path.sub(/\[.*\]\z/, "") }.uniq.sort
+          inventory = File.join(directory, "inventory.json")
+          File.write(inventory, JSON.generate(files.map { |path| File.expand_path(path) }))
+          ENV["GITHUB_SHA"] = source
+          ENV["COLLECT_TEST_MAPPING"] = variant == "ordinary" ? "0" : "1"
+          ENV["COLLECT_RSPEC_MAPPING"] = "0"
+          ENV["TEST_SELECTION_ROOT"] = Dir.pwd
+          ENV["TEST_SELECTION_ENVIRONMENT"] = "source139-merged-traces-worker-diagnostic"
+          ENV["TEST_SELECTION_INVENTORY"] = inventory
+          ENV["TEST_EXECUTION_DIRECTORY"] = File.join(directory, "workers")
+          ENV["RSPEC_MAPPING_DIRECTORY"] = File.join(directory, "mapping")
+          ENV["TEST_SELECTION_ORIGINAL_RUBYOPT"] = ENV.fetch("RUBYOPT", "")
+          ENV["RUBYOPT"] = [ENV["RUBYOPT"], "-rbundler/setup", "-r#{File.expand_path("script/ci/rspec_execution.rb")}"].compact.join(" ")
+          command = ["bin/rspec", *selectors, "--tag", "~type:multisite", "--seed", "1687650430", "--format", "json", "--out", File.join(directory, "rspec.json")]
+          record = {
+            "controller_revision" => ENV.fetch("CONTROLLER_REVISION"),
+            "application_revision" => source,
+            "actual_event" => ENV.fetch("GITHUB_EVENT_NAME"),
+            "variant" => variant,
+            "source_sha256" => expected,
+            "original_source_sha256" => original_source_sha256,
+            "selectors" => selectors,
+            "command" => command,
+            "scope" => "Private shared and merged TracePoint candidate on the original forty file HTML worker, order, seed and nonmultisite filter. The only runtime source override is the declared tracer file. Ordinary reference is the preceding fixed source job. No assertions changed, no events removed and no CPU profiler. Not a whole producer or PR consumption proof.",
+          }
+          result_path = File.join(directory, "result.json")
+          File.write(result_path, JSON.pretty_generate(record))
+          started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          system(*command)
+          status = $?
+          record["exit_code"] = status.exitstatus
+          record["term_signal"] = status.termsig
+          record["elapsed_seconds"] = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+          File.write(result_path, JSON.pretty_generate(record))
+          expected.each do |path, digest|
+            raise "Application source changed: #{path}" unless Digest::SHA256.file(path).hexdigest == digest
+          end
+          exit(status.exitstatus || 128 + status.termsig)
+          RUBY
+      - name: Publish original diagnostic records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: merged-traces-worker-diagnostic-${{ matrix.variant }}
+          path: tmp/merged-traces-worker-diagnostic
+          retention-days: 14
+          if-no-files-found: error
