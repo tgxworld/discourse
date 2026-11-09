@@ -53,7 +53,7 @@ module Scheduler
 
       @mutex.synchronize do
         @queue << wrapped_block
-        spawn_thread if @threads.length == 0
+        spawn_thread if @threads.length < @max_threads && @busy_threads.length == @threads.length
 
         @new_work.signal
       end
