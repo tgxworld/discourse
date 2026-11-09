@@ -1,0 +1,144 @@
+name: Verify mapping remediation
+
+on:
+  push:
+    branches:
+      - tgxworld/selection-source139-remediation
+
+permissions:
+  contents: read
+
+concurrency:
+  group: selection-source139-remediation
+  cancel-in-progress: false
+
+env:
+  CONTROLLER_REVISION: ${{ github.sha }}
+  APPLICATION_REVISION: e682028b6ad7f9e777e5b382b2cb9f6d910def10
+  RAILS_ENV: test
+  LOAD_PLUGINS: "0"
+  PGUSER: discourse
+  PGPASSWORD: discourse
+
+jobs:
+  timing:
+    name: ${{ matrix.variant }} timing
+    runs-on: ubuntu-latest
+    container: discourse/discourse_test:release
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [ordinary, traced]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Set working directory owner
+        run: chown root:root .
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.APPLICATION_REVISION }}
+          fetch-depth: 1
+      - name: Start Redis
+        run: redis-server /etc/redis/redis.conf --daemonize yes --logfile ""
+      - name: Start Postgres
+        run: |
+          chown -R postgres /var/run/postgresql
+          sudo -E -u postgres script/start_test_db.rb
+          sudo -u postgres psql -c "CREATE ROLE $PGUSER LOGIN SUPERUSER PASSWORD '$PGPASSWORD';"
+      - name: Install locked dependencies
+        run: |
+          export GITHUB_SHA="$APPLICATION_REVISION"
+          ln -s /var/www/discourse/vendor/bundle vendor/bundle
+          bundle config --local path vendor/bundle
+          bundle config --local deployment true
+          bundle config --local without development
+          bundle install --jobs $(($(nproc) - 1))
+          bundle clean
+          pnpm install --frozen-lockfile
+      - name: Prepare database
+        run: |
+          export GITHUB_SHA="$APPLICATION_REVISION"
+          bin/rake db:create
+          bin/rake db:migrate
+      - name: Execute identical observed examples
+        env:
+          DIAGNOSTIC_VARIANT: ${{ matrix.variant }}
+        run: |
+          LD_PRELOAD="$RUBY_ALLOCATOR" ruby <<'RUBY'
+          require "json"
+          require "digest"
+          require "fileutils"
+          
+          source = ENV.fetch("APPLICATION_REVISION")
+          raise "Wrong application checkout" unless IO.popen(%w[git rev-parse HEAD], &:read).strip == source
+          expected = {
+            "lib/scheduler/thread_pool.rb" => "9f7a4eb07b971b1131af038b852fbc7f0b8030737704228c5229a13e6865bfda",
+            "script/ci/dependency_graph.rb" => "1e7d5ba68612d760c45eed72aa7e20f668fd402694011ed2289293afb39050f5",
+            "script/ci/ruby_dependencies.rb" => "04042c9572c9885facf60464f37ca900fc9d6cb489499cc2be4bf8e4c7b57b47",
+            "spec/lib/scheduler/thread_pool_spec.rb" => "f65ddcd7b4f17fa22f2afc7fa50a979b4a732b712c9d3541cc6e6fe076467ee1",
+          }
+          expected.each do |path, digest|
+            raise "Unexpected source: #{path}" unless Digest::SHA256.file(path).hexdigest == digest
+          end
+          directory = File.expand_path("tmp/remediation-diagnostic")
+          FileUtils.mkdir_p(directory)
+          variant = ENV.fetch("DIAGNOSTIC_VARIANT")
+          raise "Unknown variant" unless %w[ordinary traced].include?(variant)
+          selectors = %w[
+            spec/lib/html_to_markdown_spec.rb[1:30]
+            spec/lib/html_to_markdown_spec.rb[1:31]
+            spec/lib/html_to_markdown_spec.rb[1:32]
+            spec/lib/pretty_text_spec.rb[1:33:1]
+            spec/lib/scheduler/thread_pool_spec.rb[1:2:1]
+            spec/lib/scheduler/thread_pool_spec.rb[1:3:2]
+            spec/requests/uploads_controller_spec.rb[1:4:1]
+            spec/requests/posts_controller_spec.rb[1:16:2]
+          ]
+          files = selectors.map { |path| path.sub(/\[.*\]\z/, "") }.uniq.sort
+          inventory = File.join(directory, "inventory.json")
+          File.write(inventory, JSON.generate(files.map { |path| File.expand_path(path) }))
+          ENV["GITHUB_SHA"] = source
+          ENV["COLLECT_TEST_MAPPING"] = variant == "ordinary" ? "0" : "1"
+          ENV["COLLECT_RSPEC_MAPPING"] = "0"
+          ENV["TEST_SELECTION_ROOT"] = Dir.pwd
+          ENV["TEST_SELECTION_ENVIRONMENT"] = "source139-remediation-diagnostic"
+          ENV["TEST_SELECTION_INVENTORY"] = inventory
+          ENV["TEST_EXECUTION_DIRECTORY"] = File.join(directory, "workers")
+          ENV["RSPEC_MAPPING_DIRECTORY"] = File.join(directory, "mapping")
+          ENV["TEST_SELECTION_ORIGINAL_RUBYOPT"] = ENV.fetch("RUBYOPT", "")
+          ENV["RUBYOPT"] = [ENV["RUBYOPT"], "-rbundler/setup", "-r#{File.expand_path("script/ci/rspec_execution.rb")}"].compact.join(" ")
+          command = ["bin/rspec", *selectors, "--seed", "1687650430", "--format", "json", "--out", File.join(directory, "rspec.json")]
+          record = {
+            "controller_revision" => ENV.fetch("CONTROLLER_REVISION"),
+            "application_revision" => source,
+            "actual_event" => ENV.fetch("GITHUB_EVENT_NAME"),
+            "variant" => variant,
+            "source_sha256" => expected,
+            "selectors" => selectors,
+            "command" => command,
+            "scope" => "Focused fork experiment on the exact unpublished remediation source. Both variants use the same application and unchanged timing assertions. No CPU profiler. Not a whole producer or PR consumption proof.",
+          }
+          result_path = File.join(directory, "result.json")
+          File.write(result_path, JSON.pretty_generate(record))
+          started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          system(*command)
+          status = $?
+          record["exit_code"] = status.exitstatus
+          record["term_signal"] = status.termsig
+          record["elapsed_seconds"] = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+          File.write(result_path, JSON.pretty_generate(record))
+          expected.each do |path, digest|
+            raise "Application source changed: #{path}" unless Digest::SHA256.file(path).hexdigest == digest
+          end
+          exit(status.exitstatus || 128 + status.termsig)
+          RUBY
+      - name: Publish original diagnostic records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: remediation-diagnostic-${{ matrix.variant }}
+          path: tmp/remediation-diagnostic
+          retention-days: 14
+          if-no-files-found: error
