@@ -15,6 +15,7 @@ workloads = {
   ],
   "html-only" => %w[./spec/lib/html_to_markdown_spec.rb[1:32]],
   "user-description" => %w[./spec/models/user_spec.rb[1:114:1]],
+  "html-file" => %w[./spec/lib/html_to_markdown_spec.rb],
 }
 unless ARGV.empty?
   unknown = ARGV - workloads.keys
@@ -29,7 +30,7 @@ record = {
   collector_sha256: Digest::SHA256.file("script/ci/ruby_dependencies.rb").hexdigest,
   seed: 4_018_241_148,
   scope:
-    "Original example IDs and assertions, isolated processes, JSON formatter. Diagnostic only, never an eligible mapping bundle.",
+    "Original tests and assertions, isolated processes, JSON formatter. Diagnostic only, never an eligible mapping bundle.",
   phases: [],
 }
 
@@ -39,6 +40,7 @@ workloads.each do |name, targets|
     raise "Diagnostic output already exists: #{folder}" if File.exist?(folder)
     FileUtils.mkdir_p(folder)
     files = targets.map { |target| target.split("[", 2).first.delete_prefix("./") }.uniq.sort
+    specific_examples = targets.all? { |target| target.include?("[") }
     inventory = "#{folder}/inventory.json"
     File.write(inventory, JSON.generate(files.map { |file| File.realpath(file) }))
     original_rubyopt = ENV.fetch("RUBYOPT", "")
@@ -82,17 +84,22 @@ workloads.each do |name, targets|
     receipts = Dir["#{folder}/workers/rspec-*.json"].map { |file| JSON.parse(File.read(file)) }
     summary = report.fetch("summary", {})
     examples = report.fetch("examples", [])
+    expected_count = specific_examples ? targets.length : examples.length
     exact =
-      examples.map { |example| example.fetch("id") }.sort == targets.sort && receipts.one? &&
-        receipts.first.fetch("files") == files && receipts.first.fetch("executed_files") == files
+      (!specific_examples || examples.map { |example| example.fetch("id") }.sort == targets.sort) &&
+        receipts.one? && receipts.first.fetch("files") == files &&
+        receipts.first.fetch("executed_files") == files
     success =
-      status.success? && exact && summary["example_count"] == targets.length &&
-        summary["failure_count"] == 0 && summary["errors_outside_of_examples_count"] == 0 &&
+      status.success? && exact && examples.any? &&
+        examples.all? { |example| example.fetch("status") == "passed" } &&
+        summary["example_count"] == expected_count && summary["failure_count"] == 0 &&
+        summary["errors_outside_of_examples_count"] == 0 &&
         receipts.first.fetch("description_errors").empty? &&
         !receipts.first.fetch("non_example_failure")
     phase = {
       workload: name,
       mode: mode,
+      selection_type: specific_examples ? "example_ids" : "files",
       command: command,
       pid: pid,
       exit_code: status.exitstatus,
