@@ -312,11 +312,11 @@ jobs:
           bus_addr=$(dbus-daemon --session --fork --print-address 2>/dev/null)
           echo "DBUS_SESSION_BUS_ADDRESS=$bus_addr" >> "$GITHUB_ENV"
 
-      - name: Repeat the complete HTML spec file with and without collection
+      - name: Compare retry set and complete HTML file in the same job
         run: |
           diagnostic_exit_code=0
           for diagnostic_attempt in 1 2 3; do
-            if ! LD_PRELOAD="$RUBY_ALLOCATOR" ruby script/ci/collector_timing_diagnostic.rb "tmp/producer-diagnostics/collector-timing/attempt-$diagnostic_attempt" html-file; then
+            if ! LD_PRELOAD="$RUBY_ALLOCATOR" ruby script/ci/collector_timing_diagnostic.rb "tmp/producer-diagnostics/collector-timing/attempt-$diagnostic_attempt" retry-set html-file; then
               diagnostic_exit_code=1
             fi
           done
